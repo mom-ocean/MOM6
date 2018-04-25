@@ -115,6 +115,9 @@ use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_t
 use MOM_wave_interface,        only : wave_parameters_CS, waves_end
 use MOM_wave_interface,        only : Update_Stokes_Drift
 
+! ODA modules
+use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
+use MOM_oda_driver_mod,        only : set_prior_tracer, set_analysis_time, apply_oda_tracer_increments
 ! Offline modules
 use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, update_offline_fields
 use MOM_offline_main,          only : insert_offline_main, extract_offline_main, post_offline_convergence_diags
@@ -321,6 +324,12 @@ type, public :: MOM_control_struct ; private
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
   type(offline_transport_CS),    pointer :: offline_CSp            => NULL()
 
+  logical                                :: ensemble_ocean !< if true, this run is part of a
+                                               !! larger ensemble for the purpose of data assimilation
+                                               !! or statistical analysis.
+  type(ODA_CS), pointer                  :: odaCS => NULL() !< a pointer to the control structure for handling
+                                                 !! ensemble model state vectors and data assimilation
+                                                 !! increments and priors
 end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
@@ -779,6 +788,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     CS%p_surf_prev(i,j) = forces%p_surf(i,j)
   enddo ; enddo ; endif
 
+  if (CS%ensemble_ocean) then
+      ! update the time for the next analysis step if needed
+      call set_analysis_time(CS%Time,CS%odaCS)
+      ! store ensemble vector in odaCS
+      call set_prior_tracer(CS%Time, G, GV, CS%h, CS%tv, CS%odaCS)
+      ! call DA interface
+      call oda(CS%Time,CS%odaCS)
+  endif
+
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
   call extract_surface_state(CS, sfc_state)
 
@@ -1094,6 +1112,8 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, &
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
 
   call enable_averaging(dtdia, Time_end_thermo, CS%diag)
+
+  call apply_oda_tracer_increments(dtdia,G,tv,h,CS%odaCS)
 
   if (update_BBL) then
     !   Calculate the BBL properties and store them inside visc (u,h).
@@ -1467,10 +1487,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   real, dimension(:,:), pointer :: shelf_area
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
-  type(group_pass_type) :: tmp_pass_Kv_turb
+  ! GMM, the following *is not* used. Should we delete it?
+  type(group_pass_type) :: tmp_pass_Kv_shear
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
+  logical :: ensemble_ocean    ! If true, perform an ensemble gather at the end of step_MOM
   logical :: new_sim
   logical :: use_geothermal    ! If true, apply geothermal heating.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
@@ -1836,6 +1858,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                     fail_if_missing=.true.)
   endif
 
+
+  CS%ensemble_ocean=.false.
+  call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
+                 "If False, The model is being run in serial mode as a single realization.\n"//&
+                 "If True, The current model realization is part of a larger ensemble \n"//&
+                 "and at the end of step MOM, we will perform a gather of the ensemble\n"//&
+                 "members for statistical evaluation and/or data assimilation.", default=.false.)
 
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
 
@@ -2321,8 +2350,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call do_group_pass(pass_uv_T_S_h, G%Domain)
 
-  if (associated(CS%visc%Kv_turb)) &
-    call pass_var(CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+  if (associated(CS%visc%Kv_shear)) &
+    call pass_var(CS%visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
 
   call cpu_clock_end(id_clock_pass_init)
 
@@ -2358,6 +2387,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   CS%write_IC = save_IC .and. &
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
                       (LEN_TRIM(dirs%input_filename) == 1))
+
+
+  if (CS%ensemble_ocean) then
+      call init_oda(Time, G, GV, CS%odaCS)
+  endif
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
@@ -2932,6 +2966,9 @@ subroutine MOM_end(CS)
   call tracer_hor_diff_end(CS%tracer_diff_CSp)
   call tracer_registry_end(CS%tracer_Reg)
   call tracer_flow_control_end(CS%tracer_flow_CSp)
+
+  ! GMM, the following is commented because it fails on Travis.
+  !if (associated(CS%diabatic_CSp)) call diabatic_driver_end(CS%diabatic_CSp)
 
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 
