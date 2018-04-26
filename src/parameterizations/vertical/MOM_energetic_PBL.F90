@@ -561,10 +561,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
          "Module must be initialized before it is used.")
 
-  if (.not. ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
+  if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
       "energetic_PBL: Temperature, salinity and an equation of state "//&
       "must now be used.")
-  if (.NOT. ASSOCIATED(fluxes%ustar)) call MOM_error(FATAL, &
+  if (.NOT. associated(fluxes%ustar)) call MOM_error(FATAL, &
       "energetic_PBL: No surface TKE fluxes (ustar) defined in mixedlayer!")
   if (present(dT_expected) .or. present(dS_expected)) debug = .true.
 

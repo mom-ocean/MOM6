@@ -196,7 +196,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          "The directory in which input files are found.", default=".")
   inputdir = slasher(inputdir)
 
-  use_temperature = ASSOCIATED(tv%T)
+  use_temperature = associated(tv%T)
   useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
   use_OBC = associated(OBC)

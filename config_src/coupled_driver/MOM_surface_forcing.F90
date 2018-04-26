@@ -451,80 +451,80 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   do j=js,je ; do i=is,ie
 
     if (wind_stagger == BGRID_NE) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     elseif (wind_stagger == AGRID) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     else ! C-grid wind stresses.
-      if (ASSOCIATED(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (ASSOCIATED(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     endif
 
-    if (ASSOCIATED(IOB%lprec)) &
+    if (associated(IOB%lprec)) &
       fluxes%lprec(i,j) =  IOB%lprec(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%fprec)) &
+    if (associated(IOB%fprec)) &
       fluxes%fprec(i,j) = IOB%fprec(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%q_flux)) &
+    if (associated(IOB%q_flux)) &
       fluxes%evap(i,j) = - IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%runoff)) &
+    if (associated(IOB%runoff)) &
       fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%calving)) &
+    if (associated(IOB%calving)) &
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (((ASSOCIATED(IOB%ustar_berg) .and. (.not. ASSOCIATED(fluxes%ustar_berg)))   &
-      .or. (ASSOCIATED(IOB%area_berg) .and. (.not. ASSOCIATED(fluxes%area_berg)))) &
-      .or. (ASSOCIATED(IOB%mass_berg) .and. (.not. ASSOCIATED(fluxes%mass_berg)))) &
+    if (((associated(IOB%ustar_berg) .and. (.not. associated(fluxes%ustar_berg)))   &
+      .or. (associated(IOB%area_berg) .and. (.not. associated(fluxes%area_berg)))) &
+      .or. (associated(IOB%mass_berg) .and. (.not. associated(fluxes%mass_berg)))) &
       call allocate_forcing_type(G, fluxes, iceberg=.true.)
 
-    if (ASSOCIATED(IOB%ustar_berg)) &
+    if (associated(IOB%ustar_berg)) &
       fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%area_berg)) &
+    if (associated(IOB%area_berg)) &
       fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%mass_berg)) &
+    if (associated(IOB%mass_berg)) &
       fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%runoff_hflx)) &
+    if (associated(IOB%runoff_hflx)) &
       fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%calving_hflx)) &
+    if (associated(IOB%calving_hflx)) &
       fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%lw_flux)) &
+    if (associated(IOB%lw_flux)) &
       fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%t_flux)) &
+    if (associated(IOB%t_flux)) &
       fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     fluxes%latent(i,j) = 0.0
-    if (ASSOCIATED(IOB%fprec)) then
+    if (associated(IOB%fprec)) then
       fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
       fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
     endif
-    if (ASSOCIATED(IOB%calving)) then
+    if (associated(IOB%calving)) then
       fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
       fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
     endif
-    if (ASSOCIATED(IOB%q_flux)) then
+    if (associated(IOB%q_flux)) then
       fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
       fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
     endif
 
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
-    if (ASSOCIATED(IOB%sw_flux_vis_dir)) &
+    if (associated(IOB%sw_flux_vis_dir)) &
       fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
-    if (ASSOCIATED(IOB%sw_flux_vis_dif)) &
+    if (associated(IOB%sw_flux_vis_dif)) &
       fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
-    if (ASSOCIATED(IOB%sw_flux_nir_dir)) &
+    if (associated(IOB%sw_flux_nir_dir)) &
       fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
-    if (ASSOCIATED(IOB%sw_flux_nir_dif)) &
+    if (associated(IOB%sw_flux_nir_dif)) &
       fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
@@ -532,7 +532,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   enddo ; enddo
 
   ! more salt restoring logic
-  if (ASSOCIATED(IOB%salt_flux)) then
+  if (associated(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
       fluxes%salt_flux(i,j)    = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
       fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*( -IOB%salt_flux(i-i0,j-j0) )
@@ -563,7 +563,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
       !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
-      if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
+      if (associated(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
         net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
       net_FW2(i,j) = net_FW(i,j) / G%areaT(i,j)
@@ -584,7 +584,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   endif
 
   ! applied surface pressure from atmosphere and cryosphere
-  if (ASSOCIATED(IOB%p)) then
+  if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
         forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
@@ -1228,11 +1228,11 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
     write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
     write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
     write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
-    if (ASSOCIATED(iobt%ustar_berg)) &
+    if (associated(iobt%ustar_berg)) &
       write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg     )
-    if (ASSOCIATED(iobt%area_berg)) &
+    if (associated(iobt%area_berg)) &
       write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg      )
-    if (ASSOCIATED(iobt%mass_berg)) &
+    if (associated(iobt%mass_berg)) &
       write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg      )
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 

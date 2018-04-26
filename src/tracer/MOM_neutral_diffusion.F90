@@ -1933,7 +1933,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   allocate(EOS)
   call EOS_manual_init(EOS, form_of_EOS = EOS_LINEAR, dRho_dT = -1., dRho_dS = 2.)
   ! Unit tests for refine_nondim_position
-  ALLOCATE(CS%ndiff_aux_CS)
+  allocate(CS%ndiff_aux_CS)
   call set_ndiff_aux_params(CS%ndiff_aux_CS, deg = 1, max_iter = 10, drho_tol = 0., xtol = 0., EOS = EOS)
   ! Tests using Newton's method
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
