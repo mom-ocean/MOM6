@@ -842,30 +842,19 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
     call safe_alloc_alloc(CS%LA_MOD, isd, ied, jsd, jed)
   endif
 
-  !Fitting coefficients to asymptote twoard 0 as MLD -> Ekman depth
-  CS%MSTAR_A = CS%MSTAR_AT_XINT**(1./CS%MSTAR_N)
-  CS%MSTAR_B = CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A**(CS%MSTAR_N-1.))
-  !Fitting coefficients to asymptote toward MSTAR_CAP
-  !*Fixed to begin asymptote at MSTAR_CAP-0.5 toward MSTAR_CAP
-  CS%MSTAR_A2 = 0.5**(1./CS%MSTAR_N)
-  CS%MSTAR_B2 = -CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A2**(CS%MSTAR_N-1))
-  !Compute value of X (referenced to MSTAR_XINT) where transition
-  ! to asymptotic regime based on value of X where MSTAR=MSTAR_CAP-0.5
-  CS%MSTAR_XINT_UP = (CS%MSTAR_CAP-0.5-CS%MSTAR_AT_XINT)/CS%MSTAR_SLOPE
-
-  call cvmix_epbl_init(CS%mstar,CS%nstar,CS%MixLenExponent,CS%TKE_decay,CS%MKE_to_TKE_effic,CS%omega,CS%omega_frac,&
-CS%wstar_ustar_coef,CS%vstar_scale_fac,CS%transLay_scale,CS%MLD_tol,CS%min_mix_len,&
+  call cvmix_epbl_init(CS%cvmix_CS, CS%mstar,CS%nstar,CS%MixLenExponent,CS%TKE_decay,CS%MKE_to_TKE_effic,CS%ustar_min,CS%omega,CS%omega_frac,&
+CS%wstar_ustar_coef,CS%vstar_scale_fac,CS%Ekman_scale_coef,CS%transLay_scale,CS%MLD_tol,CS%min_mix_len,&
 CS%N2_Dissipation_Scale_Neg,CS%N2_Dissipation_Scale_Pos,CS%MSTAR_CAP,CS%MSTAR_SLOPE,CS%MSTAR_XINT,CS%MSTAR_AT_XINT,&
-CS%LT_ENHANCE_COEF,CS%LT_ENHANCE_EXP,CS%MSTAR_N,CS%C_EK,CS%MSTAR_COEF,CS%MSTAR_A,CS%MSTAR_B,CS%MSTAR_A2,CS%MSTAR_B2,&
+CS%LT_ENHANCE_COEF,CS%LT_ENHANCE_EXP,CS%MSTAR_N,CS%C_EK,CS%MSTAR_COEF,&
 CS%LaC_MLDoEK,CS%LaC_MLDoOB_stab,CS%LaC_EKoOB_stab,&
 CS%LaC_MLDoOB_un,CS%LaC_EKoOB_un,CS%Max_Enhance_M,CS%CNV_MST_FAC,CS%LT_Enhance_Form,CS%MSTAR_MODE,&
 CS%CONST_MSTAR,CS%MLD_o_OBUKHOV,CS%EKMAN_o_OBUKHOV,CS%MSTAR_FLATCAP,CS%TKE_diagnostics,CS%Use_LA_windsea,&
-CS%orig_PE_calc,CS%Use_MLD_iteration,CS%Orig_MLD_iteration,CS%MLD_iteration_guess,CS%Mixing_Diagnostics,CS%cvmix_CS)
+CS%orig_PE_calc,CS%Use_MLD_iteration,CS%Orig_MLD_iteration,CS%MLD_iteration_guess,CS%Mixing_Diagnostics)
 
 end subroutine energetic_PBL_init
 
 subroutine energetic_PBL_end(CS)
-  type(energetic_PBL_CS), pointer        :: CS
+  type(energetic_PBL_CS), pointer  :: CS
 
   call cvmix_epbl_end(CS%cvmix_CS)
 

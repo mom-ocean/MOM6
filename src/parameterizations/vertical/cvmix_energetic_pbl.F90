@@ -172,6 +172,9 @@ type :: cvmix_energetic_PBL_CS ; private
     diag_TKE_conv_decay, & ! The decay of convective TKE.
     diag_TKE_mixing,&  ! The work done by TKE to deepen
                        ! the mixed layer.
+    ! Additional output parameters also 2d
+    ML_depth, &        ! The mixed layer depth in m. (result after iteration step)
+    ML_depth2, &       ! The mixed layer depth in m. (guess for iteration step)
     Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
     MLD_EKMAN, &       ! MLD over Ekman length
@@ -1705,24 +1708,25 @@ subroutine get_LA_windsea(ustar, hbl, Rho0,g_Earth, LA)
   endif
 end subroutine Get_LA_windsea
 
-subroutine cvmix_epbl_init(mstar,nstar,MixLenExponent,TKE_decay,MKE_to_TKE_effic,omega,omega_frac,&
-wstar_ustar_coef,vstar_scale_fac,transLay_scale,MLD_tol,min_mix_len,&
+subroutine cvmix_epbl_init(CS, mstar,nstar,MixLenExponent,TKE_decay,MKE_to_TKE_effic,ustar_min,omega,omega_frac,&
+wstar_ustar_coef,vstar_scale_fac,Ekman_scale_coef,transLay_scale,MLD_tol,min_mix_len,&
 N2_Dissipation_Scale_Neg,N2_Dissipation_Scale_Pos,MSTAR_CAP,MSTAR_SLOPE,MSTAR_XINT,MSTAR_AT_XINT,&
-LT_ENHANCE_COEF,LT_ENHANCE_EXP,MSTAR_N,C_EK,MSTAR_COEF,MSTAR_A,MSTAR_B,MSTAR_A2,MSTAR_B2,&
+LT_ENHANCE_COEF,LT_ENHANCE_EXP,MSTAR_N,C_EK,MSTAR_COEF,&
 LaC_MLDoEK,LaC_MLDoOB_stab,LaC_EKoOB_stab,&
 LaC_MLDoOB_un,LaC_EKoOB_un,Max_Enhance_M,CNV_MST_FAC,LT_Enhance_Form,MSTAR_MODE,&
 CONST_MSTAR,MLD_o_OBUKHOV,EKMAN_o_OBUKHOV,MSTAR_FLATCAP,TKE_diagnostics,Use_LA_windsea,&
-orig_PE_calc,Use_MLD_iteration,Orig_MLD_iteration,MLD_iteration_guess,Mixing_Diagnostics,CS)
-   real, intent(in) :: mstar,nstar,MixLenExponent,TKE_decay,MKE_to_TKE_effic,omega,omega_frac,&
-wstar_ustar_coef,vstar_scale_fac,transLay_scale,MLD_tol,min_mix_len,&
+orig_PE_calc,Use_MLD_iteration,Orig_MLD_iteration,MLD_iteration_guess,Mixing_Diagnostics)
+
+   type(cvmix_energetic_PBL_CS), pointer :: CS
+   real, intent(in) :: mstar,nstar,MixLenExponent,TKE_decay,MKE_to_TKE_effic,ustar_min,omega,omega_frac,&
+wstar_ustar_coef,vstar_scale_fac,Ekman_scale_coef,transLay_scale,MLD_tol,min_mix_len,&
 N2_Dissipation_Scale_Neg,N2_Dissipation_Scale_Pos,MSTAR_CAP,MSTAR_SLOPE,MSTAR_XINT,MSTAR_AT_XINT,&
-LT_ENHANCE_COEF,LT_ENHANCE_EXP,MSTAR_N,C_EK,MSTAR_COEF,MSTAR_A,MSTAR_B,MSTAR_A2,MSTAR_B2,&
+LT_ENHANCE_COEF,LT_ENHANCE_EXP,MSTAR_N,C_EK,MSTAR_COEF,&
 LaC_MLDoEK,LaC_MLDoOB_stab,LaC_EKoOB_stab,&
 LaC_MLDoOB_un,LaC_EKoOB_un,Max_Enhance_M,CNV_MST_FAC
    integer, intent(in) :: LT_Enhance_Form, MSTAR_MODE, CONST_MSTAR,MLD_o_OBUKHOV,EKMAN_o_OBUKHOV
    logical, intent(in) :: MSTAR_FLATCAP, TKE_diagnostics, Use_LA_windsea, orig_PE_calc, Use_MLD_iteration,&
                           Orig_MLD_iteration, MLD_iteration_guess, Mixing_Diagnostics
-   type(cvmix_energetic_PBL_CS), pointer :: CS
 
    if (associated(CS)) then
     print*,"WARNING: cvmix_epbl_init called with an associated control structure!"
@@ -1735,10 +1739,12 @@ LaC_MLDoOB_un,LaC_EKoOB_un,Max_Enhance_M,CNV_MST_FAC
    CS%MixLenExponent = MixLenExponent
    CS%TKE_decay = TKE_decay
    CS%MKE_to_TKE_effic = MKE_to_TKE_effic
+   CS%ustar_min = ustar_min
    CS%omega = omega
    CS%omega_frac = omega_frac
    CS%wstar_ustar_coef = wstar_ustar_coef
    CS%vstar_scale_fac = vstar_scale_fac
+   CS%Ekman_scale_coef =  Ekman_scale_coef
    CS%transLay_scale = transLay_scale
    CS%MLD_tol = MLD_tol
    CS%min_mix_len = min_mix_len
@@ -1753,10 +1759,6 @@ LaC_MLDoOB_un,LaC_EKoOB_un,Max_Enhance_M,CNV_MST_FAC
    CS%MSTAR_N = MSTAR_N
    CS%C_EK = C_EK
    CS%MSTAR_COEF = MSTAR_COEF
-   CS%MSTAR_A = MSTAR_A
-   CS%MSTAR_B = MSTAR_B
-   CS%MSTAR_A2 = MSTAR_A2
-   CS%MSTAR_B2 = MSTAR_B2 
    CS%LaC_MLDoEK = LaC_MLDoEK
    CS%LaC_MLDoOB_stab = LaC_MLDoOB_stab
    CS%LaC_EKoOB_stab = LaC_EKoOB_stab
@@ -1778,7 +1780,16 @@ LaC_MLDoOB_un,LaC_EKoOB_un,Max_Enhance_M,CNV_MST_FAC
    CS%MLD_iteration_guess = MLD_iteration_guess
    CS%Mixing_Diagnostics = Mixing_Diagnostics
 
-
+  !Fitting coefficients to asymptote twoard 0 as MLD -> Ekman depth
+  CS%MSTAR_A = CS%MSTAR_AT_XINT**(1./CS%MSTAR_N)
+  CS%MSTAR_B = CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A**(CS%MSTAR_N-1.))
+  !Fitting coefficients to asymptote toward MSTAR_CAP
+  !*Fixed to begin asymptote at MSTAR_CAP-0.5 toward MSTAR_CAP
+  CS%MSTAR_A2 = 0.5**(1./CS%MSTAR_N)
+  CS%MSTAR_B2 = -CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A2**(CS%MSTAR_N-1))
+  !Compute value of X (referenced to MSTAR_XINT) where transition
+  ! to asymptotic regime based on value of X where MSTAR=MSTAR_CAP-0.5
+  CS%MSTAR_XINT_UP = (CS%MSTAR_CAP-0.5-CS%MSTAR_AT_XINT)/CS%MSTAR_SLOPE
 
 end subroutine cvmix_epbl_init
 
