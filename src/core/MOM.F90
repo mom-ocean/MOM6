@@ -515,6 +515,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     dt = time_interval / real(n_max)
     dt_therm = dt ; ntstep = 1
     if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
+
+    if (CS%UseWaves) call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass)
   endif
 
   if (therm_reset) then
@@ -553,6 +555,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     else
       CS%p_surf_end  => forces%p_surf
     endif
+
+    if (CS%UseWaves) then
+      ! Update wave information, which is presently kept static over each call to step_mom
+      call enable_averaging(time_interval, Time_start + set_time(int(floor(time_interval+0.5))), CS%diag)
+      call Update_Stokes_Drift(G, GV, Waves, h, forces%ustar)
+      call disable_averaging(CS%diag)
+    endif
+  else ! not do_dyn.
+    if (CS%UseWaves) & ! Diagnostics are not enabled in this call.
+      call Update_Stokes_Drift(G, GV, Waves, h, fluxes%ustar)
   endif
 
   if (CS%debug) then
@@ -571,16 +583,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     CS%Time = Time_start + set_time(int(floor(0.5 + rel_time - 0.5*dt)))
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(rel_time+0.5)))
-
-    !### Update_Stokes_Drift must be behind a do_dyn or a do_thermo test.
-    if (CS%UseWaves) then
-    ! Update wave information, which is presently kept static over each call to step_mom
-      !bgr 3/15/18: Need to enable_averaging here to enable output of Stokes drift from the
-      ! update_stokes_drift routine.  Other options?
-      call enable_averaging(dt, Time_local, CS%diag)
-      call Update_Stokes_Drift(G, GV, Waves, h, forces%ustar)
-      call disable_averaging(CS%diag)
-    endif
 
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
@@ -603,13 +605,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         dtdia = dt*min(ntstep,n_max-(n-1))
       endif
 
-      ! If necessary, temporarily reset CS%Time to the center of the period covered
-      ! by the call to step_MOM_thermo, noting that they begin at the same time.
-      if (dtdia > dt) CS%Time = CS%Time + set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
-
-      ! The end-time of the diagnostic interval needs to be set ahead if there
-      ! are multiple dynamic time steps worth of thermodynamics applied here.
-      end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
+      end_time_thermo = Time_local
+      if (dtdia > dt) then
+        ! If necessary, temporarily reset CS%Time to the center of the period covered
+        ! by the call to step_MOM_thermo, noting that they begin at the same time.
+        CS%Time = CS%Time + set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
+        ! The end-time of the diagnostic interval needs to be set ahead if there
+        ! are multiple dynamic time steps worth of thermodynamics applied here.
+        end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
+      endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
@@ -843,7 +847,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                   !! bottom boundary layer properties will apply,
                                                   !! in s, or zero not to update the properties.
   type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
-  type(time_type),    intent(in)    :: Time_local !< Starting time of a segment, as a time type
+  type(time_type),    intent(in)    :: Time_local !< End time of a segment, as a time type
   type(wave_parameters_CS), &
             optional, pointer       :: Waves      !< Container for wave related parameters; the
                                                   !! fields in Waves are intent(in) here.
@@ -877,7 +881,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
 
-    call enable_averaging(dt_thermo,Time_local+set_time(int(floor(dt_thermo-dt+0.5))), CS%diag)
+    call enable_averaging(dt_thermo, Time_local+set_time(int(floor(dt_thermo-dt+0.5))), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
@@ -896,7 +900,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
     call enable_averaging(bbl_time_int, &
-              Time_local+set_time(int(bbl_time_int-dt+0.5)), CS%diag)
+              Time_local + set_time(int(bbl_time_int-dt+0.5)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
     call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, &
@@ -913,7 +917,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     calc_dtbt = .false.
     if (CS%dtbt_reset_period == 0.0) calc_dtbt = .true.
     if (CS%dtbt_reset_period > 0.0) then
-      if (Time_local >= CS%dtbt_reset_time) then
+      if (Time_local >= CS%dtbt_reset_time) then  !### Change >= to > here.
         calc_dtbt = .true.
         CS%dtbt_reset_time = CS%dtbt_reset_time + CS%dtbt_reset_interval
       endif
@@ -1348,7 +1352,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
           if (associated(CS%VarMix)) then
-            call pass_var(CS%h,G%Domain)
+            call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, CS%VarMix)
           endif
@@ -1373,7 +1377,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
                 ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
           if (associated(CS%VarMix)) then
-            call pass_var(CS%h,G%Domain)
+            call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, CS%VarMix)
           endif
@@ -1429,9 +1433,9 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call extract_surface_state(CS, sfc_state)
 
   call disable_averaging(CS%diag)
-  call pass_var(CS%tv%T,G%Domain)
-  call pass_var(CS%tv%S,G%Domain)
-  call pass_var(CS%h,G%Domain)
+  call pass_var(CS%tv%T, G%Domain)
+  call pass_var(CS%tv%S, G%Domain)
+  call pass_var(CS%h, G%Domain)
 
   fluxes%fluxes_used = .true.
 
