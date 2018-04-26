@@ -612,7 +612,7 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
           Bottom = Bottom - GV%H_to_m *  (h(ii,jj,kk)+h(ii,jjm1,kk))/2.
           call DHH85_mid(CS,GV,ustar(ii,jj),Midpoint,US)
           ! Putting into x-direction for now
-          CS%US_x(:,:,kk) = US
+          CS%US_x(ii,jj,kk) = US
         enddo
       enddo
     enddo
@@ -626,7 +626,7 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
           Bottom = Bottom - GV%H_to_m *  (h(ii,jj,kk)+h(ii,jjm1,kk))/2.
           call DHH85_mid(CS,GV,ustar(ii,jj),Midpoint,US)
           ! Putting into x-direction for now
-          CS%US_y(:,:,kk) = 0.0
+          CS%US_y(ii,jj,kk) = 0.0 !### Note that =0 should be =US - RWH
         enddo
       enddo
     enddo
