@@ -2304,10 +2304,10 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                   ! (See Hallberg, J Comp Phys 1997 for a discussion.)
   real, dimension(SZIBS_(G),SZJ_(G)) :: &
     Datu          ! Basin depth at u-velocity grid points times the y-grid
-                  ! spacing, in m2.
+                  ! spacing, in H m.
   real, dimension(SZI_(G),SZJBS_(G)) :: &
     Datv          ! Basin depth at v-velocity grid points times the x-grid
-                  ! spacing, in m2.
+                  ! spacing, in H m.
   real :: det_de  ! The partial derivative due to self-attraction and loading
                   ! of the reference geopotential with the sea surface height.
                   ! This is typically ~0.09 or less.
@@ -2421,16 +2421,20 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! in determining the transport.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                   !! transports.
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu    !< A fixed estimate of the face areas at u points.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at v points.
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu    !< A fixed estimate of the face areas at u points, in H m.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at v points, in H m.
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u !< Structure of information used
                                                                   !! for a dynamic estimate of the face areas at
                                                                   !! u-points.
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(in) :: BTCL_v !< Structure of information used
                                                                   !! for a dynamic estimate of the face areas at
                                                                   !! v-points.
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: uhbt0
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vhbt0
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: uhbt0   !< A correction to the zonal transport so that
+                                                                  !! the barotropic functions agree with the sum
+                                                                  !! of the layer transpotts, in H m2 s-1.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vhbt0   !< A correction to the meridional transport so that
+                                                                  !! the barotropic functions agree with the sum
+                                                                  !! of the layer transpotts, in H m2 s-1.
 
   ! Local variables
   real :: vel_prev    ! The previous velocity in m s-1.
@@ -2687,8 +2691,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
   integer,                               intent(in)    :: halo   !< The extra halo size to use here.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                  !! transports.
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu   !< A fixed estimate of the face areas at u points.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv   !< A fixed estimate of the face areas at u points.
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu   !< A fixed estimate of the face areas at u points, in H m.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv   !< A fixed estimate of the face areas at v points, in H m.
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u !< Structure of information used
                                                                  !! for a dynamic estimate of the face areas at
                                                                  !! u-points.
@@ -3148,7 +3152,10 @@ end subroutine btcalc
 !> The function find_uhbt determines the zonal transport for a given velocity.
 function find_uhbt(u, BTC) result(uhbt)
   real, intent(in) :: u    !< The local zonal velocity, in m s-1
-  type(local_BT_cont_u_type), intent(in) :: BTC
+  type(local_BT_cont_u_type), intent(in) :: BTC !< A structure containing various fields that
+                           !! allow the barotropic transports to be calculated consistently
+                           !! with the layers' continuity equations.
+
   real :: uhbt !< The result
 
   if (u == 0.0) then
@@ -3259,7 +3266,9 @@ end function uhbt_to_ubt
 !> The function find_vhbt determines the meridional transport for a given velocity.
 function find_vhbt(v, BTC) result(vhbt)
   real, intent(in) :: v    !< The local meridional velocity, in m s-1
-  type(local_BT_cont_v_type), intent(in) :: BTC
+  type(local_BT_cont_v_type), intent(in) :: BTC !< A structure containing various fields that
+                           !! allow the barotropic transports to be calculated consistently
+                           !! with the layers' continuity equations.
   real :: vhbt !< The result
 
   if (v == 0.0) then
@@ -3592,15 +3601,18 @@ end subroutine adjust_local_BT_cont_types
 !> This subroutine uses the BTCL types to find typical or maximum face
 !! areas, which can then be used for finding wave speeds, etc.
 subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, halo, maximize)
-  type(BT_cont_type),                         intent(inout) :: BT_cont    !< The BT_cont_type input to the
-                                                                          !! barotropic solver.
-  type(memory_size_type),                     intent(in)    :: MS         !< A type that describes the memory
-                                                                          !! sizes of the argument arrays.
-  real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu
-  real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv
-  type(ocean_grid_type),                      intent(in)  :: G            !< The ocean's grid structure.
-  integer,                          optional, intent(in)  :: halo         !< The extra halo size to use here.
-  logical,                          optional, intent(in)  :: maximize
+  type(BT_cont_type),     intent(inout) :: BT_cont    !< The BT_cont_type input to the
+                                                      !! barotropic solver.
+  type(memory_size_type), intent(in)    :: MS         !< A type that describes the memory
+                                                      !! sizes of the argument arrays.
+  real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), &
+                          intent(out)   :: Datu       !< The effective zonal face area, in H m.
+  real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), &
+                          intent(out)   :: Datv       !< The effective meridional face area, in H m.
+  type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
+  integer,      optional, intent(in)    :: halo       !< The extra halo size to use here.
+  logical,      optional, intent(in)    :: maximize   !< If present and true, find the
+                                                      !! maximum face area for any velocity.
 
   ! Local variables
   logical :: find_max
@@ -3629,8 +3641,9 @@ subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, halo, maximize)
 
 end subroutine BT_cont_to_face_areas
 
+!> Swap the values of two real variables
 subroutine swap(a,b)
-  real, intent(inout) :: a, b
+  real, intent(inout) :: a, b !< The varaibles to be swapped.
   real :: tmp
   tmp = a ; a = b ; b = tmp
 end subroutine swap
@@ -3638,24 +3651,22 @@ end subroutine swap
 !> This subroutine determines the open face areas of cells for calculating
 !! the barotropic transport.
 subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
-  type(memory_size_type),                   intent(in) :: MS
+  type(memory_size_type),  intent(in) :: MS
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
-  real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu !< The open zonal face area,
-                                                                            !! in H m (m2 or kg m-1).
-  real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv !< The open meridional face area,
-                                                                            !! in H m (m2 or kg m-1).
-  type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in) :: GV   !< The ocean's vertical grid structure.
-  type(barotropic_CS),                      pointer    :: CS   !< The control structure returned by a previous
-                                                                            !! call to barotropic_init.
-  real, dimension(MS%isdw:MS%iedw,MS%jsdw:MS%jedw), optional, intent(in) :: eta !< The barotropic free surface
-                                                                            !! height anomaly or column mass
-                                                                            !! anomaly, in H (m or kg m-2).
-  integer,                        optional, intent(in) :: halo              !< The halo size to use, default = 1.
-  real,                           optional, intent(in) :: add_max           !< A value to add to the maximum
-                                                                            !! depth (used to overestimate the
-                                                                            !! external wave speed) in m.
-
+  real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), &
+                           intent(out) :: Datu !< The open zonal face area, in H m (m2 or kg m-1).
+  real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), &
+                           intent(out) :: Datv !< The open meridional face area, in H m (m2 or kg m-1).
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
+  type(barotropic_CS),     pointer     :: CS   !< The control structure returned by a previous
+                                               !! call to barotropic_init.
+  real, dimension(MS%isdw:MS%iedw,MS%jsdw:MS%jedw), &
+                 optional, intent(in)  :: eta  !< The barotropic free surface height anomaly
+                                               !! or column mass anomaly, in H (m or kg m-2).
+  integer,       optional, intent(in)  :: halo !< The halo size to use, default = 1.
+  real,          optional, intent(in)  :: add_max !< A value to add to the maximum depth (used
+                                               !! to overestimate the external wave speed) in m.
 
   ! Local variables
   real :: H1, H2      ! Temporary total thicknesses, in m or kg m-2.
@@ -3832,7 +3843,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 #include "version_variable.h"
   ! Local variables
   character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
-  real :: Datu(SZIBS_(G),SZJ_(G)), Datv(SZI_(G),SZJBS_(G))
+  real :: Datu(SZIBS_(G),SZJ_(G))   ! Zonal open face area in H m.
+  real :: Datv(SZI_(G),SZJBS_(G))   ! Meridional open face area in H m.
   real :: gtot_estimate ! Summing GV%g_prime gives an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
                         ! in calculating the safe external wave speed.
