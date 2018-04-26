@@ -34,13 +34,13 @@ module MOM_oda_driver_mod
   use time_manager_mod, only : get_date, get_time, operator(>=),operator(/=),operator(==),operator(<)
   use constants_mod, only : rseconds_per_hour=>seconds_per_hour, rseconds_per_day=>seconds_per_day
   ! ODA Modules
-  use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
-  use oda_core_mod, only : oda_core_init, get_profiles
+  use ocean_da_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
+  use ocean_da_core_mod, only : ocean_da_core_init, get_profiles
 #ifdef ENABLE_ECDA
   use eakf_oda_mod, only : ensemble_filter
 #endif
-  use write_ocean_data_mod, only : open_profile_file
-  use write_ocean_data_mod, only : write_profile,close_profile_file
+  use write_ocean_obs_mod, only : open_profile_file
+  use write_ocean_obs_mod, only : write_profile,close_profile_file
   use kdtree, only : kd_root !# JEDI
   ! MOM Modules
   use MOM_checksum_packages,    only : MOM_thermo_chksum
@@ -109,9 +109,9 @@ module MOM_oda_driver_mod
   type :: pointer_mpp_domain
      type(domain2d), pointer :: mpp_domain => NULL()
   end type pointer_mpp_domain
-  
+
   ! intermediate variables for remapped model T and S before redistribution
-  real, dimension(:,:,:), allocatable :: T, S  
+  real, dimension(:,:,:), allocatable :: T, S
   real, dimension(:,:,:), allocatable :: T_inc, S_inc
   type(ocean_control_struct), pointer :: Ocean_increment=>NULL()
   integer, parameter :: seconds_per_hour = rseconds_per_hour
@@ -276,8 +276,8 @@ contains
     !!  get global grid information from ocean model
     call set_up_global_tgrid(T_grid, CS)
 
-    call oda_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
- 
+    call ocean_da_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
+
     !! Set the initial assimilation time
     !CS%Time=Time
     CS%Time=increment_time(Time,CS%assim_frequency*seconds_per_hour)
@@ -362,7 +362,7 @@ contains
     !! Retain CS%tv to calculate increments for IAU updates CS%tv_inc otherwise
     get_inc = .true.
     if(present(increment)) get_inc = increment
-  
+
     if(get_inc) then
       if( .not. associated(Ocean_increment) ) then
         allocate(Ocean_increment)
@@ -371,7 +371,7 @@ contains
       Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
       Ocean_increment%S = CS%Ocean_posterior%S - CS%Ocean_prior%S
     endif
-  
+
     do m=1,CS%ensemble_size
       if(get_inc) then
         call mpp_redistribute(CS%mpp_domain, Ocean_increment%T(:,:,:,m), &
@@ -407,7 +407,7 @@ contains
 
       !! switch to global pelist
       call set_current_pelist(CS%filter_pelist)
-      !! get profiles for current assimilation step 
+      !! get profiles for current assimilation step
       call get_profiles(Time, CS%Profiles, CS%CProfiles)
 
 #ifdef ENABLE_ECDA
@@ -474,7 +474,7 @@ contains
              "assimilation interval appears to be shorter than " // &
              "the model timestep")
     endif
-    
+
     !! switch back to ensemble member pelist
     call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
 
@@ -512,7 +512,7 @@ contains
     type(thermo_var_ptrs), intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness (m or kg/m2)
     type(ODA_CS), intent(inout) :: CS     !< the data assimilation structure
-  
+
     !! local variables
     integer :: i, j, id_oda_apply_increments
     integer :: isc, iec, jsc, jec
@@ -558,7 +558,7 @@ contains
     call mpp_global_field(CS%mpp_domain, CS%Grid%geolonT, T_grid%x)
     allocate(T_grid%y(CS%ni,CS%nj))
     call mpp_global_field(CS%mpp_domain, CS%Grid%geolatT, T_grid%y)
-    
+
     allocate(T_grid%basin_mask(CS%ni,CS%nj))
     call mpp_global_field(CS%mpp_domain, CS%oda_grid%basin_mask, T_grid%basin_mask)
 
@@ -566,7 +566,7 @@ contains
     allocate(T_grid%z(CS%ni,CS%nj,CS%nk));      T_grid%z(:,:,:) = 0.0
     allocate(global2D(CS%ni,CS%nj))
     allocate(global2D_old(CS%ni,CS%nj))
- 
+
     do k = 1, CS%nk
       call mpp_global_field(CS%domains(CS%ensemble_id)%mpp_domain, CS%h(:,:,k), global2D)
       do i=1, CS%ni; do j=1, CS%nj
