@@ -211,7 +211,7 @@ end subroutine Neverland_buoyancy_forcing
 subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   real, pointer :: ptr(:,:)
   integer :: isd, ied, jsd, jed
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(isd:ied,jsd:jed))
     ptr(:,:) = 0.0
   endif

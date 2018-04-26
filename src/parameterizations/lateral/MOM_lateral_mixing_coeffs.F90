@@ -146,13 +146,13 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
          "Module must be initialized before it is used.")
   if (CS%calculate_cg1) then
-    if (.not. ASSOCIATED(CS%cg1)) call MOM_error(FATAL, &
+    if (.not. associated(CS%cg1)) call MOM_error(FATAL, &
       "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
     if (CS%khth_use_ebt_struct) then
-      if (.not. ASSOCIATED(CS%ebt_struct)) call MOM_error(FATAL, &
+      if (.not. associated(CS%ebt_struct)) call MOM_error(FATAL, &
         "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
       if (CS%Resoln_use_ebt) then
         ! Both resolution fn and vertical structure are using EBT
@@ -174,7 +174,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
   ! Calculate and store the ratio between deformation radius and grid-spacing
   ! at h-points (non-dimensional).
   if (CS%calculate_rd_dx) then
-    if (.not. ASSOCIATED(CS%Rd_dx_h)) call MOM_error(FATAL, &
+    if (.not. associated(CS%Rd_dx_h)) call MOM_error(FATAL, &
       "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
 !$OMP parallel default(none) shared(is,ie,js,je,CS)
 !$OMP do
@@ -190,29 +190,29 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
 
   if (.not. CS%calculate_res_fns) return
 
-  if (.not. ASSOCIATED(CS%Res_fn_h)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_h is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%Res_fn_q)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_q is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%Res_fn_u)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_u is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%Res_fn_v)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_v is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_h)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_h is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_q)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_q is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_u)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_u is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_v)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_v is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_h)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_h is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_q)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_q is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_u)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_u is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_v)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
 
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
@@ -389,7 +389,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at u-points
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
@@ -444,12 +444,12 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. ASSOCIATED(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. ASSOCIATED(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -606,12 +606,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   real    :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
   real    :: SN_v_local(SZI_(G), SZJB_(G),SZK_(G))
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. ASSOCIATED(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. ASSOCIATED(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

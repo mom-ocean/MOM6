@@ -402,7 +402,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call MOM_wave_interface_init_lite(param_file)
   endif
 
-  if (ASSOCIATED(OS%grid%Domain%maskmap)) then
+  if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
                                       OS%diag, maskmap=OS%grid%Domain%maskmap, &
                                       gas_fields_ocn=gas_fields_ocn)

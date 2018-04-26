@@ -425,7 +425,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   ! Frazil formation keeps the temperature above the freezing point.
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
-  if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
+  if (associated(tv%T) .AND. associated(tv%frazil)) then
     ! For frazil diagnostic, the first call covers the first half of the time step
     call enable_averaging(0.5*dt, Time_end - set_time(int(floor(0.5*dt+0.5))), CS%diag)
     if(CS%frazil_tendency_diag) then
@@ -434,7 +434,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       enddo ; enddo ; enddo
     endif
 
-    if (ASSOCIATED(fluxes%p_surf_full)) then
+    if (associated(fluxes%p_surf_full)) then
       call make_frazil(h, tv, G, GV, CS%diabatic_aux_CSp, fluxes%p_surf_full)
     else
       call make_frazil(h, tv, G, GV, CS%diabatic_aux_CSp)
@@ -513,7 +513,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       !  from this limitation, in which case we can let salinity=0 and still
       !  have salt conserved with SIS2 ice. So for SIS2, we can run with
       !  BOUND_SALINITY=False in MOM.F90.
-      if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
+      if (associated(tv%S) .and. associated(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, GV, CS%diabatic_aux_CSp)
       call cpu_clock_end(id_clock_mixedlayer)
       if (CS%debug) then
@@ -934,7 +934,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   ! This is a very long block.
   if (CS%bulkmixedlayer) then
 
-    if (ASSOCIATED(tv%T)) then
+    if (associated(tv%T)) then
       call cpu_clock_begin(id_clock_tridiag)
       ! Temperature and salinity (as state variables) are treated
       ! differently from other tracers to insure massless layers that
@@ -1017,7 +1017,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
 
-    endif ! endif for ASSOCIATED(T)
+    endif ! endif for associated(T)
     if (CS%debugConservation) call MOM_state_stats('BML tridiag', u, v, h, tv%T, tv%S, G)
 
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
@@ -1064,7 +1064,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       !  from this limitation, in which case we can let salinity=0 and still
       !  have salt conserved with SIS2 ice. So for SIS2, we can run with
       !  BOUND_SALINITY=False in MOM.F90.
-      if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
+      if (associated(tv%S) .and. associated(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, GV, CS%diabatic_aux_CSp)
 
       call cpu_clock_end(id_clock_mixedlayer)
@@ -1076,7 +1076,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
 
     ! calculate change in temperature & salinity due to dia-coordinate surface diffusion
-    if (ASSOCIATED(tv%T)) then
+    if (associated(tv%T)) then
 
       if (CS%debug) then
         call hchksum(ea, "before triDiagTS ea ",G%HI,haloshift=0, scale=GV%H_to_m)
@@ -1090,7 +1090,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       !  from this limitation, in which case we can let salinity=0 and still
       !  have salt conserved with SIS2 ice. So for SIS2, we can run with
       !  BOUND_SALINITY=False in MOM.F90.
-      if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
+      if (associated(tv%S) .and. associated(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, GV, CS%diabatic_aux_CSp)
 
       if(CS%diabatic_diff_tendency_diag) then
@@ -1120,7 +1120,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       call cpu_clock_end(id_clock_tridiag)
       if (showCallTree) call callTree_waypoint("done with triDiagTS (diabatic)")
 
-    endif  ! endif corresponding to if (ASSOCIATED(tv%T))
+    endif  ! endif corresponding to if (associated(tv%T))
     if (CS%debugConservation) call MOM_state_stats('triDiagTS', u, v, h, tv%T, tv%S, G)
 
 
@@ -1294,7 +1294,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       call apply_ALE_sponge(h, dt, G, CS%ALE_sponge_CSp, CS%Time)
     else
       ! Layer mode sponge
-      if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
+      if (CS%bulkmixedlayer .and. associated(tv%eqn_of_state)) then
         do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
         !$OMP parallel do default(shared)
         do j=js,je
@@ -1315,7 +1315,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
 
 !   Save the diapycnal mass fluxes as a diagnostic field.
-  if (ASSOCIATED(CDp%diapyc_vel)) then
+  if (associated(CDp%diapyc_vel)) then
     !$OMP parallel do default(shared)
     do j=js,je
       do K=2,nz ; do i=is,ie
@@ -1389,14 +1389,14 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
     !$OMP parallel do default(shared) private(hval,b1,d1,c1,eaval)
     do j=js,je
       do I=Isq,Ieq
-        if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
+        if (associated(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
         hval = (hold(i,j,1) + hold(i+1,j,1)) + (ea(i,j,1) + ea(i+1,j,1)) + h_neglect
         b1(I) = 1.0 / (hval + (eb(i,j,1) + eb(i+1,j,1)))
         d1(I) = hval * b1(I)
         u(I,j,1) = b1(I) * (hval * u(I,j,1))
       enddo
       do k=2,nz ; do I=Isq,Ieq
-        if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,k) = u(I,j,k)
+        if (associated(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,k) = u(I,j,k)
         c1(I,k) = (eb(i,j,k-1)+eb(i+1,j,k-1)) * b1(I)
         eaval = ea(i,j,k) + ea(i+1,j,k)
         hval = hold(i,j,k) + hold(i+1,j,k) + h_neglect
@@ -1406,10 +1406,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       enddo ; enddo
       do k=nz-1,1,-1 ; do I=Isq,Ieq
         u(I,j,k) = u(I,j,k) + c1(I,k+1)*u(I,j,k+1)
-        if (ASSOCIATED(ADp%du_dt_dia)) &
+        if (associated(ADp%du_dt_dia)) &
           ADp%du_dt_dia(I,j,k) = (u(I,j,k) - ADp%du_dt_dia(I,j,k)) * Idt
       enddo ; enddo
-      if (ASSOCIATED(ADp%du_dt_dia)) then
+      if (associated(ADp%du_dt_dia)) then
         do I=Isq,Ieq
           ADp%du_dt_dia(I,j,nz) = (u(I,j,nz)-ADp%du_dt_dia(I,j,nz)) * Idt
         enddo
@@ -1421,14 +1421,14 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
     !$OMP parallel do default(shared) private(hval,b1,d1,c1,eaval)
     do J=Jsq,Jeq
       do i=is,ie
-        if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,1) = v(i,J,1)
+        if (associated(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,1) = v(i,J,1)
         hval = (hold(i,j,1) + hold(i,j+1,1)) + (ea(i,j,1) + ea(i,j+1,1)) + h_neglect
         b1(i) = 1.0 / (hval + (eb(i,j,1) + eb(i,j+1,1)))
         d1(I) = hval * b1(I)
         v(i,J,1) = b1(i) * (hval * v(i,J,1))
       enddo
       do k=2,nz ; do i=is,ie
-        if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,k) = v(i,J,k)
+        if (associated(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,k) = v(i,J,k)
         c1(i,k) = (eb(i,j,k-1)+eb(i,j+1,k-1)) * b1(i)
         eaval = ea(i,j,k) + ea(i,j+1,k)
         hval = hold(i,j,k) + hold(i,j+1,k) + h_neglect
@@ -1438,10 +1438,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       enddo ; enddo
       do k=nz-1,1,-1 ; do i=is,ie
         v(i,J,k) = v(i,J,k) + c1(i,k+1)*v(i,J,k+1)
-        if (ASSOCIATED(ADp%dv_dt_dia)) &
+        if (associated(ADp%dv_dt_dia)) &
           ADp%dv_dt_dia(i,J,k) = (v(i,J,k) - ADp%dv_dt_dia(i,J,k)) * Idt
       enddo ; enddo
-      if (ASSOCIATED(ADp%dv_dt_dia)) then
+      if (associated(ADp%dv_dt_dia)) then
         do i=is,ie
           ADp%dv_dt_dia(i,J,nz) = (v(i,J,nz)-ADp%dv_dt_dia(i,J,nz)) * Idt
         enddo
@@ -1457,7 +1457,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   ! Frazil formation keeps temperature above the freezing point.
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
-  if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
+  if (associated(tv%T) .AND. associated(tv%frazil)) then
     call enable_averaging(0.5*dt, Time_end, CS%diag)
     if(CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
@@ -1465,7 +1465,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       enddo ; enddo ; enddo
     endif
 
-    if (ASSOCIATED(fluxes%p_surf_full)) then
+    if (associated(fluxes%p_surf_full)) then
       call make_frazil(h, tv, G, GV, CS%diabatic_aux_CSp, fluxes%p_surf_full)
     else
       call make_frazil(h, tv, G, GV, CS%diabatic_aux_CSp)
@@ -2412,7 +2412,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     endif
   endif
   CS%nsw = 0
-  if (ASSOCIATED(CS%optics)) CS%nsw = CS%optics%nbands
+  if (associated(CS%optics)) CS%nsw = CS%optics%nbands
 
   ! Initialize the diagnostic grid storage
   call diag_grid_storage_init(CS%diag_grids_prev, G, diag)

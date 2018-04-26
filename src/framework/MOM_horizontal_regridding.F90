@@ -315,9 +315,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
 
-  if (ALLOCATED(tr_z)) deallocate(tr_z)
-  if (ALLOCATED(mask_z)) deallocate(mask_z)
-  if (ALLOCATED(z_edges_in)) deallocate(z_edges_in)
+  if (allocated(tr_z)) deallocate(tr_z)
+  if (allocated(mask_z)) deallocate(mask_z)
+  if (allocated(z_edges_in)) deallocate(z_edges_in)
 
   PI_180=atan(1.0)/45.
 

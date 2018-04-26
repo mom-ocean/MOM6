@@ -38,7 +38,7 @@ subroutine safe_alloc_ptr_1d(ptr, i1, i2)
   real, pointer :: ptr(:)
   integer, intent(in) :: i1
   integer, optional, intent(in) :: i2
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     if (present(i2)) then
       allocate(ptr(i1:i2))
     else
@@ -51,7 +51,7 @@ end subroutine safe_alloc_ptr_1d
 subroutine safe_alloc_ptr_2d_2arg(ptr, ni, nj)
   real, pointer :: ptr(:,:)
   integer, intent(in) :: ni, nj
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(ni,nj))
     ptr(:,:) = 0.0
   endif
@@ -60,7 +60,7 @@ end subroutine safe_alloc_ptr_2d_2arg
 subroutine safe_alloc_ptr_3d_2arg(ptr, ni, nj, nk)
   real, pointer :: ptr(:,:,:)
   integer, intent(in) :: ni, nj, nk
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(ni,nj,nk))
     ptr(:,:,:) = 0.0
   endif
@@ -69,7 +69,7 @@ end subroutine safe_alloc_ptr_3d_2arg
 subroutine safe_alloc_ptr_2d(ptr, is, ie, js, je)
   real, pointer :: ptr(:,:)
   integer, intent(in) :: is, ie, js, je
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(is:ie,js:je))
     ptr(:,:) = 0.0
   endif
@@ -78,7 +78,7 @@ end subroutine safe_alloc_ptr_2d
 subroutine safe_alloc_ptr_3d(ptr, is, ie, js, je, nk)
   real, pointer :: ptr(:,:,:)
   integer, intent(in) :: is, ie, js, je, nk
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(is:ie,js:je,nk))
     ptr(:,:,:) = 0.0
   endif
@@ -87,7 +87,7 @@ end subroutine safe_alloc_ptr_3d
 subroutine safe_alloc_allocatable_2d(ptr, is, ie, js, je)
   real, allocatable :: ptr(:,:)
   integer, intent(in) :: is, ie, js, je
-  if (.not.ALLOCATED(ptr)) then
+  if (.not.allocated(ptr)) then
     allocate(ptr(is:ie,js:je))
     ptr(:,:) = 0.0
   endif
@@ -96,7 +96,7 @@ end subroutine safe_alloc_allocatable_2d
 subroutine safe_alloc_allocatable_3d(ptr, is, ie, js, je, nk)
   real, allocatable :: ptr(:,:,:)
   integer, intent(in) :: is, ie, js, je, nk
-  if (.not.ALLOCATED(ptr)) then
+  if (.not.allocated(ptr)) then
     allocate(ptr(is:ie,js:je,nk))
     ptr(:,:,:) = 0.0
   endif

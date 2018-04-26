@@ -2368,7 +2368,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
         deallocate(tmp_buffer)
       else ! fid <= 0 (Uniform value)
-        if (.not. ASSOCIATED(segment%field(m)%buffer_dst)) then
+        if (.not. associated(segment%field(m)%buffer_dst)) then
           if (segment%is_E_or_W) then
             if (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))

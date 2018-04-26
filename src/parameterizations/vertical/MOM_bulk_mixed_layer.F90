@@ -441,10 +441,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
          "Module must be initialized before it is used.")
   if (GV%nkml < 1) return
 
-  if (.not. ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
+  if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
       "MOM_mixed_layer: Temperature, salinity and an equation of state "//&
       "must now be used.")
-  if (.NOT. ASSOCIATED(fluxes%ustar)) call MOM_error(FATAL, &
+  if (.NOT. associated(fluxes%ustar)) call MOM_error(FATAL, &
       "MOM_mixed_layer: No surface TKE fluxes (ustar) defined in mixedlayer!")
 
   nkmb = CS%nkml+CS%nkbl
@@ -503,13 +503,13 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
         CS%diag_TKE_conv_decay(i,j) = 0.0 ; CS%diag_TKE_conv_s2(i,j) = 0.0
       enddo ; enddo
     endif
-    if (ALLOCATED(CS%diag_PE_detrain)) then
+    if (allocated(CS%diag_PE_detrain)) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_PE_detrain(i,j) = 0.0
       enddo ; enddo
     endif
-    if (ALLOCATED(CS%diag_PE_detrain2)) then
+    if (allocated(CS%diag_PE_detrain2)) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_PE_detrain2(i,j) = 0.0
@@ -674,10 +674,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
       T(i,0) = T(i,1) ; S(i,0) = S(i,1) ; R0(i,0) = R0(i,1) ; Rcv(i,0) = Rcv(i,1)
       h(i,0) = htot(i)
     endif ; enddo
-    if (write_diags .and. ALLOCATED(CS%ML_depth)) then ; do i=is,ie
+    if (write_diags .and. allocated(CS%ML_depth)) then ; do i=is,ie
       CS%ML_depth(i,j) = h(i,0) * GV%H_to_m
     enddo ; endif
-    if (ASSOCIATED(Hml)) then ; do i=is,ie
+    if (associated(Hml)) then ; do i=is,ie
       Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_m)
     enddo ; endif
 
@@ -1221,10 +1221,10 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                  (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
                   dRcv_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
-    if(ASSOCIATED(fluxes%heat_content_massin))                            &
+    if(associated(fluxes%heat_content_massin))                            &
            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) &
                        + T_precip * netMassIn(i) * GV%H_to_kg_m2 * fluxes%C_p * Idt
-    if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+    if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T_precip * netMassIn(i) * GV%H_to_kg_m2
   endif ; enddo
 
@@ -1274,10 +1274,10 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*GV%H_to_kg_m2*fluxes%C_p*Idt
         ! by uncommenting the lines here.
         ! we will also then completely remove TempXpme from the model.
-        if(ASSOCIATED(fluxes%heat_content_massout))                            &
+        if(associated(fluxes%heat_content_massout))                            &
            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
                                     - T(i,k)*h_evap*GV%H_to_kg_m2 * fluxes%C_p * Idt
-        if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
+        if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
                                       T(i,k)*h_evap*GV%H_to_kg_m2
 
       endif
@@ -3006,7 +3006,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
       h(i,0) = h(i,0) - (h_ml_to_h1 + h_ml_to_h2)
 
 
-      if (ALLOCATED(CS%diag_PE_detrain) .or. ALLOCATED(CS%diag_PE_detrain2)) then
+      if (allocated(CS%diag_PE_detrain) .or. allocated(CS%diag_PE_detrain2)) then
         R0_det = R0_to_bl*Ihdet
         s1en = G_2 * Idt_H2 * ( ((R0(i,kb2)-R0(i,kb1))*h1*h2 + &
             h_det_to_h2*( (R0(i,kb1)-R0_det)*h1 + (R0(i,kb2)-R0_det)*h2 ) + &
@@ -3014,10 +3014,10 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                          (R0_det-R0(i,0))*h_det_to_h2 ) + &
             h_det_to_h1*h_ml_to_h1*(R0_det-R0(i,0))) - 2.0*GV%Rho0*dPE_extrap )
 
-        if (ALLOCATED(CS%diag_PE_detrain)) &
+        if (allocated(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + s1en
 
-        if (ALLOCATED(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
+        if (allocated(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
             CS%diag_PE_detrain2(i,j) + s1en + Idt_H2*Rho0xG*dPE_extrap
       endif
 
@@ -3215,9 +3215,9 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
         h(i,kb1) = stays + h_to_bl
         h(i,kb2) = h1_to_h2
         h(i,k0) = h(i,k0) + (h1_to_k0 + h2)
-        if (ALLOCATED(CS%diag_PE_detrain)) &
+        if (allocated(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + Idt_H2*dPE_merge
-        if (ALLOCATED(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
+        if (allocated(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
              CS%diag_PE_detrain2(i,j) + Idt_H2*(dPE_det+Rho0xG*dPE_extrap)
       else ! Not mergeable_bl.
         ! There is no further detrainment from the buffer layers, and the
@@ -3291,9 +3291,9 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
         h(i,kb1) = stays + h_to_bl
         h(i,kb2) = h(i,kb2) + h1_to_h2
 
-        if (ALLOCATED(CS%diag_PE_detrain)) &
+        if (allocated(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + Idt_H2*dPE_det
-        if (ALLOCATED(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
+        if (allocated(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
           CS%diag_PE_detrain2(i,j) + Idt_H2*(dPE_det+Rho0xG*dPE_extrap)
       endif
     endif ! End of detrainment...
@@ -3412,10 +3412,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
         CS%diag_TKE_conv_s2(i,j) =  CS%diag_TKE_conv_s2(i,j) + &
           g_H2_2Rho0dt * h(i,k) * h(i,nkmb) * &
           (R0(i,nkmb) - R0(i,k))
-      if (ALLOCATED(CS%diag_PE_detrain)) &
+      if (allocated(CS%diag_PE_detrain)) &
         CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + &
             g_H2_2dt * h(i,k) * h(i,nkmb) * (R0(i,nkmb) - R0(i,k))
-      if (ALLOCATED(CS%diag_PE_detrain2)) &
+      if (allocated(CS%diag_PE_detrain2)) &
         CS%diag_PE_detrain2(i,j) = CS%diag_PE_detrain2(i,j) + &
             g_H2_2dt * h(i,k) * h(i,nkmb) * (R0(i,nkmb) - R0(i,k))
 
@@ -3462,7 +3462,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
       d_eb(i,nkmb) = d_eb(i,nkmb) - detrain(i)
       d_ea(i,nkmb) = d_ea(i,nkmb) + detrain(i)
 
-      if (ALLOCATED(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
+      if (allocated(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
         CS%diag_PE_detrain(i,j) + g_H2_2dt * detrain(i)* &
                      (h(i,0) + h(i,nkmb)) * (R0(i,nkmb) - R0(i,0))
       x1 = R0(i,0)
@@ -3542,7 +3542,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
           detrain(i) = h(i,nkmb)*(Rcv(i,nkmb) - RcvTgt(k)) / &
                                   (RcvTgt(k+1) - RcvTgt(k))
 
-          if (ALLOCATED(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
+          if (allocated(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
             CS%diag_PE_detrain(i,j) - g_H2_2dt * detrain(i) * &
                  (h(i,nkmb)-detrain(i)) * (RcvTgt(k+1) - RcvTgt(k)) * dR0_dRcv
 
@@ -3591,7 +3591,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
           h(i,k+1) = h(i,k+1) + detrain(i)
           h(i,nkmb) = h(i,nkmb) - detrain(i)
 
-          if (ALLOCATED(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
+          if (allocated(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
             CS%diag_PE_detrain(i,j) - g_H2_2dt * detrain(i) * dR0_dRcv * &
                  (h(i,nkmb)-detrain(i)) * (RcvTgt(k+1) - Rcv(i,nkmb) + dRml)
         endif

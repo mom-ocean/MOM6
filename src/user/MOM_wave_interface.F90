@@ -304,11 +304,11 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
          " Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and \n"// &
          " STOKES_Y, there are no safety checks in the code.",              &
          units='', default=1)
-      ALLOCATE ( CS%WaveNum_Cen(1:NumBands) ) ; CS%WaveNum_Cen(:)=0.0
-      ALLOCATE ( CS%PrescribedSurfStkX(1:NumBands)) ; CS%PrescribedSurfStkX(:) = 0.0
-      ALLOCATE ( CS%PrescribedSurfStkY(1:NumBands)) ; CS%PrescribedSurfStkY(:) = 0.0
-      ALLOCATE ( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:NumBands)) ; CS%STKx0(:,:,:) = 0.0
-      ALLOCATE ( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:NumBands)) ; CS%STKy0(:,:,:) = 0.0
+      allocate( CS%WaveNum_Cen(1:NumBands) ) ; CS%WaveNum_Cen(:)=0.0
+      allocate( CS%PrescribedSurfStkX(1:NumBands)) ; CS%PrescribedSurfStkX(:) = 0.0
+      allocate( CS%PrescribedSurfStkY(1:NumBands)) ; CS%PrescribedSurfStkY(:) = 0.0
+      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:NumBands)) ; CS%STKx0(:,:,:) = 0.0
+      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:NumBands)) ; CS%STKy0(:,:,:) = 0.0
       partitionmode=0
       call get_param(param_file,mdl,"SURFBAND_WAVENUMBERS",CS%WaveNum_Cen,      &
            "Central wavenumbers for surface Stokes drift bands.",units='rad/m', &
@@ -352,17 +352,17 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   ! 2. Allocate and initialize
   !    Stokes drift
   ! Profiles
-  ALLOCATE (CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke)) ; CS%Us_x(:,:,:) = 0.0
-  ALLOCATE (CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke)) ; CS%Us_y(:,:,:) = 0.0
+  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke)) ; CS%Us_x(:,:,:) = 0.0
+  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke)) ; CS%Us_y(:,:,:) = 0.0
   ! Surface Values
-  ALLOCATE (CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed)) ; CS%US0_x(:,:) = 0.0
-  ALLOCATE (CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB)) ; CS%US0_y(:,:) = 0.0
+  allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed)) ; CS%US0_x(:,:) = 0.0
+  allocate(CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB)) ; CS%US0_y(:,:) = 0.0
   ! Langmuir number
-  ALLOCATE (CS%LangNum(G%isc:G%iec,G%jsc:G%jec)) ; CS%LangNum(:,:) = 0.0
+  allocate(CS%LangNum(G%isc:G%iec,G%jsc:G%jec)) ; CS%LangNum(:,:) = 0.0
 
   if (CS%StokesMixing) then
     ! Viscosity for Stokes drift
-    ALLOCATE (CS%KvS(G%isd:G%Ied,G%jsd:G%jed,G%ke)) ; CS%KvS(:,:,:) = 0.0
+    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,G%ke)) ; CS%KvS(:,:,:) = 0.0
   endif
 
   !
@@ -721,7 +721,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
           " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
       endif
       ! Allocating size of wavenumber bins
-      ALLOCATE ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
+      allocate( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
     elseif (rcode_fr.eq.0) then
       ! frequencies found:
       PartitionMode=1
@@ -743,15 +743,15 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
              " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
       endif
       ! Allocating size of frequency bins
-      ALLOCATE ( CS%Freq_Cen(1:id) ) ; CS%Freq_Cen(:)=0.0
-      ALLOCATE ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
+      allocate( CS%Freq_Cen(1:id) ) ; CS%Freq_Cen(:)=0.0
+      allocate( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
     endif
 
 
     ! Allocating size of wavenumber bins
 
-    ALLOCATE ( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:id)) ; CS%STKx0(:,:,:) = 0.0
-    ALLOCATE ( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:id)) ; CS%STKy0(:,:,:) = 0.0
+    allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:id)) ; CS%STKx0(:,:,:) = 0.0
+    allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:id)) ; CS%STKy0(:,:,:) = 0.0
 
 
     ! Reading wavenumber bins/Frequencies
@@ -1280,18 +1280,18 @@ subroutine Waves_end(CS)
 !/
   type(wave_parameters_CS), pointer :: CS !< Control structure
 !/
-  if (allocated(CS%WaveNum_Cen)) then; DEALLOCATE( CS%WaveNum_Cen ); endif
-  if (allocated(CS%Freq_Cen))    DEALLOCATE( CS%Freq_Cen )
-  if (allocated(CS%Us_x))        DEALLOCATE( CS%Us_x )
-  if (allocated(CS%Us_y))        DEALLOCATE( CS%Us_y )
-  if (allocated(CS%LangNum))     DEALLOCATE( CS%LangNum )
-  if (allocated(CS%STKx0))       DEALLOCATE( CS%STKx0 )
-  if (allocated(CS%STKy0))       DEALLOCATE( CS%STKy0 )
-  if (allocated(CS%KvS))         DEALLOCATE( CS%KvS )
-  if (allocated(CS%Us0_y))       DEALLOCATE( CS%Us0_y )
-  if (allocated(CS%Us0_x))       DEALLOCATE( CS%Us0_x )
+  if (allocated(CS%WaveNum_Cen)) then; deallocate( CS%WaveNum_Cen ); endif
+  if (allocated(CS%Freq_Cen))    deallocate( CS%Freq_Cen )
+  if (allocated(CS%Us_x))        deallocate( CS%Us_x )
+  if (allocated(CS%Us_y))        deallocate( CS%Us_y )
+  if (allocated(CS%LangNum))     deallocate( CS%LangNum )
+  if (allocated(CS%STKx0))       deallocate( CS%STKx0 )
+  if (allocated(CS%STKy0))       deallocate( CS%STKy0 )
+  if (allocated(CS%KvS))         deallocate( CS%KvS )
+  if (allocated(CS%Us0_y))       deallocate( CS%Us0_y )
+  if (allocated(CS%Us0_x))       deallocate( CS%Us0_x )
 !/
-  DEALLOCATE( CS )
+  deallocate( CS )
 !/
   return
 end subroutine Waves_end

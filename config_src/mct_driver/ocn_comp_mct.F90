@@ -890,7 +890,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     if (.not. OS%use_ice_shelf) call allocate_forcing_type(OS%grid, OS%fluxes, ustar=.true., shelf=.true.)
   endif
 
-  if (ASSOCIATED(OS%grid%Domain%maskmap)) then
+  if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
                                       OS%diag, maskmap=OS%grid%Domain%maskmap, &
                                       gas_fields_ocn=gas_fields_ocn)
@@ -2050,70 +2050,70 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
     endif
 
     ! liquid precipitation (rain)
-    if (ASSOCIATED(fluxes%lprec)) &
+    if (associated(fluxes%lprec)) &
       fluxes%lprec(i,j) = x2o_o(ind%x2o_Faxa_rain,k) * G%mask2dT(i,j)
 
     ! frozen precipitation (snow)
-    if (ASSOCIATED(fluxes%fprec)) &
+    if (associated(fluxes%fprec)) &
       fluxes%fprec(i,j) = x2o_o(ind%x2o_Faxa_snow,k) * G%mask2dT(i,j)
 
     ! evaporation
-    if (ASSOCIATED(fluxes%evap)) &
+    if (associated(fluxes%evap)) &
       fluxes%evap(i,j) = x2o_o(ind%x2o_Foxx_evap,k) * G%mask2dT(i,j)
 
     ! river runoff flux
-    if (ASSOCIATED(fluxes%lrunoff)) &
+    if (associated(fluxes%lrunoff)) &
       fluxes%lrunoff(i,j) = x2o_o(ind%x2o_Foxx_rofl,k) * G%mask2dT(i,j)
 
     ! ice runoff flux
-    if (ASSOCIATED(fluxes%frunoff)) &
+    if (associated(fluxes%frunoff)) &
       fluxes%frunoff(i,j) = x2o_o(ind%x2o_Foxx_rofi,k) * G%mask2dT(i,j)
 
     ! GMM, we don't have an icebergs yet so the following is not needed
-    !if (((ASSOCIATED(IOB%ustar_berg) .and. (.not. ASSOCIATED(fluxes%ustar_berg)))   &
-    !  .or. (ASSOCIATED(IOB%area_berg) .and. (.not. ASSOCIATED(fluxes%area_berg)))) &
-    !  .or. (ASSOCIATED(IOB%mass_berg) .and. (.not. ASSOCIATED(fluxes%mass_berg)))) &
+    !if (((associated(IOB%ustar_berg) .and. (.not. associated(fluxes%ustar_berg)))   &
+    !  .or. (associated(IOB%area_berg) .and. (.not. associated(fluxes%area_berg)))) &
+    !  .or. (associated(IOB%mass_berg) .and. (.not. associated(fluxes%mass_berg)))) &
     !  call allocate_forcing_type(G, fluxes, iceberg=.true.)
-    !if (ASSOCIATED(IOB%ustar_berg)) &
+    !if (associated(IOB%ustar_berg)) &
     !  fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
-    !if (ASSOCIATED(IOB%area_berg)) &
+    !if (associated(IOB%area_berg)) &
     !  fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
-    !if (ASSOCIATED(IOB%mass_berg)) &
+    !if (associated(IOB%mass_berg)) &
     !  fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
     ! heat_content_frunoff. I am seeting these to zero for now.
-    if (ASSOCIATED(fluxes%heat_content_lrunoff)) &
+    if (associated(fluxes%heat_content_lrunoff)) &
       fluxes%heat_content_lrunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
-    if (ASSOCIATED(fluxes%heat_content_frunoff)) &
+    if (associated(fluxes%heat_content_frunoff)) &
       fluxes%heat_content_frunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
     ! longwave radiation, sum up and down (W/m2)
-    if (ASSOCIATED(fluxes%LW)) &
+    if (associated(fluxes%LW)) &
       fluxes%LW(i,j) = (x2o_o(ind%x2o_Faxa_lwdn,k) + x2o_o(ind%x2o_Foxx_lwup,k)) * G%mask2dT(i,j)
 
     ! sensible heat flux (W/m2)
-    if (ASSOCIATED(fluxes%sens)) &
+    if (associated(fluxes%sens)) &
       fluxes%sens(i,j) =  x2o_o(ind%x2o_Foxx_sen,k) * G%mask2dT(i,j)
 
     ! latent heat flux (W/m^2)
-    if (ASSOCIATED(fluxes%latent)) &
+    if (associated(fluxes%latent)) &
       fluxes%latent(i,j) = x2o_o(ind%x2o_Foxx_lat,k) * G%mask2dT(i,j)
 
     if (sw_decomp) then
       ! Use runtime coefficients to decompose net short-wave heat flux into 4 components
       ! 1) visible, direct shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_vis_dir)) &
+      if (associated(fluxes%sw_vis_dir)) &
         fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c1
       ! 2) visible, diffuse shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_vis_dif)) &
+      if (associated(fluxes%sw_vis_dif)) &
         fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c2
       ! 3) near-IR, direct shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_nir_dir)) &
+      if (associated(fluxes%sw_nir_dir)) &
         fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c3
       ! 4) near-IR, diffuse shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_nir_dif)) &
+      if (associated(fluxes%sw_nir_dif)) &
         fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c4
 
       fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
@@ -2125,7 +2125,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
 
     ! applied surface pressure from atmosphere and cryosphere
     ! sea-level pressure (Pa)
-    if (ASSOCIATED(forces%p_surf_full) .and. ASSOCIATED(forces%p_surf)) then
+    if (associated(forces%p_surf_full) .and. associated(forces%p_surf)) then
       forces%p_surf_full(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Sa_pslv,k)
       if (CS%max_p_surf >= 0.0) then
           forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
@@ -2143,10 +2143,10 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
 
     ! salt flux
     ! more salt restoring logic
-    if (ASSOCIATED(fluxes%salt_flux)) &
+    if (associated(fluxes%salt_flux)) &
       fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(x2o_o(ind%x2o_Fioi_salt,k) + fluxes%salt_flux(i,j))
 
-    if (ASSOCIATED(fluxes%salt_flux_in)) &
+    if (associated(fluxes%salt_flux_in)) &
       fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*x2o_o(ind%x2o_Fioi_salt,k)
 
   enddo ; enddo
@@ -2164,7 +2164,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
-      if (ASSOCIATED(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
+      if (associated(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
         net_FW(i,j) = net_FW(i,j) + G%areaT(i,j) * &
                      (fluxes%salt_flux(i,j) / CS%ice_salt_concentration)
       net_FW2(i,j) = net_FW(i,j)/G%areaT(i,j)

@@ -277,7 +277,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
 
   if (GV%nkml<1) return
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
-  if (.not.ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
+  if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, &
     "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
 

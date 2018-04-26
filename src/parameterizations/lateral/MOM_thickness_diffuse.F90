@@ -122,7 +122,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
 
   if ((.not.CS%thickness_diffuse) .or. &
@@ -133,14 +133,14 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
 
   if (associated(MEKE)) then
-    if (ASSOCIATED(MEKE%GM_src)) then
+    if (associated(MEKE%GM_src)) then
       do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
     endif
   endif
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   khth_use_ebt_struct = .false.
-  if (Associated(VarMix)) then
+  if (associated(VarMix)) then
     use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
@@ -312,8 +312,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
                                 int_slope_u, int_slope_v)
   endif
 
-  if (associated(MEKE) .AND. ASSOCIATED(VarMix)) then
-    if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then
+  if (associated(MEKE) .AND. associated(VarMix)) then
+    if (associated(MEKE%Rd_dx_h) .and. associated(VarMix%Rd_dx_h)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
       do j=js,je ; do i=is,ie
         MEKE%Rd_dx_h(i,j) = VarMix%Rd_dx_h(i,j)
@@ -367,11 +367,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
-      if (ASSOCIATED(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
+      if (associated(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k)*dt
-      if (ASSOCIATED(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
+      if (associated(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
     enddo ; enddo
     do j=js,je ; do i=is,ie
       h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
@@ -529,8 +529,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   nk_linear = max(GV%nkml, 1)
 
   find_work = .false.
-  if (associated(MEKE)) find_work = ASSOCIATED(MEKE%GM_src)
-  find_work = (ASSOCIATED(CS%GMwork) .or. find_work)
+  if (associated(MEKE)) find_work = associated(MEKE%GM_src)
+  find_work = (associated(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
     call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth, dt, T, S, G, GV, 1)
@@ -1130,8 +1130,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
-    if (ASSOCIATED(CS%GMwork)) CS%GMwork(i,j) = Work_h
-    if (associated(MEKE)) then ; if (ASSOCIATED(MEKE%GM_src)) then
+    if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
+    if (associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
   enddo ; enddo ; endif
