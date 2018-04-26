@@ -38,11 +38,11 @@ module MOM_oda_driver_mod
   use time_manager_mod, only : get_date, get_time, operator(>=),operator(/=),operator(==),operator(<)
   use constants_mod, only : radius, epsln
   ! ODA Modules
-  use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
-  use oda_core_mod, only : oda_core_init, get_profiles
+  use ocean_da_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
+  use ocean_da_core_mod, only : ocean_da_core_init, get_profiles
   !use eakf_oda_mod, only : ensemble_filter
-  use write_ocean_data_mod, only : open_profile_file
-  use write_ocean_data_mod, only : write_profile,close_profile_file
+  use write_ocean_obs_mod, only : open_profile_file
+  use write_ocean_obs_mod, only : write_profile,close_profile_file
   use kdtree, only : kd_root !# JEDI
   ! MOM Modules
   use MOM_io, only : slasher, MOM_read_data
@@ -314,7 +314,7 @@ contains
      global2D_old = global2D
    end do
 
-   call oda_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
+   call ocean_da_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
 
    CS%Time=Time
    !! switch back to ensemble member pelist
