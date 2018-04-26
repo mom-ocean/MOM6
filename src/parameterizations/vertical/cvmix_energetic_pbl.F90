@@ -52,9 +52,8 @@ implicit none ; private
 !> cvmix_energetic_PBL_CS type contains the physical parameters that are used
 !! in implementing the energetic planetary boundary layer scheme of Jackson et. al.
 !! These parameters should  be initialized with sensible values before the scheme can be used.
-!! ****TO DO***
-!! We should set defaults for these parameters and provide a subroutine to reset them by the user.
-type :: cvmix_energetic_PBL_CS
+
+type :: cvmix_energetic_PBL_CS ; private
   real    :: mstar = 1.2     ! The ratio of the friction velocity cubed to the
                              ! TKE available to drive entrainment, nondimensional.
                              ! This quantity is the vertically integrated
@@ -151,13 +150,13 @@ type :: cvmix_energetic_PBL_CS
   integer :: MSTAR_MODE = 0  ! An integer to determine which formula is used to
                              !  set mstar
   integer :: CONST_MSTAR=0,MLD_o_OBUKHOV=1,EKMAN_o_OBUKHOV=2
-  logical :: MSTAR_FLATCAP=.true. !Set false to use asymptotic mstar cap.
+  logical :: MSTAR_FLATCAP =.true. !Set false to use asymptotic mstar cap.
   logical :: TKE_diagnostics = .false.
   logical :: Use_LA_windsea = .false.
   logical :: orig_PE_calc = .true.
-  logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
-  logical :: Orig_MLD_iteration=.true. ! False to use old MLD value
-  logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
+  logical :: Use_MLD_iteration =.false. ! False to use old ePBL method.
+  logical :: Orig_MLD_iteration =.true. ! False to use old MLD value
+  logical :: MLD_iteration_guess =.false. ! False to default to guessing half the
                                          ! ocean depth for the iteration.
   logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
                                           !  length and velocity scale
@@ -173,9 +172,6 @@ type :: cvmix_energetic_PBL_CS
     diag_TKE_conv_decay, & ! The decay of convective TKE.
     diag_TKE_mixing,&  ! The work done by TKE to deepen
                        ! the mixed layer.
-    ! Additional output parameters also 2d
-    ML_depth, &        ! The mixed layer depth in m. (result after iteration step)
-    ML_depth2, &       ! The mixed layer depth in m. (guess for iteration step)
     Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
     MLD_EKMAN, &       ! MLD over Ekman length
@@ -197,7 +193,7 @@ type :: cvmix_energetic_PBL_CS
   integer :: id_LA, id_LA_mod
 end type cvmix_energetic_PBL_CS
 
-public cvmix_energetic_PBL_CS, cvmix_epbl_column, cvmix_epbl_end
+public cvmix_energetic_PBL_CS, cvmix_epbl_init, cvmix_epbl_column, cvmix_epbl_end
 
 contains
 
@@ -206,6 +202,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
                        dSV_dT,dSV_dS,TKE_forced, dt, IdtdR0, &
                        m_to_H, H_to_m, H_to_kg_m2,g_Earth,Rho0,h_neglect, &
                        buoy_flux,U_Star,U_Star_Mean,absf,mech_TKE,conv_PErel, &
+                       ML_Depth,ML_Depth2,&
                        ii,jj, & !?Niki: just to be able to set the CS% arrays. Can we get rid of them?
                        CS,    & !?Niki: container type for the subroutine
                        dT_expected, dS_expected)
@@ -238,6 +235,8 @@ subroutine cvmix_epbl_column(NZ, Kd, &
   real, intent(inout) :: conv_PErel !< The potential energy that has been convectively released
                                  ! during this timestep, in J m-2 = kg s-2. A portion nstar_FC
                                  ! of conv_PErel is available to drive mixing.
+  real, intent(inout) :: ML_depth  !< The mixed layer depth in m. (result after iteration step)
+  real, intent(inout) :: ML_Depth2 !< The mixed layer depth in m. (guess for iteration step)
   integer , intent(in) :: ii,jj
   type(cvmix_energetic_PBL_CS),  pointer :: CS     !< The control structure returned by a previous
   real, dimension(NZ), optional, intent(inout) :: dT_expected, dS_expected
@@ -506,9 +505,9 @@ subroutine cvmix_epbl_column(NZ, Kd, &
       !/BGR: Add MLD_guess based on stored previous value.
       !      note that this is different from ML_Depth already
       !      computed by EPBL, need to figure out why.
-      if (CS%MLD_iteration_guess .and. CS%ML_Depth2(ii,jj) > 1.) then
+      if (CS%MLD_iteration_guess .and. ML_Depth2 > 1.) then
         !If prev value is present use for guess.
-        MLD_guess=CS%ML_Depth2(ii,jj)
+        MLD_guess=ML_Depth2
       else
         !Otherwise guess middle of water column (or stab_scale if smaller).
         MLD_guess = 0.5 * (min_MLD+max_MLD)
@@ -522,7 +521,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
 
         ! Reset ML_depth
-        CS%ML_depth(ii,jj) = h(1)*H_to_m
+        ML_depth = h(1)*H_to_m
         !CS%ML_depth2(ii,jj) = h(i,1)*H_to_m
 
         sfc_connected = .true.
@@ -957,7 +956,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
                 dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
               endif
               if (sfc_connected) then
-                CS%ML_depth(ii,jj) = CS%ML_depth(ii,jj) + H_to_m * h(k)
+                ML_depth = ML_depth + H_to_m * h(k)
                 !CS%ML_depth2(ii,jj) = CS%ML_depth2(ii,jj) + H_to_m * h(i,k)
               endif
 
@@ -982,7 +981,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
               mech_TKE = TKE_reduc*(mech_TKE + MKE_src)
               conv_PErel = TKE_reduc*conv_PErel
               if (sfc_connected) then
-                CS%ML_depth(ii,jj) = CS%ML_depth(ii,jj) + H_to_m * h(k)
+                ML_depth = ML_depth + H_to_m * h(k)
                 !CS%ML_depth2(ii,jj) = CS%ML_depth2(ii,jj) + H_to_m * h(i,k)
               endif
             elseif (tot_TKE == 0.0) then
@@ -1084,7 +1083,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
                     (CS%nstar-nstar_FC) * conv_PErel * IdtdR0
               endif
 
-              if (sfc_connected) CS%ML_depth(ii,jj) = CS%ML_depth(ii,jj) + &
+              if (sfc_connected) ML_depth = ML_depth + &
                    (PE_chg / PE_chg_g0) * H_to_m * h(k)
               tot_TKE = 0.0 ; mech_TKE= 0.0 ; conv_PErel = 0.0
               sfc_disconnect = .true.
@@ -1189,7 +1188,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
                     NUMIT = NUMIT+1
                     print*,MAXIT,MINIT,SUMIT/NUMIT
                   endif
-                  CS%ML_Depth2(ii,jj) = MLD_guess
+                  ML_Depth2 = MLD_guess
                 else
                   max_MLD = MLD_guess !We know this guess was too deep
                 endif
@@ -1198,7 +1197,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
           enddo
         else
           !New method uses ML_DEPTH as computed in ePBL routine
-          MLD_FOUND=CS%ML_DEPTH(ii,jj)
+          MLD_FOUND=ML_DEPTH
           if (MLD_FOUND-CS%MLD_tol > MLD_guess) then
             min_MLD = MLD_guess
           elseif (abs(MLD_guess-MLD_FOUND) < (CS%MLD_tol)) then
@@ -1210,7 +1209,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
               NUMIT = NUMIT+1
               print*,MAXIT,MINIT,SUMIT/NUMIT
             endif
-            CS%ML_Depth2(ii,jj) = MLD_guess
+            ML_Depth2 = MLD_guess
           else
             max_MLD = MLD_guess !We know this guess was too deep
           endif
@@ -1704,15 +1703,91 @@ subroutine get_LA_windsea(ustar, hbl, Rho0,g_Earth, LA)
   else
     LA=1.e8
   endif
-endsubroutine Get_LA_windsea
+end subroutine Get_LA_windsea
+
+subroutine cvmix_epbl_init(mstar,nstar,MixLenExponent,TKE_decay,MKE_to_TKE_effic,omega,omega_frac,&
+wstar_ustar_coef,vstar_scale_fac,transLay_scale,MLD_tol,min_mix_len,&
+N2_Dissipation_Scale_Neg,N2_Dissipation_Scale_Pos,MSTAR_CAP,MSTAR_SLOPE,MSTAR_XINT,MSTAR_AT_XINT,&
+LT_ENHANCE_COEF,LT_ENHANCE_EXP,MSTAR_N,C_EK,MSTAR_COEF,MSTAR_A,MSTAR_B,MSTAR_A2,MSTAR_B2,&
+LaC_MLDoEK,LaC_MLDoOB_stab,LaC_EKoOB_stab,&
+LaC_MLDoOB_un,LaC_EKoOB_un,Max_Enhance_M,CNV_MST_FAC,LT_Enhance_Form,MSTAR_MODE,&
+CONST_MSTAR,MLD_o_OBUKHOV,EKMAN_o_OBUKHOV,MSTAR_FLATCAP,TKE_diagnostics,Use_LA_windsea,&
+orig_PE_calc,Use_MLD_iteration,Orig_MLD_iteration,MLD_iteration_guess,Mixing_Diagnostics,CS)
+   real, intent(in) :: mstar,nstar,MixLenExponent,TKE_decay,MKE_to_TKE_effic,omega,omega_frac,&
+wstar_ustar_coef,vstar_scale_fac,transLay_scale,MLD_tol,min_mix_len,&
+N2_Dissipation_Scale_Neg,N2_Dissipation_Scale_Pos,MSTAR_CAP,MSTAR_SLOPE,MSTAR_XINT,MSTAR_AT_XINT,&
+LT_ENHANCE_COEF,LT_ENHANCE_EXP,MSTAR_N,C_EK,MSTAR_COEF,MSTAR_A,MSTAR_B,MSTAR_A2,MSTAR_B2,&
+LaC_MLDoEK,LaC_MLDoOB_stab,LaC_EKoOB_stab,&
+LaC_MLDoOB_un,LaC_EKoOB_un,Max_Enhance_M,CNV_MST_FAC
+   integer, intent(in) :: LT_Enhance_Form, MSTAR_MODE, CONST_MSTAR,MLD_o_OBUKHOV,EKMAN_o_OBUKHOV
+   logical, intent(in) :: MSTAR_FLATCAP, TKE_diagnostics, Use_LA_windsea, orig_PE_calc, Use_MLD_iteration,&
+                          Orig_MLD_iteration, MLD_iteration_guess, Mixing_Diagnostics
+   type(cvmix_energetic_PBL_CS), pointer :: CS
+
+   if (associated(CS)) then
+    print*,"WARNING: cvmix_epbl_init called with an associated control structure!"
+    return
+   endif
+   allocate(CS)
+  
+   CS%mstar = mstar
+   CS%nstar = nstar
+   CS%MixLenExponent = MixLenExponent
+   CS%TKE_decay = TKE_decay
+   CS%MKE_to_TKE_effic = MKE_to_TKE_effic
+   CS%omega = omega
+   CS%omega_frac = omega_frac
+   CS%wstar_ustar_coef = wstar_ustar_coef
+   CS%vstar_scale_fac = vstar_scale_fac
+   CS%transLay_scale = transLay_scale
+   CS%MLD_tol = MLD_tol
+   CS%min_mix_len = min_mix_len
+   CS%N2_Dissipation_Scale_Neg = N2_Dissipation_Scale_Neg
+   CS%N2_Dissipation_Scale_Pos = N2_Dissipation_Scale_Pos
+   CS%MSTAR_CAP = MSTAR_CAP
+   CS%MSTAR_SLOPE = MSTAR_SLOPE
+   CS%MSTAR_XINT = MSTAR_XINT
+   CS%MSTAR_AT_XINT = MSTAR_AT_XINT
+   CS%LT_ENHANCE_COEF = LT_ENHANCE_COEF
+   CS%LT_ENHANCE_EXP = LT_ENHANCE_EXP
+   CS%MSTAR_N = MSTAR_N
+   CS%C_EK = C_EK
+   CS%MSTAR_COEF = MSTAR_COEF
+   CS%MSTAR_A = MSTAR_A
+   CS%MSTAR_B = MSTAR_B
+   CS%MSTAR_A2 = MSTAR_A2
+   CS%MSTAR_B2 = MSTAR_B2 
+   CS%LaC_MLDoEK = LaC_MLDoEK
+   CS%LaC_MLDoOB_stab = LaC_MLDoOB_stab
+   CS%LaC_EKoOB_stab = LaC_EKoOB_stab
+   CS%LaC_MLDoOB_un = LaC_MLDoOB_un
+   CS%LaC_EKoOB_un = LaC_EKoOB_un
+   CS%Max_Enhance_M = Max_Enhance_M
+   CS%CNV_MST_FAC = CNV_MST_FAC
+   CS%LT_Enhance_Form = LT_Enhance_Form
+   CS%MSTAR_MODE = MSTAR_MODE
+   CS%CONST_MSTAR = CONST_MSTAR
+   CS%MLD_o_OBUKHOV = MLD_o_OBUKHOV
+   CS%EKMAN_o_OBUKHOV = EKMAN_o_OBUKHOV 
+   CS%MSTAR_FLATCAP = MSTAR_FLATCAP
+   CS%TKE_diagnostics = TKE_diagnostics
+   CS%Use_LA_windsea = Use_LA_windsea
+   CS%orig_PE_calc = orig_PE_calc
+   CS%Use_MLD_iteration = Use_MLD_iteration
+   CS%Orig_MLD_iteration = Orig_MLD_iteration
+   CS%MLD_iteration_guess = MLD_iteration_guess
+   CS%Mixing_Diagnostics = Mixing_Diagnostics
+
+
+
+end subroutine cvmix_epbl_init
 
 subroutine cvmix_epbl_end(CS)
+
   type(cvmix_energetic_PBL_CS), pointer :: CS
 
   if (.not.associated(CS)) return
 
-  if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
-  if (allocated(CS%ML_depth2))           deallocate(CS%ML_depth2)
   if (allocated(CS%Enhance_M))           deallocate(CS%Enhance_M)
   if (allocated(CS%MLD_EKMAN))           deallocate(CS%MLD_EKMAN)
   if (allocated(CS%MLD_OBUKHOV))         deallocate(CS%MLD_OBUKHOV)

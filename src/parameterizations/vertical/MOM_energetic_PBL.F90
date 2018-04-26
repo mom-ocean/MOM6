@@ -58,7 +58,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
-use cvmix_energetic_pbl, only : energetic_PBL_CS=>cvmix_energetic_PBL_CS, cvmix_epbl_column, cvmix_epbl_end
+use cvmix_energetic_pbl, only : cvmix_energetic_PBL_CS, cvmix_epbl_init, cvmix_epbl_column, cvmix_epbl_end
 
 implicit none ; private
 
@@ -68,6 +68,151 @@ public energetic_PBL, energetic_PBL_init, energetic_PBL_end
 public energetic_PBL_get_MLD
 public energetic_PBL_CS
 
+type, public :: energetic_PBL_CS ; private
+  real    :: mstar           ! The ratio of the friction velocity cubed to the
+                             ! TKE available to drive entrainment, nondimensional.
+                             ! This quantity is the vertically integrated
+                             ! shear production minus the vertically integrated
+                             ! dissipation of TKE produced by shear.
+  real    :: nstar           ! The fraction of the TKE input to the mixed layer
+                             ! available to drive entrainment, nondim.
+                             ! This quantity is the vertically integrated
+                             ! buoyancy production minus the vertically integrated
+                             ! dissipation of TKE produced by buoyancy.
+  real    :: MixLenExponent  ! Exponent in the mixing length shape-function.
+                             ! 1 is law-of-the-wall at top and bottom,
+                             ! 2 is more KPP like.
+  real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
+                             ! decay scale, nondimensional.
+  real    :: MKE_to_TKE_effic ! The efficiency with which mean kinetic energy
+                             ! released by mechanically forced entrainment of
+                             ! the mixed layer is converted to TKE, nondim.
+!  real    :: Hmix_min        ! The minimum mixed layer thickness in m.
+  real    :: ustar_min       ! A minimum value of ustar to avoid numerical
+                             ! problems, in m s-1.  If the value is small enough,
+                             ! this should not affect the solution.
+  real    :: omega           !   The Earth's rotation rate, in s-1.
+  real    :: omega_frac      !   When setting the decay scale for turbulence, use
+                             ! this fraction of the absolute rotation rate blended
+                             ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
+  real    :: wstar_ustar_coef ! A ratio relating the efficiency with which
+                             ! convectively released energy is converted to a
+                             ! turbulent velocity, relative to mechanically
+                             ! forced turbulent kinetic energy, nondim. Making
+                             ! this larger increases the diffusivity.
+  real    :: vstar_scale_fac ! An overall nondimensional scaling factor
+                             ! for vstar.  Making this larger increases the
+                             ! diffusivity.
+  real    :: Ekman_scale_coef ! A nondimensional scaling factor controlling
+                             ! the inhibition of the diffusive length scale by
+                             ! rotation.  Making this larger decreases the
+                             ! diffusivity in the planetary boundary layer.
+  real    :: transLay_scale  ! A scale for the mixing length in the transition layer
+                             ! at the edge of the boundary layer as a fraction of the
+                             ! boundary layer thickness.  The default is 0, but a
+                             ! value of 0.1 might be better justified by observations.
+  real    :: MLD_tol         ! A tolerance for determining the boundary layer
+                             ! thickness when Use_MLD_iteration is true, in m.
+  real    :: min_mix_len     ! The minimum mixing length scale that will be
+                             ! used by ePBL, in m.  The default (0) does not
+                             ! set a minimum.
+  real    :: N2_Dissipation_Scale_Neg
+  real    :: N2_Dissipation_Scale_Pos
+                             ! A nondimensional scaling factor controlling the
+                             ! loss of TKE due to enhanced dissipation in the presence
+                             ! of stratification.  This dissipation is applied to the
+                             ! available TKE which includes both that generated at the
+                             ! surface and that generated at depth.  It may be important
+                             ! to distinguish which TKE flavor that this dissipation
+                             ! applies to in subsequent revisions of this code.
+                             ! "_Neg" and "_Pos" refer to which scale is applied as a
+                             ! function of negative or positive local buoyancy.
+  real    :: MSTAR_CAP       ! Since MSTAR is restoring undissipated energy to mixing,
+                             ! there must be a cap on how large it can be.  This
+                             ! is definitely a function of latitude (Ekman limit),
+                             ! but will be taken as constant for now.
+  real    :: MSTAR_SLOPE     ! Slope of the function which relates the shear production
+                             ! to the mixing layer depth, Ekman depth, and Monin-Obukhov
+                             ! depth.
+  real    :: MSTAR_XINT      ! Value where MSTAR function transitions from linear
+                             ! to decay toward MSTAR->0 at fully developed Ekman depth.
+  real    :: MSTAR_XINT_UP   ! Similar but for transition to asymptotic cap.
+  real    :: MSTAR_AT_XINT   ! Intercept value of MSTAR at value where function
+                             ! changes to linear transition.
+  integer :: LT_ENHANCE_FORM ! Integer for Enhancement functional form (various options)
+  real    :: LT_ENHANCE_COEF ! Coefficient in fit for Langmuir Enhancment
+  real    :: LT_ENHANCE_EXP  ! Exponent in fit for Langmuir Enhancement
+  real :: MSTAR_N = -2.      ! Exponent in decay at negative and positive limits of MLD_over_STAB
+  real :: MSTAR_A,MSTAR_A2   ! MSTAR_A and MSTAR_B are coefficients in asymptote toward limits.
+  real :: MSTAR_B,MSTAR_B2   !  These are computed to match the function value and slope at both
+                             !  ends of the linear fit within the well constrained region.
+  real :: C_EK = 0.17        ! MSTAR Coefficient in rotation limit for mstar_mode=2
+  real :: MSTAR_COEF = 0.3   ! MSTAR coefficient in rotation/stabilizing balance for mstar_mode=2
+  real :: LaC_MLDoEK         ! Coefficients for Langmuir number modification based on
+  real :: LaC_MLDoOB_stab    !  length scale ratios, MLD is boundary, EK is Ekman,
+  real :: LaC_EKoOB_stab     !  and OB is Obukhov, the "o" in the name is for division.
+  real :: LaC_MLDoOB_un      !  Stab/un are for stable (pos) and unstable (neg) Obukhov depths
+  real :: LaC_EKoOB_un       !   ...
+  real :: LaDepthRatio=0.04  ! The ratio of OBL depth to average Stokes drift over
+  real :: Max_Enhance_M = 5. ! The maximum allowed LT enhancement to the mixing.
+  real :: CNV_MST_FAC        ! Factor to reduce mstar when statically unstable.
+  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+
+  integer :: MSTAR_MODE = 0  ! An integer to determine which formula is used to
+                             !  set mstar
+  integer :: CONST_MSTAR=0,MLD_o_OBUKHOV=1,EKMAN_o_OBUKHOV=2
+  logical :: MSTAR_FLATCAP=.true. !Set false to use asymptotic mstar cap.
+  logical :: TKE_diagnostics = .false.
+  logical :: Use_LA_windsea = .false.
+  logical :: orig_PE_calc = .true.
+  logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
+  logical :: Orig_MLD_iteration=.false. ! False to use old MLD value
+  logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
+                                         ! ocean depth for the iteration.
+  logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
+                                          !  length and velocity scale
+  logical :: MSTAR_Diagnostics=.false.
+  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
+
+! These are terms in the mixed layer TKE budget, all in J m-2 = kg s-2.
+  real, allocatable, dimension(:,:) :: &
+    diag_TKE_wind, &   ! The wind source of TKE.
+    diag_TKE_MKE, &    ! The resolved KE source of TKE.
+    diag_TKE_conv, &   ! The convective source of TKE.
+    diag_TKE_forcing, & ! The TKE sink required to mix surface
+                       ! penetrating shortwave heating.
+    diag_TKE_mech_decay, & ! The decay of mechanical TKE.
+    diag_TKE_conv_decay, & ! The decay of convective TKE.
+    diag_TKE_mixing,&  ! The work done by TKE to deepen
+                       ! the mixed layer.
+    ! Additional output parameters also 2d
+    ML_depth, &        ! The mixed layer depth in m. (result after iteration step)
+    ML_depth2, &       ! The mixed layer depth in m. (guess for iteration step)
+    Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
+    MSTAR_MIX, &       ! Mstar used in EPBL
+    MSTAR_LT, &        ! Mstar for Langmuir turbulence
+    MLD_EKMAN, &       ! MLD over Ekman length
+    MLD_OBUKHOV, &     ! MLD over Obukhov length
+    EKMAN_OBUKHOV, &   ! Ekman over Obukhov length
+    LA, &              ! Langmuir number
+    LA_MOD             ! Modified Langmuir number
+
+  real, allocatable, dimension(:,:,:) :: &
+    Velocity_Scale, & ! The velocity scale used in getting Kd
+    Mixing_Length     ! The length scale used in getting Kd
+  integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
+  integer :: id_TKE_MKE = -1, id_TKE_conv = -1, id_TKE_forcing = -1
+  integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
+  integer :: id_Hsfc_used = -1
+  integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
+  integer :: id_OSBL = -1, id_LT_Enhancement = -1, id_MSTAR_mix = -1
+  integer :: id_mld_ekman = -1, id_mld_obukhov = -1, id_ekman_obukhov = -1
+  integer :: id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
+
+  type(cvmix_energetic_PBL_CS), pointer  :: cvmix_CS => null() ! A structure that is used to drive the cvmix kernel for kappa_shear
+  
+end type energetic_PBL_CS
 
 type(diag_ctrl), pointer :: MY_diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -313,8 +458,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                        dSV_dT(i,j,:),dSV_dS(i,j,:),TKE_forced(i,j,:),dt, IdtdR0, &
                        GV%m_to_H, GV%H_to_m,GV%H_to_kg_m2,GV%g_Earth,GV%Rho0,GV%H_subroundoff,&
                        Buoy_Flux(i,j),U_Star,U_Star_Mean,absf(i),mech_TKE(i),conv_PErel(i),&
+                       CS%ML_Depth(i,j),CS%ML_Depth2(i,j),&
                        i,j, & !?Niki: just to be able to set the CS% arrays. Can we get rid of them?
-                       CS) !?Niki: container type for the subroutine
+                       CS%cvmix_CS) !?Niki: container type for the subroutine
 !                       dT_expected(i,j,:), dS_expected(i,j,:)) !?Niki: Cannot use these, cause crash
 
     else
@@ -707,12 +853,21 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   ! to asymptotic regime based on value of X where MSTAR=MSTAR_CAP-0.5
   CS%MSTAR_XINT_UP = (CS%MSTAR_CAP-0.5-CS%MSTAR_AT_XINT)/CS%MSTAR_SLOPE
 
+  call cvmix_epbl_init(CS%mstar,CS%nstar,CS%MixLenExponent,CS%TKE_decay,CS%MKE_to_TKE_effic,CS%omega,CS%omega_frac,&
+CS%wstar_ustar_coef,CS%vstar_scale_fac,CS%transLay_scale,CS%MLD_tol,CS%min_mix_len,&
+CS%N2_Dissipation_Scale_Neg,CS%N2_Dissipation_Scale_Pos,CS%MSTAR_CAP,CS%MSTAR_SLOPE,CS%MSTAR_XINT,CS%MSTAR_AT_XINT,&
+CS%LT_ENHANCE_COEF,CS%LT_ENHANCE_EXP,CS%MSTAR_N,CS%C_EK,CS%MSTAR_COEF,CS%MSTAR_A,CS%MSTAR_B,CS%MSTAR_A2,CS%MSTAR_B2,&
+CS%LaC_MLDoEK,CS%LaC_MLDoOB_stab,CS%LaC_EKoOB_stab,&
+CS%LaC_MLDoOB_un,CS%LaC_EKoOB_un,CS%Max_Enhance_M,CS%CNV_MST_FAC,CS%LT_Enhance_Form,CS%MSTAR_MODE,&
+CS%CONST_MSTAR,CS%MLD_o_OBUKHOV,CS%EKMAN_o_OBUKHOV,CS%MSTAR_FLATCAP,CS%TKE_diagnostics,CS%Use_LA_windsea,&
+CS%orig_PE_calc,CS%Use_MLD_iteration,CS%Orig_MLD_iteration,CS%MLD_iteration_guess,CS%Mixing_Diagnostics,CS%cvmix_CS)
+
 end subroutine energetic_PBL_init
 
 subroutine energetic_PBL_end(CS)
   type(energetic_PBL_CS), pointer        :: CS
 
-  call cvmix_epbl_end(CS)
+  call cvmix_epbl_end(CS%cvmix_CS)
 
   deallocate(CS)
 
