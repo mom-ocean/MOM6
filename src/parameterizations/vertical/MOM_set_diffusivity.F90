@@ -355,11 +355,11 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 ! GMM, fix OMP calls below
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
-!$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc,    &
+!$OMP                                  Kd,visc,    &
 !$OMP                                  Kd_int,dt,u,v,Omega2)   &
-!$OMP                          private(dRho_int,I_trans,atan_fn_sfc,I_atan_fn,atan_fn_lay, &
-!$OMP                                  I_Hmix,depth_c,depth,N2_lay, N2_int, N2_bot,        &
-!$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra, KS_extra,   &
+!$OMP                          private(dRho_int, &
+!$OMP                                  N2_lay, N2_int, N2_bot,        &
+!$OMP                                  KT_extra, KS_extra,   &
 !$OMP                                  TKE_to_Kd,maxTKE,dissip,kb)
   do j=js,je
 
