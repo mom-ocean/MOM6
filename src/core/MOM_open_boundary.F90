@@ -1916,6 +1916,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     endif
     if (segment%oblique) then
       allocate(segment%grad_normal(JsdB:JedB,2,OBC%ke));      segment%grad_normal(:,:,:) = 0.0
+      allocate(segment%rx_normal(IsdB:IedB,jsd:jed,OBC%ke));  segment%rx_normal(:,:,:)=0.0
       allocate(segment%ry_normal(IsdB:IedB,jsd:jed,OBC%ke));  segment%ry_normal(:,:,:)=0.0
     endif
   endif
@@ -1940,6 +1941,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     if (segment%oblique) then
       allocate(segment%grad_normal(IsdB:IedB,2,OBC%ke));      segment%grad_normal(:,:,:) = 0.0
       allocate(segment%rx_normal(isd:ied,JsdB:JedB,OBC%ke));  segment%rx_normal(:,:,:)=0.0
+      allocate(segment%ry_normal(isd:ied,JsdB:JedB,OBC%ke));  segment%ry_normal(:,:,:)=0.0
     endif
   endif
 
@@ -3024,7 +3026,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
   ! This implementation uses 3D arrays solely for restarts. We need
   ! to be able to add 2D ( x,z or y,z ) data to restarts to avoid using
   ! so much memory and disk space. ***
-  if (OBC_CS%radiation_BCs_exist_globally) then
+  if (OBC_CS%radiation_BCs_exist_globally .or. OBC_CS%oblique_BCs_exist_globally) then
     allocate(OBC_CS%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
     OBC_CS%rx_normal(:,:,:) = 0.0
     vd = var_desc("rx_normal","m s-1", "Normal Phase Speed for EW OBCs",'u','L')
