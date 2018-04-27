@@ -203,6 +203,9 @@ type, public :: mech_forcing
                                  !< enabled, and is exactly 0 away from shelves or on land.
     rigidity_ice_u => NULL(), &  !< Depth-integrated lateral viscosity of ice
     rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
+
+  logical :: initialized = .false. !< This indicates whether the appropriate
+                                 !! arrays have been initialized.
 end type mech_forcing
 
 !> Structure that defines the id handles for the forcing type
