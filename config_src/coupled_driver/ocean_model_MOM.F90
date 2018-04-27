@@ -39,7 +39,7 @@ use MOM_io, only : close_file, file_exists, read_data, write_version_number
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing, only : ice_ocn_bnd_type_chksum
+use MOM_surface_forcing, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing, only : forcing_save_restart
 use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
@@ -525,8 +525,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) ! Needed to allow diagnostics in convert_IOB
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%forces, OS%fluxes, index_bnds, OS%Time, &
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
+    call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
+                               OS%grid, OS%forcing_CSp)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
@@ -550,8 +552,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%fluxes%dt_buoy_accum = dt_coupling
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%forces, OS%flux_tmp, index_bnds, OS%Time, &
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
+    call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
+                               OS%grid, OS%forcing_CSp)
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif

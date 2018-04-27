@@ -44,7 +44,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public convert_IOB_to_fluxes
+public convert_IOB_to_fluxes, convert_IOB_to_forces
 public surface_forcing_init
 public ice_ocn_bnd_type_chksum
 public forcing_save_restart
@@ -189,12 +189,14 @@ integer :: id_clock_forcing
 
 contains
 
-subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS, &
+!> This subroutine translates the Ice_ocean_boundary_type into a MOM
+!! thermodynamic forcing type, including changes of units, sign conventions,
+!! and putting the fields into arrays with MOM-standard halos.
+subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
                                  sfc_state, restore_salt, restore_temp)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
-  type(mech_forcing),      intent(inout) :: forces !< A structure with the driving mechanical forces
   type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to
                                                    !! all possible mass, heat or salt flux forcing fields.
                                                    !!  Unused fields have NULL ptrs.
@@ -206,34 +208,11 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
                                                    !! previous call to surface_forcing_init.
   type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
                                                    !! surface state of the ocean.
-  logical, optional,       intent(in)    :: restore_salt, restore_temp
+  logical,       optional, intent(in)    :: restore_salt !< If true, salinity is restored to a target value.
+  logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
-! This subroutine translates the Ice_ocean_boundary_type into a
-! MOM forcing type, including changes of units, sign conventions,
-! and puting the fields into arrays with MOM-standard halos.
-
-! Arguments:
-!   IOB  ice-ocean boundary type w/ fluxes to drive ocean in a coupled model
-!  (out) fluxes - A structure containing pointers to any possible
-!                 forcing fields.  Unused fields have NULL ptrs.
-!  (in)  index_bounds - the i- and j- size of the arrays in IOB.
-!  (in)  Time - The time of the fluxes, used for interpolating the salinity
-!               to the right time, when it is being restored.
-!  (in)  G - The ocean's grid structure.
-!  (in)  CS - A pointer to the control structure returned by a previous
-!             call to surface_forcing_init.
-!  (in)  state - A structure containing fields that describe the
-!                surface state of the ocean.
-!  (in)  restore_salt - if true, salinity is restored to a target value.
-!  (in)  restore_temp - if true, temperature is restored to a target value.
-
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
-    taux_at_q, &     ! Zonal wind stresses at q points (Pa)
-    tauy_at_q        ! Meridional wind stresses at q points (Pa)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    taux_at_h,     & ! Zonal wind stresses at h points (Pa)
-    tauy_at_h,     & ! Meridional wind stresses at h points (Pa)
     data_restore,  & ! The surface value toward which to restore (g/kg or degC)
     SST_anom,      & ! Instantaneous sea surface temperature anomalies from a target value (deg C)
     SSS_anom,      & ! Instantaneous sea surface salinity anomalies from a target value (g/kg)
@@ -247,16 +226,6 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
                      ! sum, used with units of m2 or (kg/s)
     open_ocn_mask    ! a binary field indicating where ice is present based on frazil criteria
 
-  real :: gustiness     ! unresolved gustiness that contributes to ustar (Pa)
-  real :: Irho0         ! inverse of the mean density in (m^3/kg)
-  real :: taux2, tauy2  ! squared wind stresses (Pa^2)
-  real :: tau_mag       ! magnitude of the wind stress (Pa)
-  real :: I_GEarth      ! 1.0 / G%G_Earth  (s^2/m)
-  real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice) ( m^5/(s*kg) )
-  real :: mass_ice      ! mass of sea ice at a face (kg/m^2)
-  real :: mass_eff      ! effective mass of sea ice for rigidity (kg/m^2)
-
-  integer :: wind_stagger  ! AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
@@ -282,7 +251,6 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
 
   C_p                    = fluxes%C_p
-  Irho0                  = 1.0/CS%Rho0
   open_ocn_mask(:,:)     = 1.0
   pme_adj(:,:)           = 0.0
   fluxes%vPrecGlobalAdj  = 0.0
@@ -302,8 +270,6 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   if (fluxes%dt_buoy_accum < 0) then
     call allocate_forcing_type(G, fluxes, water=.true., heat=.true., &
                                ustar=.true., press=.true.)
-    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., &
-                               press=.true.)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -330,14 +296,6 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
       fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
     enddo; enddo
 
-    call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
-    call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
-
-    if (CS%rigid_sea_ice) then
-      call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
-      call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
-    endif
-
     if (restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
 
     fluxes%dt_buoy_accum = 0.0
@@ -353,8 +311,8 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
 
 
   if (CS%allow_flux_adjustments) then
-   fluxes%heat_added(:,:)=0.0
-   fluxes%salt_flux_added(:,:)=0.0
+    fluxes%heat_added(:,:)=0.0
+    fluxes%salt_flux_added(:,:)=0.0
   endif
 
   ! allocation and initialization on first call to this routine
@@ -433,33 +391,10 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
     enddo; enddo
   endif
 
-  wind_stagger = CS%wind_stagger
-  if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
-      (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
-  if (wind_stagger == BGRID_NE) then
-    ! This is necessary to fill in the halo points.
-    taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
-  endif
-  if (wind_stagger == AGRID) then
-    ! This is necessary to fill in the halo points.
-    taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
-  endif
-
 
   ! obtain fluxes from IOB; note the staggering of indices
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
   do j=js,je ; do i=is,ie
-
-    if (wind_stagger == BGRID_NE) then
-      if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    elseif (wind_stagger == AGRID) then
-      if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    else ! C-grid wind stresses.
-      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    endif
 
     if (associated(IOB%lprec)) &
       fluxes%lprec(i,j) =  IOB%lprec(i-i0,j-j0) * G%mask2dT(i,j)
@@ -583,6 +518,90 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
 
   endif
 
+  if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
+      coupler_type_initialized(IOB%fluxes)) &
+    call coupler_type_copy_data(IOB%fluxes, fluxes%tr_fluxes)
+
+  if (CS%allow_flux_adjustments) then
+    ! Apply adjustments to fluxes
+    call apply_flux_adjustments(G, CS, Time, fluxes)
+  endif
+
+  ! Allow for user-written code to alter fluxes after all the above
+  call user_alter_forcing(sfc_state, fluxes, Time, G, CS%urf_CS)
+
+  call cpu_clock_end(id_clock_forcing)
+
+end subroutine convert_IOB_to_fluxes
+
+!> This subroutine translates the Ice_ocean_boundary_type into a MOM
+!! mechanical forcing type, including changes of units, sign conventions,
+!! and putting the fields into arrays with MOM-standard halos.
+subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
+  type(ice_ocean_boundary_type), &
+                   target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
+                                                   !! the ocean in a coupled model
+  type(mech_forcing),      intent(inout) :: forces !< A structure with the driving mechanical forces
+  integer, dimension(4),   intent(in)    :: index_bounds !< The i- and j- size of the arrays in IOB.
+  type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
+                                                   !! salinity to the right time, when it is being restored.
+  type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
+  type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
+                                                   !! previous call to surface_forcing_init.
+
+
+  real, dimension(SZIB_(G),SZJB_(G)) :: &
+    taux_at_q, & ! Zonal wind stresses at q points (Pa)
+    tauy_at_q    ! Meridional wind stresses at q points (Pa)
+
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    taux_at_h, & ! Zonal wind stresses at h points (Pa)
+    tauy_at_h    ! Meridional wind stresses at h points (Pa)
+
+  real :: gustiness     ! unresolved gustiness that contributes to ustar (Pa)
+  real :: Irho0         ! inverse of the mean density in (m^3/kg)
+  real :: taux2, tauy2  ! squared wind stresses (Pa^2)
+  real :: tau_mag       ! magnitude of the wind stress (Pa)
+  real :: I_GEarth      ! 1.0 / G%G_Earth  (s^2/m)
+  real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice) ( m^5/(s*kg) )
+  real :: mass_ice      ! mass of sea ice at a face (kg/m^2)
+  real :: mass_eff      ! effective mass of sea ice for rigidity (kg/m^2)
+
+  integer :: wind_stagger  ! AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
+  integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
+
+  call cpu_clock_begin(id_clock_forcing)
+
+  isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
+  jsc_bnd = index_bounds(3) ; jec_bnd = index_bounds(4)
+  is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
+  Isq  = G%IscB  ; Ieq  = G%IecB   ; Jsq  = G%JscB  ; Jeq  = G%JecB
+  isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
+  IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
+  isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
+  i0 = is - isc_bnd ; j0 = js - jsc_bnd
+
+  Irho0                  = 1.0/CS%Rho0
+
+  ! allocation and initialization if this is the first time that this
+  ! mechanical forcing type has been used.
+  if (.not.forces%initialized) then
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., &
+                               press=.true.)
+
+    call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
+    call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
+
+    if (CS%rigid_sea_ice) then
+      call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
+      call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
+    endif
+    
+    forces%initialized = .true.
+  endif
+
   ! applied surface pressure from atmosphere and cryosphere
   if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
@@ -602,6 +621,32 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
       forces%p_surf_SSH => forces%p_surf_full
     endif
   endif
+
+  wind_stagger = CS%wind_stagger
+  if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
+      (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
+  if (wind_stagger == BGRID_NE) then
+    ! This is necessary to fill in the halo points.
+    taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
+  endif
+  if (wind_stagger == AGRID) then
+    ! This is necessary to fill in the halo points.
+    taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
+  endif
+
+  ! obtain fluxes from IOB; note the staggering of indices
+  do j=js,je ; do i=is,ie
+    if (wind_stagger == BGRID_NE) then
+      if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+    elseif (wind_stagger == AGRID) then
+      if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+    else ! C-grid wind stresses.
+      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+    endif
+  enddo ; enddo
 
   ! surface momentum stress related fields as function of staggering
   if (wind_stagger == BGRID_NE) then
@@ -725,41 +770,34 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
     enddo ; enddo
   endif
 
-  if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
-      coupler_type_initialized(IOB%fluxes)) &
-    call coupler_type_copy_data(IOB%fluxes, fluxes%tr_fluxes)
-
   if (CS%allow_flux_adjustments) then
-    ! Apply adjustments to fluxes
-    call apply_flux_adjustments(G, CS, Time, forces, fluxes)
+    ! Apply adjustments to forces
+    call apply_force_adjustments(G, CS, Time, forces)
   endif
 
-  ! Allow for user-written code to alter fluxes after all the above
-  call user_alter_forcing(sfc_state, fluxes, Time, G, CS%urf_CS)
+!###  ! Allow for user-written code to alter fluxes after all the above
+!###  call user_alter_mech_forcing(forces, Time, G, CS%urf_CS)
 
   call cpu_clock_end(id_clock_forcing)
-end subroutine convert_IOB_to_fluxes
+end subroutine convert_IOB_to_forces
 
-!> Adds flux adjustments obtained via data_override
+!> Adds thermodynamic flux adjustments obtained via data_override
 !! Component name is 'OCN'
 !! Available adjustments are:
-!! - taux_adj (Zonal wind stress delta, positive to the east, in Pa)
-!! - tauy_adj (Meridional wind stress delta, positive to the north, in Pa)
-subroutine apply_flux_adjustments(G, CS, Time, forces, fluxes)
+!! - hflx_adj (Heat flux into the ocean, in W m-2)
+!! - sflx_adj (Salt flux into the ocean, in kg salt m-2 s-1)
+!! - prcme_adj (Fresh water flux into the ocean, in kg m-2 s-1)
+subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   type(ocean_grid_type),    intent(inout) :: G  !< Ocean grid structure
   type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
   type(time_type),          intent(in)    :: Time !< Model time structure
-  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points (Pa)
-  real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points (Pa)
   real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Fluxes at h points (W m-2 or kg m-2 s-1)
 
   integer :: isc, iec, jsc, jec, i, j
-  real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
-  logical :: overrode_x, overrode_y, overrode_h
+  logical :: overrode_h
 
   isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
 
@@ -786,6 +824,28 @@ subroutine apply_flux_adjustments(G, CS, Time, forces, fluxes)
     fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   if (overrode_h) call pass_var(fluxes%vprec, G%Domain)
+end subroutine apply_flux_adjustments
+
+!> Adds mechanical forcing adjustments obtained via data_override
+!! Component name is 'OCN'
+!! Available adjustments are:
+!! - taux_adj (Zonal wind stress delta, positive to the east, in Pa)
+!! - tauy_adj (Meridional wind stress delta, positive to the north, in Pa)
+subroutine apply_force_adjustments(G, CS, Time, forces)
+  type(ocean_grid_type),    intent(inout) :: G  !< Ocean grid structure
+  type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
+  type(time_type),          intent(in)    :: Time !< Model time structure
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points (Pa)
+  real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points (Pa)
+
+  integer :: isc, iec, jsc, jec, i, j
+  real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
+  logical :: overrode_x, overrode_y
+
+  isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
 
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
@@ -822,7 +882,7 @@ subroutine apply_flux_adjustments(G, CS, Time, forces, fluxes)
     enddo ; enddo
   endif ! overrode_x .or. overrode_y
 
-end subroutine apply_flux_adjustments
+end subroutine apply_force_adjustments
 
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
