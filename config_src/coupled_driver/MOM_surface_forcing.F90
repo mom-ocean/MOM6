@@ -14,6 +14,7 @@ use MOM_diag_mediator,    only : safe_alloc_ptr, time_type
 use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
 use MOM_domains,          only : global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
+use MOM_domains,          only : To_North, To_East, Omit_Corners
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_forcing_type,     only : forcing, mech_forcing, copy_common_forcing_fields
@@ -652,7 +653,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   if (wind_stagger == BGRID_NE) then
     if (G%symmetric) &
       call fill_symmetric_edges(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
-    call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
+    call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE, halo=1)
 
     do j=js,je ; do I=Isq,Ieq
       forces%taux(I,j) = 0.0
@@ -689,7 +690,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     enddo ; enddo
 
   elseif (wind_stagger == AGRID) then
-    call pass_vector(taux_at_h, tauy_at_h, G%Domain,stagger=AGRID)
+    call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, &
+                     stagger=AGRID, halo=1)
 
     do j=js,je ; do I=Isq,Ieq
       forces%taux(I,j) = 0.0
@@ -717,7 +719,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   else ! C-grid wind stresses.
     if (G%symmetric) &
       call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)
-    call pass_vector(forces%taux, forces%tauy, G%Domain)
+    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
 
     do j=js,je ; do i=is,ie
       taux2 = 0.0
@@ -807,7 +809,7 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
     fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
-  if (overrode_h) call pass_var(fluxes%heat_added, G%Domain)
+  ! Not needed? ! if (overrode_h) call pass_var(fluxes%heat_added, G%Domain)
 
   overrode_h = .false.
   call data_override('OCN', 'sflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
@@ -815,7 +817,7 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
     fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
-  if (overrode_h) call pass_var(fluxes%salt_flux_added, G%Domain)
+  ! Not needed? ! if (overrode_h) call pass_var(fluxes%salt_flux_added, G%Domain)
 
   overrode_h = .false.
   call data_override('OCN', 'prcme_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
@@ -823,7 +825,7 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
     fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
-  if (overrode_h) call pass_var(fluxes%vprec, G%Domain)
+  ! Not needed? ! if (overrode_h) call pass_var(fluxes%vprec, G%Domain)
 end subroutine apply_flux_adjustments
 
 !> Adds mechanical forcing adjustments obtained via data_override
@@ -858,7 +860,7 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
             "Both taux_adj and tauy_adj must be specified, or neither, in data_table")
 
     ! Rotate winds
-    call pass_vector(tempx_at_h, tempy_at_h, G%Domain, To_All, AGRID)
+    call pass_vector(tempx_at_h, tempy_at_h, G%Domain, To_All, AGRID, halo=1)
     do j=jsc-1,jec+1 ; do i=isc-1,iec+1
       dLonDx = G%geoLonCu(I,j) - G%geoLonCu(I-1,j)
       dLonDy = G%geoLonCv(i,J) - G%geoLonCv(i,J-1)
