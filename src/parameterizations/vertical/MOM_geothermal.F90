@@ -171,7 +171,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
-  if (.not.ASSOCIATED(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
+  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
 !  do i=is,ie ; do j=js,je

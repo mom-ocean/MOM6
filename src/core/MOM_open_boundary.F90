@@ -2368,7 +2368,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
         deallocate(tmp_buffer)
       else ! fid <= 0 (Uniform value)
-        if (.not. ASSOCIATED(segment%field(m)%buffer_dst)) then
+        if (.not. associated(segment%field(m)%buffer_dst)) then
           if (segment%is_E_or_W) then
             if (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
@@ -3000,10 +3000,10 @@ end subroutine flood_fill2
 
 !> Register OBC segment data for restarts
 subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
-  type(hor_index_type), intent(in) :: HI !< Horizontal indices
-  type(verticalGrid_type), pointer, intent(in) :: GV !< Container for vertical grid information
-  type(ocean_OBC_type), pointer, intent(inout) :: OBC_CS !< OBC data structure
-  type(MOM_restart_CS), pointer, intent(inout) :: restart_CSp !< Restart structure
+  type(hor_index_type),    intent(in) :: HI !< Horizontal indices
+  type(verticalGrid_type), pointer    :: GV !< Container for vertical grid information
+  type(ocean_OBC_type),    pointer    :: OBC_CS !< OBC data structure, data intent(inout)
+  type(MOM_restart_CS),    pointer    :: restart_CSp !< Restart structure, data intent(inout)
   ! Local variables
   type(vardesc) :: vd
 

@@ -624,9 +624,9 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
          "Cannot use a single_exp opacity scheme with nbands!=1.")
     endif
   endif
-  if (.not.ASSOCIATED(optics%min_wavelength_band)) &
+  if (.not.associated(optics%min_wavelength_band)) &
     allocate(optics%min_wavelength_band(optics%nbands))
-  if (.not.ASSOCIATED(optics%max_wavelength_band)) &
+  if (.not.associated(optics%max_wavelength_band)) &
     allocate(optics%max_wavelength_band(optics%nbands))
 
   if (CS%opacity_scheme == MANIZZA_05) then
@@ -648,9 +648,9 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The value to use for opacity over land. The default is \n"//&
                  "10 m-1 - a value for muddy water.", units="m-1", default=10.0)
 
-  if (.not.ASSOCIATED(optics%opacity_band)) &
+  if (.not.associated(optics%opacity_band)) &
     allocate(optics%opacity_band(optics%nbands,isd:ied,jsd:jed,nz))
-  if (.not.ASSOCIATED(optics%sw_pen_band)) &
+  if (.not.associated(optics%sw_pen_band)) &
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
   allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
 
@@ -681,8 +681,8 @@ subroutine opacity_end(CS, optics)
   if (associated(CS)) deallocate(CS)
 
   if (present(optics)) then ; if (associated(optics)) then
-    if (ASSOCIATED(optics%opacity_band)) deallocate(optics%opacity_band)
-    if (ASSOCIATED(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
+    if (associated(optics%opacity_band)) deallocate(optics%opacity_band)
+    if (associated(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
   endif ; endif
 
 end subroutine opacity_end
