@@ -808,8 +808,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
   real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy flux (m^2/s^3)
   real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux (K H/s)
   real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux (ppt H/s)
-  logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip  calculating
-                                                                              !! diagnostics inside extractFluxes1d()
+  logical,                        optional, intent(in)    :: skip_diags     !< If present and true, skip  calculating
+                                                                            !! diagnostics inside extractFluxes1d()
   ! local variables
   integer                                   :: nsw, start, npts, k
   real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
@@ -1722,12 +1722,14 @@ end subroutine register_forcing_type_diags
 
 !> Accumulate the forcing over time steps
 subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
-  type(forcing),         intent(in)    :: flux_tmp
+  type(forcing),         intent(in)    :: flux_tmp !< A temporary structure with current
+                                                 !!thermodynamic forcing fields
   type(mech_forcing),    intent(in)    :: forces !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes
+  type(forcing),         intent(inout) :: fluxes !< A structure containing time-averaged
+                                                 !! thermodynamic forcing fields
   real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  real,                  intent(out)   :: wt2
+  real,                  intent(out)   :: wt2  !< The relative weight of the new fluxes
 
   ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
@@ -1847,14 +1849,18 @@ end subroutine forcing_accumulate
 
 !> This subroutine copies the computational domains of common forcing fields
 !! from a mech_forcing type to a (thermodynamic) forcing type.
-subroutine copy_common_forcing_fields(forces, fluxes, G)
+subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
   type(mech_forcing),      intent(in)    :: forces   !< A structure with the driving mechanical forces
   type(forcing),           intent(inout) :: fluxes   !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in)    :: G        !< grid type
+  logical,       optional, intent(in)    :: skip_pres !< If present and true, do not copy pressure fields.
 
   real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  logical :: do_pres
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  do_pres = .true. ; if (present(skip_pres)) do_pres = .not.skip_pres
 
   if (associated(forces%ustar) .and. associated(fluxes%ustar)) then
     do j=js,je ; do i=is,ie
@@ -1862,22 +1868,24 @@ subroutine copy_common_forcing_fields(forces, fluxes, G)
     enddo ; enddo
   endif
 
-  if (associated(forces%p_surf) .and. associated(fluxes%p_surf)) then
-    do j=js,je ; do i=is,ie
-      fluxes%p_surf(i,j) = forces%p_surf(i,j)
-    enddo ; enddo
-  endif
+  if (do_pres) then
+    if (associated(forces%p_surf) .and. associated(fluxes%p_surf)) then
+      do j=js,je ; do i=is,ie
+        fluxes%p_surf(i,j) = forces%p_surf(i,j)
+      enddo ; enddo
+    endif
 
-  if (associated(forces%p_surf_full) .and. associated(fluxes%p_surf_full)) then
-    do j=js,je ; do i=is,ie
-      fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
-    enddo ; enddo
-  endif
+    if (associated(forces%p_surf_full) .and. associated(fluxes%p_surf_full)) then
+      do j=js,je ; do i=is,ie
+        fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
+      enddo ; enddo
+    endif
 
-  if (associated(forces%p_surf_SSH, forces%p_surf_full)) then
-    fluxes%p_surf_SSH => fluxes%p_surf_full
-  elseif (associated(forces%p_surf_SSH, forces%p_surf)) then
-    fluxes%p_surf_SSH => fluxes%p_surf
+    if (associated(forces%p_surf_SSH, forces%p_surf_full)) then
+      fluxes%p_surf_SSH => fluxes%p_surf_full
+    elseif (associated(forces%p_surf_SSH, forces%p_surf)) then
+      fluxes%p_surf_SSH => fluxes%p_surf
+    endif
   endif
 
 end subroutine copy_common_forcing_fields
@@ -2013,7 +2021,7 @@ end subroutine mech_forcing_diags
 !> Offer buoyancy forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
 subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
-  type(forcing),         intent(in)    :: fluxes    !< flux type
+  type(forcing),         intent(in)    :: fluxes    !< A structure containing thermodynamic forcing fields
   type(surface),         intent(in)    :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   real,                  intent(in)    :: dt        !< time step
@@ -2501,7 +2509,7 @@ end subroutine forcing_diagnostics
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, iceberg, salt)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
-  type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
+  type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
   logical, optional,     intent(in) :: heat    !< If present and true, allocate heat fluxes
   logical, optional,     intent(in) :: ustar   !< If present and true, allocate ustar and related fields
