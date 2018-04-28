@@ -523,12 +523,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   weight = 1.0
 
+  call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
+                             OS%grid, OS%forcing_CSp)
+
   if (OS%fluxes%fluxes_used) then
-    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) ! Needed to allow diagnostics in convert_IOB
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
-    call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
@@ -542,9 +542,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     endif
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
-    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
+    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid, skip_pres=.true.)
 
 #ifdef _USE_GENERIC_TRACER
+    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
     ! Indicate that there are new unused fluxes.
@@ -554,14 +555,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%flux_tmp%C_p = OS%fluxes%C_p
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
-    call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp)
+
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
     if (OS%icebergs_apply_rigid_boundary)  then
-     !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-     call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf, OS%density_iceberg, &
+      ! This assumes that the iceshelf and ocean are on the same grid. I hope this is true
+      call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf, OS%density_iceberg, &
             OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, dt_coupling, OS%berg_area_threshold)
     endif
 
@@ -589,7 +589,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  if(OS%offline_tracer_mode) then
+  if (OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
   elseif (OS%single_step_call) then
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
