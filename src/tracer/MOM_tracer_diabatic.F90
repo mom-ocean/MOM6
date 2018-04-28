@@ -260,7 +260,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! If no freshwater fluxes, nothing needs to be done in this routine
-  if ( (.not. ASSOCIATED(fluxes%netMassIn)) .or. (.not. ASSOCIATED(fluxes%netMassOut)) ) return
+  if ( (.not. associated(fluxes%netMassIn)) .or. (.not. associated(fluxes%netMassOut)) ) return
 
   in_flux(:,:) = 0.0 ; out_flux(:,:) = 0.0
   if(present(in_flux_optional)) then

@@ -2286,16 +2286,13 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
 
 end subroutine diag_mediator_init
 
+!> Set pointers to the default state fields used to remap diagnostics.
 subroutine diag_set_state_ptrs(h, T, S, eqn_of_state, diag_cs)
-
-  real, dimension(:,:,:), target, intent(in) :: h, T, S
-  type(EOS_type),  pointer, intent(in)       :: eqn_of_state !< Equation of state structure
-  type(diag_ctrl), intent(inout) :: diag_cs
-
-  !  (inout) diag_cs - diag mediator control structure
-  !  (in) h - a pointer to model thickness
-  !  (in) T - a pointer to model temperature
-  !  (in) S - a pointer to model salinity
+  real, dimension(:,:,:), target, intent(in   ) :: h !< the model thickness array
+  real, dimension(:,:,:), target, intent(in   ) :: T !< the model temperature array
+  real, dimension(:,:,:), target, intent(in   ) :: S !< the model salinity array
+  type(EOS_type),         target, intent(in   ) :: eqn_of_state !< Equation of state structure
+  type(diag_ctrl),                intent(inout) :: diag_cs !< diag mediator control structure
 
   ! Keep pointers to h, T, S needed for the diagnostic remapping
   diag_cs%h => h
@@ -2520,17 +2517,12 @@ subroutine initialize_diag_type(diag)
 
 end subroutine initialize_diag_type
 
-! Make a new diagnostic. Either use memory which is in the array of 'primary'
-! diagnostics, or if that is in use, insert it to the list of secondary diags.
+!> Make a new diagnostic. Either use memory which is in the array of 'primary'
+!! diagnostics, or if that is in use, insert it to the list of secondary diags.
 subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
-  integer, intent(in) :: diag_id
-  type(diag_ctrl), target, intent(inout) :: diag_cs
-  type(diag_type), pointer, intent(out) :: diag
-
-  ! Arguments:
-  !  (in)      diag_id  - new id for the diag.
-  !  (inout)   diag_cs  - structure used to regulate diagnostic output
-  !  (inout)   diag     - structure representing a diagnostic
+  integer,                 intent(in   ) :: diag_id !< id for the diagnostic
+  type(diag_ctrl), target, intent(inout) :: diag_cs !< structure used to regulate diagnostic output
+  type(diag_type),         pointer       :: diag    !< structure representing a diagnostic (inout)
 
   type(diag_type), pointer :: tmp
 

@@ -485,7 +485,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr0d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr0d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -514,7 +514,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr1d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr1d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -543,7 +543,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr2d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr2d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -572,7 +572,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr3d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr3d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -601,7 +601,7 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr4d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr4d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -632,7 +632,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr0d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr0d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -669,7 +669,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr1d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr1d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -706,7 +706,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr2d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr2d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -743,7 +743,7 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr3d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr3d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -780,7 +780,7 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   query_initialized = .false.
   n = CS%novars+1
   do m=1,CS%novars
-    if (ASSOCIATED(CS%var_ptr4d(m)%p,f_ptr)) then
+    if (associated(CS%var_ptr4d(m)%p,f_ptr)) then
       if (CS%restart_field(m)%initialized) query_initialized = .true.
       n = m ; exit
     endif
@@ -956,15 +956,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     !Prepare the checksum of the restart fields to be written to restart files
     call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
     do m=start_var,next_var-1
-      if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
+      if (associated(CS%var_ptr3d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-      elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then
+      elseif (associated(CS%var_ptr2d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-      elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then
+      elseif (associated(CS%var_ptr4d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-      elseif (ASSOCIATED(CS%var_ptr1d(m)%p)) then
+      elseif (associated(CS%var_ptr1d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
-      elseif (ASSOCIATED(CS%var_ptr0d(m)%p)) then
+      elseif (associated(CS%var_ptr0d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p)
       endif
     enddo
@@ -979,19 +979,19 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
     do m=start_var,next_var-1
 
-      if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
+      if (associated(CS%var_ptr3d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
                          CS%var_ptr3d(m)%p, restart_time)
-      elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then
+      elseif (associated(CS%var_ptr2d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
                          CS%var_ptr2d(m)%p, restart_time)
-      elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then
+      elseif (associated(CS%var_ptr4d(m)%p)) then
         call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
                          CS%var_ptr4d(m)%p, restart_time)
-      elseif (ASSOCIATED(CS%var_ptr1d(m)%p)) then
+      elseif (associated(CS%var_ptr1d(m)%p)) then
         call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
                          restart_time)
-      elseif (ASSOCIATED(CS%var_ptr0d(m)%p)) then
+      elseif (associated(CS%var_ptr0d(m)%p)) then
         call write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
                          restart_time)
       endif
@@ -1154,41 +1154,41 @@ subroutine restore_state(filename, directory, day, G, CS)
           endif
           if (.NOT. CS%checksum_required ) is_there_a_checksum = .false. ! Do not need to do data checksumming.
 
-          if (ASSOCIATED(CS%var_ptr1d(m)%p))  then
+          if (associated(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
             call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
                            no_domain=.true., timelevel=1)
             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
-          elseif (ASSOCIATED(CS%var_ptr0d(m)%p)) then ! Read a scalar...
+          elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
                            no_domain=.true., timelevel=1)
             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p)
-          elseif ((pos == 0) .and. ASSOCIATED(CS%var_ptr2d(m)%p)) then  ! Read a non-decomposed 2d array.
+          elseif ((pos == 0) .and. associated(CS%var_ptr2d(m)%p)) then  ! Read a non-decomposed 2d array.
             ! Probably should query the field type to make sure that the sizes are right.
             call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                            no_domain=.true., timelevel=1)
             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-          elseif ((pos == 0) .and. ASSOCIATED(CS%var_ptr3d(m)%p)) then  ! Read a non-decomposed 3d array.
+          elseif ((pos == 0) .and. associated(CS%var_ptr3d(m)%p)) then  ! Read a non-decomposed 3d array.
             ! Probably should query the field type to make sure that the sizes are right.
             call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                            no_domain=.true., timelevel=1)
              if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-          elseif ((pos == 0) .and. ASSOCIATED(CS%var_ptr4d(m)%p)) then  ! Read a non-decomposed 4d array.
+          elseif ((pos == 0) .and. associated(CS%var_ptr4d(m)%p)) then  ! Read a non-decomposed 4d array.
             ! Probably should query the field type to make sure that the sizes are right.
             call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                            no_domain=.true., timelevel=1)
             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
           elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
-            if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
+            if (associated(CS%var_ptr3d(m)%p)) then
               ! Read 3d array...  Time level 1 is always used.
               call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                              G%Domain, 1, position=pos)
               if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-            elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then ! Read 2d array...
+            elseif (associated(CS%var_ptr2d(m)%p)) then ! Read 2d array...
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                              G%Domain, 1, position=pos)
               if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-            elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then ! Read 4d array...
+            elseif (associated(CS%var_ptr4d(m)%p)) then ! Read 4d array...
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                              G%Domain, 1, position=pos)
               if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
@@ -1235,7 +1235,7 @@ subroutine restore_state(filename, directory, day, G, CS)
               exit
             endif
 
-            if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
+            if (associated(CS%var_ptr3d(m)%p)) then
               if (ntime == 0) then
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
@@ -1243,7 +1243,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), 1)
               endif
-            elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then
+            elseif (associated(CS%var_ptr2d(m)%p)) then
               if (ntime == 0) then
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
@@ -1251,7 +1251,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), 1)
               endif
-            elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then
+            elseif (associated(CS%var_ptr4d(m)%p)) then
               if (ntime == 0) then
                 call read_field(unit(n), fields(i), &
                                 CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))

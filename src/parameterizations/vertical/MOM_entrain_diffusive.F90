@@ -284,9 +284,9 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
   if (.not.(present(Kd_Lay) .or. present(Kd_int))) call MOM_error(FATAL, &
       "MOM_entrain_diffusive: Either Kd_Lay or Kd_int must be present in call.")
 
-  if ((.not.CS%bulkmixedlayer .and. .not.ASSOCIATED(fluxes%buoy)) .and. &
-      (ASSOCIATED(fluxes%lprec) .or. ASSOCIATED(fluxes%evap) .or. &
-       ASSOCIATED(fluxes%sens) .or. ASSOCIATED(fluxes%sw))) then
+  if ((.not.CS%bulkmixedlayer .and. .not.associated(fluxes%buoy)) .and. &
+      (associated(fluxes%lprec) .or. associated(fluxes%evap) .or. &
+       associated(fluxes%sens) .or. associated(fluxes%sw))) then
     if (is_root_pe()) call MOM_error(NOTE, "Calculate_Entrainment: &
           &The code to handle evaporation and precipitation without &
           &a bulk mixed layer has not been implemented.")
@@ -454,7 +454,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
         maxF(i,1) = 0.0
         htot(i) = h(i,j,1) - Angstrom
       enddo
-      if (ASSOCIATED(fluxes%buoy)) then ; do i=is,ie
+      if (associated(fluxes%buoy)) then ; do i=is,ie
         maxF(i,1) = (dt*fluxes%buoy(i,j)) / GV%g_prime(2)
       enddo ; endif
     endif
