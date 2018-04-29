@@ -162,7 +162,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot
   type(wave_parameters_CS), pointer, optional :: Waves !< Container for wave/Stokes information
 
-  ! Fields from fluxes used in this subroutine:
+  ! Fields from forces used in this subroutine:
   !   taux: Zonal wind stress in Pa.
   !   tauy: Meridional wind stress in Pa.
 
@@ -229,29 +229,17 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
-
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
 
   ! When mixing down Eulerian current + Stokes drift add before calling solver
-  if (DoStokesMixing ) then
-    do j=G%jsc,G%jec
-      do I=Isq,Ieq
-        if (G%mask2dCu(I,j) > 0) then
-          do k=1,nz
-            u(i,j,k) = u(i,j,k) + Waves%Us_x(i,j,k)
-          enddo
-        endif
-      enddo
-    enddo
-  endif
+  if (DoStokesMixing) then ; do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    if (G%mask2dCu(I,j) > 0) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
+  enddo ; enddo ; enddo ; endif
 
-!$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
-!$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
-!$OMP                                  Idt,taux_bot,Rho0)                      &
-!$OMP                     firstprivate(Ray)                                    &
-!$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
-!$OMP                                     b_denom_1,b1,d1,c1)
+  !$OMP parallel do default(shared) firstprivate(Ray) &
+  !$OMP                 private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+  !$OMP                         b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -345,38 +333,20 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   enddo ! end u-component j loop
 
   ! When mixing down Eulerian current + Stokes drift subtract after calling solver
-  if (DoStokesMixing ) then
-    do j=G%jsc,G%jec
-      do I=Isq,Ieq
-        if (G%mask2dCu(I,j) > 0) then
-          do k=1,nz
-            u(i,j,k) = u(i,j,k) - Waves%Us_x(i,j,k)
-          enddo
-        endif
-      enddo
-    enddo
-  endif
+  if (DoStokesMixing) then ; do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    if (G%mask2dCu(I,j) > 0) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
+  enddo ; enddo ; enddo ; endif
 
   ! Now work on the meridional velocity component.
   ! When mixing down Eulerian current + Stokes drift add before calling solver
-  if (DoStokesMixing ) then
-    do j=Jsq,Jeq
-      do I=Is,Ie
-        if (G%mask2dCv(I,j) > 0) then
-          do k=1,nz
-            v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
-          enddo
-        endif
-      enddo
-    enddo
-  endif
+  if (DoStokesMixing) then ; do k=1,nz ; do j=Jsq,Jeq ; do I=Is,Ie
+    if (G%mask2dCv(I,j) > 0) &
+      v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
+  enddo ; enddo ; enddo ; endif
 
-!$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,fluxes,h, &
-!$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,Rho0,    &
-!$OMP                                  tauy_bot,is,ie)                         &
-!$OMP                     firstprivate(Ray)                                    &
-!$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
-!$OMP                                  b_denom_1,b1,d1,c1)
+  !$OMP parallel do default(shared) firstprivate(Ray) &
+  !$OMP               private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+  !$OMP                       b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -444,17 +414,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   enddo ! end of v-component J loop
 
   ! When mixing down Eulerian current + Stokes drift subtract after calling solver
-  if (DoStokesMixing ) then
-    do j=Jsq,Jeq
-      do I=Is,Ie
-        if (G%mask2dCv(I,j) > 0) then
-          do k=1,nz
-            v(i,j,k) = v(i,j,k) - Waves%Us_y(i,j,k)
-          enddo
-        endif
-      enddo
-    enddo
-  endif
+  if (DoStokesMixing) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=Is,Ie
+    if (G%mask2dCv(i,J) > 0) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
+  enddo ; enddo ; enddo ; endif
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 
@@ -1162,21 +1124,21 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     endif
   endif ; enddo
 
-  if (associated(visc%Kv_turb)) then
-     ! BGR/ Add factor of 2. * the averaged Kv_turb.
+  if (associated(visc%Kv_shear)) then
+     ! BGR/ Add factor of 2. * the averaged Kv_shear.
      !      this is needed to reproduce the analytical solution to
      !      a simple diffusion problem, likely due to h_shear being
      !      equal to 2 x \delta z
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i+1,j,k))
+        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1185,14 +1147,14 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i,j+1,k))
+        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
