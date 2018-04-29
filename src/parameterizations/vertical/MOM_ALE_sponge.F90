@@ -115,11 +115,11 @@ contains
 subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_data)
 
   type(ocean_grid_type),                intent(in) :: G !< The ocean's grid structure (in).
+  integer,                              intent(in) :: nz_data !< The total number of sponge input layers  (in).
   real, dimension(SZI_(G),SZJ_(G)),     intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
   type(param_file_type),                intent(in) :: param_file !< A structure indicating the open file to parse for model parameter values (in).
   type(ALE_sponge_CS),                  pointer    :: CS !< A pointer that is set to point to the control structure for this module (in/out).
   real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge input layers.  (in).
-  integer,                              intent(in)     :: nz_data !< The total number of sponge input layers  (in).
 
 
 ! This include declares and sets the variable "version".
