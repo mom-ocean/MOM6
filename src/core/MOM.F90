@@ -2403,11 +2403,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 end subroutine initialize_MOM
 
 !> This subroutine finishes initializing MOM and writes out the initial conditions.
-subroutine finish_MOM_initialization(Time, dirs, CS, fluxes, restart_CSp)
+subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
   type(MOM_control_struct), pointer       :: CS          !< pointer to MOM control structure
-  type(forcing),            intent(inout) :: fluxes      !< pointers to forcing fields
   type(MOM_restart_CS),     pointer       :: restart_CSp !< pointer to the restart control
                                                          !! structure that will be used for MOM.
   ! Local variables

@@ -496,7 +496,7 @@ program MOM_main
     endif
 
     if (ns==1) then
-      call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes, restart_CSp)
+      call finish_MOM_initialization(Time, dirs, MOM_CSp, restart_CSp)
     endif
 
     ! This call steps the model over a time dt_forcing.
