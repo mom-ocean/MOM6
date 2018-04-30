@@ -347,9 +347,8 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   type(surface),         intent(inout) :: state !< structure containing fields that
                                                 !!describe the surface state of the ocean
   type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes !< structure containing pointers to
-                                                 !!any possible forcing fields.
-                                                 !!Unused fields have NULL ptrs.
+  type(forcing),         intent(inout) :: fluxes !< structure containing pointers to any possible
+                                                 !! thermodynanamic or mass-flux forcing fields.
   type(time_type),       intent(in)    :: Time !< Start time of the fluxes.
   real,                  intent(in)    :: time_step !< Length of time over which
                                                     !! these fluxes will be applied, in s.
@@ -952,39 +951,33 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   real, dimension(:,:), allocatable, target  :: last_area_shelf_h !< Ice shelf area
                           ! at at previous time (Time-dt), m^2
 
+  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
   real, parameter :: rho_fw = 1000.0 ! fresh water density
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
   Irho0 = 1.0 / CS%Rho0
+  kv_rho_ice = CS%kv_ice / CS%density_ice
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
   ! vertical decay scale.
   if (CS%shelf_mass_is_dynamic) then
-    do j=jsd,jed ; do i=isd,ied
-      if (G%areaT(i,j) > 0.0) &
-        fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
-    enddo ; enddo
-    !do I=isd,ied-1 ; do j=isd,jed
-    do j=jsd,jed ; do i=isd,ied-1 ! ### changed stride order; i->ied-1?
+    do j=jsd,jed ; do I=isd,ied-1
       forces%frac_shelf_u(I,j) = 0.0
       if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
         forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
                                     (G%areaT(i,j) + G%areaT(i+1,j)))
-    !### Either the min here or the max below must be wrong, but is either right? -RWH
-      forces%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
+      forces%rigidity_ice_u(I,j) = kv_rho_ice * &
                                     min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
-    do j=jsd,jed-1 ; do i=isd,ied ! ### change stride order; j->jed-1?
-    !do i=isd,ied ; do J=isd,jed-1
+    do J=jsd,jed-1 ; do i=isd,ied
       forces%frac_shelf_v(i,J) = 0.0
       if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
         forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
                                     (G%areaT(i,j) + G%areaT(i,j+1)))
-    !### Either the max here or the min above must be wrong, but is either right? -RWH
-      forces%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
-                                    max(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+      forces%rigidity_ice_v(i,J) = kv_rho_ice * &
+                                    min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
     call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   else
@@ -992,13 +985,13 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     ! in the ice shelf cavity: MJH
 
     do j=jsd,jed ; do i=isd,ied-1 ! changed stride
-      forces%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
+      forces%rigidity_ice_u(I,j) = kv_rho_ice * &
                     min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
 
     do j=jsd,jed-1 ; do i=isd,ied ! changed stride
-      forces%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
-                    max(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+      forces%rigidity_ice_v(i,J) = kv_rho_ice * &
+                    min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
   endif
 
@@ -1019,10 +1012,13 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     call pass_vector(state%taux_shelf, state%tauy_shelf, G%domain, TO_ALL, CGRID_NE)
   endif
 
-  if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir = 0.0
-  if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif = 0.0
-  if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir = 0.0
-  if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif = 0.0
+
+  if (CS%shelf_mass_is_dynamic) then
+    do j=jsd,jed ; do i=isd,ied
+      if (G%areaT(i,j) > 0.0) &
+        fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) * G%IareaT(i,j)
+    enddo ; enddo
+  endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     frac_area = fluxes%frac_shelf_h(i,j)
@@ -1045,11 +1041,15 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
       !fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
 
       if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
+      if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = 0.0
+      if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = 0.0
+      if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir(i,j) = 0.0
+      if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif(i,j) = 0.0
       if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
       if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
       if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
       if (associated(fluxes%lprec)) then
-        if (CS%lprec(i,j) > 0.0 ) then
+        if (CS%lprec(i,j) > 0.0) then
           fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
         else
           fluxes%lprec(i,j) = 0.0
@@ -1061,8 +1061,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
       if (associated(fluxes%sens)) fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
       if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
       if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
-      ! Same for IOB%p
-      if (associated(fluxes%p_surf_full) ) fluxes%p_surf_full(i,j) = &
+      if (associated(fluxes%p_surf_full)) fluxes%p_surf_full(i,j) = &
            frac_area * CS%g_Earth * CS%mass_shelf(i,j)
 
     endif
@@ -1136,7 +1135,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
           delta_mass_shelf = 0.0
        endif
     else ! ice shelf mass does not change
-       delta_mass_shelf = 0.0
+      delta_mass_shelf = 0.0
     endif
 
     call mpp_sum(mean_melt_flux)
@@ -1165,15 +1164,16 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   ! If the shelf mass is changing, the forces%rigidity_ice_[uv] needs to be
   ! updated here.
 
+  kv_rho_ice = CS%kv_ice / CS%density_ice
   if (CS%shelf_mass_is_dynamic) then
     do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
-      forces%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
-                                    max(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
+      forces%rigidity_ice_u(I,j) = kv_rho_ice * &
+                                   min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
 
     do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
-      forces%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
-                                    max(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+      forces%rigidity_ice_v(i,J) = kv_rho_ice * &
+                                   min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
   endif
 
