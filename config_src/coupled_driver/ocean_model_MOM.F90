@@ -450,7 +450,7 @@ end subroutine ocean_model_init
 !! storing the new ocean properties in Ocean_state.
 subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                               time_start_update, Ocean_coupling_time_step, &
-                              update_dyn, update_thermo)
+                              update_dyn, update_thermo, Ocn_fluxes_used)
   type(ice_ocean_boundary_type), &
                      intent(in)    :: Ice_ocean_boundary !< A structure containing the
                                               !! various forcing fields coming from the ice.
@@ -469,6 +469,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                               !! due to the ocean dynamics.
   logical, optional, intent(in)    :: update_thermo !< If present and false, do not do updates
                                               !! due to the ocean thermodynamics or remapping.
+  logical, optional, intent(in)    :: Ocn_fluxes_used !< If present, this indicates whether the
+                                              !! cumulative thermodynamic fluxes from the ocean,
+                                              !! like frazil, have been used and should be reset.
 
   type(time_type) :: Master_time ! This allows step_MOM to temporarily change
                                  ! the time that is seen by internal modules.
@@ -488,7 +491,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   type(time_type) :: Time2  ! A temporary time.
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
-  logical :: do_dyn, do_thermo
+  logical :: do_dyn       ! If true, step the ocean dynamics and transport.
+  logical :: do_thermo    ! If true, step the ocean thermodynamics.
   logical :: step_thermo           ! If true, take a thermodynamic step.
   integer :: secs, days
   integer :: is, ie, js, je
@@ -528,7 +532,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   if (OS%fluxes%fluxes_used) then
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
+                               OS%grid, OS%forcing_CSp, OS%sfc_state, &
+                               OS%restore_salinity, OS%restore_temp)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
@@ -590,6 +595,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   if (OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
+  elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
+    ! The call sequence is being orchestrated from outside of update_ocean_model.
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
+                  Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
+                  reset_therm=Ocn_fluxes_used)
+ !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
+    
   elseif (OS%single_step_call) then
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else
@@ -615,16 +627,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
         if (modulo(n-1,nts)==0) then
           dtdia = dt_dyn*min(nts,n_max-(n-1))
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
-                        do_dynamics=.false., do_thermodynamics=.true., &
+                        Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
         endif
 
         call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
-                      do_dynamics=.true., do_thermodynamics=.false., &
+                      Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
       else
         call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
-                      do_dynamics=.true., do_thermodynamics=.false., &
+                      Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
         step_thermo = .false.
@@ -641,7 +653,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
           ! Back up Time2 to the start of the thermodynamic segment.
           Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
-                        do_dynamics=.false., do_thermodynamics=.true., &
+                        Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
         endif
       endif
@@ -692,7 +704,8 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
                                   latent_heat_fusion, sfc_state, time_step, berg_area_threshold)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(mech_forcing),    intent(inout) :: forces  !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes
+  type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
+                                                  !! tracer and mass exchange forcing fields
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
@@ -715,29 +728,23 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
   !the ocean model. This routine is taken from the add_shelf_flux subroutine
   !within the ice shelf model.
 
-  if (.not. (((associated(fluxes%frac_shelf_h) .and. associated(forces%frac_shelf_u)) &
-    .and.(associated(forces%frac_shelf_v) .and. associated(fluxes%ustar_shelf)))&
-    .and.(associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)))) return
-
   if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
             associated(fluxes%mass_berg) ) ) return
 
+  if (.not.(associated(forces%frac_shelf_u) .and. associated(forces%frac_shelf_v) .and. &
+            associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) ) return
+
+  if (.not.(associated(fluxes%frac_shelf_h) .and. associated(fluxes%ustar_shelf)) ) return
+
+  ! This section sets or augments the values of fields in forces.
   if (.not. use_ice_shelf) then
-    fluxes%frac_shelf_h(:,:) = 0.
     forces%frac_shelf_u(:,:) = 0.
     forces%frac_shelf_v(:,:) = 0.
-    fluxes%ustar_shelf(:,:) = 0.
     forces%rigidity_ice_u(:,:) = 0.
     forces%rigidity_ice_v(:,:) = 0.
   endif
 
   kv_rho_ice = kv_ice / density_ice
-
-  do j=jsd,jed ; do i=isd,ied
-    if (G%areaT(i,j) > 0.0) &
-      fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j)
-      fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  +  fluxes%ustar_berg(i,j)
-  enddo ; enddo
   do j=jsd,jed ; do I=isd,ied-1
     forces%frac_shelf_u(I,j) = 0.0
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
@@ -759,6 +766,20 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
                          min(fluxes%mass_berg(i,j), fluxes%mass_berg(i,j+1))
   enddo ; enddo
   call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
+
+  ! The remaining code sets or augments the values of fields in fluxes.
+
+  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
+            associated(fluxes%mass_berg) ) ) return
+  if (.not. use_ice_shelf) then
+    fluxes%frac_shelf_h(:,:) = 0.
+    fluxes%ustar_shelf(:,:) = 0.
+  endif
+  do j=jsd,jed ; do i=isd,ied
+    if (G%areaT(i,j) > 0.0) &
+      fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j)
+      fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  +  fluxes%ustar_berg(i,j)
+  enddo ; enddo
 
   !Zero'ing out other fluxes under the tabular icebergs
   if (berg_area_threshold >= 0.) then
