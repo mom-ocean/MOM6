@@ -582,8 +582,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   endif
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes, &
-                                   OS%restart_CSp)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
 
   call disable_averaging(OS%diag)
