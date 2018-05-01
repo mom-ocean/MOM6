@@ -24,10 +24,12 @@ use MOM, only : get_ocean_stocks, step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
-use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains, only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains, only : TO_ALL, Omit_Corners
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
+use MOM_forcing_type, only : allocate_forcing_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : forcing_accumulate, copy_common_forcing_fields
 use MOM_forcing_type, only : copy_back_forcing_fields, set_net_mass_forcing
@@ -59,10 +61,8 @@ use coupler_types_mod, only : coupler_type_set_diags, coupler_type_send_data
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
-use MOM_forcing_type, only : allocate_forcing_type
 use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
-use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
 use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
@@ -540,7 +540,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
     if (OS%icebergs_apply_rigid_boundary)  then
-      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
       call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%fluxes, OS%use_ice_shelf, &
                     OS%density_iceberg, OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, &
                     dt_coupling, OS%berg_area_threshold)
@@ -565,7 +564,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
     if (OS%icebergs_apply_rigid_boundary)  then
-      ! This assumes that the iceshelf and ocean are on the same grid. I hope this is true
       call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf, OS%density_iceberg, &
             OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, dt_coupling, OS%berg_area_threshold)
     endif
@@ -728,43 +726,43 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
   !the ocean model. This routine is taken from the add_shelf_flux subroutine
   !within the ice shelf model.
 
-  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
-            associated(fluxes%mass_berg) ) ) return
+  if (.not.(associated(forces%area_berg) .and.  associated(forces%mass_berg) ) ) return
 
   if (.not.(associated(forces%frac_shelf_u) .and. associated(forces%frac_shelf_v) .and. &
             associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) ) return
 
+  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
+            associated(fluxes%mass_berg) ) ) return
   if (.not.(associated(fluxes%frac_shelf_h) .and. associated(fluxes%ustar_shelf)) ) return
 
   ! This section sets or augments the values of fields in forces.
   if (.not. use_ice_shelf) then
-    forces%frac_shelf_u(:,:) = 0.
-    forces%frac_shelf_v(:,:) = 0.
-    forces%rigidity_ice_u(:,:) = 0.
-    forces%rigidity_ice_v(:,:) = 0.
+    forces%frac_shelf_u(:,:) = 0.0 ; forces%frac_shelf_v(:,:) = 0.0
+    forces%rigidity_ice_u(:,:) = 0.0 ; forces%rigidity_ice_v(:,:) = 0.0
   endif
 
+  call pass_var(forces%area_berg, G%domain, TO_ALL+Omit_corners, halo=1, complete=.false.)
+  call pass_var(forces%mass_berg, G%domain, TO_ALL+Omit_corners, halo=1, complete=.true.)
   kv_rho_ice = kv_ice / density_ice
-  do j=jsd,jed ; do I=isd,ied-1
-    forces%frac_shelf_u(I,j) = 0.0
+  do j=js,je ; do I=is-1,ie
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
       forces%frac_shelf_u(I,j) = forces%frac_shelf_u(I,j) + &
-          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + &
-            (fluxes%area_berg(i+1,j)*G%areaT(i+1,j))) / &
+          (((forces%area_berg(i,j)*G%areaT(i,j)) + &
+            (forces%area_berg(i+1,j)*G%areaT(i+1,j))) / &
            (G%areaT(i,j) + G%areaT(i+1,j)) )
     forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + kv_rho_ice * &
-                         min(fluxes%mass_berg(i,j), fluxes%mass_berg(i+1,j))
+                         min(forces%mass_berg(i,j), forces%mass_berg(i+1,j))
   enddo ; enddo
-  do J=jsd,jed-1 ; do i=isd,ied
-    forces%frac_shelf_v(i,J) = 0.0
+  do J=js-1,je ; do i=is,ie
     if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
       forces%frac_shelf_v(i,J) = forces%frac_shelf_v(i,J) + &
-          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + &
-            (fluxes%area_berg(i,j+1)*G%areaT(i,j+1))) / &
+          (((forces%area_berg(i,j)*G%areaT(i,j)) + &
+            (forces%area_berg(i,j+1)*G%areaT(i,j+1))) / &
            (G%areaT(i,j) + G%areaT(i,j+1)) )
     forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + kv_rho_ice * &
-                         min(fluxes%mass_berg(i,j), fluxes%mass_berg(i,j+1))
+                         min(forces%mass_berg(i,j), forces%mass_berg(i,j+1))
   enddo ; enddo
+  !### This halo update may be unnecessary. Test it.  -RWH
   call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
 
   ! The remaining code sets or augments the values of fields in fluxes.
