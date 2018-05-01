@@ -1422,7 +1422,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                       (CS%ice_strength_length**2 * dtbt)
 
       ! Units of dyn_coef: m2 s-2 H-1
-      dyn_coef_eta(I,j) = min(dyn_coef_max, ice_strength * GV%H_to_m)
+      dyn_coef_eta(i,j) = min(dyn_coef_max, ice_strength * GV%H_to_m)
     enddo ; enddo ; endif
   endif
 
@@ -1627,7 +1627,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       if (CS%dynamic_psurf) then
 !GOMP do
         do j=jsv-1,jev+1 ; do i=isv-1,iev+1
-          p_surf_dyn(i,j) = dyn_coef_eta(I,j) * (eta_pred(i,j) - eta(i,j))
+          p_surf_dyn(i,j) = dyn_coef_eta(i,j) * (eta_pred(i,j) - eta(i,j))
         enddo ; enddo
       endif
     endif
