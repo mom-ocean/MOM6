@@ -307,6 +307,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     fluxes%dt_buoy_accum = 0.0
   endif   ! endif for allocation and initialization
 
+
+  if (((associated(IOB%ustar_berg) .and. (.not. associated(fluxes%ustar_berg))) &
+    .or. (associated(IOB%area_berg) .and. (.not. associated(fluxes%area_berg)))) &
+    .or. (associated(IOB%mass_berg) .and. (.not. associated(fluxes%mass_berg)))) &
+    call allocate_forcing_type(G, fluxes, iceberg=.true.)
+
   if ((.not.coupler_type_initialized(fluxes%tr_fluxes)) .and. &
       coupler_type_initialized(IOB%fluxes)) &
     call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, &
@@ -416,11 +422,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
 
     if (associated(IOB%calving)) &
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
-
-    if (((associated(IOB%ustar_berg) .and. (.not. associated(fluxes%ustar_berg)))   &
-      .or. (associated(IOB%area_berg) .and. (.not. associated(fluxes%area_berg)))) &
-      .or. (associated(IOB%mass_berg) .and. (.not. associated(fluxes%mass_berg)))) &
-      call allocate_forcing_type(G, fluxes, iceberg=.true.)
 
     if (associated(IOB%ustar_berg)) &
       fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
@@ -628,6 +629,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     forces%initialized = .true.
   endif
 
+  if ( (associated(IOB%area_berg) .and. (.not. associated(forces%area_berg))) .or. &
+       (associated(IOB%mass_berg) .and. (.not. associated(forces%mass_berg))) ) &
+    call allocate_mech_forcing(G, forces, iceberg=.true.)
+
+
   ! applied surface pressure from atmosphere and cryosphere
   if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
@@ -657,6 +663,12 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
 
   ! obtain fluxes from IOB; note the staggering of indices
   do j=js,je ; do i=is,ie
+    if (associated(IOB%area_berg)) &
+      forces%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (associated(IOB%mass_berg)) &
+      forces%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
     if (wind_stagger == BGRID_NE) then
       if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
@@ -764,13 +776,10 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
 
   ! sea ice related fields
   if (CS%rigid_sea_ice) then
-    ! The commented out code here and in the following lines is the correct
-    ! version, but the incorrect version is being retained temporarily to avoid
-    ! changing answers.
-    call pass_var(forces%p_surf_full, G%Domain)
+    call pass_var(forces%p_surf_full, G%Domain, halo=1)
     I_GEarth = 1.0 / G%G_Earth
     Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
-    do I=isd,ied-1 ; do j=jsd,jed
+    do I=is-1,ie ; do j=js,je
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i+1,j)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
@@ -781,7 +790,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
       ! a maximum for the second call.
       forces%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
     enddo ; enddo
-    do i=isd,ied ; do J=jsd,jed-1
+    do i=is,ie ; do J=js-1,je
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
