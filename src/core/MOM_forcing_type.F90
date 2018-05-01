@@ -194,6 +194,10 @@ type, public :: mech_forcing
                                !! This may point to p_surf or to p_surf_full.
     net_mass_src  => NULL(), & !< The net mass source to the ocean, in kg m-2 s-1.
 
+  ! iceberg related inputs
+    area_berg  => NULL(), &    !< area of ocean surface covered by icebergs (m2/m2)
+    mass_berg  => NULL(), &    !< mass of icebergs (kg/m2)
+
   ! land ice-shelf related inputs
     frac_shelf_u  => NULL(), &   !< Fractional ice shelf coverage of u-cells, nondimensional
                                  !! from 0 to 1. This is only associated if ice shelves are
@@ -2605,6 +2609,10 @@ subroutine allocate_mech_forcing(G, forces, stress, ustar, shelf, press, iceberg
   call myAlloc(forces%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
   call myAlloc(forces%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
 
+  !These fields should only on allocated when iceberg area is being passed through the coupler.
+  call myAlloc(forces%area_berg,isd,ied,jsd,jed, iceberg)
+  call myAlloc(forces%mass_berg,isd,ied,jsd,jed, iceberg)
+
 end subroutine allocate_mech_forcing
 
 !> Allocates and zeroes-out array.
@@ -2678,13 +2686,15 @@ subroutine deallocate_mech_forcing(forces)
   if (associated(forces%taux))  deallocate(forces%taux)
   if (associated(forces%tauy))  deallocate(forces%tauy)
   if (associated(forces%ustar)) deallocate(forces%ustar)
-  if (associated(forces%p_surf))      deallocate(forces%p_surf)
-  if (associated(forces%p_surf_full)) deallocate(forces%p_surf_full)
+  if (associated(forces%p_surf))         deallocate(forces%p_surf)
+  if (associated(forces%p_surf_full))    deallocate(forces%p_surf_full)
   if (associated(forces%net_mass_src))   deallocate(forces%net_mass_src)
   if (associated(forces%rigidity_ice_u)) deallocate(forces%rigidity_ice_u)
   if (associated(forces%rigidity_ice_v)) deallocate(forces%rigidity_ice_v)
   if (associated(forces%frac_shelf_u))   deallocate(forces%frac_shelf_u)
   if (associated(forces%frac_shelf_v))   deallocate(forces%frac_shelf_v)
+  if (associated(forces%area_berg))      deallocate(forces%area_berg)
+  if (associated(forces%mass_berg))      deallocate(forces%mass_berg)
 
 end subroutine deallocate_mech_forcing
 
