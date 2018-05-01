@@ -958,42 +958,35 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
   Irho0 = 1.0 / CS%Rho0
-  kv_rho_ice = CS%kv_ice / CS%density_ice
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
   ! vertical decay scale.
   if (CS%shelf_mass_is_dynamic) then
     do j=jsd,jed ; do I=isd,ied-1
       forces%frac_shelf_u(I,j) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
+      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
         forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
                                     (G%areaT(i,j) + G%areaT(i+1,j)))
-      forces%rigidity_ice_u(I,j) = kv_rho_ice * &
-                                    min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
     do J=jsd,jed-1 ; do i=isd,ied
       forces%frac_shelf_v(i,J) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
+      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
         forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
                                     (G%areaT(i,j) + G%areaT(i,j+1)))
-      forces%rigidity_ice_v(i,J) = kv_rho_ice * &
-                                    min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
     call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
-  else
-    ! This is needed because rigidity is potentially modified in the coupler. Reset
-    ! in the ice shelf cavity: MJH
-
-    do j=jsd,jed ; do i=isd,ied-1 ! changed stride
-      forces%rigidity_ice_u(I,j) = kv_rho_ice * &
-                    min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
-    enddo ; enddo
-
-    do j=jsd,jed-1 ; do i=isd,ied ! changed stride
-      forces%rigidity_ice_v(i,J) = kv_rho_ice * &
-                    min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
-    enddo ; enddo
   endif
+
+  ! For various reasons, forces%rigidity_ice_[uv] is always updated here.
+  kv_rho_ice = CS%kv_ice / CS%density_ice
+  do j=js,je ; do I=is-1,ie
+    forces%rigidity_ice_u(I,j) = kv_rho_ice * &
+                    min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
+  enddo ; enddo
+  do J=js-1,je ; do i=is,ie
+    forces%rigidity_ice_v(i,J) = kv_rho_ice * &
+                    min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+  enddo ; enddo
 
   if (CS%debug) then
     if (associated(state%taux_shelf)) then
@@ -1011,7 +1004,24 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
     call pass_vector(state%taux_shelf, state%tauy_shelf, G%domain, TO_ALL, CGRID_NE)
   endif
+  ! GMM: melting is computed using ustar_shelf (and not ustar), which has already
+  ! been passed, I so believe we do not need to update fluxes%ustar.
+!  do j=js,je ; do i=is,ie ; if (fluxes%frac_shelf_h(i,j) > 0.0) then
+    ! ### THIS SHOULD BE AN AREA WEIGHTED AVERAGE OF THE ustar_shelf POINTS.
+    ! taux2 = 0.0 ; tauy2 = 0.0
+    ! asu1 = forces%frac_shelf_u(I-1,j) * G%areaCu(I-1,j)
+    ! asu2 = forces%frac_shelf_u(I,j) * G%areaCu(I,j)
+    ! asv1 = forces%frac_shelf_v(i,J-1) * G%areaCv(i,J-1)
+    ! asv2 = forces%frac_shelf_v(i,J) * G%areaCv(i,J)
+    ! if ((asu1 + asu2 > 0.0) .and. associated(state%taux_shelf)) &
+    !   taux2 = (asu1 * state%taux_shelf(I-1,j)**2 + &
+    !            asu2 * state%taux_shelf(I,j)**2  ) / (asu1 + asu2)
+    ! if ((asv1 + asv2 > 0.0) .and. associated(state%tauy_shelf)) &
+    !   tauy2 = (asv1 * state%tauy_shelf(i,J-1)**2 + &
+    !            asv2 * state%tauy_shelf(i,J)**2  ) / (asv1 + asv2)
 
+    !fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
+!  endif ; enddo ; enddo
 
   if (CS%shelf_mass_is_dynamic) then
     do j=jsd,jed ; do i=isd,ied
@@ -1020,52 +1030,36 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     enddo ; enddo
   endif
 
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+  do j=js,je ; do i=is,ie ; if (fluxes%frac_shelf_h(i,j) > 0.0) then
     frac_area = fluxes%frac_shelf_h(i,j)
-    if (frac_area > 0.0) then
-      ! ### THIS SHOULD BE AN AREA WEIGHTED AVERAGE OF THE ustar_shelf POINTS.
-      taux2 = 0.0 ; tauy2 = 0.0
-      asu1 = forces%frac_shelf_u(i-1,j) * (G%areaT(i-1,j) + G%areaT(i,j)) ! G%dxdy_u(i-1,j)
-      asu2 = forces%frac_shelf_u(i,j) * (G%areaT(i,j) + G%areaT(i+1,j)) ! G%dxdy_u(i,j)
-      asv1 = forces%frac_shelf_v(i,j-1) * (G%areaT(i,j-1) + G%areaT(i,j)) ! G%dxdy_v(i,j-1)
-      asv2 = forces%frac_shelf_v(i,j) * (G%areaT(i,j) + G%areaT(i,j+1)) ! G%dxdy_v(i,j)
-      if ((asu1 + asu2 > 0.0) .and. associated(state%taux_shelf)) &
-        taux2 = (asu1 * state%taux_shelf(i-1,j)**2 + &
-                 asu2 * state%taux_shelf(i,j)**2  ) / (asu1 + asu2)
-      if ((asv1 + asv2 > 0.0) .and. associated(state%tauy_shelf)) &
-        tauy2 = (asv1 * state%tauy_shelf(i,j-1)**2 + &
-                 asv2 * state%tauy_shelf(i,j)**2  ) / (asv1 + asv2)
-
-      ! GMM: melting is computed using ustar_shelf (and not ustar), which has already
-      ! been passed, so believe we do not need to update fluxes%ustar.
-      !fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
-
-      if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
-      if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = 0.0
-      if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = 0.0
-      if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir(i,j) = 0.0
-      if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif(i,j) = 0.0
-      if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
-      if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
-      if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
-      if (associated(fluxes%lprec)) then
-        if (CS%lprec(i,j) > 0.0) then
-          fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
-        else
-          fluxes%lprec(i,j) = 0.0
-          fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
-        endif
+    if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
+    if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = 0.0
+    if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = 0.0
+    if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir(i,j) = 0.0
+    if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif(i,j) = 0.0
+    if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
+    if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
+    if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
+    if (associated(fluxes%lprec)) then
+      if (CS%lprec(i,j) > 0.0) then
+        fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
+      else
+        fluxes%lprec(i,j) = 0.0
+        fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
       endif
-
-
-      if (associated(fluxes%sens)) fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
-      if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
-      if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
-      if (associated(fluxes%p_surf_full)) fluxes%p_surf_full(i,j) = &
-           frac_area * CS%g_Earth * CS%mass_shelf(i,j)
-
     endif
-  enddo ; enddo
+
+
+    if (associated(fluxes%sens)) &
+      fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
+    if (associated(fluxes%salt_flux)) &
+      fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
+    if (associated(fluxes%p_surf)) &
+      fluxes%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
+    if (associated(fluxes%p_surf_full)) &
+      fluxes%p_surf_full(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
+
+  endif ; enddo ; enddo
 
   ! keep sea level constant by removing mass in the sponge
   ! region (via virtual precip, vprec). Apply additional
@@ -1074,6 +1068,8 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   ! This is needed for some of the ISOMIP+ experiments.
 
   if (CS%constant_sea_level) then
+    !### This code has lots of problems with hard coded constants and the use of
+    !### of non-reproducing sums.  I needs to be refactored. -RWH
 
     if (.not. associated(fluxes%salt_flux)) allocate(fluxes%salt_flux(ie,je))
     if (.not. associated(fluxes%vprec)) allocate(fluxes%vprec(ie,je))
@@ -1157,25 +1153,9 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     if (CS%DEBUG) then
      if (is_root_pe()) write(*,*)'Mean melt flux (kg/(m^2 s)),dt',mean_melt_flux,CS%time_step
       call MOM_forcing_chksum("After constant sea level", fluxes, G, haloshift=0)
-   endif
+    endif
 
   endif!constant_sea_level
-
-  ! If the shelf mass is changing, the forces%rigidity_ice_[uv] needs to be
-  ! updated here.
-
-  kv_rho_ice = CS%kv_ice / CS%density_ice
-  if (CS%shelf_mass_is_dynamic) then
-    do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
-      forces%rigidity_ice_u(I,j) = kv_rho_ice * &
-                                   min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
-    enddo ; enddo
-
-    do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
-      forces%rigidity_ice_v(i,J) = kv_rho_ice * &
-                                   min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
-    enddo ; enddo
-  endif
 
 end subroutine add_shelf_flux
 
@@ -1197,6 +1177,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   type(vardesc) :: vd
   type(dyn_horgrid_type), pointer :: dG => NULL()
   real :: cdrag, drag_bg_vel
+  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
   logical :: new_sim, save_IC, var_force
   !This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1806,22 +1787,21 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   endif
 
   if (present(forces) .and. .not. CS%solo_ice_sheet) then
-    do j=jsd,jed ; do i=isd,ied-1
+    kv_rho_ice = CS%kv_ice / CS%density_ice
+    do j=js,je ; do i=is-1,ie
       forces%frac_shelf_u(I,j) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
+      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
         forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
                       (G%areaT(i,j) + G%areaT(i+1,j)))
-      forces%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
+      forces%rigidity_ice_u(I,j) = kv_rho_ice * &
                       min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
-
-
-    do j=jsd,jed-1 ; do i=isd,ied
+    do j=js-1,je ; do i=is,ie
       forces%frac_shelf_v(i,J) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
+      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
         forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
                       (G%areaT(i,j) + G%areaT(i,j+1)))
-      forces%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
+      forces%rigidity_ice_v(i,J) = kv_rho_ice * &
                       min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
   endif
@@ -6769,135 +6749,5 @@ end subroutine ice_shelf_advect_temp_y
 !!
 !! Holland, David M., and Adrian Jenkins. Modeling thermodynamic ice-ocean interactions at the base of an ice shelf.
 !! Journal of Physical Oceanography 29.8 (1999): 1787-1800.
-
-
-
-! GMM, I am putting all the commented functions below
-
-! subroutine add_shelf_flux_IOB(CS, state, forces, fluxes)
-! !  type(ice_ocean_boundary_type), intent(inout)    :: IOB
-!   type(ice_shelf_CS),             intent(in)    :: CS
-!   type(surface),                  intent(inout) :: state
-!   type(mech_forcing),             intent(inout) :: forces !< A structure with the driving mechanical forces
-!   type(forcing),                  intent(inout) :: fluxes
-
-! ! Arguments:
-! !  (in)      fluxes - A structure of surface fluxes that may be used.
-! !  (in)      visc - A structure containing vertical viscosities, bottom boundary
-! !                   layer properies, and related fields.
-! !  (in)      G - The ocean's grid structure.
-! !  (in)      CS - This module's control structure.
-!  !need to use visc variables
-!  !time step therm v. dynamic?
-!   real :: Irho0         ! The inverse of the mean density in m3 kg-1.
-!   real :: frac_area     ! The fractional area covered by the ice shelf, nondim.
-!   real :: taux2, tauy2  ! The squared surface stresses, in Pa.
-!   real :: asu1, asu2    ! Ocean areas covered by ice shelves at neighboring u-
-!   real :: asv1, asv2    ! and v-points, in m2.
-!   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-!   type(ocean_grid_type), pointer :: G
-
-!   G=>CS%grid
-!   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-!   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
-
-!   Irho0 = 1.0 / CS%Rho0
-!   ! Determine ustar and the square magnitude of the velocity in the
-!   ! bottom boundary layer. Together these give the TKE source and
-!   ! vertical decay scale.
-!   if (CS%shelf_mass_is_dynamic) then
-!     do j=jsd,jed ; do i=isd,ied
-!       if (G%areaT(i,j) > 0.0) &
-!         fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
-!     enddo ; enddo
-!     !do I=isd,ied-1 ; do j=isd,jed
-!     do j=jsd,jed ; do i=isd,ied-1 ! ### changed stride order; i->ied-1?
-!       forces%frac_shelf_u(I,j) = 0.0
-!       if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
-!         forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
-!                                     (G%areaT(i,j) + G%areaT(i+1,j)))
-!       forces%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
-!                                     min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
-!     enddo ; enddo
-!     do j=jsd,jed-1 ; do i=isd,ied ! ### change stride order; j->jed-1?
-!     !do i=isd,ied ; do J=isd,jed-1
-!       forces%frac_shelf_v(i,J) = 0.0
-!       if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
-!         forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
-!                                     (G%areaT(i,j) + G%areaT(i,j+1)))
-!       forces%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
-!                                     min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
-!     enddo ; enddo
-!     call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
-!   endif
-
-!   if (CS%debug) then
-!     if (associated(state%taux_shelf)) then
-!       call uchksum(state%taux_shelf, "taux_shelf", G%HI, haloshift=0)
-!     endif
-!     if (associated(state%tauy_shelf)) then
-!       call vchksum(state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
-!     endif
-!   endif
-
-!   if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
-!     call pass_vector(state%taux_shelf, state%tauy_shelf, G%domain, TO_ALL, CGRID_NE)
-!   endif
-
-!   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-!     frac_area = fluxes%frac_shelf_h(i,j)
-!     if (frac_area > 0.0) then
-!       ! ### THIS SHOULD BE AN AREA WEIGHTED AVERAGE OF THE ustar_shelf POINTS.
-!       taux2 = 0.0 ; tauy2 = 0.0
-!       asu1 = forces%frac_shelf_u(i-1,j) * (G%areaT(i-1,j) + G%areaT(i,j)) ! G%dxdy_u(i-1,j)
-!       asu2 = forces%frac_shelf_u(i,j) * (G%areaT(i,j) + G%areaT(i+1,j)) ! G%dxdy_u(i,j)
-!       asv1 = forces%frac_shelf_v(i,j-1) * (G%areaT(i,j-1) + G%areaT(i,j)) ! G%dxdy_v(i,j-1)
-!       asv2 = forces%frac_shelf_v(i,j) * (G%areaT(i,j) + G%areaT(i,j+1)) ! G%dxdy_v(i,j)
-!       if ((asu1 + asu2 > 0.0) .and. associated(state%taux_shelf)) &
-!         taux2 = (asu1 * state%taux_shelf(i-1,j)**2 + &
-!                  asu2 * state%taux_shelf(i,j)**2  ) / (asu1 + asu2)
-!       if ((asv1 + asv2 > 0.0) .and. associated(state%tauy_shelf)) &
-!         tauy2 = (asv1 * state%tauy_shelf(i,j-1)**2 + &
-!                  asv2 * state%tauy_shelf(i,j)**2  ) / (asv1 + asv2)
-!       fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
-
-!       if (CS%lprec(i,j) > 0.0) then
-!         fluxes%lprec(i,j) = fluxes%lprec(i,j) + frac_area*CS%lprec(i,j)
-!         ! Same for IOB%lprec
-!       else
-!         fluxes%evap(i,j) = fluxes%evap(i,j) + frac_area*CS%lprec(i,j)
-!         ! Same for -1*IOB%q_flux
-!       endif
-!       fluxes%sens(i,j) = fluxes%sens(i,j) - frac_area*CS%t_flux(i,j)
-!       ! Same for -1*IOB%t_flux
-!     ! fluxes%salt_flux(i,j) = fluxes%salt_flux(i,j) + frac_area * CS%salt_flux(i,j)
-!     ! ! Same for IOB%salt_flux.
-!       fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + &
-!                            frac_area * CS%g_Earth * CS%mass_shelf(i,j)
-!       ! Same for IOB%p
-!       if (associated(fluxes%p_surf_full)) fluxes%p_surf_full(i,j) = &
-!            fluxes%p_surf_full(i,j) + frac_area * CS%g_Earth * CS%mass_shelf(i,j)
-!     endif
-!   enddo ; enddo
-
-!   if (CS%debug) then
-!     call hchksum(fluxes%ustar_shelf, "ustar_shelf", G%HI, haloshift=0)
-!   endif
-
-!   ! If the shelf mass is changing, the forces%rigidity_ice_[uv] needs to be
-!   ! updated here.
-
-!   if (CS%shelf_mass_is_dynamic) then
-!     do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
-!       forces%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
-!                                     min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
-!     enddo ; enddo
-
-!     do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
-!       forces%rigidity_ice_v(i,J) = (CS%kv_ice / CS%density_ice) * &
-!                                     min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
-!     enddo ; enddo
-!   endif
-! end subroutine add_shelf_flux_IOB
 
 end module MOM_ice_shelf
