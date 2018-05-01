@@ -197,6 +197,8 @@ type, public :: ocean_OBC_type
   logical :: zero_strain = .false.                    !< If True, sets strain to zero on open boundaries.
   logical :: freeslip_strain = .false.                !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the strain on open boundaries.
+  logical :: computed_strain = .false.                !< If True, uses external data for tangential velocity to compute
+                                                      !! normal gradient in the strain on open boundaries.
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
   logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
@@ -309,7 +311,9 @@ subroutine open_boundary_config(G, param_file, OBC)
          "If true, uses the external values of tangential velocity\n"// &
          "in the relative vorticity on open boundaries. This cannot\n"// &
          "be true if OBC_ZERO_VORTICITY or OBC_FREESLIP_VORTICITY is True.", default=.false.)
-    if (OBC%zero_vorticity .and. OBC%freeslip_vorticity .and. OBC%computed_vorticity) &
+    if ((OBC%zero_vorticity .and. OBC%freeslip_vorticity) .or.  &
+        (OBC%zero_vorticity .and. OBC%computed_vorticity) .or.  &
+        (OBC%freeslip_vorticity .and. OBC%computed_vorticity))  &
          call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config:\n"//&
          "Only one of OBC_ZERO_VORTICITY, OBC_FREESLIP_VORTICITY and OBC_COMPUTED_VORTICITY\n"//&
          "can be True at once.")
@@ -319,10 +323,17 @@ subroutine open_boundary_config(G, param_file, OBC)
     call get_param(param_file, mdl, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
-         "be true if OBC_ZERO_STRAIN is True.", default=.false.)
-    if (OBC%zero_strain .and. OBC%freeslip_strain) call MOM_error(FATAL, &
-         "MOM_open_boundary.F90, open_boundary_config: "//&
-         "Only one of OBC_ZERO_STRAIN and OBC_FREESLIP_STRAIN can be True at once.")
+         "be true if OBC_ZERO_STRAIN or OBC_COMPUTED_STRAIN is True.", default=.false.)
+    call get_param(param_file, mdl, "OBC_COMPUTED_STRAIN", OBC%computed_strain, &
+         "If true, sets the normal gradient of tangential velocity to\n"// &
+         "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+         "be true if OBC_ZERO_STRAIN or OBC_FREESLIP_STRAIN is True.", default=.false.)
+    if ((OBC%zero_strain .and. OBC%freeslip_strain) .or.  &
+        (OBC%zero_strain .and. OBC%computed_strain) .or.  &
+        (OBC%freeslip_strain .and. OBC%computed_strain))  &
+         call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config:\n"//&
+         "Only one of OBC_ZERO_STRAIN, OBC_FREESLIP_STRAIN and OBC_COMPUTED_STRAIN\n"//&
+         "can be True at once.")
     call get_param(param_file, mdl, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
          "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
          "viscosity term.", default=.false.)
