@@ -686,32 +686,21 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 end subroutine update_ocean_model
 ! </SUBROUTINE> NAME="update_ocean_model"
 
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_restart">
-!
-! <DESCRIPTION>
-! write out restart file.
-! Arguments:
-!   timestamp (optional, intent(in)) : A character string that represents the model time,
-!                                      used for writing restart. timestamp will append to
-!                                      the any restart file name as a prefix.
-! </DESCRIPTION>
-!
 
 subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice, kv_ice, &
                                   latent_heat_fusion, sfc_state, time_step, berg_area_threshold)
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
   type(mech_forcing),    intent(inout) :: forces  !< A structure with the driving mechanical forces
   type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
                                                   !! tracer and mass exchange forcing fields
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
-  real, intent(in) :: kv_ice       !< The viscosity of ice, in m2 s-1.
-  real, intent(in) :: density_ice  !< A typical density of ice, in kg m-3.
-  real, intent(in) :: latent_heat_fusion   !< The latent heat of fusion, in J kg-1.
-  real, intent(in) :: time_step   !< The coupling time step, in s.
-  real, intent(in) :: berg_area_threshold  !< Area threshold for zeroing fluxes below iceberg
+  real,                  intent(in)    :: kv_ice      !< The viscosity of ice, in m2 s-1.
+  real,                  intent(in)    :: density_ice !< A typical density of ice, in kg m-3.
+  real,                  intent(in)    :: latent_heat_fusion   !< The latent heat of fusion, in J kg-1.
+  real,                  intent(in)    :: time_step   !< The coupling time step, in s.
+  real,                  intent(in)    :: berg_area_threshold !< Area threshold for zeroing fluxes below iceberg
 ! Arguments:
 !  (in)      fluxes - A structure of surface fluxes that may be used.
 !  (in)      G - The ocean's grid structure.
@@ -773,11 +762,10 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
     fluxes%frac_shelf_h(:,:) = 0.
     fluxes%ustar_shelf(:,:) = 0.
   endif
-  do j=jsd,jed ; do i=isd,ied
-    if (G%areaT(i,j) > 0.0) &
-      fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j)
-      fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  +  fluxes%ustar_berg(i,j)
-  enddo ; enddo
+  do j=jsd,jed ; do i=isd,ied ; if (G%areaT(i,j) > 0.0) then
+    fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j)
+    fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  +  fluxes%ustar_berg(i,j)
+  endif ; enddo ; enddo
 
   !Zero'ing out other fluxes under the tabular icebergs
   if (berg_area_threshold >= 0.) then
@@ -811,9 +799,22 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
 
 end subroutine add_berg_flux_to_shelf
 
+!=======================================================================
+! <SUBROUTINE NAME="ocean_model_restart">
+!
+! <DESCRIPTION>
+! write out restart file.
+! Arguments:
+!   timestamp (optional, intent(in)) : A character string that represents the model time,
+!                                      used for writing restart. timestamp will prepend to
+!                                      the any restart file name as a prefix.
+! </DESCRIPTION>
+!
 subroutine ocean_model_restart(OS, timestamp)
-  type(ocean_state_type),        pointer :: OS
-  character(len=*), intent(in), optional :: timestamp
+  type(ocean_state_type),        pointer :: OS !< A pointer to the structure containing the
+                                               !! internal ocean state being saved to a restart file
+  character(len=*), intent(in), optional :: timestamp !< An optional timestamp string that should be
+                                               !! prepended to the file name. (Currently this is unused.)
 
   if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
       call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
