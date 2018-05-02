@@ -1941,9 +1941,11 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
   endif   ! endif for allocation and initialization
 
   if (CS%allow_flux_adjustments) then
-   fluxes%heat_added(:,:)=0.0
-   fluxes%salt_flux_added(:,:)=0.0
+    fluxes%heat_added(:,:)=0.0
+    fluxes%salt_flux_added(:,:)=0.0
   endif
+  if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
+  if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
   if (CS%area_surf < 0.0) then
     do j=js,je ; do i=is,ie
@@ -2292,7 +2294,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       endif
       ! CAUTION: with both rigid_sea_ice and ice shelves, we will need to make this
       ! a maximum for the second call.
-      forces%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=isd,ied ; do J=jsd,jed-1
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
@@ -2301,7 +2303,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
       endif
-      forces%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + Kv_rho_ice * mass_eff
     enddo ; enddo
   endif
 

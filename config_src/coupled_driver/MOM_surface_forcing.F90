@@ -129,13 +129,15 @@ type, public :: surface_forcing_CS ; private
   character(len=30)        :: salt_restore_var_name ! name of surface salinity in salt_restore_file
   logical                  :: mask_srestore         ! if true, apply a 2-dimensional mask to the surface
                                                     ! salinity restoring fluxes. The masking file should be
-                                                    ! in inputdir/salt_restore_mask.nc and the field should be name 'mask'
+                                                    ! in inputdir/salt_restore_mask.nc and the field should
+                                                    ! be named 'mask'
   real, pointer, dimension(:,:) :: srestore_mask => NULL() ! mask for SSS restoring
   character(len=200)       :: temp_restore_file     ! filename for sst restoring data
   character(len=30)        :: temp_restore_var_name ! name of surface temperature in temp_restore_file
   logical                  :: mask_trestore         ! if true, apply a 2-dimensional mask to the surface
                                                     ! temperature restoring fluxes. The masking file should be
-                                                    ! in inputdir/temp_restore_mask.nc and the field should be name 'mask'
+                                                    ! in inputdir/temp_restore_mask.nc and the field should
+                                                    ! be named 'mask'
   real, pointer, dimension(:,:) :: trestore_mask => NULL() ! mask for SST restoring
   integer :: id_srestore = -1     ! id number for time_interp_external.
   integer :: id_trestore = -1     ! id number for time_interp_external.
@@ -153,37 +155,40 @@ end type surface_forcing_CS
 ! the elements, units, and conventions that exactly conform to the use for
 ! MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
-  real, pointer, dimension(:,:) :: u_flux               =>NULL() ! i-direction wind stress (Pa)
-  real, pointer, dimension(:,:) :: v_flux               =>NULL() ! j-direction wind stress (Pa)
-  real, pointer, dimension(:,:) :: t_flux               =>NULL() ! sensible heat flux (W/m2)
-  real, pointer, dimension(:,:) :: q_flux               =>NULL() ! specific humidity flux (kg/m2/s)
-  real, pointer, dimension(:,:) :: salt_flux            =>NULL() ! salt flux (kg/m2/s)
-  real, pointer, dimension(:,:) :: lw_flux              =>NULL() ! long wave radiation (W/m2)
-  real, pointer, dimension(:,:) :: sw_flux_vis_dir      =>NULL() ! direct visible sw radiation (W/m2)
-  real, pointer, dimension(:,:) :: sw_flux_vis_dif      =>NULL() ! diffuse visible sw radiation (W/m2)
-  real, pointer, dimension(:,:) :: sw_flux_nir_dir      =>NULL() ! direct Near InfraRed sw radiation (W/m2)
-  real, pointer, dimension(:,:) :: sw_flux_nir_dif      =>NULL() ! diffuse Near InfraRed sw radiation (W/m2)
-  real, pointer, dimension(:,:) :: lprec                =>NULL() ! mass flux of liquid precip (kg/m2/s)
-  real, pointer, dimension(:,:) :: fprec                =>NULL() ! mass flux of frozen precip (kg/m2/s)
-  real, pointer, dimension(:,:) :: runoff               =>NULL() ! mass flux of liquid runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: calving              =>NULL() ! mass flux of frozen runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: ustar_berg           =>NULL() ! frictional velocity beneath icebergs (m/s)
-  real, pointer, dimension(:,:) :: area_berg            =>NULL() ! area covered by icebergs(m2/m2)
-  real, pointer, dimension(:,:) :: mass_berg            =>NULL() ! mass of icebergs(kg/m2)
-  real, pointer, dimension(:,:) :: runoff_hflx          =>NULL() ! heat content of liquid runoff (W/m2)
-  real, pointer, dimension(:,:) :: calving_hflx         =>NULL() ! heat content of frozen runoff (W/m2)
-  real, pointer, dimension(:,:) :: p                    =>NULL() ! pressure of overlying ice and atmosphere
-                                                                 ! on ocean surface (Pa)
-  real, pointer, dimension(:,:) :: mi                   =>NULL() ! mass of ice (kg/m2)
-  integer :: xtype                                   ! REGRID, REDIST or DIRECT
-  type(coupler_2d_bc_type)      :: fluxes            ! A structure that may contain an
-                                                     ! array of named fields used for
-                                                     ! passive tracer fluxes.
-  integer :: wind_stagger = -999                     ! A flag indicating the spatial discretization of
-                                                     ! wind stresses.  This flag may be set by the
-                                                     ! flux-exchange code, based on what the sea-ice
-                                                     ! model is providing.  Otherwise, the value from
-                                                     ! the surface_forcing_CS is used.
+  real, pointer, dimension(:,:) :: u_flux          =>NULL() !< i-direction wind stress (Pa)
+  real, pointer, dimension(:,:) :: v_flux          =>NULL() !< j-direction wind stress (Pa)
+  real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux (W/m2)
+  real, pointer, dimension(:,:) :: q_flux          =>NULL() !< specific humidity flux (kg/m2/s)
+  real, pointer, dimension(:,:) :: salt_flux       =>NULL() !< salt flux (kg/m2/s)
+  real, pointer, dimension(:,:) :: lw_flux         =>NULL() !< long wave radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_vis_dir =>NULL() !< direct visible sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_vis_dif =>NULL() !< diffuse visible sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_nir_dir =>NULL() !< direct Near InfraRed sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: sw_flux_nir_dif =>NULL() !< diffuse Near InfraRed sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: lprec           =>NULL() !< mass flux of liquid precip (kg/m2/s)
+  real, pointer, dimension(:,:) :: fprec           =>NULL() !< mass flux of frozen precip (kg/m2/s)
+  real, pointer, dimension(:,:) :: runoff          =>NULL() !< mass flux of liquid runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: calving         =>NULL() !< mass flux of frozen runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: ustar_berg      =>NULL() !< frictional velocity beneath icebergs (m/s)
+  real, pointer, dimension(:,:) :: area_berg       =>NULL() !< area covered by icebergs(m2/m2)
+  real, pointer, dimension(:,:) :: mass_berg       =>NULL() !< mass of icebergs(kg/m2)
+  real, pointer, dimension(:,:) :: runoff_hflx     =>NULL() !< heat content of liquid runoff (W/m2)
+  real, pointer, dimension(:,:) :: calving_hflx    =>NULL() !< heat content of frozen runoff (W/m2)
+  real, pointer, dimension(:,:) :: p               =>NULL() !< pressure of overlying ice and atmosphere
+                                                            !< on ocean surface (Pa)
+  real, pointer, dimension(:,:) :: mi              =>NULL() !< mass of ice (kg/m2)
+  real, pointer, dimension(:,:) :: ice_rigidity    =>NULL() !< rigidity of the sea ice, sea-ice and
+                                                            !! ice-shelves, expressed as a coefficient
+                                                            !! for divergence damping, as determined
+                                                            !! outside of the ocean model in (m3/s)
+  integer :: xtype                                   !< The type of the exchange - REGRID, REDIST or DIRECT
+  type(coupler_2d_bc_type)      :: fluxes            !< A structure that may contain an array of
+                                                     !! named fields used for passive tracer fluxes.
+  integer :: wind_stagger = -999                     !< A flag indicating the spatial discretization of
+                                                     !! wind stresses.  This flag may be set by the
+                                                     !! flux-exchange code, based on what the sea-ice
+                                                     !! model is providing.  Otherwise, the value from
+                                                     !! the surface_forcing_CS is used.
 end type ice_ocean_boundary_type
 
 integer :: id_clock_forcing
@@ -308,9 +313,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
   endif   ! endif for allocation and initialization
 
 
-  if (((associated(IOB%ustar_berg) .and. (.not. associated(fluxes%ustar_berg))) &
-    .or. (associated(IOB%area_berg) .and. (.not. associated(fluxes%area_berg)))) &
-    .or. (associated(IOB%mass_berg) .and. (.not. associated(fluxes%mass_berg)))) &
+  if (((associated(IOB%ustar_berg) .and. (.not.associated(fluxes%ustar_berg))) &
+    .or. (associated(IOB%area_berg) .and. (.not.associated(fluxes%area_berg)))) &
+    .or. (associated(IOB%mass_berg) .and. (.not.associated(fluxes%mass_berg)))) &
     call allocate_forcing_type(G, fluxes, iceberg=.true.)
 
   if ((.not.coupler_type_initialized(fluxes%tr_fluxes)) .and. &
@@ -397,10 +402,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
   if (restore_sst) then
     call time_interp_external(CS%id_trestore,Time,data_restore)
     do j=js,je ; do i=is,ie
-       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
-       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
-       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
-    enddo; enddo
+      delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
+      delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
+      fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
+                      (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
+    enddo ; enddo
   endif
 
 
@@ -577,6 +583,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     tauy_at_q    ! Meridional wind stresses at q points (Pa)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
+    rigidity_at_h, & ! Ice rigidity at tracer points (m3 s-1)
     taux_at_h, & ! Zonal wind stresses at h points (Pa)
     tauy_at_h    ! Meridional wind stresses at h points (Pa)
 
@@ -632,7 +639,14 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   if ( (associated(IOB%area_berg) .and. (.not. associated(forces%area_berg))) .or. &
        (associated(IOB%mass_berg) .and. (.not. associated(forces%mass_berg))) ) &
     call allocate_mech_forcing(G, forces, iceberg=.true.)
+  if (associated(IOB%ice_rigidity)) then
+    rigidity_at_h(:,:) = 0.0
+    call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
+    call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
+  endif
 
+  if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
+  if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
   ! applied surface pressure from atmosphere and cryosphere
   if (associated(IOB%p)) then
@@ -669,6 +683,9 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     if (associated(IOB%mass_berg)) &
       forces%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
+    if (associated(IOB%ice_rigidity)) &
+      rigidity_at_h(i,j) = IOB%ice_rigidity(i-i0,j-j0) * G%mask2dT(i,j)
+
     if (wind_stagger == BGRID_NE) then
       if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
@@ -679,6 +696,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
       if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     endif
+
   enddo ; enddo
 
   ! surface momentum stress related fields as function of staggering
@@ -773,8 +791,19 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
 
   endif   ! endif for wind related fields
 
+  ! sea ice related dynamic fields
+  if (associated(IOB%ice_rigidity)) then
+    call pass_var(rigidity_at_h, G%Domain, halo=1)
+    do I=is-1,ie ; do j=js,je
+      forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
+              min(rigidity_at_h(i,j), rigidity_at_h(i+1,j))
+    enddo ; enddo
+    do i=is,ie ; do J=js-1,je
+      forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + &
+              min(rigidity_at_h(i,j), rigidity_at_h(i,j+1))
+    enddo ; enddo
+  endif
 
-  ! sea ice related fields
   if (CS%rigid_sea_ice) then
     call pass_var(forces%p_surf_full, G%Domain, halo=1)
     I_GEarth = 1.0 / G%G_Earth
@@ -786,9 +815,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
       endif
-      ! CAUTION: with both rigid_sea_ice and ice shelves, we will need to make this
-      ! a maximum for the second call.
-      forces%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=is,ie ; do J=js-1,je
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
@@ -797,7 +824,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
       endif
-      forces%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + Kv_rho_ice * mass_eff
     enddo ; enddo
   endif
 
@@ -1320,11 +1347,11 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
     write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
     write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
     if (associated(iobt%ustar_berg)) &
-      write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg     )
+      write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg )
     if (associated(iobt%area_berg)) &
-      write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg      )
+      write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg  )
     if (associated(iobt%mass_berg)) &
-      write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg      )
+      write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg  )
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
     call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
