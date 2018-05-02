@@ -347,7 +347,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
 
-  CS%new_sponges = .true.  
+  CS%new_sponges = .true.
   CS%nz = G%ke
   CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
   CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
