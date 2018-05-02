@@ -1,10 +1,10 @@
 !> Interface to CVMix interior shear schemes
-module MOM_cvmix_shear
+module MOM_CVMix_shear
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 !---------------------------------------------------
-! module MOM_cvmix_shear
+! module MOM_CVMix_shear
 ! Author: Brandon Reichl
 ! Date: Aug 31, 2016
 ! Purpose: Interface to CVMix interior shear schemes
@@ -19,16 +19,16 @@ use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, EOS_type
-use cvmix_shear, only : cvmix_init_shear, cvmix_coeffs_shear
+use CVMix_shear, only : CVMix_init_shear, CVMix_coeffs_shear
 use MOM_kappa_shear, only : kappa_shear_is_used
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_is_used, cvmix_shear_end
+public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear_end
 
 !> Control structure including parameters for CVMix interior shear schemes.
-type, public :: cvmix_shear_cs
+type, public :: CVMix_shear_cs
   logical :: use_LMD94, use_PP81            !< Flags for various schemes
   real    :: Ri_zero                        !< LMD94 critical Richardson number
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
@@ -43,14 +43,14 @@ type, public :: cvmix_shear_cs
   type(diag_ctrl), pointer :: diag => NULL()
   integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
 
-end type cvmix_shear_cs
+end type CVMix_shear_cs
 
-character(len=40)  :: mdl = "MOM_cvmix_shear"  !< This module's name.
+character(len=40)  :: mdl = "MOM_CVMix_shear"  !< This module's name.
 
 contains
 
 !> Subroutine for calculating (internal) vertical diffusivities/viscosities
-subroutine calculate_cvmix_shear(u_H, v_H, h, tv, kd,  &
+subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
                                  kv, G, GV, CS )
   type(ocean_grid_type),                      intent(in)  :: G !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
@@ -62,7 +62,7 @@ subroutine calculate_cvmix_shear(u_H, v_H, h, tv, kd,  &
                                                                 !! (not layer!) in m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv !< The vertical viscosity at each interface
                                                                 !! (not layer!) in m2 s-1.
-  type(cvmix_shear_cs),                       pointer     :: CS !< The control structure returned by a previous call to
+  type(CVMix_shear_cs),                       pointer     :: CS !< The control structure returned by a previous call to
                                                                 !! CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
@@ -125,7 +125,7 @@ subroutine calculate_cvmix_shear(u_H, v_H, h, tv, kd,  &
       enddo
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
-      call  cvmix_coeffs_shear(Mdiff_out=kv(i,j,:), &
+      call  CVMix_coeffs_shear(Mdiff_out=kv(i,j,:), &
                                    Tdiff_out=kd(i,j,:), &
                                    RICH=Ri_Grad, &
                                    nlev=G%ke,    &
@@ -140,20 +140,20 @@ subroutine calculate_cvmix_shear(u_H, v_H, h, tv, kd,  &
   if (CS%id_S2 > 0) call post_data(CS%id_S2,CS%S2, CS%diag)
   if (CS%id_ri_grad > 0) call post_data(CS%id_ri_grad,CS%ri_grad, CS%diag)
 
-end subroutine calculate_cvmix_shear
+end subroutine calculate_CVMix_shear
 
 
-!> Initialized the cvmix internal shear mixing routine.
+!> Initialized the CVMix internal shear mixing routine.
 !! \note *This is where we test to make sure multiple internal shear
 !!       mixing routines (including JHL) are not enabled at the same time.
-!! (returns) cvmix_shear_init - True if module is to be used, False otherwise
-logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
+!! (returns) CVMix_shear_init - True if module is to be used, False otherwise
+logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current time.
   type(ocean_grid_type),   intent(in)    :: G !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure.
-  type(cvmix_shear_cs),    pointer       :: CS !< This module's control structure.
+  type(CVMix_shear_cs),    pointer       :: CS !< This module's control structure.
   ! Local variables
   integer :: NumberTrue=0
   logical :: use_JHL
@@ -161,7 +161,7 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
 #include "version_variable.h"
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "cvmix_shear_init called with an associated "// &
+    call MOM_error(WARNING, "CVMix_shear_init called with an associated "// &
                             "control structure.")
     return
   endif
@@ -189,14 +189,14 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   ! After testing for interior schemes, make sure only 0 or 1 are enabled.
   ! Otherwise, warn user and kill job.
   if ((NumberTrue).gt.1) then
-     call MOM_error(FATAL, 'MOM_cvmix_shear_init: '// &
+     call MOM_error(FATAL, 'MOM_CVMix_shear_init: '// &
            'Multiple shear driven internal mixing schemes selected,'//&
            ' please disable all but one scheme to proceed.')
   endif
-  cvmix_shear_init=(CS%use_PP81.or.CS%use_LMD94)
+  CVMix_shear_init=(CS%use_PP81.or.CS%use_LMD94)
 
 ! Forego remainder of initialization if not using this scheme
-  if (.not. cvmix_shear_init) return
+  if (.not. CVMix_shear_init) return
   call get_param(param_file, mdl, "NU_ZERO", CS%Nu_Zero, &
                  "Leading coefficient in KPP shear mixing.", &
                  units="nondim", default=5.e-3)
@@ -209,7 +209,7 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
                  "Exponent of unitless factor of diffusivities,"// &
                  " for KPP internal shear mixing scheme." &
                  ,units="nondim", default=3.0)
-  call cvmix_init_shear(mix_scheme=CS%mix_scheme, &
+  call CVMix_init_shear(mix_scheme=CS%mix_scheme, &
                         KPP_nu_zero=CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)
@@ -218,31 +218,31 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_N2 = register_diag_field('ocean_model', 'N2_shear', diag%axesTi, Time, &
-      'Square of Brunt-Vaisala frequency used by MOM_cvmix_shear module', '1/s2')
+      'Square of Brunt-Vaisala frequency used by MOM_CVMix_shear module', '1/s2')
   if (CS%id_N2 > 0) &
     allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%N2(:,:,:) = 0.
 
   CS%id_S2 = register_diag_field('ocean_model', 'S2_shear', diag%axesTi, Time, &
-      'Square of vertical shear used by MOM_cvmix_shear module','1/s2')
+      'Square of vertical shear used by MOM_CVMix_shear module','1/s2')
   if (CS%id_S2 > 0) &
     allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%S2(:,:,:) = 0.
 
   CS%id_ri_grad = register_diag_field('ocean_model', 'ri_grad_shear', diag%axesTi, Time, &
-      'Gradient Richarson number used by MOM_cvmix_shear module','nondim')
+      'Gradient Richarson number used by MOM_CVMix_shear module','nondim')
   if (CS%id_ri_grad > 0) & !Initialize w/ large Richardson value
      allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad(:,:,:) = 1.e8
 
-  CS%id_kd = register_diag_field('ocean_model', 'kd_shear_cvmix', diag%axesTi, Time, &
-      'Vertical diffusivity added by MOM_cvmix_shear module', 'm2/s')
-  CS%id_kv = register_diag_field('ocean_model', 'kv_shear_cvmix', diag%axesTi, Time, &
-      'Vertical viscosity added by MOM_cvmix_shear module', 'm2/s')
+  CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
+      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s')
+  CS%id_kv = register_diag_field('ocean_model', 'kv_shear_CVMix', diag%axesTi, Time, &
+      'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s')
 
-end function cvmix_shear_init
+end function CVMix_shear_init
 
 !> Reads the parameters "LMD94" and "PP81" and returns state.
 !!   This function allows other modules to know whether this parameterization will
 !! be used without needing to duplicate the log entry.
-logical function cvmix_shear_is_used(param_file)
+logical function CVMix_shear_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< Run-time parameter files handle.
   ! Local variables
   logical :: LMD94, PP81
@@ -250,18 +250,18 @@ logical function cvmix_shear_is_used(param_file)
        default=.false., do_not_log = .true.)
   call get_param(param_file, mdl, "Use_PP81", PP81, &
        default=.false., do_not_log = .true.)
-  cvmix_shear_is_used = (LMD94 .or. PP81)
-end function cvmix_shear_is_used
+  CVMix_shear_is_used = (LMD94 .or. PP81)
+end function CVMix_shear_is_used
 
 !> Clear pointers and dealocate memory
-subroutine cvmix_shear_end(CS)
-  type(cvmix_shear_cs), pointer :: CS ! Control structure
+subroutine CVMix_shear_end(CS)
+  type(CVMix_shear_cs), pointer :: CS ! Control structure
 
   if (CS%id_N2 > 0) deallocate(CS%N2)
   if (CS%id_S2 > 0) deallocate(CS%S2)
   if (CS%id_ri_grad > 0) deallocate(CS%ri_grad)
   deallocate(CS)
 
-end subroutine cvmix_shear_end
+end subroutine CVMix_shear_end
 
-end module MOM_cvmix_shear
+end module MOM_CVMix_shear

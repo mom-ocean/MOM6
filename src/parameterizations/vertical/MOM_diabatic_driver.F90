@@ -9,7 +9,7 @@ use MOM_debugging,           only : hchksum
 use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_CVMix_shear,         only : cvmix_shear_is_used
+use MOM_CVMix_shear,         only : CVMix_shear_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
@@ -22,8 +22,8 @@ use MOM_diag_mediator,       only : diag_save_grids, diag_restore_grids
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
-use MOM_cvmix_conv,          only : cvmix_conv_init, cvmix_conv_cs
-use MOM_cvmix_conv,          only : cvmix_conv_end, calculate_cvmix_conv
+use MOM_CVMix_conv,          only : CVMix_conv_init, CVMix_conv_cs
+use MOM_CVMix_conv,          only : CVMix_conv_end, calculate_CVMix_conv
 use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_tidal_mixing,        only : tidal_mixing_init, tidal_mixing_cs
@@ -90,10 +90,10 @@ type, public:: diabatic_CS ; private
                                      !! in the surface boundary layer.
   logical :: use_kappa_shear         !< If true, use the kappa_shear module to find the
                                      !! shear-driven diapycnal diffusivity.
-  logical :: use_cvmix_shear         !< If true, use the CVMix module to find the
+  logical :: use_CVMix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_tidal_mixing        !< If true, activate tidal mixing diffusivity.
-  logical :: use_cvmix_conv          !< If true, use the CVMix module to get enhanced
+  logical :: use_CVMix_conv          !< If true, use the CVMix module to get enhanced
                                      !! mixing due to convection.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
                                      !! domain.  The exact location and properties of
@@ -151,7 +151,7 @@ type, public:: diabatic_CS ; private
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
                                      !! evaporated in one time-step (non-dim).
 
-  logical :: useKPP                  !< use CVmix/KPP diffusivities and non-local transport
+  logical :: useKPP = .false.        !< use CVMix/KPP diffusivities and non-local transport
   logical :: salt_reject_below_ML    !< If true, add salt below mixed layer (layer mode only)
   logical :: KPPisPassive            !< If true, KPP is in passive mode, not changing answers.
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
@@ -224,7 +224,7 @@ type, public:: diabatic_CS ; private
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
   type(tidal_mixing_cs),        pointer :: tidal_mixing_csp      => NULL()
-  type(cvmix_conv_cs),          pointer :: cvmix_conv_csp        => NULL()
+  type(CVMix_conv_cs),          pointer :: CVMix_conv_csp        => NULL()
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL()
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
@@ -526,7 +526,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
-  if (CS%use_kappa_shear .or. CS%use_cvmix_shear) then
+  if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
       if (CS%debug) then
@@ -676,13 +676,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   endif  ! endif for KPP
 
   ! Add vertical diff./visc. due to convection (computed via CVMix)
-  if (CS%use_cvmix_conv) then
-    call calculate_cvmix_conv(h, tv, G, GV, CS%cvmix_conv_csp, Hml)
+  if (CS%use_CVMix_conv) then
+    call calculate_CVMix_conv(h, tv, G, GV, CS%CVMix_conv_csp, Hml)
 
       !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       do k=1,nz ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%cvmix_conv_csp%kd_conv(i,j,k)
-        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%cvmix_conv_csp%kv_conv(i,j,k)
+        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
+        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
       enddo ; enddo ; enddo
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -1923,7 +1923,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
-  CS%use_cvmix_shear = cvmix_shear_is_used(param_file)
+  CS%use_CVMix_shear = CVMix_shear_is_used(param_file)
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
@@ -2344,9 +2344,9 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
   CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp, CS%tidal_mixing_CSp)
 
-  ! CS%use_cvmix_conv is set to True if CVMix convection will be used, otherwise
+  ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise
   ! False.
-  CS%use_cvmix_conv = cvmix_conv_init(Time, G, GV, param_file, diag, CS%cvmix_conv_csp)
+  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, param_file, diag, CS%CVMix_conv_csp)
 
   call entrain_diffusive_init(Time, G, GV, param_file, diag, CS%entrain_diffusive_CSp)
 
@@ -2425,22 +2425,20 @@ subroutine diabatic_driver_end(CS)
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
 
- ! GMM, commeting the following because it fails on Travis (gfortran)
-
- ! if (CS%useKPP) then
- !   if (allocated(CS%KPP_buoy_flux)) deallocate( CS%KPP_buoy_flux )
- !   if (allocated(CS%KPP_temp_flux)) deallocate( CS%KPP_temp_flux )
- !   if (allocated(CS%KPP_salt_flux)) deallocate( CS%KPP_salt_flux )
- ! endif
- ! if (CS%useKPP) then
- !   if (allocated(CS%KPP_NLTheat)) deallocate( CS%KPP_NLTheat )
- !   if (allocated(CS%KPP_NLTscalar)) deallocate( CS%KPP_NLTscalar )
- !   call KPP_end(CS%KPP_CSp)
- ! endif
+ if (CS%useKPP) then
+    deallocate( CS%KPP_buoy_flux )
+    deallocate( CS%KPP_temp_flux )
+    deallocate( CS%KPP_salt_flux )
+ endif
+  if (CS%useKPP) then
+    deallocate( CS%KPP_NLTheat )
+    deallocate( CS%KPP_NLTscalar )
+    call KPP_end(CS%KPP_CSp)
+  endif
 
   if (CS%use_tidal_mixing) call tidal_mixing_end(CS%tidal_mixing_CSp)
 
-  if (CS%use_cvmix_conv) call cvmix_conv_end(CS%cvmix_conv_csp)
+  if (CS%use_CVMix_conv) call CVMix_conv_end(CS%CVMix_conv_csp)
 
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
@@ -2452,8 +2450,14 @@ subroutine diabatic_driver_end(CS)
     deallocate(CS%optics)
   endif
 
-  call diag_grid_storage_end(CS%diag_grids_prev)
+  ! GMM, the following is commented out because arrays in
+  ! CS%diag_grids_prev are neither pointers or allocatables
+  ! and, therefore, cannot be deallocated.
+
+  !call diag_grid_storage_end(CS%diag_grids_prev)
+
   if (associated(CS)) deallocate(CS)
+
 
 end subroutine diabatic_driver_end
 
