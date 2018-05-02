@@ -136,6 +136,8 @@ type, public :: OBC_segment_type
                                                             !! segment (m s-1).
   real, pointer, dimension(:,:,:) :: tangential_vel=>NULL() !< The layer velocity tangential to the
                                                             !! OB segment (m s-1).
+  real, pointer, dimension(:,:,:) :: tangential_grad=>NULL() !< The gradient of the velocity tangential
+                                                            !! to the OB segment (m s-1).
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
                                                             !! segment (m3 s-1).
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
@@ -194,11 +196,15 @@ type, public :: ocean_OBC_type
                                                       !! in the relative vorticity on open boundaries.
   logical :: computed_vorticity = .false.             !< If True, uses external data for tangential velocity
                                                       !! in the relative vorticity on open boundaries.
+  logical :: imported_vorticity = .false.             !< If True, uses external data for tangential velocity
+                                                      !! gradients in the relative vorticity on open boundaries.
   logical :: zero_strain = .false.                    !< If True, sets strain to zero on open boundaries.
   logical :: freeslip_strain = .false.                !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the strain on open boundaries.
   logical :: computed_strain = .false.                !< If True, uses external data for tangential velocity to compute
                                                       !! normal gradient in the strain on open boundaries.
+  logical :: imported_strain = .false.                !< If True, uses external data for tangential velocity gradients
+                                                      !! to compute strain on open boundaries.
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
   logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
@@ -306,34 +312,48 @@ subroutine open_boundary_config(G, param_file, OBC)
     call get_param(param_file, mdl, "OBC_FREESLIP_VORTICITY", OBC%freeslip_vorticity, &
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the relative vorticity on open boundaries. This cannot\n"// &
-         "be true if OBC_ZERO_VORTICITY is True.", default=.false.)
+         "be true if another OBC_XXX_VORTICITY option is True.", default=.false.)
     call get_param(param_file, mdl, "OBC_COMPUTED_VORTICITY", OBC%computed_vorticity, &
          "If true, uses the external values of tangential velocity\n"// &
          "in the relative vorticity on open boundaries. This cannot\n"// &
-         "be true if OBC_ZERO_VORTICITY or OBC_FREESLIP_VORTICITY is True.", default=.false.)
+         "be true if another OBC_XXX_VORTICITY option is True.", default=.false.)
+    call get_param(param_file, mdl, "OBC_IMPORTED_VORTICITY", OBC%imported_vorticity, &
+         "If true, uses the external values of tangential velocity\n"// &
+         "in the relative vorticity on open boundaries. This cannot\n"// &
+         "be true if another OBC_XXX_VORTICITY option is True.", default=.false.)
     if ((OBC%zero_vorticity .and. OBC%freeslip_vorticity) .or.  &
         (OBC%zero_vorticity .and. OBC%computed_vorticity) .or.  &
-        (OBC%freeslip_vorticity .and. OBC%computed_vorticity))  &
+        (OBC%zero_vorticity .and. OBC%imported_vorticity) .or.  &
+        (OBC%freeslip_vorticity .and. OBC%computed_vorticity) .or.  &
+        (OBC%freeslip_vorticity .and. OBC%imported_vorticity) .or.  &
+        (OBC%computed_vorticity .and. OBC%imported_vorticity))  &
          call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config:\n"//&
-         "Only one of OBC_ZERO_VORTICITY, OBC_FREESLIP_VORTICITY and OBC_COMPUTED_VORTICITY\n"//&
-         "can be True at once.")
+         "Only one of OBC_ZERO_VORTICITY, OBC_FREESLIP_VORTICITY, OBC_COMPUTED_VORTICITY\n"//&
+         "and OBC_IMPORTED_VORTICITY can be True at once.")
     call get_param(param_file, mdl, "OBC_ZERO_STRAIN", OBC%zero_strain, &
          "If true, sets the strain used in the stress tensor to zero on open boundaries.", &
          default=.false.)
     call get_param(param_file, mdl, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
-         "be true if OBC_ZERO_STRAIN or OBC_COMPUTED_STRAIN is True.", default=.false.)
+         "be true if another OBC_XXX_STRAIN option is True.", default=.false.)
     call get_param(param_file, mdl, "OBC_COMPUTED_STRAIN", OBC%computed_strain, &
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
-         "be true if OBC_ZERO_STRAIN or OBC_FREESLIP_STRAIN is True.", default=.false.)
+         "be true if another OBC_XXX_STRAIN option is True.", default=.false.)
+    call get_param(param_file, mdl, "OBC_IMPORTED_STRAIN", OBC%imported_strain, &
+         "If true, sets the normal gradient of tangential velocity to\n"// &
+         "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+         "be true if another OBC_XXX_STRAIN option is True.", default=.false.)
     if ((OBC%zero_strain .and. OBC%freeslip_strain) .or.  &
         (OBC%zero_strain .and. OBC%computed_strain) .or.  &
-        (OBC%freeslip_strain .and. OBC%computed_strain))  &
+        (OBC%zero_strain .and. OBC%imported_strain) .or.  &
+        (OBC%freeslip_strain .and. OBC%computed_strain) .or.  &
+        (OBC%freeslip_strain .and. OBC%imported_strain) .or.  &
+        (OBC%computed_strain .and. OBC%imported_strain))  &
          call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config:\n"//&
-         "Only one of OBC_ZERO_STRAIN, OBC_FREESLIP_STRAIN and OBC_COMPUTED_STRAIN\n"//&
-         "can be True at once.")
+         "Only one of OBC_ZERO_STRAIN, OBC_FREESLIP_STRAIN, OBC_COMPUTED_STRAIN\n"//&
+         "and OBC_IMPORTED_STRAIN can be True at once.")
     call get_param(param_file, mdl, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
          "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
          "viscosity term.", default=.false.)
@@ -1941,11 +1961,15 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     if (segment%nudged) then
       allocate(segment%nudged_normal_vel(IsdB:IedB,jsd:jed,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
     endif
-    if (OBC%computed_vorticity .or. segment%nudged_tan .or. segment%specified_tan) then
+    if (OBC%computed_vorticity .or. segment%nudged_tan .or. segment%specified_tan .or. &
+        OBC%computed_strain) then
       allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_vel(:,:,:)=0.0
     endif
     if (segment%nudged_tan) then
       allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
+    endif
+    if (OBC%imported_vorticity .or. OBC%imported_strain) then
+      allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
     endif
     if (segment%oblique) then
       allocate(segment%grad_normal(JsdB:JedB,2,OBC%ke));      segment%grad_normal(:,:,:) = 0.0
@@ -1970,11 +1994,15 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     if (segment%nudged) then
       allocate(segment%nudged_normal_vel(isd:ied,JsdB:JedB,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
     endif
-    if (OBC%computed_vorticity .or. segment%nudged_tan .or. segment%specified_tan) then
+    if (OBC%computed_vorticity .or. segment%nudged_tan .or. segment%specified_tan .or. &
+        OBC%computed_strain) then
       allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_vel(:,:,:)=0.0
     endif
     if (segment%nudged_tan) then
       allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
+    endif
+    if (OBC%imported_vorticity .or. OBC%imported_strain) then
+      allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
     endif
     if (segment%oblique) then
       allocate(segment%grad_normal(IsdB:IedB,2,OBC%ke));      segment%grad_normal(:,:,:) = 0.0
@@ -2007,6 +2035,7 @@ subroutine deallocate_OBC_segment_data(OBC, segment)
   if (associated (segment%nudged_normal_vel)) deallocate(segment%nudged_normal_vel)
   if (associated (segment%tangential_vel)) deallocate(segment%tangential_vel)
   if (associated (segment%nudged_tangential_vel)) deallocate(segment%nudged_tangential_vel)
+  if (associated (segment%tangential_grad)) deallocate(segment%tangential_grad)
   if (associated (segment%tr_Reg)) call segment_tracer_registry_end(segment%tr_Reg)
 
 
@@ -2140,10 +2169,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
     ni_seg = segment%ie_obc-segment%is_obc+1
     nj_seg = segment%je_obc-segment%js_obc+1
-    is_obc = max(segment%is_obc,isd-1)
-    ie_obc = min(segment%ie_obc,ied)
-    js_obc = max(segment%js_obc,jsd-1)
-    je_obc = min(segment%je_obc,jed)
+    is_obc = max(segment%is_obc,isd+1)
+    ie_obc = min(segment%ie_obc,ied-1)
+    js_obc = max(segment%js_obc,jsd+1)
+    je_obc = min(segment%je_obc,jed-1)
 
 ! Calculate auxiliary fields at staggered locations.
 ! Segment indices are on q points:
@@ -2200,7 +2229,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           if (siz(3) /= segment%field(m)%nk_src) call MOM_error(FATAL,'nk_src inconsistency')
           if (segment%field(m)%nk_src > 1) then
             if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V') then
+              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               else
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
@@ -2210,7 +2239,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                 segment%field(m)%bt_vel(:,:)=0.0
               endif
             else
-              if (segment%field(m)%name == 'U') then
+              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               else
                 allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
@@ -2222,7 +2251,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             endif
           else
             if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V') then
+              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
               else
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,1))
@@ -2232,7 +2261,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                 segment%field(m)%bt_vel(:,:)=0.0
               endif
             else
-              if (segment%field(m)%name == 'U') then
+              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
               else
                 allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1))
@@ -2263,13 +2292,13 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         call time_interp_external(segment%field(m)%fid,Time, tmp_buffer)
         if (OBC%brushcutter_mode) then
           if (segment%is_E_or_W) then
-            if (segment%field(m)%name == 'V') then
+            if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
               segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset)+1:2,:)
             else
               segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset):2,:)
             endif
           else
-            if (segment%field(m)%name == 'U') then
+            if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
               segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset)+1:2,1,:)
             else
               segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset):2,1,:)
