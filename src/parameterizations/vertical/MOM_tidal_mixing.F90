@@ -17,7 +17,7 @@ use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping
 use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions,   only : uppercase, lowercase
-use MOM_io,                 only : slasher, MOM_read_data, vardesc, var_desc
+use MOM_io,                 only : slasher, MOM_read_data, vardesc, var_desc, field_size
 use cvmix_tidal,            only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
 use cvmix_tidal,            only : cvmix_coeffs_tidal, cvmix_tidal_params_type
 use cvmix_tidal,            only : cvmix_compute_Schmittner_invariant, cvmix_compute_SchmittnerCoeff
@@ -51,7 +51,8 @@ type, public :: tidal_mixing_diags
     Kd_Lowmode_Work       => NULL(),& ! layer integrated work by low mode driven mixing (W/m2) BDM
     N2_int                => NULL(),&
     vert_dep_3d           => NULL(),&
-    Schmittner_coeff_3d   => NULL()
+    Schmittner_coeff_3d   => NULL(),&
+    tidal_qe_md           => NULL()
 
   real, pointer, dimension(:,:) :: &
     TKE_itidal_used           => NULL(),& ! internal tide TKE input at ocean bottom (W/m2)
@@ -147,8 +148,8 @@ type, public :: tidal_mixing_cs
   real, pointer, dimension(:,:)       :: Nb          => NULL()
   real, pointer, dimension(:,:)       :: mask_itidal => NULL()
   real, pointer, dimension(:,:)       :: h2          => NULL()
-  real, pointer, dimension(:,:)       :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
-  real, allocatable, dimension(:)     :: h_src            ! tidal constituent input layer thickness
+  real, pointer, dimension(:,:)       :: tideamp     => NULL()  !< RMS tidal amplitude [m/s]
+  real, allocatable, dimension(:)     :: h_src                  !< tidal constituent input layer thickness [m]
   real, allocatable ,dimension(:,:)   :: tidal_qe_2d      ! q*E(x,y) ! TODO: make this E(x,y) only
   real, allocatable ,dimension(:,:,:) :: tidal_qe_3d_in   ! q*E(x,y)
 
@@ -179,6 +180,7 @@ type, public :: tidal_mixing_cs
   integer :: id_N2_int                    = -1
   integer :: id_Simmons_coeff             = -1
   integer :: id_Schmittner_coeff          = -1
+  integer :: id_tidal_qe_md               = -1
   integer :: id_vert_dep                  = -1
 
 end type tidal_mixing_cs
@@ -557,8 +559,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       ! TODO: add units
       CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
            'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
-      CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTi,Time, &
+      CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTL,Time, &
            'time-invariant portion of the tidal mixing coefficient using the Schmittner', '')
+      CS%id_tidal_qe_md = register_diag_field('ocean_model','tidal_qe_md',diag%axesTL,Time, &
+           'input tidal energy dissipated locally interpolated to model vertical coordinates', '')
       CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
            'vertical deposition function needed for Simmons et al tidal  mixing', '')
 
@@ -673,7 +677,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZK_(G)+1) :: Kv_tidal    !< tidal viscosity [m2/s]
   real, dimension(SZK_(G)+1) :: vert_dep    !< vertical deposition
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
-  real, dimension(SZK_(G)+1) :: SchmittnerSocn 
+  real, dimension(SZK_(G)+1) :: SchmittnerSocn
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
   real, dimension(SZK_(G))   :: tidal_qe_md !< Tidal dissipation energy interpolated from 3d input to model coordinates
   real, dimension(SZK_(G))   :: Schmittner_coeff
@@ -796,7 +800,8 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
       ! remap from input z coordinate to model coordinate:
       tidal_qe_md = 0.0
-      call remapping_core_h(CS%remap_cs, G%ke, CS%h_src, CS%tidal_qe_3d_in(i,j,:), G%ke, h_m, tidal_qe_md)
+      call remapping_core_h(CS%remap_cs, size(CS%h_src), CS%h_src, CS%tidal_qe_3d_in(i,j,:), &
+                            G%ke, h_m, tidal_qe_md)
 
       ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
       ! summing q_i*TidalConstituent_i over the number of constituents.
@@ -811,7 +816,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
       call cvmix_coeffs_tidal_schmittner( Mdiff_out               = Kv_tidal,             &
                                           Tdiff_out               = Kd_tidal,             &
                                           Nsqr                    = N2_int(i,:),          &
-                                          OceanDepth              = -iFaceHeight(G%ke+1), & 
+                                          OceanDepth              = -iFaceHeight(G%ke+1), &
                                           vert_dep                = vert_dep,             &
                                           nlev                    = G%ke,                 &
                                           max_nlev                = G%ke,                 &
@@ -826,7 +831,6 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
       enddo
 
       ! diagnostics
-      ! diagnostics
       if (associated(dd%Kd_itidal)) then
         dd%Kd_itidal(i,j,:) = Kd_tidal(:)
       endif
@@ -835,6 +839,9 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
       endif
       if (associated(dd%Schmittner_coeff_3d)) then
         dd%Schmittner_coeff_3d(i,j,:) = Schmittner_coeff(:)
+      endif
+      if (associated(dd%tidal_qe_md)) then
+        dd%tidal_qe_md(i,j,:) = tidal_qe_md(:)
       endif
       if (associated(dd%vert_dep_3d)) then
         dd%vert_dep_3d(i,j,:) = vert_dep(:)
@@ -1312,13 +1319,28 @@ subroutine setup_tidal_diagnostics(G,CS)
     allocate(dd%N2_int(isd:ied,jsd:jed,nz+1)) ; dd%N2_int(:,:,:) = 0.0
   endif
   if (CS%id_Simmons_coeff > 0) then
+    if (CS%cvmix_tidal_scheme .ne. SIMMONS) then
+      call MOM_error(FATAL, "setup_tidal_diagnostics: Simmons_coeff diagnostics is available "//&
+                            "only when cvmix_tidal_scheme is Simmons")
+    endif
     allocate(dd%Simmons_coeff_2d(isd:ied,jsd:jed)) ; dd%Simmons_coeff_2d(:,:) = 0.0
   endif
   if (CS%id_vert_dep > 0) then
     allocate(dd%vert_dep_3d(isd:ied,jsd:jed,nz+1)) ; dd%vert_dep_3d(:,:,:) = 0.0
   endif
   if (CS%id_Schmittner_coeff > 0) then
+    if (CS%cvmix_tidal_scheme .ne. SCHMITTNER) then
+      call MOM_error(FATAL, "setup_tidal_diagnostics: Schmittner_coeff diagnostics is available "//&
+                            "only when cvmix_tidal_scheme is Schmittner.")
+    endif
     allocate(dd%Schmittner_coeff_3d(isd:ied,jsd:jed,nz)) ; dd%Schmittner_coeff_3d(:,:,:) = 0.0
+  endif
+  if (CS%id_tidal_qe_md > 0) then
+    if (CS%cvmix_tidal_scheme .ne. SCHMITTNER) then
+      call MOM_error(FATAL, "setup_tidal_diagnostics: tidal_qe_md diagnostics is available "//&
+                            "only when cvmix_tidal_scheme is Schmittner.")
+    endif
+    allocate(dd%tidal_qe_md(isd:ied,jsd:jed,nz)) ; dd%tidal_qe_md(:,:,:) = 0.0
   endif
 end subroutine setup_tidal_diagnostics
 
@@ -1355,6 +1377,7 @@ subroutine post_tidal_diagnostics(G,GV,h,CS)
     if (CS%id_vert_dep> 0)      call post_data(CS%id_vert_dep, dd%vert_dep_3d, CS%diag)
     if (CS%id_Simmons_coeff> 0) call post_data(CS%id_Simmons_coeff, dd%Simmons_coeff_2d, CS%diag)
     if (CS%id_Schmittner_coeff> 0) call post_data(CS%id_Schmittner_coeff, dd%Schmittner_coeff_3d, CS%diag)
+    if (CS%id_tidal_qe_md> 0) call post_data(CS%id_tidal_qe_md, dd%tidal_qe_md, CS%diag)
 
     if (CS%id_Kd_Itidal_Work > 0) &
       call post_data(CS%id_Kd_Itidal_Work, dd%Kd_Itidal_Work, CS%diag)
@@ -1407,6 +1430,7 @@ subroutine post_tidal_diagnostics(G,GV,h,CS)
   if (associated(dd%vert_dep_3d)) deallocate(dd%vert_dep_3d)
   if (associated(dd%Simmons_coeff_2d)) deallocate(dd%Simmons_coeff_2d)
   if (associated(dd%Schmittner_coeff_3d)) deallocate(dd%Schmittner_coeff_3d)
+  if (associated(dd%tidal_qe_md)) deallocate(dd%tidal_qe_md)
 
 end subroutine post_tidal_diagnostics
 
@@ -1445,31 +1469,36 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
   type(tidal_mixing_cs),  pointer     :: CS
 
   ! local
-  integer :: k, isd, ied, jsd, jed, nz
-  real, parameter  :: p33 = 1.0/3.0
-  real, dimension(SZK_(G)) :: &
-    z_t, &        ! depth from surface to midpoint of input layer [cm]
-    z_w           ! depth from surface to top of input layer [cm]
+  integer               :: k, isd, ied, jsd, jed, i,j
+  integer, dimension(4) :: nz_in
+  real, parameter       :: p33 = 1.0/3.0
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tidal_qk1, &  ! qk1 coefficient used in Schmittner & Egbert
     tidal_qo1     ! qo1 coefficient used in Schmittner & Egbert
+  real, allocatable, dimension(:) :: &
+    z_t, &        ! depth from surface to midpoint of input layer [cm]
+    z_w           ! depth from surface to top of input layer [cm]
   real, allocatable, dimension(:,:,:) :: &
     tc_m2, &      ! input lunar semidiurnal tidal energy flux [W/m^2]
     tc_s2, &      ! input solar semidiurnal tidal energy flux [W/m^2]
     tc_k1, &      ! input lunar diurnal tidal energy flux [W/m^2]
     tc_o1         ! input lunar diurnal tidal energy flux [W/m^2]
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  ! allocate CS variables associated with 3d tidal energy dissipation
-  if (.not. allocated(CS%tidal_qe_3d_in)) allocate(CS%tidal_qe_3d_in(isd:ied,jsd:jed,nz))
-  if (.not. allocated(CS%h_src))          allocate(CS%h_src(nz))
+  ! get number of input levels:
+  call field_size(tidal_energy_file, 'z_t',nz_in)
 
   ! allocate local variables
-  allocate(tc_m2(isd:ied,jsd:jed,nz), &
-           tc_s2(isd:ied,jsd:jed,nz), &
-           tc_k1(isd:ied,jsd:jed,nz), &
-           tc_o1(isd:ied,jsd:jed,nz) )
+  allocate(z_t(nz_in(1)), z_w(nz_in(1)) )
+  allocate(tc_m2(isd:ied,jsd:jed,nz_in(1)), &
+           tc_s2(isd:ied,jsd:jed,nz_in(1)), &
+           tc_k1(isd:ied,jsd:jed,nz_in(1)), &
+           tc_o1(isd:ied,jsd:jed,nz_in(1)) )
+
+  ! allocate CS variables associated with 3d tidal energy dissipation
+  if (.not. allocated(CS%tidal_qe_3d_in)) allocate(CS%tidal_qe_3d_in(isd:ied,jsd:jed,nz_in(1)))
+  if (.not. allocated(CS%h_src))          allocate(CS%h_src(nz_in(1)))
 
   ! read in tidal constituents
   call MOM_read_data(tidal_energy_file, 'M2', tc_m2, G%domain)
@@ -1478,7 +1507,6 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
   call MOM_read_data(tidal_energy_file, 'O1', tc_o1, G%domain)
   call MOM_read_data(tidal_energy_file, 'z_t', z_t)
   call MOM_read_data(tidal_energy_file, 'z_w', z_w)
-
 
   where (abs(G%geoLatT(:,:)) < 30.0)
     tidal_qk1(:,:) = p33
@@ -1489,37 +1517,54 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
   endwhere
 
   CS%tidal_qe_3d_in = 0.0
-  do k=1,nz
+  do k=1,nz_in(1)
     ! input cell thickness
     CS%h_src(k) = (z_t(k)-z_w(k))*2.0 *1e-2
     ! form tidal_qe_3d_in from weighted tidal constituents
-    where (z_t(k) <= G%bathyT(:,:) .and. z_w(k) > CS%tidal_diss_lim_tc)
+    where ( (z_t(k)*1e-2) <= G%bathyT(:,:) .and. (z_w(k)*1e-2) > CS%tidal_diss_lim_tc)
       CS%tidal_qe_3d_in(:,:,k) = p33*tc_m2(:,:,k) + p33*tc_s2(:,:,k) + &
                            tidal_qk1*tc_k1(:,:,k) + tidal_qo1*tc_o1(:,:,k)
     endwhere
   enddo
 
+  !open(unit=1905,file="out_1905.txt",access="APPEND")
+  !do j=G%jsd,G%jed
+  !  do i=isd,ied
+  !    if ( i+G%idg_offset .eq. 90 .and. j+G%jdg_offset .eq. 126) then
+  !      print *, "-------------------------------------------"
+  !      do k=50,nz_in(1)
+  !          write(1905,*) i,j,k
+  !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)
+  !          write(1905,*) z_t(k), G%bathyT(i,j), z_w(k),CS%tidal_diss_lim_tc
+  !      end do
+  !    endif
+  !  enddo
+  !enddo
+  !close(1905)
+
   ! test if qE is positive
-  if (any(CS%tidal_qe_3d_in<0)) then
+  if (any(CS%tidal_qe_3d_in<0.0)) then
         call MOM_error(FATAL, "read_tidal_constituents: Negative tidal_qe_3d_in terms.")
   endif
 
   !! collapse 3D q*E to 2D q*E
   !CS%tidal_qe_2d = 0.0
-  !do k=1,nz
+  !do k=1,nz_in(1)
   !  where (z_t(k) <= G%bathyT(:,:))
   !    CS%tidal_qe_2d(:,:) = CS%tidal_qe_2d(:,:) + CS%tidal_qe_3d_in(:,:,k)
   !  endwhere
   !enddo
 
   ! initialize input remapping:
-  call initialize_remapping(CS%remap_cs, remapping_scheme="PPM_IH4", &
+  call initialize_remapping(CS%remap_cs, remapping_scheme="PLM", &
                             boundary_extrapolation=.false., check_remapping=CS%debug)
 
   deallocate(tc_m2)
   deallocate(tc_s2)
   deallocate(tc_k1)
   deallocate(tc_o1)
+  deallocate(z_t)
+  deallocate(z_w)
 
 end subroutine read_tidal_constituents
 
