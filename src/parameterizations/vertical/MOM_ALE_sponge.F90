@@ -21,7 +21,7 @@ use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
-
+use mpp_mod, only : mpp_pe
 ! GMM - Planned extension:  Support for time varying sponge targets.
 
 implicit none ; private
@@ -166,6 +166,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
 
+  CS%new_sponges = .false.
   CS%nz = G%ke
   CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
   CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
@@ -178,13 +179,10 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
       CS%num_col = CS%num_col + 1
   enddo ; enddo
 
-
   if (CS%num_col > 0) then
-
     allocate(CS%Iresttime_col(CS%num_col)) ; CS%Iresttime_col = 0.0
     allocate(CS%col_i(CS%num_col))         ; CS%col_i = 0
     allocate(CS%col_j(CS%num_col))         ; CS%col_j = 0
-
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -194,16 +192,12 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
         col = col +1
       endif
     enddo ; enddo
-
     ! same for total number of arbritary layers and correspondent data
     CS%nz_data = nz_data
     allocate(CS%Ref_h%p(CS%nz_data,CS%num_col))
     do col=1,CS%num_col ; do K=1,CS%nz_data
       CS%Ref_h%p(K,col) = data_h(CS%col_i(col),CS%col_j(col),K)
     enddo; enddo
-    CS%new_sponges = .false.
-
-
   endif
 
   total_sponge_cols = CS%num_col
@@ -354,6 +348,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
 
+  CS%new_sponges = .true.  
   CS%nz = G%ke
   CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
   CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
@@ -368,11 +363,9 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 
 
   if (CS%num_col > 0) then
-
     allocate(CS%Iresttime_col(CS%num_col)) ; CS%Iresttime_col = 0.0
     allocate(CS%col_i(CS%num_col))         ; CS%col_i = 0
     allocate(CS%col_j(CS%num_col))         ; CS%col_j = 0
-
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -382,9 +375,6 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
         col = col +1
       endif
     enddo ; enddo
-
-    CS%new_sponges = .true.
-
   endif
 
   total_sponge_cols = CS%num_col
@@ -822,7 +812,8 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
 
       deallocate(sp_val, mask_z)
     enddo
-  else
+ else
+    print *,'CS%nz_data= ',mpp_pe(),CS%nz_data
     nz_data = CS%nz_data
   endif
 
