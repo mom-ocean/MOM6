@@ -797,10 +797,14 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
       ! form the time-invariant part of Schmittner coefficient term
       call CVMix_compute_Schmittner_invariant(nlev                    = G%ke,           &
                                               VertDep                 = vert_dep,       &
+                                              efficiency              = CS%Mu_itides,   &
                                               rho                     = rho_fw,         &
                                               exp_hab_zetar           = exp_hab_zetar,  &
                                               zw                      = iFaceHeight,    &
                                               CVmix_tidal_params_user = CS%CVMix_tidal_params)
+                  !TODO: in above call, there is no need to pass efficiency, since it gets 
+                  ! passed via CVMix_init_tidal and stored in CVMix_tidal_params. Change
+                  ! CVMix API to prevent this redundancy.
 
       ! remap from input z coordinate to model coordinate:
       tidal_qe_md = 0.0
