@@ -21,7 +21,6 @@ use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
-use mpp_mod, only : mpp_pe
 ! GMM - Planned extension:  Support for time varying sponge targets.
 
 implicit none ; private
@@ -811,8 +810,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
 
       deallocate(sp_val, mask_z)
     enddo
- else
-    print *,'CS%nz_data= ',mpp_pe(),CS%nz_data
+  else
     nz_data = CS%nz_data
   endif
 
