@@ -2169,10 +2169,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
     ni_seg = segment%ie_obc-segment%is_obc+1
     nj_seg = segment%je_obc-segment%js_obc+1
-    is_obc = max(segment%is_obc,isd+1)
-    ie_obc = min(segment%ie_obc,ied-1)
-    js_obc = max(segment%js_obc,jsd+1)
-    je_obc = min(segment%je_obc,jed-1)
+    is_obc = max(segment%is_obc,isd-1)
+    ie_obc = min(segment%ie_obc,ied)
+    js_obc = max(segment%js_obc,jsd-1)
+    je_obc = min(segment%je_obc,jed)
 
 ! Calculate auxiliary fields at staggered locations.
 ! Segment indices are on q points:
@@ -2357,7 +2357,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             I=is_obc
             if (segment%field(m)%name == 'V') then
               ! Do q points for the whole segment
-              do J=js_obc,je_obc
+              do J=max(js_obc,jsd),min(je_obc,jed-1)
                 ! Using the h remapping approach
                 ! Pretty sure we need to check for source/target grid consistency here
                 segment%field(m)%buffer_dst(I,J,:)=0.0  ! initialize remap destination buffer
@@ -2400,7 +2400,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             J=js_obc
             if (segment%field(m)%name == 'U') then
               ! Do q points for the whole segment
-              do I=is_obc,ie_obc
+              do I=max(is_obc,isd),min(ie_obc,ied-1)
                 segment%field(m)%buffer_dst(I,J,:)=0.0  ! initialize remap destination buffer
                 if (G%mask2dCv(i,J)>0. .and. G%mask2dCv(i+1,J)>0.) then
               ! Using the h remapping approach
