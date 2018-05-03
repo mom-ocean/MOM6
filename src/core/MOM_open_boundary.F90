@@ -196,14 +196,14 @@ type, public :: ocean_OBC_type
                                                       !! in the relative vorticity on open boundaries.
   logical :: computed_vorticity = .false.             !< If True, uses external data for tangential velocity
                                                       !! in the relative vorticity on open boundaries.
-  logical :: imported_vorticity = .false.             !< If True, uses external data for tangential velocity
+  logical :: specified_vorticity = .false.            !< If True, uses external data for tangential velocity
                                                       !! gradients in the relative vorticity on open boundaries.
   logical :: zero_strain = .false.                    !< If True, sets strain to zero on open boundaries.
   logical :: freeslip_strain = .false.                !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the strain on open boundaries.
   logical :: computed_strain = .false.                !< If True, uses external data for tangential velocity to compute
                                                       !! normal gradient in the strain on open boundaries.
-  logical :: imported_strain = .false.                !< If True, uses external data for tangential velocity gradients
+  logical :: specified_strain = .false.               !< If True, uses external data for tangential velocity gradients
                                                       !! to compute strain on open boundaries.
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
@@ -317,16 +317,16 @@ subroutine open_boundary_config(G, param_file, OBC)
          "If true, uses the external values of tangential velocity\n"// &
          "in the relative vorticity on open boundaries. This cannot\n"// &
          "be true if another OBC_XXX_VORTICITY option is True.", default=.false.)
-    call get_param(param_file, mdl, "OBC_IMPORTED_VORTICITY", OBC%imported_vorticity, &
+    call get_param(param_file, mdl, "OBC_SPECIFIED_VORTICITY", OBC%specified_vorticity, &
          "If true, uses the external values of tangential velocity\n"// &
          "in the relative vorticity on open boundaries. This cannot\n"// &
          "be true if another OBC_XXX_VORTICITY option is True.", default=.false.)
     if ((OBC%zero_vorticity .and. OBC%freeslip_vorticity) .or.  &
         (OBC%zero_vorticity .and. OBC%computed_vorticity) .or.  &
-        (OBC%zero_vorticity .and. OBC%imported_vorticity) .or.  &
+        (OBC%zero_vorticity .and. OBC%specified_vorticity) .or.  &
         (OBC%freeslip_vorticity .and. OBC%computed_vorticity) .or.  &
-        (OBC%freeslip_vorticity .and. OBC%imported_vorticity) .or.  &
-        (OBC%computed_vorticity .and. OBC%imported_vorticity))  &
+        (OBC%freeslip_vorticity .and. OBC%specified_vorticity) .or.  &
+        (OBC%computed_vorticity .and. OBC%specified_vorticity))  &
          call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config:\n"//&
          "Only one of OBC_ZERO_VORTICITY, OBC_FREESLIP_VORTICITY, OBC_COMPUTED_VORTICITY\n"//&
          "and OBC_IMPORTED_VORTICITY can be True at once.")
@@ -341,16 +341,16 @@ subroutine open_boundary_config(G, param_file, OBC)
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
          "be true if another OBC_XXX_STRAIN option is True.", default=.false.)
-    call get_param(param_file, mdl, "OBC_IMPORTED_STRAIN", OBC%imported_strain, &
+    call get_param(param_file, mdl, "OBC_SPECIFIED_STRAIN", OBC%specified_strain, &
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
          "be true if another OBC_XXX_STRAIN option is True.", default=.false.)
     if ((OBC%zero_strain .and. OBC%freeslip_strain) .or.  &
         (OBC%zero_strain .and. OBC%computed_strain) .or.  &
-        (OBC%zero_strain .and. OBC%imported_strain) .or.  &
+        (OBC%zero_strain .and. OBC%specified_strain) .or.  &
         (OBC%freeslip_strain .and. OBC%computed_strain) .or.  &
-        (OBC%freeslip_strain .and. OBC%imported_strain) .or.  &
-        (OBC%computed_strain .and. OBC%imported_strain))  &
+        (OBC%freeslip_strain .and. OBC%specified_strain) .or.  &
+        (OBC%computed_strain .and. OBC%specified_strain))  &
          call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config:\n"//&
          "Only one of OBC_ZERO_STRAIN, OBC_FREESLIP_STRAIN, OBC_COMPUTED_STRAIN\n"//&
          "and OBC_IMPORTED_STRAIN can be True at once.")
@@ -1968,7 +1968,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     if (segment%nudged_tan) then
       allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
     endif
-    if (OBC%imported_vorticity .or. OBC%imported_strain) then
+    if (OBC%specified_vorticity .or. OBC%specified_strain) then
       allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
     endif
     if (segment%oblique) then
@@ -2001,7 +2001,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     if (segment%nudged_tan) then
       allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
     endif
-    if (OBC%imported_vorticity .or. OBC%imported_strain) then
+    if (OBC%specified_vorticity .or. OBC%specified_strain) then
       allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
     endif
     if (segment%oblique) then
@@ -2306,13 +2306,13 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           endif
         else
           if (segment%is_E_or_W) then
-            if (segment%field(m)%name == 'V') then
+            if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
               segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,js_obc+G%jdg_offset+1:je_obc+G%jdg_offset+1,:)
             else
               segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,js_obc+G%jdg_offset+1:je_obc+G%jdg_offset,:)
             endif
           else
-            if (segment%field(m)%name == 'U') then
+            if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
               segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(is_obc+G%idg_offset+1:ie_obc+G%idg_offset+1,1,:)
             else
               segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(is_obc+G%idg_offset+1:ie_obc+G%idg_offset,1,:)
@@ -2323,13 +2323,13 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer)
           if (OBC%brushcutter_mode) then
             if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V') then
+              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset)+1:2,:)
               else
                 segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset):2,:)
               endif
             else
-              if (segment%field(m)%name == 'U') then
+              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset)+1:2,1,:)
               else
                 segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset):2,1,:)
@@ -2337,13 +2337,13 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             endif
           else
             if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V') then
+              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,js_obc+G%jdg_offset+1:je_obc+G%jdg_offset+1,:)
               else
                 segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,js_obc+G%jdg_offset+1:je_obc+G%jdg_offset,:)
               endif
             else
-              if (segment%field(m)%name == 'U') then
+              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(is_obc+G%idg_offset+1:ie_obc+G%idg_offset+1,1,:)
               else
                 segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(is_obc+G%idg_offset+1:ie_obc+G%idg_offset,1,:)
@@ -2355,7 +2355,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             ishift=1
             if (segment%direction == OBC_DIRECTION_E) ishift=0
             I=is_obc
-            if (segment%field(m)%name == 'V') then
+            if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
               ! Do q points for the whole segment
               do J=max(js_obc,jsd),min(je_obc,jed-1)
                 ! Using the h remapping approach
@@ -2398,7 +2398,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             jshift=1
             if (segment%direction == OBC_DIRECTION_N) jshift=0
             J=js_obc
-            if (segment%field(m)%name == 'U') then
+            if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
               ! Do q points for the whole segment
               do I=max(is_obc,isd),min(ie_obc,ied-1)
                 segment%field(m)%buffer_dst(I,J,:)=0.0  ! initialize remap destination buffer
@@ -2451,6 +2451,8 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             else if (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
+            else if (segment%field(m)%name == 'DVDX') then
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
             endif
@@ -2461,6 +2463,8 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             else if (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
+            else if (segment%field(m)%name == 'DUDY') then
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
             endif
@@ -2504,7 +2508,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. associated(segment%tangential_vel)) then
             I=is_obc
-            do J=js_obc+1,je_obc-1
+            do J=js_obc,je_obc
               do k=1,G%ke
                 segment%tangential_vel(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
@@ -2512,11 +2516,25 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             enddo
           elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. associated(segment%tangential_vel)) then
             J=js_obc
-            do I=is_obc+1,ie_obc-1
+            do I=is_obc,ie_obc
               do k=1,G%ke
                 segment%tangential_vel(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
               if (associated(segment%nudged_tangential_vel)) segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
+            enddo
+          elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. associated(segment%tangential_grad)) then
+            I=is_obc
+            do J=js_obc,je_obc
+              do k=1,G%ke
+                segment%tangential_grad(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
+              enddo
+            enddo
+          elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. associated(segment%tangential_grad)) then
+            J=js_obc
+            do I=is_obc,ie_obc
+              do k=1,G%ke
+                segment%tangential_grad(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
+              enddo
             enddo
           endif
         endif
