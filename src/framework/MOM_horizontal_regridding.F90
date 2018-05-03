@@ -91,6 +91,11 @@ subroutine myStats(array, missing, is, ie, js, je, k, mesg)
   endif
 end subroutine myStats
 
+
+!> Use ICE-9 algorithm to populate points (fill=1) with
+!! valid data (good=1). If no information is available,
+!! Then use a previous guess (prev). Optionally (smooth)
+!! blend the filled points to achieve a more desirable result.
 subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug,debug)
   !
   !# Use ICE-9 algorithm to populate points (fill=1) with
@@ -105,19 +110,29 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !
   use MOM_coms, only : sum_across_PEs
 
-  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: good !< Valid data mask for incoming array
-                                                          !! (1==good data; 0==missing data).
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: fill !< Same shape array of points which need
-                                                          !! filling (1==please fill;0==leave
-                                                          !! it alone).
-  real, dimension(SZI_(G),SZJ_(G)), optional, &
-                                    intent(in)    :: prev !< First guess where isolated holes exist.
-  logical, intent(in),              optional      :: smooth
-  integer, intent(in),              optional      :: num_pass
-  real,                 intent(in), optional      :: relc,crit
-  logical,              intent(in), optional      :: keep_bug, debug
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(inout) :: aout !< The array with missing values to fill
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in)    :: good !< Valid data mask for incoming array
+                                               !! (1==good data; 0==missing data).
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in)    :: fill !< Same shape array of points which need
+                                               !! filling (1==please fill;0==leave
+                                               !! it alone).
+  real, dimension(SZI_(G),SZJ_(G)), &
+               optional, intent(in)    :: prev !< First guess where isolated holes exist.
+  logical,     optional, intent(in)    :: smooth !< If present and true, apply a number of
+                                               !! Laplacian smoothing passes to the interpolated data
+  integer,     optional, intent(in)    :: num_pass !< The maximum number of smoothing passes
+                                               !! to apply.
+  real,        optional, intent(in)    :: relc !< A nondimensional relaxation coefficient for
+                                               !! the smoothing passes.
+  real,        optional, intent(in)    :: crit !< A minimal value for changes in the array
+                                               !! at which point the smoothing is stopped.
+  logical,     optional, intent(in)    :: keep_bug !< Use an algorithm with a bug that dates
+                                               !! to the "sienna" code release.
+  logical,     optional, intent(in)    :: debug !< If true, write verbose debugging messages.
 
 
   real, dimension(SZI_(G),SZJ_(G)) :: b,r
@@ -229,9 +244,12 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
         do j=js,je
            do i=is,ie
               if (fill(i,j) .eq. 1) then
-                 east=max(good(i+1,j),fill(i+1,j));west=max(good(i-1,j),fill(i-1,j))
-                 north=max(good(i,j+1),fill(i,j+1));south=max(good(i,j-1),fill(i,j-1))
-                 r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1)+west*aout(i-1,j)+east*aout(i+1,j) - (south+north+west+east)*aout(i,j))
+                 east=max(good(i+1,j),fill(i+1,j)) ; west=max(good(i-1,j),fill(i-1,j))
+                 north=max(good(i,j+1),fill(i,j+1)) ; south=max(good(i,j-1),fill(i,j-1))
+                 !### Appropriate parentheses should be added here, but they will change answers.
+                 r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
+                                       west*aout(i-1,j)+east*aout(i+1,j) - &
+                                      (south+north+west+east)*aout(i,j))
               else
                  r(i,j) = 0.
               endif
@@ -273,9 +291,11 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
                                                      !! local model grid and native vertical levels.
   real, allocatable,     dimension(:)  :: z_in       !< Cell grid values for input data.
   real, allocatable,     dimension(:)  :: z_edges_in !< Cell grid edge values for input data.
-  real,                  intent(out)   :: missing_value
-  logical,               intent(in)    :: reentrant_x, tripolar_n
-  logical, intent(in),   optional      :: homogenize
+  real,                  intent(out)   :: missing_value !< The missing value in the returned array.
+  logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
+  logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
+  logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
+                                                     !! to produce perfectly "flat" initial conditions
 
   real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
                                                      !! native horizontal grid and extended grid
@@ -587,9 +607,11 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
                                                      !! local model grid and native vertical levels.
   real, allocatable,     dimension(:)  :: z_in       !< Cell grid values for input data.
   real, allocatable,     dimension(:)  :: z_edges_in !< Cell grid edge values for input data.
-  real,                  intent(out)   :: missing_value
-  logical,               intent(in)    :: reentrant_x, tripolar_n
-  logical, intent(in),   optional      :: homogenize
+  real,                  intent(out)   :: missing_value !< The missing value in the returned array.
+  logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
+  logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
+  logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
+                                                     !! to produce perfectly "flat" initial conditions
 
   real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
                                                      !! native horizontal grid and extended grid
