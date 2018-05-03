@@ -211,6 +211,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
     if (segment%direction == OBC_DIRECTION_W) then
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
       jsd = segment%HI%jsd ; jed = segment%HI%jed
+      JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do j=jsd,jed ; do I=IsdB,IedB
         x1 = 1000. * G%geoLonCu(I,j)
         y1 = 1000. * G%geoLatCu(I,j)
@@ -242,6 +243,10 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           endif
         endif
       enddo ; enddo
+!     if (allocated(segment%tangential_vel)) then
+!       do J=JsdB,JedB ; do I=IsdB,IedB
+!       enddo ; enddo
+!     endif
     else
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
