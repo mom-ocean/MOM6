@@ -1191,7 +1191,7 @@ end function chksum_general_3d
 
 !> Return the bitcount of an arbitrarily sized 2d array by promotion to a 3d array
 integer function chksum_general_2d( array_2d, scale_factor, istart, iend, jstart, jend )
-  real, dimension(:,:) :: array_2d   !< Array to be checksummed
+  real, dimension(:,:), intent(in) :: array_2d   !< Array to be checksummed
   real,    optional, intent(in) :: scale_factor  !< Factor to scale array by before checksum
   integer, optional, intent(in) :: istart        !< Starting index in the i-direction
   integer, optional, intent(in) :: iend          !< Ending index in the i-direction
@@ -1210,11 +1210,11 @@ end function chksum_general_2d
 
 !> Return the bitcount of an arbitrarily sized 1d array by promotion to a 3d array
 integer function chksum_general_1d( array_1d, scale_factor, istart, iend )
-  real, dimension(:) :: array_1d      !< Array to be checksummed
-  real,    optional  :: scale_factor  !< Factor to scale array by before checksum
-  integer, optional  :: istart        !< Starting index in the i-direction
-  integer, optional  :: iend          !< Ending index in the i-direction
-  integer :: is, ie, js, je
+  real, dimension(:), intent(in) :: array_1d      !< Array to be checksummed
+  real,    optional,  intent(in) :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional,  intent(in) :: istart        !< Starting index in the i-direction
+  integer, optional,  intent(in) :: iend          !< Ending index in the i-direction
+  integer :: is, ie
   real, dimension(:,:,:), allocatable :: array_3d !< Promotion from 2d to 3d array
 
   is = LBOUND(array_1d,1) ; ie = UBOUND(array_1d,1)
