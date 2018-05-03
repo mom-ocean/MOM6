@@ -78,8 +78,6 @@ type, public :: opacity_CS ; private
                              ! The default is 10 m-1 - a value for muddy water.
   integer :: sbc_chl         ! An integer handle used in time interpolation of
                              ! chlorophyll read from a file.
-  character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
-                             ! when var_pen_sw is defined and reading from file.
   logical ::  chl_from_file  !   If true, chl_a is read from a file.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
@@ -497,6 +495,9 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   character(len=200) :: longname
   character(len=40)  :: scheme_string
   logical :: use_scheme
+  character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
+                                 ! when var_pen_sw is defined and reading from file.
+  character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
@@ -511,7 +512,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   CS%tracer_flow_CSp => tracer_flow
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, '')
 
 ! parameters for CHL_A routines
   call get_param(param_file, mdl, "VAR_PEN_SW", CS%var_pen_sw, &
@@ -519,7 +520,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "OPACITY_SCHEME to determine the e-folding depth of \n"//&
                  "incoming short wave radiation.", default=.false.)
 
-  CS%opacity_scheme = NO_SCHEME ; scheme_string = ""
+  CS%opacity_scheme = NO_SCHEME ; scheme_string = ''
   if (CS%var_pen_sw) then
     call get_param(param_file, mdl, "OPACITY_SCHEME", tmpstr, &
                  "This character string specifies how chlorophyll \n"//&
@@ -553,14 +554,15 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       call time_interp_external_init()
 
       call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
-      call get_param(param_file, mdl, "CHL_FILE", CS%chl_file, &
+      call get_param(param_file, mdl, "CHL_FILE", chl_file, &
                  "CHL_FILE is the file containing chl_a concentrations in \n"//&
                  "the variable CHL_A. It is used when VAR_PEN_SW and \n"//&
                  "CHL_FROM_FILE are true.", fail_if_missing=.true.)
-
-      filename = trim(slasher(inputdir))//trim(CS%chl_file)
+      filename = trim(slasher(inputdir))//trim(chl_file)
       call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", filename)
-      CS%sbc_chl = init_external_field(filename,'CHL_A',domain=G%Domain%mpp_domain)
+      call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
+                 "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
+      CS%sbc_chl = init_external_field(filename,trim(chl_varname),domain=G%Domain%mpp_domain)
     endif
 
     call get_param(param_file, mdl, "BLUE_FRAC_SW", CS%blue_frac, &
@@ -622,9 +624,9 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
          "Cannot use a single_exp opacity scheme with nbands!=1.")
     endif
   endif
-  if (.not.ASSOCIATED(optics%min_wavelength_band)) &
+  if (.not.associated(optics%min_wavelength_band)) &
     allocate(optics%min_wavelength_band(optics%nbands))
-  if (.not.ASSOCIATED(optics%max_wavelength_band)) &
+  if (.not.associated(optics%max_wavelength_band)) &
     allocate(optics%max_wavelength_band(optics%nbands))
 
   if (CS%opacity_scheme == MANIZZA_05) then
@@ -646,9 +648,9 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The value to use for opacity over land. The default is \n"//&
                  "10 m-1 - a value for muddy water.", units="m-1", default=10.0)
 
-  if (.not.ASSOCIATED(optics%opacity_band)) &
+  if (.not.associated(optics%opacity_band)) &
     allocate(optics%opacity_band(optics%nbands,isd:ied,jsd:jed,nz))
-  if (.not.ASSOCIATED(optics%sw_pen_band)) &
+  if (.not.associated(optics%sw_pen_band)) &
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
   allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
 
@@ -679,8 +681,8 @@ subroutine opacity_end(CS, optics)
   if (associated(CS)) deallocate(CS)
 
   if (present(optics)) then ; if (associated(optics)) then
-    if (ASSOCIATED(optics%opacity_band)) deallocate(optics%opacity_band)
-    if (ASSOCIATED(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
+    if (associated(optics%opacity_band)) deallocate(optics%opacity_band)
+    if (associated(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
   endif ; endif
 
 end subroutine opacity_end

@@ -60,7 +60,7 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : read_data, slasher, file_exists
+use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
@@ -119,7 +119,8 @@ subroutine set_grid_metrics(G, param_file)
                  " \t mercator - use a Mercator spherical grid.", &
                  fail_if_missing=.true.)
   call get_param(param_file, "MOM_grid_init", "DEBUG", debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
@@ -277,7 +278,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-  if(ASSOCIATED(G%domain%maskmap)) then
+  if(associated(G%domain%maskmap)) then
      call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
             xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
@@ -298,7 +299,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read X from the supergrid
   tmpZ(:,:) = 999.
-  call read_data(filename, 'x', tmpZ, domain=SGdom%mpp_domain, position=CORNER)
+  call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
@@ -319,7 +320,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read Y from the supergrid
   tmpZ(:,:) = 999.
-  call read_data(filename, 'y', tmpZ, domain=SGdom%mpp_domain, position=CORNER)
+  call MOM_read_data(filename, 'y', tmpZ, SGdom, position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
@@ -338,8 +339,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read DX,DY from the supergrid
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
-  call read_data(filename,'dx',tmpV,domain=SGdom%mpp_domain,position=NORTH_FACE)
-  call read_data(filename,'dy',tmpU,domain=SGdom%mpp_domain,position=EAST_FACE)
+  call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
+  call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
   call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
@@ -366,7 +367,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read AREA from the supergrid
   tmpT(:,:) = 0.
-  call read_data(filename, 'area', tmpT, domain=SGdom%mpp_domain)
+  call MOM_read_data(filename, 'area', tmpT, SGdom)
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
@@ -1339,14 +1340,12 @@ subroutine initialize_masks(G, PF)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
-    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
-    G%dx_Cv_obc(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo

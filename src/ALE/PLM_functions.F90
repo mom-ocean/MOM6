@@ -16,14 +16,14 @@ implicit none ; private
 
 public PLM_reconstruction, PLM_boundary_extrapolation
 
-real, parameter :: h_neglect = 1.E-30
+real, parameter :: hNeglect_dflt = 1.E-30
 
 contains
 
 !------------------------------------------------------------------------------
 ! PLM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
+subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients, h_neglect )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within each cell.
 !
@@ -43,6 +43,9 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E
   real, dimension(:,:), intent(inout) :: ppoly_coefficients
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+                                          !! the purpose of cell reconstructions
+                                          !! in the same units as h
 
   ! Local variables
   integer       :: k                    ! loop index
@@ -55,6 +58,9 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
   real          :: u_min, u_max, e_l, e_r, edge
   real          :: almost_one, almost_two
   real, dimension(N) :: slp, mslp
+  real    :: hNeglect
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   almost_one = 1. - epsilon(slope)
   almost_two = 2. * almost_one
@@ -67,7 +73,7 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
 
     ! Get cell widths
     h_l = h(k-1) ; h_c = h(k) ; h_r = h(k+1)
-    h_cn = max( h_c, h_neglect ) ! To avoid division by zero
+    h_cn = max( h_c, hNeglect ) ! To avoid division by zero
 
     ! Side differences
     sigma_r = u_r - u_c
@@ -83,7 +89,7 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
 
     ! This is the original estimate of the second order slope from Laurent
     ! but multiplied by h_c
-    sigma_c = 2.0 * ( u_r - u_l ) * ( h_c / ( h_l + 2.0*h_c + h_r + h_neglect) )
+    sigma_c = 2.0 * ( u_r - u_l ) * ( h_c / ( h_l + 2.0*h_c + h_r + hNeglect) )
 
     if ( (sigma_l * sigma_r) > 0.0 ) then
       ! This limits the slope so that the edge values are bounded by the
@@ -209,7 +215,7 @@ end subroutine PLM_reconstruction
 !------------------------------------------------------------------------------
 ! plm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
+subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients, h_neglect )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -233,17 +239,23 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E
   real, dimension(:,:), intent(inout) :: ppoly_coefficients
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+                                          !! the purpose of cell reconstructions
+                                          !! in the same units as h
 
   ! Local variables
-  real          :: u0, u1               ! cell averages
-  real          :: h0, h1               ! corresponding cell widths
-  real          :: slope                ! retained PLM slope
+  real    :: u0, u1               ! cell averages
+  real    :: h0, h1               ! corresponding cell widths
+  real    :: slope                ! retained PLM slope
+  real    :: hNeglect
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! -----------------------------------------
   ! Left edge value in the left boundary cell
   ! -----------------------------------------
-  h0 = h(1) + h_neglect
-  h1 = h(2) + h_neglect
+  h0 = h(1) + hNeglect
+  h1 = h(2) + hNeglect
 
   u0 = u(1)
   u1 = u(2)
@@ -264,8 +276,8 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
   ! ------------------------------------------
-  h0 = h(N-1) + h_neglect
-  h1 = h(N) + h_neglect
+  h0 = h(N-1) + hNeglect
+  h1 = h(N) + hNeglect
 
   u0 = u(N-1)
   u1 = u(N)

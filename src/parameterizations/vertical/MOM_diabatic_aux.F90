@@ -456,7 +456,7 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (.not.ASSOCIATED(fluxes%salt_flux)) return
+  if (.not.associated(fluxes%salt_flux)) return
 
   p_ref_cv(:)  = tv%P_ref
 
@@ -861,7 +861,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Only apply forcing if fluxes%sw is associated.
-  if (.not.ASSOCIATED(fluxes%sw)) return
+  if (.not.associated(fluxes%sw)) return
 
 #define _OLD_ALG_
   nsw = optics%nbands
@@ -1043,13 +1043,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           dTemp = dTemp + dThickness*Temp_in
 
           ! Diagnostics of heat content associated with mass fluxes
-          if (ASSOCIATED(fluxes%heat_content_massin))                             &
+          if (associated(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
                          T2d(i,k) * max(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
-          if (ASSOCIATED(fluxes%heat_content_massout))                            &
+          if (associated(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
                          T2d(i,k) * min(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
-          if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+          if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T2d(i,k) * dThickness * GV%H_to_kg_m2
 
           ! Determine the energetics of river mixing before updating the state.
@@ -1123,13 +1123,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           dTemp = dTemp + dThickness*T2d(i,k)
 
           ! Diagnostics of heat content associated with mass fluxes
-          if (ASSOCIATED(fluxes%heat_content_massin))                             &
+          if (associated(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
                          tv%T(i,j,k) * max(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
-          if (ASSOCIATED(fluxes%heat_content_massout))                            &
+          if (associated(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
                          tv%T(i,j,k) * min(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
-          if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+          if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          tv%T(i,j,k) * dThickness * GV%H_to_kg_m2
 !NOTE tv%T should be T2d
 
@@ -1265,25 +1265,26 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     !  1) Answers will change due to round-off
     !  2) Be sure to save their values BEFORE fluxes are used.
     if (Calculate_Buoyancy) then
-       drhodt(:) = 0.0
-       drhods(:) = 0.0
-       netPen(:,:) = 0.0
-       ! Sum over bands and attenuate as a function of depth
-       ! netPen is the netSW as a function of depth
-       call sumSWoverBands(G, GV, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
-            H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
-       ! Density derivatives
-       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
-            dRhodT, dRhodS, start, npts, tv%eqn_of_state)
-       ! 1. Adjust netSalt to reflect dilution effect of FW flux
-       ! 2. Add in the SW heating for purposes of calculating the net
-       ! surface buoyancy flux affecting the top layer.
-       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
-       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
-       SkinBuoyFlux(G%isc:G%iec,j) = - GoRho * ( dRhodS(G%isc:G%iec) * (netSalt_rate(G%isc:G%iec) &
-            - tv%S(G%isc:G%iec,j,1) * netMassInOut_rate(G%isc:G%iec)* GV%H_to_m )&
-            + dRhodT(G%isc:G%iec) * ( netHeat_rate(G%isc:G%iec) +        &
-            netPen(G%isc:G%iec,1))) * GV%H_to_m ! m^2/s^3
+      drhodt(:) = 0.0
+      drhods(:) = 0.0
+      netPen(:,:) = 0.0
+      ! Sum over bands and attenuate as a function of depth
+      ! netPen is the netSW as a function of depth
+      call sumSWoverBands(G, GV, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
+           H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
+      ! Density derivatives
+      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
+           dRhodT, dRhodS, start, npts, tv%eqn_of_state)
+      ! 1. Adjust netSalt to reflect dilution effect of FW flux
+      ! 2. Add in the SW heating for purposes of calculating the net
+      ! surface buoyancy flux affecting the top layer.
+      ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
+      !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
+      do i=is,ie
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_m * ( &
+            dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
+            dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
+      enddo
     endif
 
   enddo ! j-loop finish

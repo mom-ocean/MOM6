@@ -8,9 +8,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
@@ -84,7 +81,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -153,9 +150,9 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
           eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom_z
+          h(i,j,k) = GV%Angstrom
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -168,9 +165,9 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
         eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = min_thickness
+          h(i,j,k) = GV%m_to_H * min_thickness
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -179,7 +176,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = delta_h
+      h(i,j,:) = GV%m_to_H * delta_h
     end do ; end do
 
 end select
@@ -193,7 +190,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in H (m or Pa)
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -257,7 +254,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / G%max_depth
+          xi1 = xi0 + GV%H_to_m * h(i,j,k) / G%max_depth
           select case ( trim(density_profile) )
             case ('linear')
              !S(i,j,k) = S_surf + S_range * 0.5 * (xi0 + xi1)
@@ -267,6 +264,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
               S(i,j,k) = S_surf + S_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
               T(i,j,k) = T_surf + T_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
             case ('exponential')
+              r = 0.8 ! small values give sharp profiles
               S(i,j,k) = S_surf + S_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
               T(i,j,k) = T_surf + T_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
             case default

@@ -433,16 +433,18 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
   integer :: i, j, k, is, ie, js, je, nz, nkmb, n
   integer :: nsw    ! The number of bands of penetrating shortwave radiation.
 
+  real    :: H_limit_fluxes ! CS%H_limit fluxes converted to units of H.
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixed_layer: "//&
          "Module must be initialized before it is used.")
   if (GV%nkml < 1) return
 
-  if (.not. ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
+  if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
       "MOM_mixed_layer: Temperature, salinity and an equation of state "//&
       "must now be used.")
-  if (.NOT. ASSOCIATED(fluxes%ustar)) call MOM_error(FATAL, &
+  if (.NOT. associated(fluxes%ustar)) call MOM_error(FATAL, &
       "MOM_mixed_layer: No surface TKE fluxes (ustar) defined in mixedlayer!")
 
   nkmb = CS%nkml+CS%nkbl
@@ -451,12 +453,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
 
   Irho0 = 1.0 / GV%Rho0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
-  Idt = 1.0/dt
+  Idt = 1.0 / dt
   Idt_diag = 1.0 / dt__diag
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
+  H_limit_fluxes = CS%H_limit_fluxes * GV%m_to_H
 
   p_ref(:) = 0.0 ; p_ref_cv(:) = tv%P_Ref
-
 
   nsw = CS%nsw
 
@@ -501,13 +503,13 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
         CS%diag_TKE_conv_decay(i,j) = 0.0 ; CS%diag_TKE_conv_s2(i,j) = 0.0
       enddo ; enddo
     endif
-    if (ALLOCATED(CS%diag_PE_detrain)) then
+    if (allocated(CS%diag_PE_detrain)) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_PE_detrain(i,j) = 0.0
       enddo ; enddo
     endif
-    if (ALLOCATED(CS%diag_PE_detrain2)) then
+    if (allocated(CS%diag_PE_detrain2)) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_PE_detrain2(i,j) = 0.0
@@ -522,21 +524,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
   endif
   max_BL_det(:) = -1
 
-!$OMP parallel default(none) shared(is,ie,js,je,nz,h_3d,u_3d,v_3d,nkmb,G,GV,nsw,optics,      &
-!$OMP                               CS,tv,fluxes,Irho0,dt,Idt_diag,Ih,write_diags,           &
-!$OMP                               hmbl_prev,h_sum,Hsfc_min,Hsfc_max,dt__diag,              &
-!$OMP                               Hsfc_used,Inkmlm1,Inkml,ea,eb,h_miss,Hml,                &
-!$OMP                               id_clock_EOS,id_clock_resort,id_clock_adjustment,        &
-!$OMP                               id_clock_conv,id_clock_mech,id_clock_detrain,aggregate_FW_forcing ) &
-!$OMP                  firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv)              &
-!$OMP                       private(h,h_orig,u,v,eps,T,S,opacity_band,d_ea,d_eb,             &
-!$OMP                               dR0_dT,dR0_dS,dRcv_dT,dRcv_dS,R0,Rcv,ksort,              &
-!$OMP                               RmixConst,TKE_river,netMassInOut, NetMassOut,            &
-!$OMP                               Net_heat, Net_salt, htot,TKE,Pen_SW_bnd,Ttot,Stot, uhtot,&
-!$OMP                               vhtot, R0_tot, Rcv_tot,Conv_en,dKE_FC,Idecay_len_TKE,    &
-!$OMP                               cMKE,Hsfc,dHsfc,dHD,H_nbr,kU_Star,absf_x_H,              &
-!$OMP                               ebml,eaml)
-!$OMP do
+  !$OMP parallel default(shared) firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv) &
+  !$OMP                 private(h,u,v,h_orig,eps,T,S,opacity_band,d_ea,d_eb,R0,Rcv,ksort, &
+  !$OMP                         dR0_dT,dR0_dS,dRcv_dT,dRcv_dS,htot,Ttot,Stot,TKE,Conv_en, &
+  !$OMP                         RmixConst,TKE_river,Pen_SW_bnd,netMassInOut,NetMassOut,   &
+  !$OMP                         Net_heat,Net_salt,uhtot,vhtot,R0_tot,Rcv_tot,dKE_FC,      &
+  !$OMP                         Idecay_len_TKE,cMKE,Hsfc,dHsfc,dHD,H_nbr,kU_Star,         &
+  !$OMP                         absf_x_H,ebml,eaml)
+  !$OMP do
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
@@ -626,7 +621,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
     ! net_salt     = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
     call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt, &
-                  CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
+                  H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h(:,1:), T(:,1:), netMassInOut, netMassOut, Net_heat, Net_salt, Pen_SW_bnd,&
                   tv, aggregate_FW_forcing)
 
@@ -660,7 +655,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                                 cMKE, Idt_diag, nsw, Pen_SW_bnd, opacity_band, TKE, &
                                 Idecay_len_TKE, j, ksort, G, GV, CS)
 
-    call absorbRemainingSW(G, GV, h(:,1:), opacity_band, nsw, j, dt, CS%H_limit_fluxes, &
+    call absorbRemainingSW(G, GV, h(:,1:), opacity_band, nsw, j, dt, H_limit_fluxes, &
                            CS%correct_absorption, CS%absorb_all_SW, &
                            T(:,1:), Pen_SW_bnd, eps, ksort, htot, Ttot)
 
@@ -679,10 +674,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
       T(i,0) = T(i,1) ; S(i,0) = S(i,1) ; R0(i,0) = R0(i,1) ; Rcv(i,0) = Rcv(i,1)
       h(i,0) = htot(i)
     endif ; enddo
-    if (write_diags .and. ALLOCATED(CS%ML_depth)) then ; do i=is,ie
+    if (write_diags .and. allocated(CS%ML_depth)) then ; do i=is,ie
       CS%ML_depth(i,j) = h(i,0) * GV%H_to_m
     enddo ; endif
-    if (ASSOCIATED(Hml)) then ; do i=is,ie
+    if (associated(Hml)) then ; do i=is,ie
       Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_m)
     enddo ; endif
 
@@ -1226,10 +1221,10 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                  (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
                   dRcv_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
-    if(ASSOCIATED(fluxes%heat_content_massin))                            &
+    if(associated(fluxes%heat_content_massin))                            &
            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) &
                        + T_precip * netMassIn(i) * GV%H_to_kg_m2 * fluxes%C_p * Idt
-    if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+    if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T_precip * netMassIn(i) * GV%H_to_kg_m2
   endif ; enddo
 
@@ -1279,10 +1274,10 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*GV%H_to_kg_m2*fluxes%C_p*Idt
         ! by uncommenting the lines here.
         ! we will also then completely remove TempXpme from the model.
-        if(ASSOCIATED(fluxes%heat_content_massout))                            &
+        if(associated(fluxes%heat_content_massout))                            &
            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
                                     - T(i,k)*h_evap*GV%H_to_kg_m2 * fluxes%C_p * Idt
-        if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
+        if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
                                       T(i,k)*h_evap*GV%H_to_kg_m2
 
       endif
@@ -1824,7 +1819,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
           endif
 
           TKE(i) = TKE_full_ent
-          if (TKE(i) <= 0.0) TKE(i) = 1e-300
+          if (TKE(i) <= 0.0) TKE(i) = 1.0e-150
         else
 ! The layer is only partially entrained.  The amount that will be
 ! entrained is determined iteratively.  No further layers will be
@@ -3011,7 +3006,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
       h(i,0) = h(i,0) - (h_ml_to_h1 + h_ml_to_h2)
 
 
-      if (ALLOCATED(CS%diag_PE_detrain) .or. ALLOCATED(CS%diag_PE_detrain2)) then
+      if (allocated(CS%diag_PE_detrain) .or. allocated(CS%diag_PE_detrain2)) then
         R0_det = R0_to_bl*Ihdet
         s1en = G_2 * Idt_H2 * ( ((R0(i,kb2)-R0(i,kb1))*h1*h2 + &
             h_det_to_h2*( (R0(i,kb1)-R0_det)*h1 + (R0(i,kb2)-R0_det)*h2 ) + &
@@ -3019,10 +3014,10 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                          (R0_det-R0(i,0))*h_det_to_h2 ) + &
             h_det_to_h1*h_ml_to_h1*(R0_det-R0(i,0))) - 2.0*GV%Rho0*dPE_extrap )
 
-        if (ALLOCATED(CS%diag_PE_detrain)) &
+        if (allocated(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + s1en
 
-        if (ALLOCATED(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
+        if (allocated(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
             CS%diag_PE_detrain2(i,j) + s1en + Idt_H2*Rho0xG*dPE_extrap
       endif
 
@@ -3220,9 +3215,9 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
         h(i,kb1) = stays + h_to_bl
         h(i,kb2) = h1_to_h2
         h(i,k0) = h(i,k0) + (h1_to_k0 + h2)
-        if (ALLOCATED(CS%diag_PE_detrain)) &
+        if (allocated(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + Idt_H2*dPE_merge
-        if (ALLOCATED(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
+        if (allocated(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
              CS%diag_PE_detrain2(i,j) + Idt_H2*(dPE_det+Rho0xG*dPE_extrap)
       else ! Not mergeable_bl.
         ! There is no further detrainment from the buffer layers, and the
@@ -3296,9 +3291,9 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
         h(i,kb1) = stays + h_to_bl
         h(i,kb2) = h(i,kb2) + h1_to_h2
 
-        if (ALLOCATED(CS%diag_PE_detrain)) &
+        if (allocated(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + Idt_H2*dPE_det
-        if (ALLOCATED(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
+        if (allocated(CS%diag_PE_detrain2)) CS%diag_PE_detrain2(i,j) = &
           CS%diag_PE_detrain2(i,j) + Idt_H2*(dPE_det+Rho0xG*dPE_extrap)
       endif
     endif ! End of detrainment...
@@ -3417,10 +3412,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
         CS%diag_TKE_conv_s2(i,j) =  CS%diag_TKE_conv_s2(i,j) + &
           g_H2_2Rho0dt * h(i,k) * h(i,nkmb) * &
           (R0(i,nkmb) - R0(i,k))
-      if (ALLOCATED(CS%diag_PE_detrain)) &
+      if (allocated(CS%diag_PE_detrain)) &
         CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + &
             g_H2_2dt * h(i,k) * h(i,nkmb) * (R0(i,nkmb) - R0(i,k))
-      if (ALLOCATED(CS%diag_PE_detrain2)) &
+      if (allocated(CS%diag_PE_detrain2)) &
         CS%diag_PE_detrain2(i,j) = CS%diag_PE_detrain2(i,j) + &
             g_H2_2dt * h(i,k) * h(i,nkmb) * (R0(i,nkmb) - R0(i,k))
 
@@ -3467,7 +3462,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
       d_eb(i,nkmb) = d_eb(i,nkmb) - detrain(i)
       d_ea(i,nkmb) = d_ea(i,nkmb) + detrain(i)
 
-      if (ALLOCATED(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
+      if (allocated(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
         CS%diag_PE_detrain(i,j) + g_H2_2dt * detrain(i)* &
                      (h(i,0) + h(i,nkmb)) * (R0(i,nkmb) - R0(i,0))
       x1 = R0(i,0)
@@ -3547,7 +3542,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
           detrain(i) = h(i,nkmb)*(Rcv(i,nkmb) - RcvTgt(k)) / &
                                   (RcvTgt(k+1) - RcvTgt(k))
 
-          if (ALLOCATED(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
+          if (allocated(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
             CS%diag_PE_detrain(i,j) - g_H2_2dt * detrain(i) * &
                  (h(i,nkmb)-detrain(i)) * (RcvTgt(k+1) - RcvTgt(k)) * dR0_dRcv
 
@@ -3596,7 +3591,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
           h(i,k+1) = h(i,k+1) + detrain(i)
           h(i,nkmb) = h(i,nkmb) - detrain(i)
 
-          if (ALLOCATED(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
+          if (allocated(CS%diag_PE_detrain)) CS%diag_PE_detrain(i,j) = &
             CS%diag_PE_detrain(i,j) - g_H2_2dt * detrain(i) * dR0_dRcv * &
                  (h(i,nkmb)-detrain(i)) * (RcvTgt(k+1) - Rcv(i,nkmb) + dRml)
         endif

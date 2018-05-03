@@ -5,7 +5,7 @@ module MOM_io
 
 
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
-use MOM_domains,          only : MOM_domain_type
+use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
@@ -39,13 +39,13 @@ implicit none ; private
 public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data, read_field
-public :: num_timelevels, MOM_read_data, ensembler
+public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
-public :: var_desc, modify_vardesc, query_vardesc
+public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 public :: get_axis_data
 
 !> Type for describing a variable, typically a tracer
@@ -58,6 +58,7 @@ type, public :: vardesc
   character(len=8)   :: t_grid             !< Time description: s, p, or 1
   character(len=64)  :: cmor_field_name    !< CMOR name
   character(len=64)  :: cmor_units         !< CMOR physical dimensions of the variable
+  character(len=240) :: cmor_longname      !< CMOR long name of the variable
   real               :: conversion         !< for unit conversions, such as needed to
                                            !! convert from intensive to extensive
 end type vardesc
@@ -68,18 +69,23 @@ interface file_exists
 end interface
 
 interface MOM_read_data
+  module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
   module procedure MOM_read_data_2d
   module procedure MOM_read_data_1d
 end interface
 
+interface MOM_read_vector
+  module procedure MOM_read_vector_3d
+  module procedure MOM_read_vector_2d
+end interface
 
 contains
 
 !> Routine creates a new NetCDF file.  It also sets up
 !! structures that describe this file and variables that will
 !! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
+subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
@@ -98,6 +104,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
                                                      !! required if the new file uses any
                                                      !! vertical grid axes.
+  integer(kind=8), optional,      intent(in)    :: checksums(:,:)  !< checksums of vars
 
   logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
   logical        :: use_layer, use_int, use_periodic
@@ -315,8 +322,13 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     end select
     pack = 1
 
-    call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+    if(present(checksums)) then
+       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+           vars(k)%longname, pack = pack, checksum=checksums(k,:))
+    else
+       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack)
+    endif
   enddo
 
   if (use_lath) call write_field(unit, axis_lath)
@@ -582,7 +594,7 @@ end function num_timelevels
 !! have default values that are empty strings or are appropriate for a 3-d
 !! tracer field at the tracer cell centers.
 function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
-                  cmor_field_name, cmor_units, conversion, caller) result(vd)
+                  cmor_field_name, cmor_units, cmor_longname, conversion, caller) result(vd)
   character(len=*),           intent(in) :: name               !< variable name
   character(len=*), optional, intent(in) :: units              !< variable units
   character(len=*), optional, intent(in) :: longname           !< variable long name
@@ -591,6 +603,7 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(in) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(in) :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(in) :: cmor_units         !< CMOR physical dimensions of variable
+  character(len=*), optional, intent(in) :: cmor_longname      !< CMOR long name
   real            , optional, intent(in) :: conversion         !< for unit conversions, such as needed to
                                                                !! convert from intensive to extensive
   character(len=*), optional, intent(in) :: caller             !< calling routine?
@@ -607,20 +620,21 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
 
   vd%cmor_field_name  =  ""
   vd%cmor_units       =  ""
+  vd%cmor_longname    =  ""
   vd%conversion       =  1.0
 
   call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
                       z_grid=z_grid, t_grid=t_grid,                          &
                       cmor_field_name=cmor_field_name,cmor_units=cmor_units, &
-                      conversion=conversion, caller=cllr)
+                      cmor_longname=cmor_longname, conversion=conversion, caller=cllr)
 
 end function var_desc
 
 
 !> This routine modifies the named elements of a vardesc type.
 !! All arguments are optional, except the vardesc type to be modified.
-subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
-                  cmor_field_name, cmor_units, conversion, caller)
+subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
+                 cmor_field_name, cmor_units, cmor_longname, conversion, caller)
   type(vardesc),              intent(inout) :: vd                 !< vardesc type that is modified
   character(len=*), optional, intent(in)    :: name               !< name of variable
   character(len=*), optional, intent(in)    :: units              !< units of variable
@@ -630,6 +644,7 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
   character(len=*), optional, intent(in)    :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(in)    :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(in)    :: cmor_units         !< CMOR physical dimensions of variable
+  character(len=*), optional, intent(in)    :: cmor_longname      !< CMOR long name
   real            , optional, intent(in)    :: conversion         !< for unit conversions, such as needed to
                                                                   !! convert from intensive to extensive
   character(len=*), optional, intent(in)    :: caller             !< calling routine?
@@ -651,17 +666,34 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
   if (present(t_grid))    call safe_string_copy(t_grid, vd%t_grid,     &
                                "vd%t_grid of "//trim(vd%name), cllr)
 
-  if (present(cmor_field_name))    call safe_string_copy(cmor_field_name, vd%cmor_field_name,      &
-                                   "vd%cmor_field_name of "//trim(vd%name), cllr)
-  if (present(cmor_units))          call safe_string_copy(cmor_units, vd%cmor_units,               &
-                                   "vd%cmor_units of "//trim(vd%name), cllr)
+  if (present(cmor_field_name)) call safe_string_copy(cmor_field_name, vd%cmor_field_name, &
+                                     "vd%cmor_field_name of "//trim(vd%name), cllr)
+  if (present(cmor_units))      call safe_string_copy(cmor_units, vd%cmor_units, &
+                                     "vd%cmor_units of "//trim(vd%name), cllr)
+  if (present(cmor_longname))   call safe_string_copy(cmor_longname, vd%cmor_longname, &
+                                     "vd%cmor_longname of "//trim(vd%name), cllr)
 
 end subroutine modify_vardesc
 
+!> This function returns the CMOR standard name given a CMOR longname, based on
+!! the standard pattern of character conversions.
+function cmor_long_std(longname) result(std_name)
+  character(len=*), intent(in) :: longname  !< The CMOR longname being converted
+  character(len=len(longname)) :: std_name  !< The CMOR standard name generated from longname
+
+  integer :: k
+
+  std_name = lowercase(longname)
+
+  do k=1, len_trim(std_name)
+    if (std_name(k:k) == ' ') std_name(k:k) = '_'
+  enddo
+
+end function cmor_long_std
 
 !> This routine queries vardesc
 subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
-                         cmor_field_name, cmor_units, conversion, caller)
+                         cmor_field_name, cmor_units, cmor_longname, conversion, caller)
   type(vardesc),              intent(in)  :: vd                 !< vardesc type that is queried
   character(len=*), optional, intent(out) :: name               !< name of variable
   character(len=*), optional, intent(out) :: units              !< units of variable
@@ -671,6 +703,7 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(out) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(out) :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(out) :: cmor_units         !< CMOR physical dimensions of variable
+  character(len=*), optional, intent(out) :: cmor_longname      !< CMOR long name
   real            , optional, intent(out) :: conversion         !< for unit conversions, such as needed to
                                                                 !! convert from intensive to extensive
   character(len=*), optional, intent(in)  :: caller             !< calling routine?
@@ -693,19 +726,22 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   if (present(t_grid))    call safe_string_copy(vd%t_grid, t_grid,     &
                                "vd%t_grid of "//trim(vd%name), cllr)
 
-  if (present(cmor_field_name))    call safe_string_copy(vd%cmor_field_name, cmor_field_name,       &
-                                   "vd%cmor_field_name of "//trim(vd%name), cllr)
-  if (present(cmor_units))          call safe_string_copy(vd%cmor_units, cmor_units,                &
-                                   "vd%cmor_units of "//trim(vd%name), cllr)
+  if (present(cmor_field_name)) call safe_string_copy(vd%cmor_field_name, cmor_field_name, &
+                                     "vd%cmor_field_name of "//trim(vd%name), cllr)
+  if (present(cmor_units))      call safe_string_copy(vd%cmor_units, cmor_units,          &
+                                     "vd%cmor_units of "//trim(vd%name), cllr)
+  if (present(cmor_longname))   call safe_string_copy(vd%cmor_longname, cmor_longname, &
+                                     "vd%cmor_longname of "//trim(vd%name), cllr)
 
 end subroutine query_vardesc
 
 
 !> Copies a string
 subroutine safe_string_copy(str1, str2, fieldnm, caller)
-  character(len=*),           intent(in)  :: str1
-  character(len=*),           intent(out) :: str2
-  character(len=*), optional, intent(in)  :: fieldnm, caller
+  character(len=*),           intent(in)  :: str1    !< The string being copied
+  character(len=*),           intent(out) :: str2    !< The string being copied into
+  character(len=*), optional, intent(in)  :: fieldnm !< The name of the field for error messages
+  character(len=*), optional, intent(in)  :: caller  !< The calling routine for error messages
 
   if (len(trim(str1)) > len(str2)) then
     if (present(fieldnm) .and. present(caller)) then
@@ -722,9 +758,9 @@ end subroutine safe_string_copy
 
 !> Returns a name with "%#E" or "%E" replaced with the ensemble member number.
 function ensembler(name, ens_no_in) result(en_nm)
-  character(len=*),  intent(in) :: name
-  integer, optional, intent(in) :: ens_no_in
-  character(len=len(name)) :: en_nm
+  character(len=*),  intent(in) :: name       !< The name to be modified
+  integer, optional, intent(in) :: ens_no_in  !< The number of the current ensemble member
+  character(len=len(name)) :: en_nm  !< The name encoded with the ensemble number
 
   ! This function replaces "%#E" or "%E" with the ensemble number anywhere it
   ! occurs in name, with %E using 4 or 6 digits (depending on the ensemble size)
@@ -779,61 +815,153 @@ end function ensembler
 
 
 !> Returns true if the named file or its domain-decomposed variant exists.
-function MOM_file_exists(file_name, MOM_Domain)
-  character(len=*),       intent(in) :: file_name
-  type(MOM_domain_type),  intent(in) :: MOM_domain
+function MOM_file_exists(filename, MOM_Domain)
+  character(len=*),       intent(in) :: filename   !< The name of the file being inquired about
+  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
 ! This function uses the fms_io function file_exist to determine whether
 ! a named file (or its decomposed variant) exists.
 
   logical :: MOM_file_exists
 
-  MOM_file_exists = file_exist(file_name, MOM_Domain%mpp_domain)
+  MOM_file_exists = file_exist(filename, MOM_Domain%mpp_domain)
 
 end function MOM_file_exists
 
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data)
-  character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:),               intent(inout) :: data ! 1 dimensional data
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
 
-  call read_data(filename, fieldname, data)
+  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
 
 end subroutine MOM_read_data_1d
-
 
 !> This function uses the fms_io function read_data to read a distributed
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position)
-  character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:,:),             intent(inout) :: data ! 2 dimensional data
-  type(MOM_domain_type),            intent(in)    :: MOM_Domain
-  integer,                optional, intent(in)    :: timelevel, position
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
+                                                     !! should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
 
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
 end subroutine MOM_read_data_2d
 
-
 !> This function uses the fms_io function read_data to read a distributed
-!! 2-D data field named "fieldname" from file "filename".  Valid values for
+!! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position)
-  character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:,:,:),           intent(inout) :: data ! 2 dimensional data
-  type(MOM_domain_type),            intent(in)    :: MOM_Domain
-  integer,                optional, intent(in)    :: timelevel, position
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
+                                                     !! should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
 
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
 end subroutine MOM_read_data_3d
+
+!> This function uses the fms_io function read_data to read a distributed
+!! 4-D data field named "fieldname" from file "filename".  Valid values for
+!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
+subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
+                            timelevel, position)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:,:), intent(inout) :: data    !< The 4-dimensional array into which the data
+                                                     !! should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
+
+  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=position)
+
+end subroutine MOM_read_data_4d
+
+
+!> This function uses the fms_io function read_data to read a pair of distributed
+!! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
+!! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
+subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                              timelevel, stagger, scalar_pair)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
+  character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
+  real, dimension(:,:),   intent(inout) :: u_data    !< The 2 dimensional array into which the
+                                                     !! u-component of the data should be read
+  real, dimension(:,:),   intent(inout) :: v_data    !< The 2 dimensional array into which the
+                                                     !! v-component of the data should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
+  logical,      optional, intent(in)    :: scalar_pair   !< If true, a pair of scalars are to be read.cretized
+
+  integer :: u_pos, v_pos
+
+  u_pos = EAST_FACE ; v_pos = NORTH_FACE
+  if (present(stagger)) then
+    if (stagger == CGRID_NE) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
+    elseif (stagger == BGRID_NE) then ; u_pos = CORNER ; v_pos = CORNER
+    elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
+  endif
+
+  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=u_pos)
+  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=v_pos)
+
+end subroutine MOM_read_vector_2d
+
+
+!> This function uses the fms_io function read_data to read a pair of distributed
+!! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
+!! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
+subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                              timelevel, stagger, scalar_pair)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
+  character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
+  real, dimension(:,:,:), intent(inout) :: u_data    !< The 3 dimensional array into which the
+                                                     !! u-component of the data should be read
+  real, dimension(:,:,:), intent(inout) :: v_data    !< The 3 dimensional array into which the
+                                                     !! v-component of the data should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
+  logical,      optional, intent(in)    :: scalar_pair   !< If true, a pair of scalars are to be read.cretized
+
+  integer :: u_pos, v_pos
+
+  u_pos = EAST_FACE ; v_pos = NORTH_FACE
+  if (present(stagger)) then
+    if (stagger == CGRID_NE) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
+    elseif (stagger == BGRID_NE) then ; u_pos = CORNER ; v_pos = CORNER
+    elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
+  endif
+
+  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=u_pos)
+  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=v_pos)
+
+end subroutine MOM_read_vector_3d
 
 
 !> Initialize the MOM_io module
@@ -848,7 +976,6 @@ subroutine MOM_io_init(param_file)
   call log_version(param_file, mdl, version)
 
 end subroutine MOM_io_init
-
 
 
 !> \namespace mom_io

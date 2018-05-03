@@ -105,7 +105,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !
   use MOM_coms, only : sum_across_PEs
 
-  type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: good !< Valid data mask for incoming array
                                                           !! (1==good data; 0==missing data).
@@ -132,14 +132,14 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   real, parameter :: relc_default = 0.25, crit_default = 1.e-3
 
   integer :: npass
-  integer :: is, ie, js, je, nz
+  integer :: is, ie, js, je
   real    :: relax_coeff, acrit, ares
   logical :: debug_it
 
   debug_it=.false.
   if (PRESENT(debug)) debug_it=debug
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   npass = num_pass_default
   if (PRESENT(num_pass)) npass = num_pass
@@ -266,7 +266,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   character(len=*),      intent(in)    :: varnam     !< Name of tracer in filee.
   real,                  intent(in)    :: conversion !< Conversion factor for tracer.
   integer,               intent(in)    :: recnum     !< Record number of tracer to be read.
-  type(ocean_grid_type), intent(in)    :: G          !< Grid object
+  type(ocean_grid_type), intent(inout) :: G          !< Grid object
   real, allocatable, dimension(:,:,:)  :: tr_z       !< pointer to allocatable tracer array on local
                                                      !! model grid and native vertical levels.
   real, allocatable, dimension(:,:,:)  :: mask_z     !< pointer to allocatable tracer mask array on
@@ -298,7 +298,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
-  integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
@@ -309,16 +308,16 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
 
-  if (ALLOCATED(tr_z)) deallocate(tr_z)
-  if (ALLOCATED(mask_z)) deallocate(mask_z)
-  if (ALLOCATED(z_edges_in)) deallocate(z_edges_in)
+  if (allocated(tr_z)) deallocate(tr_z)
+  if (allocated(mask_z)) deallocate(mask_z)
+  if (allocated(z_edges_in)) deallocate(z_edges_in)
 
   PI_180=atan(1.0)/45.
 
@@ -578,10 +577,10 @@ end subroutine horiz_interp_and_extrap_tracer_record
 subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, tr_z, mask_z, z_in, &
                                                 z_edges_in, missing_value, reentrant_x, tripolar_n, homogenize )
 
-  integer,               intent(in)    :: fms_id         !< A unique id used by the FMS time interpolator
+  integer,               intent(in)    :: fms_id     !< A unique id used by the FMS time interpolator
   type(time_type),       intent(in)    :: Time       !< A FMS time type
   real,                  intent(in)    :: conversion !< Conversion factor for tracer.
-  type(ocean_grid_type), intent(in)    :: G          !< Grid object
+  type(ocean_grid_type), intent(inout) :: G          !< Grid object
   real, allocatable, dimension(:,:,:)  :: tr_z       !< pointer to allocatable tracer array on local
                                                      !! model grid and native vertical levels.
   real, allocatable, dimension(:,:,:)  :: mask_z     !< pointer to allocatable tracer mask array on
@@ -616,7 +615,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
-  integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   integer, dimension(4) :: fld_sz
   character(len=12)  :: dim_name(4)
@@ -628,7 +626,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 

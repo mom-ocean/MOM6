@@ -14,7 +14,7 @@ use MOM_open_boundary,         only : ocean_obc_type, update_OBC_segment_data
 use MOM_open_boundary,         only : OBC_registry_type, file_OBC_CS
 use MOM_open_boundary,         only : register_file_OBC, file_OBC_end
 use MOM_verticalGrid,          only : verticalGrid_type
-use MOM_tracer_registry,       only : add_tracer_OBC_values, tracer_registry_type
+use MOM_tracer_registry,       only : tracer_registry_type
 use MOM_variables,             only : thermo_var_ptrs
 use tidal_bay_initialization,  only : tidal_bay_set_OBC_data, register_tidal_bay_OBC
 use tidal_bay_initialization,  only : tidal_bay_OBC_end, tidal_bay_OBC_CS
@@ -22,6 +22,8 @@ use Kelvin_initialization,     only : Kelvin_set_OBC_data, register_Kelvin_OBC
 use Kelvin_initialization,     only : Kelvin_OBC_end, Kelvin_OBC_CS
 use shelfwave_initialization,  only : shelfwave_set_OBC_data, register_shelfwave_OBC
 use shelfwave_initialization,  only : shelfwave_OBC_end, shelfwave_OBC_CS
+use dyed_channel_initialization, only : dyed_channel_update_flow, register_dyed_channel_OBC
+use dyed_channel_initialization, only : dyed_channel_OBC_end, dyed_channel_OBC_CS
 
 implicit none ; private
 
@@ -35,10 +37,12 @@ type, public :: update_OBC_CS ; private
   logical :: use_Kelvin = .false.
   logical :: use_tidal_bay = .false.
   logical :: use_shelfwave = .false.
+  logical :: use_dyed_channel = .false.
   type(file_OBC_CS), pointer :: file_OBC_CSp => NULL()
   type(Kelvin_OBC_CS), pointer :: Kelvin_OBC_CSp => NULL()
   type(tidal_bay_OBC_CS), pointer :: tidal_bay_OBC_CSp => NULL()
   type(shelfwave_OBC_CS), pointer :: shelfwave_OBC_CSp => NULL()
+  type(dyed_channel_OBC_CS), pointer :: dyed_channel_OBC_CSp => NULL()
 end type update_OBC_CS
 
 integer :: id_clock_pass
@@ -78,6 +82,9 @@ subroutine call_OBC_register(param_file, CS, OBC)
   call get_param(param_file, mdl, "USE_SHELFWAVE_OBC", CS%use_shelfwave, &
                  "If true, use the shelfwave open boundary.", &
                  default=.false.)
+  call get_param(param_file, mdl, "USE_DYED_CHANNEL_OBC", CS%use_dyed_channel, &
+                 "If true, use the dyed channel open boundary.", &
+                 default=.false.)
 
   if (CS%use_files) CS%use_files = &
     register_file_OBC(param_file, CS%file_OBC_CSp, &
@@ -91,18 +98,21 @@ subroutine call_OBC_register(param_file, CS, OBC)
   if (CS%use_shelfwave) CS%use_shelfwave = &
     register_shelfwave_OBC(param_file, CS%shelfwave_OBC_CSp, &
                OBC%OBC_Reg)
+  if (CS%use_dyed_channel) CS%use_dyed_channel = &
+    register_dyed_channel_OBC(param_file, CS%dyed_channel_OBC_CSp, &
+               OBC%OBC_Reg)
 
 end subroutine call_OBC_register
 
 !> Calls appropriate routine to update the open boundary conditions.
 subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
-  type(ocean_grid_type),                    intent(in) :: G     !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV !< Ocean vertical grid structure
-  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< layer thickness
-  type(ocean_OBC_type),                     pointer    :: OBC   !< Open boundary structure
-  type(update_OBC_CS),                      pointer    :: CS    !< Control structure for OBCs
-  type(time_type),                          intent(in) :: Time  !< Model time
+  type(ocean_grid_type),                    intent(in)    :: G    !< Ocean grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
+  type(thermo_var_ptrs),                    intent(in)    :: tv   !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thickness
+  type(ocean_OBC_type),                     pointer       :: OBC  !< Open boundary structure
+  type(update_OBC_CS),                      pointer       :: CS   !< Control structure for OBCs
+  type(time_type),                          intent(in)    :: Time !< Model time
   ! Local variables
   logical :: read_OBC_eta = .false.
   logical :: read_OBC_uv = .false.
@@ -126,6 +136,8 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
       call Kelvin_set_OBC_data(OBC, CS%Kelvin_OBC_CSp, G, h, Time)
   if (CS%use_shelfwave) &
       call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, h, Time)
+  if (CS%use_dyed_channel) &
+      call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, Time)
   if (OBC%needs_IO_for_data)  &
       call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 

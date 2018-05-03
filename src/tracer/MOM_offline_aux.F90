@@ -12,7 +12,7 @@ use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_diag_vkernels,    only : reintegrate_column
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : read_data
+use MOM_io,               only : MOM_read_data, MOM_read_vector
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
@@ -598,27 +598,34 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     uhtr, vhtr, temp_mean, salt_mean, mld, Kd, fluxes, ridx_sum, ridx_snap, read_mld, read_sw, &
     read_ts_uvh, do_ale_in)
 
-  type(ocean_grid_type), pointer,                   intent(inout) :: G         !< Horizontal grid type
-  type(verticalGrid_type), pointer,                   intent(in   ) :: GV        !< Vertical grid type
-  integer,                                   intent(in   ) :: nk_input  !< Number of levels in input file
-  character(len=*),                          intent(in   ) :: mean_file !< Name of file with averages fields
-  character(len=*),                          intent(in   ) :: sum_file  !< Name of file with summed fields
-  character(len=*),                          intent(in   ) :: snap_file !< Name of file with snapshot fields
-  character(len=*),                          intent(in   ) :: surf_file !< Name of file with surface fields
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_end     !< End of timestep layer thickness
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp_mean !< Averaged temperature
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt_mean !< Averaged salinity
-  real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: mld       !< Averaged mixed layer depth
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),intent(inout) :: Kd       !< Averaged mixed layer depth
-  type(forcing),                             intent(inout) :: fluxes    !< Fields with surface fluxes
-  integer,                                   intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
-  integer,                                   intent(in   ) :: ridx_snap !< Read index for snapshot file
-  logical,                                   intent(in   ) :: read_mld  !< True if reading in MLD
-  logical,                                   intent(in   ) :: read_sw   !< True if reading in radiative fluxes
-  logical,                                   intent(in   ) :: read_ts_uvh !< True if reading in uh, vh, and h
-  logical, optional,                         intent(in   ) :: do_ale_in !< True if using ALE algorithms
+  type(ocean_grid_type),   intent(inout) :: G         !< Horizontal grid type
+  type(verticalGrid_type), intent(in   ) :: GV        !< Vertical grid type
+  integer,                 intent(in   ) :: nk_input  !< Number of levels in input file
+  character(len=*),        intent(in   ) :: mean_file !< Name of file with averages fields
+  character(len=*),        intent(in   ) :: sum_file  !< Name of file with summed fields
+  character(len=*),        intent(in   ) :: snap_file !< Name of file with snapshot fields
+  character(len=*),        intent(in   ) :: surf_file !< Name of file with surface fields
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: uhtr      !< Zonal mass fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(inout) :: vhtr      !< Meridional mass fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(inout) :: h_end     !< End of timestep layer thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(inout) :: temp_mean !< Averaged temperature
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(inout) :: salt_mean !< Averaged salinity
+  real, dimension(SZI_(G),SZJ_(G)),          &
+                           intent(inout) :: mld       !< Averaged mixed layer depth
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: Kd        !< Diapycnal diffusivities at interfaces
+  type(forcing),           intent(inout) :: fluxes    !< Fields with surface fluxes
+  integer,                 intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
+  integer,                 intent(in   ) :: ridx_snap !< Read index for snapshot file
+  logical,                 intent(in   ) :: read_mld  !< True if reading in MLD
+  logical,                 intent(in   ) :: read_sw   !< True if reading in radiative fluxes
+  logical,                 intent(in   ) :: read_ts_uvh !< True if reading in uh, vh, and h
+  logical,       optional, intent(in   ) :: do_ale_in !< True if using ALE algorithms
 
   logical :: do_ale
   integer :: i, j, k, is, ie, js, je, nz
@@ -637,16 +644,14 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     uhtr(:,:,:) = 0.0
     vhtr(:,:,:) = 0.0
     ! Time-summed fields
-    call read_data(sum_file, 'uhtr_sum', uhtr(:,:,1:nk_input),domain=G%Domain%mpp_domain, &
-      timelevel=ridx_sum, position=EAST)
-    call read_data(sum_file, 'vhtr_sum', vhtr(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
-      timelevel=ridx_sum, position=NORTH)
-    call read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
-      timelevel=ridx_snap,position=CENTER)
-    call read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
-      timelevel=ridx_sum,position=CENTER)
-    call read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
-      timelevel=ridx_sum,position=CENTER)
+    call MOM_read_vector(sum_file, 'uhtr_sum', 'vhtr_sum', uhtr(:,:,1:nk_input), &
+                         vhtr(:,:,1:nk_input), G%Domain, timelevel=ridx_sum)
+    call MOM_read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), G%Domain, &
+                       timelevel=ridx_snap,position=CENTER)
+    call MOM_read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), G%Domain, &
+                       timelevel=ridx_sum,position=CENTER)
+    call MOM_read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), G%Domain, &
+                       timelevel=ridx_sum,position=CENTER)
   endif
 
   do j=js,je ; do i=is,ie
@@ -657,26 +662,26 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   enddo ; enddo
 
   ! Check if reading vertical diffusivities or entrainment fluxes
-  call read_data( mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), domain=G%Domain%mpp_domain, &
+  call MOM_read_data( mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), G%Domain, &
                   timelevel=ridx_sum,position=CENTER)
 
   ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
   if (do_ale) then
-    if (.not. ASSOCIATED(fluxes%netMassOut)) then
+    if (.not. associated(fluxes%netMassOut)) then
       allocate(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
       fluxes%netMassOut(:,:) = 0.0
     endif
-    if (.not. ASSOCIATED(fluxes%netMassIn)) then
+    if (.not. associated(fluxes%netMassIn)) then
       allocate(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
       fluxes%netMassIn(:,:) = 0.0
     endif
 
     fluxes%netMassOut(:,:) = 0.0
     fluxes%netMassIn(:,:) = 0.0
-    call read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
+    call MOM_read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, G%Domain, &
         timelevel=ridx_sum)
-    call read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
+    call MOM_read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  G%Domain, &
         timelevel=ridx_sum)
 
     do j=js,je ; do i=is,ie
@@ -689,7 +694,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   endif
 
   if (read_mld) then
-    call read_data(surf_file, 'ePBL_h_ML', mld, domain=G%Domain%mpp_domain, timelevel=ridx_sum)
+    call MOM_read_data(surf_file, 'ePBL_h_ML', mld, G%Domain, timelevel=ridx_sum)
   endif
 
   if (read_sw) then
@@ -697,9 +702,9 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
     ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
     ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
-    call read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, domain=G%Domain%mpp_domain, &
+    call MOM_read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, G%Domain, &
         timelevel=ridx_sum)
-    call read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, domain=G%Domain%mpp_domain, &
+    call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
         timelevel=ridx_sum)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
     fluxes%sw_vis_dif (:,:) = fluxes%sw_vis_dir

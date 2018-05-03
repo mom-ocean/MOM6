@@ -68,7 +68,7 @@ use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
-use MOM_io, only : MOM_io_init, vardesc
+use MOM_io, only : MOM_io_init
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
@@ -95,6 +95,7 @@ use MOM_vert_friction, only : vertvisc, vertvisc_coef
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid, only : get_flux_units, get_tr_flux_units
+use MOM_wave_interface, only: wave_parameters_CS
 
 implicit none ; private
 
@@ -164,7 +165,7 @@ contains
 
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
-                  VarMix, MEKE)
+                  VarMix, MEKE, Waves)
   type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -206,6 +207,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                   !! that specify the spatially variable viscosities.
   type(MEKE_type),                  pointer       :: MEKE   !< A pointer to a structure containing
                                   !! fields related to the Mesoscale Eddy Kinetic Energy.
+  type(wave_parameters_CS), pointer, optional     :: Waves  !< A pointer to a structure containing
+                                  !! fields related to the surface wave conditions
+
 ! Arguments: u - The input and output zonal velocity, in m s-1.
 !  (inout)   v - The input and output meridional velocity, in m s-1.
 !  (inout)   h - The input and output layer thicknesses, in m or kg m-2,
@@ -363,7 +367,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call vertvisc_coef(up, vp, h_av, forces, visc, dt*0.5, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp)
+                G, GV, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
 
@@ -427,7 +431,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call vertvisc_coef(upp, vpp, hp, forces, visc, dt*0.5, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(upp, vpp, hp, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp)
+                G, GV, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(upp, vpp, G%Domain, clock=id_clock_pass)
 
@@ -497,7 +501,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h_av, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
@@ -549,7 +553,6 @@ subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS, restart_CS)
 !  (inout)   CS - The control structure set up by initialize_dyn_unsplit.
 !  (inout)   restart_CS - A pointer to the restart control structure.
 
-  type(vardesc) :: vd
   character(len=40)  :: mdl = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -664,6 +667,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
   ! dynamic core, including diagnostics and the cpu clocks.
   character(len=40) :: mdl = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
+  real :: H_convert
   logical :: use_tides
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -681,7 +685,8 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
   CS%diag => diag
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 
@@ -714,10 +719,13 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
   flux_units = get_flux_units(GV)
+  H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true.)
+      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
+      conversion=H_convert)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true.)
+      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
+      conversion=H_convert)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &

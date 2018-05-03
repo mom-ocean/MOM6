@@ -20,7 +20,7 @@ use MOM_grid_initialize, only : set_grid_metrics
 use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
-use MOM_io, only : field_exists, file_exists, read_data, write_version_number
+use MOM_io, only : field_exists, file_exists, MOM_read_data, write_version_number
 use MOM_io, only : slasher, vardesc, var_desc, fieldtype
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
@@ -447,8 +447,8 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   CS%salt_flux(:,:) = 0.0; CS%t_flux(:,:) = 0.0
   CS%tfreeze(:,:) = 0.0
   ! define Sbdry to avoid Run-Time Check Failure, when melt is not computed.
-  ALLOCATE ( haline_driving(G%ied,G%jed) ); haline_driving(:,:) = 0.0
-  ALLOCATE ( Sbdry(G%ied,G%jed) ); Sbdry(:,:) = state%sss(:,:)
+  allocate( haline_driving(G%ied,G%jed) ); haline_driving(:,:) = 0.0
+  allocate( Sbdry(G%ied,G%jed) ); Sbdry(:,:) = state%sss(:,:)
 
   !update time
   CS%Time = Time
@@ -774,7 +774,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
    enddo ! j-loop
 
   ! mass flux (kg/s), part of ISOMIP diags.
-  ALLOCATE ( mass_flux(G%ied,G%jed) ); mass_flux(:,:) = 0.0
+  allocate( mass_flux(G%ied,G%jed) ); mass_flux(:,:) = 0.0
   mass_flux = (CS%lprec) * CS%area_shelf_h
 
   if (CS%shelf_mass_is_dynamic) then
@@ -1327,8 +1327,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                   units="nondim.", fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "ICE_SHELF_MASS_FROM_FILE", &
-                CS%mass_from_file, "Read the mass of the &
-                ice shelf (every time step) from a file.", default=.false.)
+                 CS%mass_from_file, "Read the mass of the "//&
+                 "ice shelf (every time step) from a file.", default=.false.)
 
   if (CS%threeeq) &
     call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
@@ -1421,7 +1421,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
-    call read_data(TideAmp_file,'tideamp',CS%utide,domain=G%domain%mpp_domain,timelevel=1)
+    call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
@@ -1856,7 +1856,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " calving mask file: Unable to open "//trim(filename))
 
-    call read_data(filename,trim(var_name),CS%calve_mask,domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename,trim(var_name),CS%calve_mask,G%Domain)
     do j=G%jsc,G%jec
       do i=G%isc,G%iec
         if (CS%calve_mask(i,j) > 0.0) CS%calve_mask(i,j) = 1.0
@@ -1915,9 +1915,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
      'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
   CS%id_Sbdry = register_diag_field('ocean_model', 'sbdry', CS%diag%axesT1, CS%Time, &
      'salinity at the ice-ocean interface.', 'psu')
-  CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesT1, CS%Time, &
+  CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
      'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1')
-  CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesT1, CS%Time, &
+  CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
      'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1')
   CS%id_exch_vel_s = register_diag_field('ocean_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
      'Sub-shelf salinity exchange velocity', 'm s-1')
@@ -1931,13 +1931,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
      'Fric vel under shelf', 'm/s')
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
-    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesB1,CS%Time, &
-       'x-velocity of ice', 'm yr')
-    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesB1,CS%Time, &
-       'y-velocity of ice', 'm yr')
-    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesB1,CS%Time, &
+    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesCu1,CS%Time, &
+       'x-velocity of ice', 'm yr-1')
+    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesCv1,CS%Time, &
+       'y-velocity of ice', 'm yr-1')
+    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesCu1,CS%Time, &
        'mask for u-nodes', 'none')
-    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesB1,CS%Time, &
+    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesCv1,CS%Time, &
        'mask for v-nodes', 'none')
     CS%id_h_mask = register_diag_field('ocean_model','h_mask',CS%diag%axesT1,CS%Time, &
        'ice shelf thickness', 'none')
@@ -2198,10 +2198,10 @@ end subroutine ice_shelf_save_restart
 
 
 subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),         pointer    :: CS
-  real,                       intent(in) :: time_step
-  real,pointer,dimension(:,:),intent(in) :: melt_rate
-  type(time_type)             :: Time
+  type(ice_shelf_CS),   pointer    :: CS
+  real,                 intent(in) :: time_step
+  real, dimension(:,:), pointer    :: melt_rate
+  type(time_type),      intent(in) :: Time
 
 ! time_step: time step in sec
 ! melt_rate: basal melt rate in kg/m^2/s
@@ -2343,23 +2343,23 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   rhoi = CS%density_ice
   rhow = CS%density_ocean_avg
-  ALLOCATE (TAUDX (isdq:iedq,jsdq:jedq) ) ; TAUDX(:,:)=0
-  ALLOCATE (TAUDY (isdq:iedq,jsdq:jedq) ) ; TAUDY(:,:)=0
-  ALLOCATE (u_prev_iterate (isdq:iedq,jsdq:jedq) )
-  ALLOCATE (v_prev_iterate (isdq:iedq,jsdq:jedq) )
-  ALLOCATE (u_bdry_cont (isdq:iedq,jsdq:jedq) ) ; u_bdry_cont(:,:)=0
-  ALLOCATE (v_bdry_cont (isdq:iedq,jsdq:jedq) ) ; v_bdry_cont(:,:)=0
-  ALLOCATE (Au (isdq:iedq,jsdq:jedq) ) ; Au(:,:)=0
-  ALLOCATE (Av (isdq:iedq,jsdq:jedq) ) ; Av(:,:)=0
-  ALLOCATE (err_u (isdq:iedq,jsdq:jedq) )
-  ALLOCATE (err_v (isdq:iedq,jsdq:jedq) )
-  ALLOCATE (u_last (isdq:iedq,jsdq:jedq) )
-  ALLOCATE (v_last (isdq:iedq,jsdq:jedq) )
+  allocate(TAUDX (isdq:iedq,jsdq:jedq) ) ; TAUDX(:,:)=0
+  allocate(TAUDY (isdq:iedq,jsdq:jedq) ) ; TAUDY(:,:)=0
+  allocate(u_prev_iterate (isdq:iedq,jsdq:jedq) )
+  allocate(v_prev_iterate (isdq:iedq,jsdq:jedq) )
+  allocate(u_bdry_cont (isdq:iedq,jsdq:jedq) ) ; u_bdry_cont(:,:)=0
+  allocate(v_bdry_cont (isdq:iedq,jsdq:jedq) ) ; v_bdry_cont(:,:)=0
+  allocate(Au (isdq:iedq,jsdq:jedq) ) ; Au(:,:)=0
+  allocate(Av (isdq:iedq,jsdq:jedq) ) ; Av(:,:)=0
+  allocate(err_u (isdq:iedq,jsdq:jedq) )
+  allocate(err_v (isdq:iedq,jsdq:jedq) )
+  allocate(u_last (isdq:iedq,jsdq:jedq) )
+  allocate(v_last (isdq:iedq,jsdq:jedq) )
 
   ! need to make these conditional on GL interpolation
-  ALLOCATE (float_cond (G%isd:G%ied,G%jsd:G%jed)) ; float_cond(:,:)=0
-    ALLOCATE (H_node (G%isdB:G%iedB,G%jsdB:G%jedB)) ; H_node(:,:)=0
-    ALLOCATE (Phisub (nsub,nsub,2,2,2,2)) ; Phisub = 0.0
+  allocate(float_cond (G%isd:G%ied,G%jsd:G%jed)) ; float_cond(:,:)=0
+    allocate(H_node (G%isdB:G%iedB,G%jsdB:G%jedB)) ; H_node(:,:)=0
+    allocate(Phisub (nsub,nsub,2,2,2,2)) ; Phisub = 0.0
 
   geolonq => G%geoLonBu ; geolatq => G%geoLatBu
 
@@ -2654,21 +2654,21 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   !write (procnum,'(I1)') mpp_pe()
   !write (numproc,'(I1)') mpp_npes()
 
-  DEALLOCATE (TAUDX)
-  DEALLOCATE (TAUDY)
-  DEALLOCATE (u_prev_iterate)
-  DEALLOCATE (v_prev_iterate)
-  DEALLOCATE (u_bdry_cont)
-  DEALLOCATE (v_bdry_cont)
-  DEALLOCATE (Au)
-  DEALLOCATE (Av)
-  DEALLOCATE (err_u)
-  DEALLOCATE (err_v)
-  DEALLOCATE (u_last)
-  DEALLOCATE (v_last)
-  DEALLOCATE (H_node)
-  DEALLOCATE (float_cond)
-  DEALLOCATE (Phisub)
+  deallocate (TAUDX)
+  deallocate (TAUDY)
+  deallocate (u_prev_iterate)
+  deallocate (v_prev_iterate)
+  deallocate (u_bdry_cont)
+  deallocate (v_bdry_cont)
+  deallocate (Au)
+  deallocate (Av)
+  deallocate (err_u)
+  deallocate (err_v)
+  deallocate (u_last)
+  deallocate (v_last)
+  deallocate (H_node)
+  deallocate (float_cond)
+  deallocate (Phisub)
 
 end subroutine ice_shelf_solve_outer
 
@@ -3758,7 +3758,7 @@ subroutine shelf_advance_front (CS, flux_enter)
 
   if(is_root_pe() .and. (iter_count.gt.1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
 
-  if (associated(flux_enter_replace)) DEALLOCATE(flux_enter_replace)
+  if (associated(flux_enter_replace)) deallocate(flux_enter_replace)
 
 end subroutine shelf_advance_front
 
@@ -6040,10 +6040,10 @@ end subroutine solo_time_step
 
 !!! OVS !!!
 subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),         pointer    :: CS
-  real,                       intent(in) :: time_step
-  real,pointer,dimension(:,:),intent(in) :: melt_rate
-  type(time_type)             :: Time
+  type(ice_shelf_CS),   pointer    :: CS
+  real,                 intent(in) :: time_step
+  real, dimension(:,:), pointer    :: melt_rate
+  type(time_type),      intent(in) :: Time
 
 ! time_step: time step in sec
 ! melt_rate: basal melt rate in kg/m^2/s

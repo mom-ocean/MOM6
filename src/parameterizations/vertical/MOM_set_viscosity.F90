@@ -34,7 +34,7 @@ module MOM_set_visc
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_debugging, only : uvchksum
+use MOM_debugging, only : uvchksum, hchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -45,6 +45,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
 use MOM_CVMix_shear, only : CVMix_shear_is_used
+use MOM_CVMix_conv,  only : CVMix_conv_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
@@ -126,7 +127,7 @@ contains
 !! paper of Killworth and Edwards, JPO 1999.  It is not necessary to
 !! calculate the thickness and viscosity every time step; instead
 !! previous values may be used.
-subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
+subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -142,6 +143,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
                                                   !! related fields.
   type(set_visc_CS),        pointer       :: CS   !< The control structure returned by a previous
                                                   !! call to vertvisc_init.
+  logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
+                                                  !! of those values in visc that would be
+                                                  !! calculated with symmetric memory.
 !   The following subroutine calculates the thickness of the bottom
 ! boundary layer and the viscosity within that layer.  A drag law is
 ! used, either linearized about an assumed bottom velocity or using
@@ -313,6 +317,17 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
          "Module must be initialized before it is used.")
   if (.not.CS%bottomdraglaw) return
 
+  if (present(symmetrize)) then ; if (symmetrize) then
+    Jsq = js-1 ; Isq = is-1
+  endif ; endif
+
+  if (CS%debug) then
+    call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1)
+    call hchksum(h,"Start set_viscous_BBL h", G%HI, haloshift=1, scale=GV%H_to_m)
+    if (associated(tv%T)) call hchksum(tv%T, "Start set_viscous_BBL T", G%HI, haloshift=1)
+    if (associated(tv%S)) call hchksum(tv%S, "Start set_viscous_BBL S", G%HI, haloshift=1)
+  endif
+
   use_BBL_EOS = associated(tv%eqn_of_state) .and. CS%BBL_use_EOS
   OBC => CS%OBC
 
@@ -324,7 +339,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !  if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
 
   if ((nkml>0) .and. .not.use_BBL_EOS) then
-    do i=G%IscB,G%IecB+1 ; p_ref(i) = tv%P_ref ; enddo
+    do i=Isq,Ieq+1 ; p_ref(i) = tv%P_ref ; enddo
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do k=1,nkmb
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
@@ -400,11 +415,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
 !$OMP                                  gam,Rayleigh, Vol_tol, tmp_val_m1_to_p1)
-  do j=G%JscB,G%JecB ; do m=1,2
+  do j=Jsq,Jeq ; do m=1,2
 
     if (m==1) then
       if (j<G%Jsc) cycle
-      is = G%IscB ; ie = G%IecB
+      is = Isq ; ie = Ieq
       do i=is,ie
         do_i(i) = .false.
         if (G%mask2dCu(I,j) > 0) do_i(i) = .true.
@@ -1023,7 +1038,7 @@ end function set_u_at_v
 !! the thickness of the topmost NKML layers (with a bulk mixed layer) are
 !! currently used.  The thicknesses are given in terms of fractional layers, so
 !! that this thickness will move as the thickness of the topmost layers change.
-subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
+subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1041,6 +1056,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
   real,                    intent(in)    :: dt   !< Time increment in s.
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to vertvisc_init.
+  logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
+                                                  !! of those values in visc that would be
+                                                  !! calculated with symmetric memory.
 
 !   The following subroutine calculates the thickness of the surface boundary
 ! layer for applying an elevated viscosity.  A bulk Richardson criterion or
@@ -1167,6 +1185,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
          "Module must be initialized before it is used.")
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
+
+  if (present(symmetrize)) then ; if (symmetrize) then
+    Jsq = js-1 ; Isq = is-1
+  endif ; endif
 
   Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth)*GV%m_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
@@ -1762,20 +1784,21 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
   logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
-  logical :: use_CVMix, MLE_use_PBL_MLD
+  logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_CVMix = .false. ;
-  useKPP = .false. ; useEPBL = .false.
+  use_kappa_shear = .false. ; use_CVMix_shear = .false. ;
+  useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false. ;
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
-    use_CVMix = CVMix_shear_is_used(param_file)
+    use_CVMix_shear = CVMix_shear_is_used(param_file)
+    use_CVMix_conv = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
-                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  default=.false., do_not_log=.true.)
     call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, &
@@ -1784,21 +1807,26 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                  "in the surface boundary layer.", default=.false., do_not_log=.true.)
   endif
 
-  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix) then
-    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
+  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
+    allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
-    allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0
+    allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
+    allocate(visc%Kv_slow(isd:ied,jsd:jed,nz+1)) ; visc%Kv_slow(:,:,:) = 0.0
 
-    vd = var_desc("Kd_turb","m2 s-1","Turbulent diffusivity at interfaces", &
+    vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
                   hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kd_turb, vd, .false., restart_CS)
+    call register_restart_field(visc%Kd_shear, vd, .false., restart_CS)
 
     vd = var_desc("TKE_turb","m2 s-2","Turbulent kinetic energy per unit mass at interfaces", &
                   hor_grid='h', z_grid='i')
     call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
-    vd = var_desc("Kv_turb","m2 s-1","Turbulent viscosity at interfaces", &
+    vd = var_desc("Kv_shear","m2 s-1","Shear-driven turbulent viscosity at interfaces", &
                   hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
+    call register_restart_field(visc%Kv_shear, vd, .false., restart_CS)
+    vd = var_desc("Kv_slow","m2 s-1","Vertical turbulent viscosity at interfaces due \n" // &
+                  " to slow processes", hor_grid='h', z_grid='i')
+    call register_restart_field(visc%Kv_slow, vd, .false., restart_CS)
+
   endif
 
   ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
@@ -2069,9 +2097,10 @@ subroutine set_visc_end(visc, CS)
   if (CS%dynamic_viscous_ML) then
     deallocate(visc%nkml_visc_u) ; deallocate(visc%nkml_visc_v)
   endif
-  if (associated(visc%Kd_turb)) deallocate(visc%Kd_turb)
+  if (associated(visc%Kd_shear)) deallocate(visc%Kd_shear)
+  if (associated(visc%Kv_slow)) deallocate(visc%Kv_slow)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
-  if (associated(visc%Kv_turb)) deallocate(visc%Kv_turb)
+  if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)

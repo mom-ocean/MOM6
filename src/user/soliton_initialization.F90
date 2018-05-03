@@ -7,9 +7,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -30,9 +27,11 @@ public soliton_initialize_velocity
 contains
 
 !> Initialization of thicknesses in Equatorial Rossby soliton test
-subroutine soliton_initialize_thickness(h, G)
-  type(ocean_grid_type),   intent(in) :: G                 !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< Thickness
+subroutine soliton_initialize_thickness(h, G, GV)
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h    !< The thickness that is being initialized, in H.
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, x0, y0
@@ -54,8 +53,7 @@ subroutine soliton_initialize_thickness(h, G)
       y = G%geoLatT(i,j)-y0
       val3 = exp(-val1*x)
       val4 = val2*((2.0*val3/(1.0+(val3*val3)))**2)
-      h(i,j,k) = 0.25*val4*(6.0*y*y+3.0)*                 &
-                exp(-0.5*y*y)
+      h(i,j,k) = GV%m_to_H * (0.25*val4 * (6.0*y*y+3.0) * exp(-0.5*y*y))
     enddo
   end do ; end do
 

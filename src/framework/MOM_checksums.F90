@@ -13,6 +13,7 @@ implicit none ; private
 
 public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
 public :: hchksum_pair, uvchksum, Bchksum_pair
+public :: chksum_general
 public :: MOM_checksums_init
 
 interface hchksum_pair
@@ -58,6 +59,10 @@ end interface
 
 interface is_NaN
   module procedure is_NaN_0d, is_NaN_1d, is_NaN_2d, is_NaN_3d
+end interface
+
+interface chksum_general
+  module procedure chksum_general_1d, chksum_general_2d, chksum_general_3d
 end interface
 
 integer, parameter :: default_shift=0
@@ -115,7 +120,9 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners
@@ -128,7 +135,18 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
   endif
   scaling = 1.0 ; if (present(scale)) scaling = scale
 
-  if (calculateStatistics) call subStats(HI, array, mesg, scaling)
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2)) )
+    rescaled_array(:,:) = 0.0
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      rescaled_array(i,j) = scale*array(i,j)
+    enddo ; enddo
+    call subStats(HI, rescaled_array, mesg)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -170,13 +188,12 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
   endif
 
   contains
-
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%jsd:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,j)))
@@ -186,11 +203,11 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, scale)
+  subroutine subStats(HI, array, mesg)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%jsd:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    real, intent(in) :: scale
+
     integer :: i, j, n
     real :: aMean, aMin, aMax
 
@@ -207,7 +224,7 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("h-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("h-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_h_2d
@@ -274,7 +291,9 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   logical,    optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,       optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j, Is, Js
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -286,10 +305,23 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
   scaling = 1.0 ; if (present(scale)) scaling = scale
-
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
-  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
+
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2)) )
+    rescaled_array(:,:) = 0.0
+    Is = HI%isc ; if (sym_stats) Is = HI%isc-1
+    Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
+    do J=Js,HI%JecB ; do I=Is,HI%IecB
+      rescaled_array(I,J) = scale*array(I,J)
+    enddo ; enddo
+    call subStats(HI, rescaled_array, mesg, sym_stats)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg, sym_stats)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -345,7 +377,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do J=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
@@ -356,12 +388,12 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, sym_stats, scale)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     logical, intent(in) :: sym_stats
-    real, intent(in) :: scale
+
     integer :: i, j, n, IsB, JsB
     real :: aMean, aMin, aMax
 
@@ -380,7 +412,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("B-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("B-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_B_2d
@@ -437,7 +469,9 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j, Is
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -452,7 +486,20 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
-  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
+
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2)) )
+    rescaled_array(:,:) = 0.0
+    Is = HI%isc ; if (sym_stats) Is = HI%isc-1
+    do j=HI%jsc,HI%jec ; do I=Is,HI%IecB
+      rescaled_array(I,j) = scale*array(I,j)
+    enddo ; enddo
+    call subStats(HI, rescaled_array, mesg, sym_stats)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg, sym_stats)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -514,7 +561,7 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do j=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
@@ -525,12 +572,12 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, sym_stats, scale)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     logical, intent(in) :: sym_stats
-    real, intent(in) :: scale
+
     integer :: i, j, n, IsB
     real :: aMean, aMin, aMax
 
@@ -548,7 +595,7 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("u-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("u-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_u_2d
@@ -565,7 +612,9 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j, Js
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -580,7 +629,20 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
-  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
+
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2)) )
+    rescaled_array(:,:) = 0.0
+    Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
+    do J=Js,HI%JecB ; do i=HI%isc,HI%iec
+      rescaled_array(i,J) = scale*array(i,J)
+    enddo ; enddo
+    call subStats(HI, rescaled_array, mesg, sym_stats)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg, sym_stats)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -642,7 +704,7 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do J=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
@@ -653,12 +715,12 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, sym_stats, scale)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     logical, intent(in) :: sym_stats
-    real, intent(in) :: scale
+
     integer :: i, j, n, JsB
     real :: aMean, aMin, aMax
 
@@ -676,7 +738,7 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("v-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("v-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_v_2d
@@ -692,7 +754,9 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j, k
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners
@@ -705,7 +769,20 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
   endif
   scaling = 1.0 ; if (present(scale)) scaling = scale
 
-  if (calculateStatistics) call subStats(HI, array, mesg, scaling)
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2), &
+                             LBOUND(array,3):UBOUND(array,3)) )
+    rescaled_array(:,:,:) = 0.0
+    do k=1,size(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      rescaled_array(i,j,k) = scale*array(i,j,k)
+    enddo ; enddo ; enddo
+
+    call subStats(HI, rescaled_array, mesg)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -753,7 +830,7 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
     real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,j,k)))
@@ -763,11 +840,11 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, scale)
+  subroutine subStats(HI, array, mesg)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    real, intent(in) :: scale
+
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
 
@@ -784,7 +861,7 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("h-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("h-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_h_3d
@@ -801,7 +878,9 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   logical,                  optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                     optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j, k, Is, Js
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -813,10 +892,24 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
   scaling = 1.0 ; if (present(scale)) scaling = scale
-
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
-  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
+
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2), &
+                             LBOUND(array,3):UBOUND(array,3)) )
+    rescaled_array(:,:,:) = 0.0
+    Is = HI%isc ; if (sym_stats) Is = HI%isc-1
+    Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
+    do k=1,size(array,3) ; do J=Js,HI%JecB ; do I=Is,HI%IecB
+      rescaled_array(I,J,k) = scale*array(I,J,k)
+    enddo ; enddo ; enddo
+    call subStats(HI, rescaled_array, mesg, sym_stats)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg, sym_stats)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -877,7 +970,7 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
@@ -888,12 +981,12 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, sym_stats, scale)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     logical, intent(in) :: sym_stats
-    real, intent(in) :: scale
+
     integer :: i, j, k, n, IsB, JsB
     real :: aMean, aMin, aMax
 
@@ -911,7 +1004,7 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("B-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("B-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_B_3d
@@ -928,7 +1021,9 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j, k, Is
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -940,10 +1035,23 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
   scaling = 1.0 ; if (present(scale)) scaling = scale
-
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
-  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
+
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2), &
+                             LBOUND(array,3):UBOUND(array,3)) )
+    rescaled_array(:,:,:) = 0.0
+    Is = HI%isc ; if (sym_stats) Is = HI%isc-1
+    do k=1,size(array,3) ; do j=HI%jsc,HI%jec ; do I=Is,HI%IecB
+      rescaled_array(I,j,k) = scale*array(I,j,k)
+    enddo ; enddo ; enddo
+    call subStats(HI, rescaled_array, mesg, sym_stats)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg, sym_stats)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -1005,7 +1113,7 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
@@ -1016,12 +1124,12 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, sym_stats, scale)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     logical, intent(in) :: sym_stats
-    real, intent(in) :: scale
+
     integer :: i, j, k, n, IsB
     real :: aMean, aMin, aMax
 
@@ -1039,10 +1147,82 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("u-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("u-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_u_3d
+
+!---chksum_general interface routines
+!> Return the bitcount of an arbitrarily sized 3d array
+integer function chksum_general_3d( array, scale_factor, istart, iend, jstart, jend, kstart, kend ) result(subchk)
+  real, dimension(:,:,:) :: array    !< Array to be checksummed
+  real,    optional :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional :: istart        !< Starting index in the i-direction
+  integer, optional :: iend          !< Ending index in the i-direction
+  integer, optional :: jstart        !< Starting index in the j-direction
+  integer, optional :: jend          !< Ending index in the j-direction
+  integer, optional :: kstart        !< Starting index in the k-direction
+  integer, optional :: kend          !< Ending index in the k-direction
+  integer :: i, j, k, bc, is, ie, js, je, ks, ke
+  real :: scale
+
+  ! By default do not scale
+  scale = 1.
+  if (present(scale_factor)) scale = scale_factor
+
+  ! Set the loop indices based on full array
+  is = LBOUND(array,1) ; ie = UBOUND(array,1)
+  js = LBOUND(array,2) ; je = UBOUND(array,2)
+  ks = LBOUND(array,3) ; ke = UBOUND(array,3)
+
+  ! Override indices if subdomain requested
+  if (present(istart)) is = istart ; if (present(iend)) ie = iend
+  if (present(jstart)) js = jstart ; if (present(jend)) je = jend
+  if (present(kstart)) ks = kstart ; if (present(kend)) ke = kend
+
+  subchk = 0
+  do k=ks,ke ; do j=js,je ; do i=is,ie
+    bc = bitcount(abs(scale*array(i,j,k)))
+    subchk = subchk + bc
+  enddo ; enddo ; enddo
+  call sum_across_PEs(subchk)
+  subchk=mod(subchk,1000000000)
+end function chksum_general_3d
+
+!> Return the bitcount of an arbitrarily sized 2d array by promotion to a 3d array
+integer function chksum_general_2d( array_2d, scale_factor, istart, iend, jstart, jend )
+  real, dimension(:,:) :: array_2d   !< Array to be checksummed
+  real,    optional :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional :: istart        !< Starting index in the i-direction
+  integer, optional :: iend          !< Ending index in the i-direction
+  integer, optional :: jstart        !< Starting index in the j-direction
+  integer, optional :: jend          !< Ending index in the j-direction
+  integer :: is, ie, js, je
+  real, dimension(:,:,:), allocatable :: array_3d !< Promotion from 2d to 3d array
+
+  is = LBOUND(array_2d,1) ; ie = UBOUND(array_2d,1)
+  js = LBOUND(array_2d,2) ; je = UBOUND(array_2d,2)
+  allocate(array_3d(is:ie, js:je,1))
+  array_3d(:,:,1) = array_2d(:,:)
+  chksum_general_2d = chksum_general_3d( array_3d, scale_factor, istart, iend, jstart, jend )
+  deallocate(array_3d)
+end function chksum_general_2d
+
+!> Return the bitcount of an arbitrarily sized 1d array by promotion to a 3d array
+integer function chksum_general_1d( array_1d, scale_factor, istart, iend )
+  real, dimension(:) :: array_1d      !< Array to be checksummed
+  real,    optional  :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional  :: istart        !< Starting index in the i-direction
+  integer, optional  :: iend          !< Ending index in the i-direction
+  integer :: is, ie, js, je
+  real, dimension(:,:,:), allocatable :: array_3d !< Promotion from 2d to 3d array
+
+  is = LBOUND(array_1d,1) ; ie = UBOUND(array_1d,1)
+  allocate(array_3d(is:ie, 1,1))
+  array_3d(:,1,1) = array_1d(:)
+  chksum_general_1d = chksum_general_3d( array_3d, scale_factor, istart, iend )
+  deallocate(array_3d)
+end function chksum_general_1d
 
 ! =====================================================================
 
@@ -1056,7 +1236,9 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
+  real, allocatable, dimension(:,:,:) :: rescaled_array
   real :: scaling
+  integer :: i, j, k, Js
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -1068,10 +1250,23 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
   scaling = 1.0 ; if (present(scale)) scaling = scale
-
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
-  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
+
+  if (calculateStatistics) then ; if (present(scale)) then
+    allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
+                             LBOUND(array,2):UBOUND(array,2), &
+                             LBOUND(array,3):UBOUND(array,3)) )
+    rescaled_array(:,:,:) = 0.0
+    Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
+    do k=1,size(array,3) ; do J=Js,HI%JecB ; do i=HI%isc,HI%iec
+      rescaled_array(i,J,k) = scale*array(i,J,k)
+    enddo ; enddo ; enddo
+    call subStats(HI, rescaled_array, mesg, sym_stats)
+    deallocate(rescaled_array)
+  else
+    call subStats(HI, array, mesg, sym_stats)
+  endif ; endif
 
   if (.not.writeChksums) return
 
@@ -1133,7 +1328,7 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
@@ -1144,12 +1339,12 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg, sym_stats, scale)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     logical, intent(in) :: sym_stats
-    real, intent(in) :: scale
+
     integer :: i, j, k, n, JsB
     real :: aMean, aMin, aMax
 
@@ -1167,7 +1362,7 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("v-point:",aMean*scale,aMin*scale,aMax*scale,mesg)
+    if (is_root_pe()) call chk_sum_msg("v-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
 end subroutine chksum_v_3d
@@ -1188,7 +1383,6 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
                                                 !! and list the root_PE value (default true)
 
   integer :: is, ie, i, bc, sum1, sum_bc
-  integer :: bitcount
   real :: sum
   real, allocatable :: sum_here(:)
   logical :: compare
@@ -1244,7 +1438,6 @@ subroutine chksum2d(array, mesg)
   real, dimension(:,:) :: array
   character(len=*) :: mesg
 
-  integer :: bitcount
   integer :: xs,xe,ys,ye,i,j,sum1,bc
   real :: sum
 
@@ -1273,7 +1466,6 @@ subroutine chksum3d(array, mesg)
   real, dimension(:,:,:) :: array
   character(len=*) :: mesg
 
-  integer :: bitcount
   integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
   real :: sum
 
@@ -1465,6 +1657,24 @@ subroutine chksum_error(signal, message)
   call MOM_error(signal, message)
 end subroutine chksum_error
 
+!> Does a bitcount of a number by first casting to an integer and then using BTEST
+!! to check bit by bit
+integer function bitcount( x )
+  real :: x !< Number to be bitcount
+
+  ! Local variables
+  integer(kind(x)) :: y !< Store the integer representation of the memory used by x
+  integer :: bit
+
+  bitcount = 0
+  y = transfer(x,y)
+
+  ! Fortran standard says that bit indexing start at 0
+  do bit = 0, bit_size(y)-1
+    if (BTEST(y,bit)) bitcount = bitcount+1
+  enddo
+
+end function bitcount
 ! =====================================================================
 
 end module MOM_checksums

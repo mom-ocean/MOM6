@@ -1002,7 +1002,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
     CS%id_tr(m) = register_diag_field('ocean_model_zold', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
-    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', name//'_xyave', CS%axesZ, Time,           &
+    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', trim(name)//'_xyave', CS%axesZ, Time, &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
@@ -1257,9 +1257,9 @@ subroutine MOM_diag_to_Z_end(CS)
   type(diag_to_Z_CS), pointer :: CS
   integer :: m
 
-  if (ASSOCIATED(CS%u_z))   deallocate(CS%u_z)
-  if (ASSOCIATED(CS%v_z))   deallocate(CS%v_z)
-  if (ASSOCIATED(CS%Z_int)) deallocate(CS%Z_int)
+  if (associated(CS%u_z))   deallocate(CS%u_z)
+  if (associated(CS%v_z))   deallocate(CS%v_z)
+  if (associated(CS%Z_int)) deallocate(CS%Z_int)
   do m=1,CS%num_tr_used ;   deallocate(CS%tr_z(m)%p) ; enddo
 
   deallocate(CS)

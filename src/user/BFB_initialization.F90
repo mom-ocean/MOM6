@@ -26,11 +26,8 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_verticalGrid, only : verticalGrid_type

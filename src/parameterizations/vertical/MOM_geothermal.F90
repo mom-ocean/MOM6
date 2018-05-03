@@ -37,7 +37,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : read_data, slasher
+use MOM_io, only : MOM_read_data, slasher
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -171,7 +171,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
-  if (.not.ASSOCIATED(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
+  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
 !  do i=is,ie ; do j=js,je
@@ -431,8 +431,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
                  "The name of the geothermal heating variable in \n"//&
                  "GEOTHERMAL_FILE.", default="geo_heat")
-    call read_data(filename, trim(geotherm_var), CS%geo_heat, &
-                   domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
     do j=jsd,jed ; do i=isd,ied
       CS%geo_heat(i,j) = (G%mask2dT(i,j) * scale) * CS%geo_heat(i,j)
     enddo ; enddo

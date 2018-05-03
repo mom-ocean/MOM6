@@ -22,14 +22,16 @@ implicit none ; private
 public P3M_interpolation
 public P3M_boundary_extrapolation
 
-real, parameter :: h_neglect = 1.E-30
+real, parameter :: hNeglect_dflt = 1.E-30
+real, parameter :: hNeglect_edge_dflt = 1.E-10
 
 contains
 
 !------------------------------------------------------------------------------
 ! p3m interpolation
 ! -----------------------------------------------------------------------------
-subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
+subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, &
+                              h_neglect )
 !------------------------------------------------------------------------------
 ! Cubic interpolation between edges.
 !
@@ -47,7 +49,9 @@ subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
-
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                          !! purpose of cell reconstructions
+                                          !! in the same units as h.
 
   ! Call the limiter for p3m, which takes care of everything from
   ! computing the coefficients of the cubic to monotonizing it.
@@ -55,7 +59,7 @@ subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   ! 'P3M_interpolation' first but we do that to provide an homogeneous
   ! interface.
 
-  call P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
+  call P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect )
 
 end subroutine P3M_interpolation
 
@@ -63,7 +67,7 @@ end subroutine P3M_interpolation
 !------------------------------------------------------------------------------
 ! p3m limiter
 ! -----------------------------------------------------------------------------
-subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
+subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect )
 !------------------------------------------------------------------------------
 ! The p3m limiter operates as follows:
 !
@@ -84,25 +88,29 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
-
-!  real, dimension(:,:), intent(inout) :: ppoly_coefficients
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+                                           !! the purpose of cell reconstructions
+                                           !! in the same units as h.
 
   ! Local variables
-  integer   :: k            ! loop index
-  integer   :: monotonic    ! boolean indicating whether the cubic is monotonic
-  real      :: u0_l, u0_r   ! edge values
-  real      :: u1_l, u1_r   ! edge slopes
-  real      :: u_l, u_c, u_r        ! left, center and right cell averages
-  real      :: h_l, h_c, h_r        ! left, center and right cell widths
-  real      :: sigma_l, sigma_c, sigma_r    ! left, center and right
-                                            ! van Leer slopes
-  real      :: slope        ! retained PLM slope
-  real      :: eps
+  integer :: k            ! loop index
+  integer :: monotonic    ! boolean indicating whether the cubic is monotonic
+  real    :: u0_l, u0_r   ! edge values
+  real    :: u1_l, u1_r   ! edge slopes
+  real    :: u_l, u_c, u_r        ! left, center and right cell averages
+  real    :: h_l, h_c, h_r        ! left, center and right cell widths
+  real    :: sigma_l, sigma_c, sigma_r    ! left, center and right
+                                          ! van Leer slopes
+  real    :: slope        ! retained PLM slope
+  real    :: eps
+  real    :: hNeglect
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   eps = 1e-10
 
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values( N, h, u, ppoly_E )
+  call bound_edge_values( N, h, u, ppoly_E, hNeglect )
 
   ! 2. Systematically average discontinuous edge values
   call average_discontinuous_edge_values( N, ppoly_E )
@@ -142,9 +150,9 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
     end if
 
     ! Compute limited slope
-    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect )
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + h_neglect )
-    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + h_neglect )
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
@@ -154,12 +162,12 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
 
     ! If the slopes are close to zero in machine precision and in absolute
     ! value, we set the slope to zero. This prevents asymmetric representation
-    ! near extrema.
-    if ( abs(u1_l*h_c) .LT. eps ) then
+    ! near extrema.  These expressions are both nondimensional.
+    if ( abs(u1_l*h_c) < eps ) then
       u1_l = 0.0
     end if
 
-    if ( abs(u1_r*h_c) .LT. eps ) then
+    if ( abs(u1_r*h_c) < eps ) then
       u1_r = 0.0
     end if
 
@@ -201,7 +209,8 @@ end subroutine P3M_limiter
 !------------------------------------------------------------------------------
 ! p3m boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
+subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, &
+                                       h_neglect, h_neglect_edge )
 !------------------------------------------------------------------------------
 ! The following explanations apply to the left boundary cell. The same
 ! reasoning holds for the right boundary cell.
@@ -222,25 +231,33 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                          !! purpose of cell reconstructions
+                                          !! in the same units as h.
+  real,       optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                          !! for the purpose of finding edge values
+                                          !! in the same units as h.
 
   ! Local variables
-  integer       :: i0, i1
-  integer       :: monotonic
-  real          :: u0, u1
-  real          :: h0, h1
-  real          :: b, c, d
-  real          :: u0_l, u0_r
-  real          :: u1_l, u1_r
-  real          :: eps
-  real          :: slope
+  integer :: i0, i1
+  integer :: monotonic
+  real    :: u0, u1
+  real    :: h0, h1
+  real    :: b, c, d
+  real    :: u0_l, u0_r
+  real    :: u1_l, u1_r
+  real    :: slope
+  real    :: hNeglect, hNeglect_edge
 
-  eps = 1e-10
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+  hNeglect_edge = hNeglect_edge_dflt
+  if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
 
   ! ----- Left boundary -----
   i0 = 1
   i1 = 2
-  h0 = h(i0) + eps
-  h1 = h(i1) + eps
+  h0 = h(i0) + hNeglect_edge
+  h1 = h(i1) + hNeglect_edge
   u0 = u(i0)
   u1 = u(i1)
 
@@ -250,7 +267,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   u1_r = b / h1     ! derivative evaluated at xi = 0.0, expressed w.r.t. x
 
   ! Limit the right slope by the PLM limited slope
-  slope = 2.0 * ( u1 - u0 ) / ( h0 + h_neglect )
+  slope = 2.0 * ( u1 - u0 ) / ( h0 + hNeglect )
   if ( abs(u1_r) .GT. abs(slope) ) then
     u1_r = slope
   end if
@@ -263,7 +280,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! edge value and slope by computing the parabola as determined by
   ! the right edge value and slope and the boundary cell average
   u0_l = 3.0 * u0 + 0.5 * h0*u1_r - 2.0 * u0_r
-  u1_l = ( - 6.0 * u0 - 2.0 * h0*u1_r + 6.0 * u0_r) / ( h0 + h_neglect )
+  u1_l = ( - 6.0 * u0 - 2.0 * h0*u1_r + 6.0 * u0_r) / ( h0 + hNeglect )
 
   ! Check whether the edge values are monotonic. For example, if the left edge
   ! value is larger than the right edge value while the slope is positive, the
@@ -297,8 +314,8 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! ----- Right boundary -----
   i0 = N-1
   i1 = N
-  h0 = h(i0) + eps
-  h1 = h(i1) + eps
+  h0 = h(i0) + hNeglect_edge
+  h1 = h(i1) + hNeglect_edge
   u0 = u(i0)
   u1 = u(i1)
 
@@ -307,10 +324,10 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   b = ppoly_coefficients(i0,2)
   c = ppoly_coefficients(i0,3)
   d = ppoly_coefficients(i0,4)
-  u1_l = (b + 2*c + 3*d) / ( h0 + h_neglect ) ! derivative evaluated at xi = 1.0
+  u1_l = (b + 2*c + 3*d) / ( h0 + hNeglect ) ! derivative evaluated at xi = 1.0
 
   ! Limit the left slope by the PLM limited slope
-  slope = 2.0 * ( u1 - u0 ) / ( h1 + h_neglect )
+  slope = 2.0 * ( u1 - u0 ) / ( h1 + hNeglect )
   if ( abs(u1_l) .GT. abs(slope) ) then
     u1_l = slope
   end if
@@ -323,7 +340,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! edge value and slope by computing the parabola as determined by
   ! the left edge value and slope and the boundary cell average
   u0_r = 3.0 * u1 - 0.5 * h1*u1_l - 2.0 * u0_l
-  u1_r = ( 6.0 * u1 - 2.0 * h1*u1_l - 6.0 * u0_l) / ( h1 + h_neglect )
+  u1_r = ( 6.0 * u1 - 2.0 * h1*u1_l - 6.0 * u0_l) / ( h1 + hNeglect )
 
   ! Check whether the edge values are monotonic. For example, if the right edge
   ! value is smaller than the left edge value while the slope is positive, the

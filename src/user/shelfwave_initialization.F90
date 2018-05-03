@@ -132,7 +132,7 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
   type(time_type),        intent(in) :: Time !< model time.
 
-  ! The following variables are used to set up the transport in the tidal_bay example.
+  ! The following variables are used to set up the transport in the shelfwave example.
   real :: my_amp, time_sec
   real :: cos_wt, cos_ky, sin_wt, sin_ky, omega, alpha
   real :: x, y, jj, kk, ll

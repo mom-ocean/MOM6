@@ -40,7 +40,6 @@ use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_continuity,            only : continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
-use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
 use MOM_hor_index,             only : hor_index_type
@@ -94,7 +93,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                   !! that were fed into the barotopic calculation, in m s-2.
 
   ! The following variables are only used with the split time stepping scheme.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta     !< Instantaneous free surface height, in m.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta     !< Instantaneous free surface height (in Boussinesq mode)
+                                                                   !! or column mass anomaly (in non-Boussinesq mode),
+                                                                   !! in units of H (m or kg m-2)
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av    !< layer x-velocity with vertical mean replaced by
                                                                    !! time-mean barotropic velocity over a baroclinic timestep (m s-1)
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av    !< layer y-velocity with vertical mean replaced by
@@ -202,7 +203,7 @@ contains
 !> RK2 splitting for time stepping MOM adiabatic dynamics
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                  Time_local, dt, forces, p_surf_begin, p_surf_end, &
-                 dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
+                 uh, vh, uhtr, vhtr, eta_av, &
                  G, GV, CS, calc_dtbt, VarMix, MEKE)
   type(ocean_grid_type),                     intent(inout) :: G             !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure
@@ -216,8 +217,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(mech_forcing),                        intent(in)    :: forces        !< A structure with the driving mechanical forces
   real, dimension(:,:),                      pointer       :: p_surf_begin  !< surf pressure at start of this dynamic time step (Pa)
   real, dimension(:,:),                      pointer       :: p_surf_end    !< surf pressure at end   of this dynamic time step (Pa)
-  real,                                      intent(in)    :: dt_since_flux !< elapsed time since fluxes were applied (sec)
-  real,                                      intent(in)    :: dt_therm      !< thermodynamic time step (sec)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh    !< zonal volume/mass transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh    !< merid volume/mass transport (m3/s or kg/s)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr          !< accumulatated zonal volume/mass transport since last tracer advection (m3 or kg)
@@ -325,10 +324,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (associated(CS%OBC)) then
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, CS%OBC, h)
 
-    do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       v_old_rad_OBC(i,J,k) = v_av(i,J,k)
     enddo ; enddo ; enddo
   endif
@@ -462,8 +461,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! Calculate the relative layer weights for determining barotropic quantities.
   if (.not.BT_cont_BT_thick) &
     call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
-  call bt_mass_source(h, eta, forces, .true., dt_therm, dt_since_flux, &
-                      G, GV, CS%barotropic_CSp)
+  call bt_mass_source(h, eta, .true., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (G%nonblocking_updates) &
@@ -568,10 +566,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
+  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
 
   if (associated(CS%OBC)) then
-    ! These should be done with a pass that excludes uh & vh.
-    call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
 
     if (CS%debug) &
       call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
@@ -580,9 +577,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
     if (CS%debug) &
       call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+
+    ! These should be done with a pass that excludes uh & vh.
+!   call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
   endif
 
-  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   endif
@@ -601,8 +600,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! hp can be changed if CS%begw /= 0.
   ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
-  call bt_mass_source(hp, eta_pred, forces, .false., dt_therm, &
-                      dt_since_flux+dt, G, GV, CS%barotropic_CSp)
+  call bt_mass_source(hp, eta_pred, .false., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (CS%begw /= 0.0) then
@@ -878,7 +876,11 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
 
-  vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+  if (GV%Boussinesq) then
+    vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+  else
+    vd = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
+  endif
   call register_restart_field(CS%eta, vd, .false., restart_CS)
 
   vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
@@ -912,7 +914,7 @@ end subroutine register_restarts_dyn_split_RK2
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
-                      visc, dirs, ntrunc)
+                      visc, dirs, ntrunc, calc_dtbt)
   type(ocean_grid_type),                     intent(inout) :: G           !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV          !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u           !< zonal velocity (m/s)
@@ -940,10 +942,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   type(directories),                         intent(in)    :: dirs        !< contains directory paths
   integer, target,                           intent(inout) :: ntrunc      !< A target for the variable that records the number of times
                                                                           !! the velocity is truncated (this should be 0).
+  logical,                                   intent(out)   :: calc_dtbt   !< If true, recalculate the barotropic time step
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
-  character(len=48) :: thickness_units, flux_units
+  character(len=48) :: thickness_units, flux_units, eta_rest_name
+  real :: H_convert
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
 
@@ -991,7 +995,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
                  "adjustment due to the change in the barotropic velocity \n"//&
                  "in the barotropic continuity equation.", default=.true.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_OBC", CS%debug_OBC, default=.false.)
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
@@ -1052,7 +1057,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   if (associated(OBC)) CS%OBC => OBC
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
-  if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
+  eta_rest_name = "sfc" ; if (.not.GV%Boussinesq) eta_rest_name = "p_bot"
+  if (.not. query_initialized(CS%eta, trim(eta_rest_name), restart_CS)) then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq
     ! approximation, eta is the free surface height anomaly, while without it
     ! eta is the mass of ocean per unit area.  eta always has the same
@@ -1069,7 +1075,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
   call barotropic_init(u, v, h, CS%eta, Time, G, GV, param_file, diag, &
-                       CS%barotropic_CSp, restart_CS, CS%BT_cont, CS%tides_CSp)
+                       CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
+                       CS%tides_CSp)
 
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
@@ -1101,10 +1108,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   call cpu_clock_end(id_clock_pass_init)
 
   flux_units = get_flux_units(GV)
+  H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true.)
+      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
+      conversion=H_convert)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true.)
+      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
+      conversion=H_convert)
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'm s-2')

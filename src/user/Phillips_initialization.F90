@@ -7,9 +7,6 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
@@ -35,7 +32,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h         !< The thickness that is being initialized, in m.
+                           intent(out) :: h         !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -102,9 +99,9 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
       eta1D(K) = eta_im(j,K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
         eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom_z
+        h(i,j,k) = GV%Angstrom
       else
-        h(i,j,k) = eta1D(K) - eta1D(K+1)
+        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo
