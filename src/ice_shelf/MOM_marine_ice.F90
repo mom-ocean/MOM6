@@ -21,7 +21,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public add_berg_flux_to_shelf, marine_ice_init
+public iceberg_forces, iceberg_fluxes, marine_ice_init
 
 !> Control structure for MOM_marine_ice
 type, public :: marine_ice_CS ; private
@@ -41,24 +41,19 @@ contains
 !> add_berg_flux_to_shelf adds rigidity and ice-area coverage due to icebergs
 !! to the forces type fields, and adds ice-areal coverage and modifies various
 !! thermodynamic fluxes due to the presence of icebergs.
-subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, sfc_state, &
+subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
                                   time_step, CS)
   type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
   type(mech_forcing),    intent(inout) :: forces  !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
-                                                  !! tracer and mass exchange forcing fields
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
   real,                  intent(in)    :: time_step   !< The coupling time step, in s.
   type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
 
-  real :: fraz      ! refreezing rate in kg m-2 s-1
-  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion, in kg J-1 s-1.
   real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
   !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
   !which can then be used to change the top of ocean boundary condition used in
   !the ocean model. This routine is taken from the add_shelf_flux subroutine
@@ -70,10 +65,6 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, sfc_state, &
 
   if (.not.(associated(forces%frac_shelf_u) .and. associated(forces%frac_shelf_v) .and. &
             associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) ) return
-
-  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
-            associated(fluxes%mass_berg) ) ) return
-  if (.not.(associated(fluxes%frac_shelf_h) .and. associated(fluxes%ustar_shelf)) ) return
 
   ! This section sets or augments the values of fields in forces.
   if (.not. use_ice_shelf) then
@@ -104,7 +95,36 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, sfc_state, &
   !### This halo update may be unnecessary. Test it.  -RWH
   call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
 
-  ! The remaining code sets or augments the values of fields in fluxes.
+end subroutine iceberg_forces
+
+!> iceberg_fluxes adds ice-area-coverage and modifies various
+!! thermodynamic fluxes due to the presence of icebergs.
+subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
+                          time_step, CS)
+  type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
+  type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
+                                                  !! tracer and mass exchange forcing fields
+  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
+  real,                  intent(in)    :: time_step   !< The coupling time step, in s.
+  type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
+
+  real :: fraz      ! refreezing rate in kg m-2 s-1
+  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion, in kg J-1 s-1.
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
+  !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
+  !which can then be used to change the top of ocean boundary condition used in
+  !the ocean model. This routine is taken from the add_shelf_flux subroutine
+  !within the ice shelf model.
+
+  if (.not.associated(CS)) return
+  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
+            associated(fluxes%mass_berg) ) ) return
+  if (.not.(associated(fluxes%frac_shelf_h) .and. associated(fluxes%ustar_shelf)) ) return
+
 
   if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
             associated(fluxes%mass_berg) ) ) return
@@ -148,7 +168,7 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, sfc_state, &
     enddo ; enddo
   endif
 
-end subroutine add_berg_flux_to_shelf
+end subroutine iceberg_fluxes
 
 !> Initialize control structure for MOM_marine_ice
 subroutine marine_ice_init(Time, G, param_file, diag, CS)

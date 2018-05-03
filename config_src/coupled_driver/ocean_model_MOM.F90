@@ -38,7 +38,7 @@ use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
-use MOM_marine_ice, only : add_berg_flux_to_shelf, marine_ice_init, marine_ice_CS
+use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
@@ -523,8 +523,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
     if (OS%icebergs_alter_ocean)  then
-      call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%fluxes, OS%use_ice_shelf, &
-                                  OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
@@ -546,8 +548,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
     if (OS%icebergs_alter_ocean)  then
-      call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf, &
-                                  OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
