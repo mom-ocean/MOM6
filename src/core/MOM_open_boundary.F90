@@ -699,7 +699,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "I=%,J=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
-  type(param_file_type), intent(in)  :: PF
+  type(param_file_type), intent(in)   :: PF  !< Parameter file handle
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
   integer :: j, a_loop
@@ -800,7 +800,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "J=%,I=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
-  type(param_file_type), intent(in)  :: PF
+  type(param_file_type),   intent(in) :: PF  !< Parameter file handle
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
   integer :: i, a_loop
@@ -990,13 +990,14 @@ end subroutine parse_segment_str
 !> Parse an OBC_SEGMENT_%%%_DATA string
  subroutine parse_segment_data_str(segment_str, var, value, filenam, fieldnam, fields, num_fields, debug )
    character(len=*), intent(in)             :: segment_str !< A string in form of "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
-   character(len=*), intent(in),  optional  :: var         !< The name of the variable for which parameters are needed
-   character(len=*), intent(out), optional  :: filenam     !< The name of the input file if using "file" method
-   character(len=*), intent(out), optional  :: fieldnam    !< The name of the variable in the input file if using "file" method
-   real,             intent(out), optional  :: value       !< A constant value if using the "value" method
-   character(len=*), dimension(MAX_OBC_FIELDS), intent(out), optional :: fields   !< List of fieldnames for each segment
-   integer, intent(out), optional           :: num_fields
-   logical, intent(in), optional            :: debug
+   character(len=*), optional, intent(in)   :: var         !< The name of the variable for which parameters are needed
+   character(len=*), optional, intent(out)  :: filenam     !< The name of the input file if using "file" method
+   character(len=*), optional, intent(out)  :: fieldnam    !< The name of the variable in the input file if using "file" method
+   real,             optional, intent(out)  :: value       !< A constant value if using the "value" method
+   character(len=*), dimension(MAX_OBC_FIELDS), &
+                     optional, intent(out)  :: fields      !< List of fieldnames for each segment
+   integer, optional, intent(out)           :: num_fields  !< The number of fields in the segment data
+   logical, optional, intent(in)            :: debug       !< If present and true, write verbose debugging messages
    ! Local variables
    character(len=128) :: word1, word2, word3, method
    integer :: lword, nfields, n, m, orient
@@ -1077,7 +1078,7 @@ end subroutine parse_segment_str
    character(len=*), intent(in)             :: segment_str !< A string in form of "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
    character(len=*), intent(in)             :: var         !< The name of the variable for which parameters are needed
    real,             intent(out)            :: param_value !< The value of the parameter
-   logical, intent(in), optional            :: debug
+   logical, optional, intent(in)            :: debug       !< If present and true, write verbose debugging messages
    ! Local variables
    character(len=128) :: word1, word2, word3, method
    integer :: lword, nfields, n, m, orient
@@ -2621,9 +2622,9 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                                       !! available subsequently to the tracer registry.
   type(param_file_type), intent(in)     :: param_file !< file to parse for  model parameter values
   type(OBC_segment_type), intent(inout) :: segment    !< current segment data structure
-  real, optional                        :: OBC_scalar !< If present, use scalar value for segment tracer
+  real, optional, intent(in)            :: OBC_scalar !< If present, use scalar value for segment tracer
                                                       !! inflow concentration.
-  logical, optional                     :: OBC_array  !< If true, use array values for segment tracer
+  logical, optional, intent(in)         :: OBC_array  !< If true, use array values for segment tracer
                                                       !! inflow concentration.
 
 
