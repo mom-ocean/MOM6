@@ -410,7 +410,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   character(4) :: stepnum
   character(2) :: procnum
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, parameter :: c2_3 = 2.0/3.0
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3, iters_vel_solve
   real, parameter :: rho_fw = 1000.0 ! fresh water density
@@ -863,10 +863,10 @@ end subroutine shelf_calc_flux
 
 !> Changes the thickness (mass) of the ice shelf based on sub-ice-shelf melting
 subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
-  type(ocean_grid_type),              intent(inout)    :: G
-  type(ice_shelf_CS),                 intent(inout)    :: CS
-  real,                               intent(in)  :: time_step
-  type(forcing),                      intent(inout) :: fluxes
+  type(ocean_grid_type), intent(inout)    :: G  !< The ocean's grid structure.
+  type(ice_shelf_CS),    intent(inout)    :: CS !< A pointer to the ice shelf control structure
+  real,                  intent(in)  :: time_step
+  type(forcing),         intent(inout) :: fluxes
 
   ! locals
   integer :: i, j
@@ -1166,7 +1166,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   type(ocean_grid_type), pointer    :: ocn_grid
   type(time_type),    intent(inout)   :: Time
-  type(ice_shelf_CS), pointer         :: CS
+  type(ice_shelf_CS), pointer         :: CS !< A pointer to the ice shelf control structure
   type(diag_ctrl), target, intent(in) :: diag
   type(forcing),      optional, intent(inout) :: fluxes
   type(mech_forcing), optional, intent(inout) :: forces
@@ -1954,10 +1954,10 @@ end subroutine initialize_ice_shelf
 !> Initializes shelf mass based on three options (file, zero and user)
 subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure.
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(ice_shelf_CS),    pointer    :: CS
-  logical, optional            :: new_sim
+  type(ice_shelf_CS),    pointer    :: CS !< A pointer to the ice shelf control structure
+  logical,     optional, intent(in) :: new_sim !< If present and false, this run is being restarted
 
   integer :: i, j, is, ie, js, je
   logical :: read_shelf_area, new_sim_2
@@ -1967,11 +1967,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
   character(len=40)  :: mdl = "MOM_ice_shelf"
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  if (.not. present(new_sim)) then
-    new_sim_2 = .true.
-  else
-    new_sim_2 = .false.
-  endif
+  new_sim_2 = .true. ; if (present(new_sim)) new_sim_2 = new_sim
 
   call get_param(param_file, mdl, "ICE_SHELF_CONFIG", config, &
                  "A string that specifies how the ice shelf is \n"//&
@@ -2043,20 +2039,14 @@ end subroutine initialize_shelf_mass
 
 !> Updates the ice shelf mass using data from a file.
 subroutine update_shelf_mass(G, CS, Time, fluxes)
-  type(ocean_grid_type), intent(inout) :: G
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ocean_grid_type), intent(inout) :: G   !< The ocean's grid structure.
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   type(time_type),            intent(in) :: Time
   type(forcing),       intent(inout) :: fluxes
 
   ! local variables
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  ! first, zero out fluxes applied during previous time step
-  do j=js,je; do i=is,ie
-
-
-  enddo; enddo
 
   call time_interp_external(CS%id_read_mass, Time, CS%mass_shelf)
 
@@ -2105,7 +2095,7 @@ subroutine update_shelf_mass(G, CS, Time, fluxes)
 end subroutine update_shelf_mass
 
 subroutine initialize_diagnostic_fields (CS, FE, Time)
-  type(ice_shelf_CS), pointer    :: CS
+  type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
   integer             :: FE
   type(time_type),            intent(in) :: Time
 
@@ -2179,7 +2169,7 @@ end subroutine ice_shelf_save_restart
 
 
 subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),   pointer    :: CS
+  type(ice_shelf_CS),   pointer    :: CS !< A pointer to the ice shelf control structure
   real,                 intent(in) :: time_step
   real, dimension(:,:), pointer    :: melt_rate
   type(time_type),      intent(in) :: Time
@@ -2296,7 +2286,7 @@ subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
 end subroutine ice_shelf_advect
 
 subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
-  type(ice_shelf_CS),                     pointer       :: CS
+  type(ice_shelf_CS),                     pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u, v
   integer,                                intent(in)    :: FE
   integer,                                intent(out)   :: iters
@@ -2654,7 +2644,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 end subroutine ice_shelf_solve_outer
 
 subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE, conv_flag, iters, time, Phi, Phisub)
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)  :: u, v
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(in)     :: taudx, taudy, H_node
   real, dimension(:,:),intent(in)                        :: float_cond
@@ -3100,7 +3090,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 end subroutine ice_shelf_solve_inner
 
 subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h0
   real, dimension(:,:), intent(inout) :: h_after_uflux
@@ -3339,7 +3329,7 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 end subroutine ice_shelf_advect_thickness_x
 
 subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_vflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h_after_uflux
   real, dimension(:,:), intent(inout) :: h_after_vflux
@@ -3552,7 +3542,7 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
 end subroutine ice_shelf_advect_thickness_y
 
 subroutine shelf_advance_front (CS, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:,:), intent(inout)  :: flux_enter
 
   ! in this subroutine we go through the computational cells only and, if they are empty or partial cells,
@@ -3745,7 +3735,7 @@ end subroutine shelf_advance_front
 
 !> Apply a very simple calving law using a minimum thickness rule
 subroutine ice_shelf_min_thickness_calve (CS, h_shelf, area_shelf_h,hmask)
-  type(ice_shelf_CS),    pointer        :: CS
+  type(ice_shelf_CS),    pointer        :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(inout)   :: h_shelf, area_shelf_h, hmask
   type(ocean_grid_type), pointer :: G
   integer                        :: i,j
@@ -3767,7 +3757,7 @@ subroutine ice_shelf_min_thickness_calve (CS, h_shelf, area_shelf_h,hmask)
 end subroutine ice_shelf_min_thickness_calve
 
 subroutine calve_to_mask (CS, h_shelf, area_shelf_h, hmask, calve_mask)
-  type(ice_shelf_CS), pointer       :: CS
+  type(ice_shelf_CS), pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(inout)   :: h_shelf, area_shelf_h, hmask, calve_mask
 
   type(ocean_grid_type), pointer :: G
@@ -3790,7 +3780,7 @@ subroutine calve_to_mask (CS, h_shelf, area_shelf_h, hmask, calve_mask)
 end subroutine calve_to_mask
 
 subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
-  type(ice_shelf_CS),         pointer   :: CS
+  type(ice_shelf_CS),         pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(in)    :: OD
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)    :: TAUD_X, TAUD_Y
   integer, intent(in)            :: FE
@@ -4030,9 +4020,9 @@ end subroutine calc_shelf_driving_stress
 
 subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
   type(time_type),       intent(in)    :: Time
-  type(ice_shelf_CS),    pointer       :: CS
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
   real, intent(in)               :: input_flux, input_thick
-  logical, optional               :: new_sim
+  logical, optional, intent(in) :: new_sim !< If present and false, this run is being restarted
 
 ! this will be a per-setup function. the boundary values of thickness and velocity
 ! (and possibly other variables) will be updated in this function
@@ -4504,7 +4494,7 @@ end subroutine CG_action_subgrid_basal_bilinear
 
 subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
 
-  type(ice_shelf_CS),    pointer       :: CS
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension (:,:), intent(inout) :: u_diagonal, v_diagonal
 
 ! returns the diagonal entries of the matrix for a Jacobi preconditioning
@@ -4664,7 +4654,7 @@ end subroutine matrix_diagonal_triangle
 
 subroutine matrix_diagonal_bilinear(CS, float_cond, H_node, dens_ratio, Phisub, u_diagonal, v_diagonal)
 
-  type(ice_shelf_CS),    pointer       :: CS
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(in) :: H_node
   real                                :: dens_ratio
   real, dimension (:,:), intent(in) :: float_cond
@@ -4845,7 +4835,7 @@ end subroutine CG_diagonal_subgrid_basal_bilinear
 subroutine apply_boundary_values_triangle (CS, time, u_boundary_contr, v_boundary_contr)
 
   type(time_type),       intent(in)    :: Time
-  type(ice_shelf_CS),    pointer       :: CS
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension (:,:), intent(inout) :: u_boundary_contr, v_boundary_contr
 
 ! this will be a per-setup function. the boundary values of thickness and velocity
@@ -5023,7 +5013,7 @@ subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond,
 
   type(time_type),       intent(in)    :: Time
   real, dimension (:,:,:,:,:,:),pointer:: Phisub
-  type(ice_shelf_CS),    pointer       :: CS
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: H_node
   real, dimension (:,:), intent (in)   :: float_cond
   real                                 :: dens_ratio
@@ -5199,7 +5189,7 @@ subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond,
 end subroutine apply_boundary_values_bilinear
 
 subroutine calc_shelf_visc_triangular (CS,u,v)
-  type(ice_shelf_CS),         pointer   :: CS
+  type(ice_shelf_CS),         pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(inout)    :: u, v
 
 ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for triangle FEM solve so there is
@@ -5282,7 +5272,7 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
 end subroutine calc_shelf_visc_triangular
 
 subroutine calc_shelf_visc_bilinear (CS, u, v)
-  type(ice_shelf_CS),         pointer   :: CS
+  type(ice_shelf_CS),         pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)    :: u, v
 
 ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for triangle FEM solve so there is
@@ -5345,7 +5335,7 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
 end subroutine calc_shelf_visc_bilinear
 
 subroutine update_OD_ffrac (CS, ocean_mass, counter, nstep_velocity, time_step, velocity_update_time_step)
-  type(ice_shelf_CS),         pointer   :: CS
+  type(ice_shelf_CS), pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(CS%grid%isd:,CS%grid%jsd:) :: ocean_mass
   integer,intent(in)            :: counter
   integer,intent(in)            :: nstep_velocity
@@ -5396,7 +5386,7 @@ subroutine update_OD_ffrac (CS, ocean_mass, counter, nstep_velocity, time_step, 
 end subroutine update_OD_ffrac
 
 subroutine update_OD_ffrac_uncoupled (CS)
-  type(ice_shelf_CS), pointer    :: CS
+  type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
 
   type(ocean_grid_type), pointer :: G
   integer             :: i, j, iters, isd, ied, jsd, jed
@@ -5567,7 +5557,7 @@ end subroutine bilinear_shape_functions_subgrid
 
 
 subroutine update_velocity_masks (CS)
-  type(ice_shelf_CS),    pointer    :: CS
+  type(ice_shelf_CS),    pointer    :: CS !< A pointer to the ice shelf control structure
 
   ! sets masks for velocity solve
   ! ignores the fact that their might be ice-free cells - this only considers the computational boundary
@@ -5576,7 +5566,7 @@ subroutine update_velocity_masks (CS)
 
   integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, k
   integer :: i_off, j_off
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, dimension(:,:), pointer  :: umask, vmask, u_face_mask, v_face_mask, hmask, u_face_mask_boundary, v_face_mask_boundary
 
   G => CS%grid
@@ -5729,11 +5719,12 @@ end subroutine update_velocity_masks
 
 
 subroutine interpolate_H_to_B (CS, h_shelf, hmask, H_node)
-  type(ice_shelf_CS), pointer                            :: CS
-  real, dimension (:,:), intent(in)                      :: h_shelf, hmask
-  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: H_node
+  type(ice_shelf_CS),   pointer       :: CS !< A pointer to the ice shelf control structure
+  real, dimension(:,:), intent(in)    :: h_shelf, hmask
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), &
+                        intent(inout) :: H_node
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   integer                        :: i, j, isc, iec, jsc, jec, num_h, k, l
   real                           :: summ
 
@@ -5769,7 +5760,7 @@ end subroutine interpolate_H_to_B
 
 !> Deallocates all memory associated with this module
 subroutine ice_shelf_end(CS)
-  type(ice_shelf_CS), pointer   :: CS
+  type(ice_shelf_CS), pointer   :: CS !< A pointer to the ice shelf control structure
 
   if (.not.associated(CS)) return
 
@@ -5887,13 +5878,13 @@ end subroutine savearray2
 
 
 subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
-  type(ice_shelf_CS), pointer    :: CS
+  type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
   real,intent(in)      :: time_step
   integer, intent(inout)      :: n
   type(time_type)      :: Time
   real,optional,intent(in)   :: min_time_step_in
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   integer          :: is, iec, js, jec, i, j, ki, kj, iters
   real             :: ratio, min_ratio, time_step_remain, local_u_max, &
                local_v_max, time_step_int, min_time_step,spy,dumtimeprint
@@ -6021,7 +6012,7 @@ end subroutine solo_time_step
 
 !!! OVS !!!
 subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),   pointer    :: CS
+  type(ice_shelf_CS),   pointer    :: CS !< A pointer to the ice shelf control structure
   real,                 intent(in) :: time_step
   real, dimension(:,:), pointer    :: melt_rate
   type(time_type),      intent(in) :: Time
@@ -6063,7 +6054,7 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   !   o--- (3) ---o
   !
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, dimension(size(CS%h_shelf,1),size(CS%h_shelf,2))   :: th_after_uflux, th_after_vflux, TH
   real, dimension(size(CS%h_shelf,1),size(CS%h_shelf,2),4) :: flux_enter
   integer                           :: isd, ied, jsd, jed, i, j, isc, iec, jsc, jec
@@ -6172,7 +6163,7 @@ end subroutine ice_shelf_temp
 
 
 subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h0
   real, dimension(:,:), intent(inout) :: h_after_uflux
@@ -6199,7 +6190,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
   integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
   integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, dimension(-2:2) :: stencil
   real, dimension(:,:), pointer  :: hmask, u_face_mask, u_flux_boundary_values,u_boundary_values,t_boundary
   real :: u_face, &  ! positive if out
@@ -6425,7 +6416,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 end subroutine ice_shelf_advect_temp_x
 
 subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h_after_uflux
   real, dimension(:,:), intent(inout) :: h_after_vflux
@@ -6452,7 +6443,7 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
   integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, dimension(-2:2) :: stencil
   real, dimension(:,:), pointer  :: hmask, v_face_mask, v_flux_boundary_values,t_boundary,v_boundary_values
   real :: v_face, &  ! positive if out
