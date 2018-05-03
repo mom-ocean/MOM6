@@ -266,8 +266,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                                                    !! diagnostics will be written. The default
                                                    !! is .true.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(out)   :: dT_expected, dS_expected
-  type(wave_parameters_CS), pointer, optional :: Waves !<Wave CS
+                 optional, intent(out)   :: dT_expected !< The values of temperature change that
+                                                   !! should be expected when the returned
+                                                   !! diffusivities are applied, in K.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(out)   :: dS_expected !< The values of salinity change that
+                                                   !! should be expected when the returned
+                                                   !! diffusivities are applied, in psu.
+  type(wave_parameters_CS), &
+                 optional, pointer       :: Waves  !< Wave CS
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
