@@ -1675,7 +1675,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   type(cpl_indices),      intent(inout) :: ind !< Structure with MCT attribute vectors and indices
   logical,                intent(in)    :: sw_decomp !< controls if shortwave is
                                                      !!decomposed into four components
-  real(kind=8),           intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  real(kind=8), optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
 
   ! local variables
   type(time_type) :: Master_time !< This allows step_MOM to temporarily change
@@ -1812,21 +1812,21 @@ end subroutine update_ocean_model
 !! the future.
 subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
                              c1, c2, c3, c4, restore_salt, restore_temp)
-  type(mech_forcing),         intent(inout)        :: forces !<  Driving mechanical forces
-  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes
-  type(time_type),            intent(in)           :: Time !< Model time
-  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid
-  type(surface_forcing_CS),   pointer              :: CS !< control structure returned by
-                                                   !! a previous call to surface_forcing_init
-  type(surface),              intent(in)           :: state !< control structure to ocean
-                                                   !! surface state fields.
-  real(kind=8),               intent(in)           :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
-  type(cpl_indices),          intent(inout)        :: ind !< Structure with MCT attribute vectors and indices
-  logical,                    intent(in)           :: sw_decomp !< controls if shortwave is
-                                                   !!decomposed into four components
-  real(kind=8),               intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-  logical, optional,          intent(in)            :: restore_salt, restore_temp !< Controls if salt and temp are
-                                                   !! restored
+  type(mech_forcing),         intent(inout) :: forces !<  Driving mechanical forces
+  type(forcing),              intent(inout) :: fluxes !< Surface fluxes
+  type(time_type),            intent(in)    :: Time !< Model time
+  type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid
+  type(surface_forcing_CS),   pointer       :: CS !< control structure returned by
+                                            !! a previous call to surface_forcing_init
+  type(surface),              intent(in)    :: state !< control structure to ocean
+                                            !! surface state fields.
+  real(kind=8),               intent(in)    :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
+  type(cpl_indices),          intent(inout) :: ind !< Structure with MCT attribute vectors and indices
+  logical,                    intent(in)    :: sw_decomp !< controls if shortwave is
+                                            !!decomposed into four components
+  real(kind=8),     optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  logical, optional,          intent(in)    :: restore_salt, restore_temp !< Controls if salt and temp are
+                                            !! restored
 
   ! local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &

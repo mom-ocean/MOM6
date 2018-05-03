@@ -685,9 +685,9 @@ end subroutine update_ocean_model
 ! </DESCRIPTION>
 !
 subroutine ocean_model_restart(OS, timestamp)
-  type(ocean_state_type),        pointer :: OS !< A pointer to the structure containing the
+  type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
                                                !! internal ocean state being saved to a restart file
-  character(len=*), intent(in), optional :: timestamp !< An optional timestamp string that should be
+  character(len=*), optional, intent(in) :: timestamp !< An optional timestamp string that should be
                                                !! prepended to the file name. (Currently this is unused.)
 
   if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
@@ -800,10 +800,11 @@ end subroutine ocean_model_save_restart
 
 subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
                                         gas_fields_ocn)
-  type(domain2D), intent(in)             :: input_domain
+  type(domain2D),          intent(in)    :: input_domain
   type(ocean_public_type), intent(inout) :: Ocean_sfc
-  type(diag_ctrl), intent(in)            :: diag
-  logical, intent(in), optional          :: maskmap(:,:)
+  type(diag_ctrl),         intent(in)    :: diag
+  logical, dimension(:,:), &
+                 optional, intent(in)    :: maskmap
   type(coupler_1d_bc_type), &
                  optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate

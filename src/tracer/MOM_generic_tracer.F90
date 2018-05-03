@@ -775,7 +775,7 @@ contains
 
 !ALL PE subroutine on Ocean!  Due to otpm design the fluxes should be initialized like this on ALL PE's!
   subroutine MOM_generic_flux_init(verbosity)
-    integer, intent(in), optional :: verbosity  !< A 0-9 integer indicating a level of verbosity.
+    integer, optional, intent(in) :: verbosity  !< A 0-9 integer indicating a level of verbosity.
 
     integer :: ind
     character(len=fm_string_len)   :: g_tracer_name,longname, package,units,old_package,file_in,file_out

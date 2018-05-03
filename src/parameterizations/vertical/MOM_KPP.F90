@@ -169,8 +169,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
   type(time_type),         intent(in)    :: Time      !< Time
   type(KPP_CS),            pointer       :: CS        !< Control structure
-  logical, optional,       intent(out)   :: passive   !< Copy of %passiveMode
-  type(wave_parameters_CS), pointer, optional :: Waves !<Wave CS
+  logical,       optional, intent(out)   :: passive   !< Copy of %passiveMode
+  type(wave_parameters_CS), optional, pointer :: Waves !< Wave CS
 
   ! Local variables
 #include "version_variable.h"
@@ -533,7 +533,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   type(KPP_CS),                           pointer       :: CS             !< Control structure
   type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  type(wave_parameters_CS), pointer, optional           :: Waves          !<Wave CS
+  type(wave_parameters_CS),     optional, pointer       :: Waves          !< Wave CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp           !< potential/cons temp (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt           !< Salinity (ppt)
