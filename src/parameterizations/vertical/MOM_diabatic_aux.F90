@@ -123,7 +123,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(diabatic_aux_CS),                 intent(in)    :: CS
-  real, dimension(SZI_(G),SZJ_(G)), intent(in), optional :: p_surf
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: p_surf
 
 !   Frazil formation keeps the temperature above the freezing point.
 ! This subroutine warms any water that is colder than the (currently
@@ -587,7 +587,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out) :: u_h, v_h
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in), optional  :: ea, eb
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(in)  :: ea, eb
 !   This subroutine calculates u_h and v_h (velocities at thickness
 ! points), optionally using the entrainments (in m) passed in as arguments.
 

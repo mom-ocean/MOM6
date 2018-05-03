@@ -227,8 +227,8 @@ integer, intent(in)                          :: nkml,nkbl
 real, intent(in)                             :: land_fill
 real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet
 real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs
-logical, intent(in), optional                :: debug
-integer, intent(in), optional                :: i_debug, j_debug
+logical, optional, intent(in)                :: debug
+integer, optional, intent(in)                :: i_debug, j_debug
 
 real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr
 real, dimension(size(tr_in,3)) :: tr_1d
@@ -397,7 +397,7 @@ function bisect_fast(a, x, lo, hi) result(bi_r)
 
 real, dimension(:,:), intent(in) :: a
 real, dimension(:), intent(in) :: x
-integer, dimension(size(a,1)), intent(in), optional  :: lo,hi
+integer, dimension(size(a,1)), optional, intent(in) :: lo,hi
 integer, dimension(size(a,1),size(x,1))  :: bi_r
 
 integer :: mid,num_x,num_a,i
@@ -494,7 +494,7 @@ integer, intent(in) :: niter
 integer, intent(in) :: k_start
 real, intent(in) :: land_fill
 real, dimension(:,:,:), intent(in) :: h
-type(eos_type), pointer, intent(in) :: eos
+type(eos_type), pointer :: eos
 
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
@@ -689,7 +689,8 @@ function find_limited_slope(val, e, k) result(slope)
 real, dimension(:), intent(in) :: val
 real, dimension(:), intent(in) :: e
 integer, intent(in) :: k
-real :: slope,amx,bmx,amn,bmn,cmn,dmn
+real :: slope
+real :: amx,bmx,amn,bmn,cmn,dmn
 
 real :: d1, d2
 
@@ -719,8 +720,6 @@ return
 
 end function find_limited_slope
 
-
-
 function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
 !  (in)      rho : potential density in z-space (kg m-3)
 !  (in)      zin : levels (m)
@@ -731,15 +730,20 @@ function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
 !  (in)     nkbl : number of buffer layer pieces
 !  (in)      hml : mixed layer depth
 
-real, dimension(:,:,:), intent(in) :: rho
-real, dimension(size(rho,3)), intent(in) :: zin
+real, dimension(:,:,:), &
+                    intent(in) :: rho
+real, dimension(size(rho,3)), &
+                    intent(in) :: zin
 real, dimension(:), intent(in) :: Rb
-real, dimension(size(rho,1),size(rho,2)), intent(in) :: depth
-real, dimension(size(rho,1),size(rho,2)), optional, intent(in) ::nlevs
-logical, optional, intent(in) :: debug
+real, dimension(size(rho,1),size(rho,2)), &
+                    intent(in) :: depth
+real, dimension(size(rho,1),size(rho,2)), &
+          optional, intent(in) ::nlevs
+logical,  optional, intent(in) :: debug
+integer,  optional, intent(in) :: nkml
+integer,  optional, intent(in) :: nkbl
+real,     optional, intent(in) :: hml
 real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi
-integer, intent(in), optional :: nkml, nkbl
-real, intent(in), optional    :: hml
 
 real, dimension(size(rho,1),size(rho,3)) :: rho_
 real, dimension(size(rho,1)) :: depth_
@@ -758,8 +762,7 @@ real, parameter :: zoff=0.999
 
 nlay=size(Rb)-1
 
-zi=0.0
-
+zi(:,:,:) = 0.0
 
 if (PRESENT(debug)) debug_=debug
 
@@ -949,8 +952,6 @@ do n=1,niter
   mp = fill_boundaries(zi,cyclic_x,tripolar_n)
 end do
 
-
-
 return
 
 end subroutine smooth_heights
@@ -1009,7 +1010,5 @@ endif
 return
 
 end function fill_boundaries_real
-
-
 
 end module midas_vertmap

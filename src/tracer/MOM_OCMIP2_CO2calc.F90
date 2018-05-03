@@ -127,7 +127,7 @@ real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
 real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
       intent(inout)         :: htotal
 real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
-      intent(out), optional :: alpha, &
+      optional, intent(out) :: alpha, &
                                pCO2surf, &
                                co2star, &
                                co3_ion

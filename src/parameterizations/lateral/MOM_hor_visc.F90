@@ -237,7 +237,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                                        !! specify the spatially variable viscosities
   type(hor_visc_CS),             pointer     :: CS     !< Pontrol structure returned by a previous
                                                        !! call to hor_visc_init.
-  type(ocean_OBC_type), pointer, optional    :: OBC    !< Pointer to an open boundary condition type
+  type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)

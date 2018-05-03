@@ -294,7 +294,7 @@ subroutine coupler_type_copy_1d_2d(var_in, var_out, is, ie, js, je,     &
   character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
        '==>Error from coupler_types_mod (coupler_type_copy_1d_2d):'
@@ -343,7 +343,7 @@ subroutine coupler_type_copy_1d_3d(var_in, var_out, is, ie, js, je, kd, &
   character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
      '==>Error from coupler_types_mod (coupler_type_copy_1d_3d):'
@@ -386,7 +386,7 @@ subroutine coupler_type_copy_2d_2d(var_in, var_out, is, ie, js, je,     &
   character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
        '==>Error from coupler_types_mod (coupler_type_copy_2d_2d):'
@@ -435,7 +435,7 @@ subroutine coupler_type_copy_2d_3d(var_in, var_out, is, ie, js, je, kd, &
   character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
      '==>Error from coupler_types_mod (coupler_type_copy_2d_3d):'
@@ -478,7 +478,7 @@ subroutine coupler_type_copy_3d_2d(var_in, var_out, is, ie, js, je,     &
   character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
        '==>Error from coupler_types_mod (coupler_type_copy_3d_2d):'
@@ -527,7 +527,7 @@ subroutine coupler_type_copy_3d_3d(var_in, var_out, is, ie, js, je, kd, &
   character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
      '==>Error from coupler_types_mod (coupler_type_copy_3d_3d):'

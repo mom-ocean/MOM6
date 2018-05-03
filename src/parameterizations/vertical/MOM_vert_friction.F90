@@ -156,11 +156,12 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                                                    !! equations for diagnostics
   type(cont_diag_ptrs),  intent(inout)   :: CDp    !< Continuity equation terms
   type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
-  !> Zonal bottom stress from ocean to rock in Pa
-  real, optional, intent(out), dimension(SZIB_(G),SZJ_(G)) :: taux_bot
-  !> Meridional bottom stress from ocean to rock in Pa
-  real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot
-  type(wave_parameters_CS), pointer, optional :: Waves !< Container for wave/Stokes information
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                   optional, intent(out) :: taux_bot !< Zonal bottom stress from ocean to rock in Pa
+  real, dimension(SZI_(G),SZJB_(G)), &
+                   optional, intent(out) :: tauy_bot !< Meridional bottom stress from ocean to rock in Pa
+  type(wave_parameters_CS), &
+                   optional, pointer     :: Waves !< Container for wave/Stokes information
 
   ! Fields from forces used in this subroutine:
   !   taux: Zonal wind stress in Pa.
