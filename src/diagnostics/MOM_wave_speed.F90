@@ -25,9 +25,9 @@ type, public :: wave_speed_CS ; private
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
-                                       !! monotonic for the purposes of calculating the equivalent barotropic wave speed.
-                                       !! This parameter controls the default behavior of wave_speed() which
-                                       !! can be overridden by optional arguments.
+                                       !! monotonic for the purposes of calculating the equivalent barotropic
+                                       !! wave speed. This parameter controls the default behavior of
+                                       !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
                                        !! calculating the equivalent barotropic wave speed. (m)
                                        !! This parameter controls the default behavior of wave_speed() which
@@ -42,23 +42,25 @@ contains
 !> Calculates the wave speed of the first baroclinic mode.
 subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
                       mono_N2_column_fraction, mono_N2_depth, modal_structure)
-  type(ocean_grid_type),                    intent(in)  :: G  !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thickness in units of H (m or kg/m2)
-  type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1 !< First mode internal wave speed (m/s)
-  type(wave_speed_CS),                      pointer     :: CS !< Control structure for MOM_wave_speed
-  logical, optional,                        intent(in)  :: full_halos !< If true, do the calculation
-                                                  !! over the entire computational domain.
-  logical, optional,                        intent(in)  :: use_ebt_mode !< If true, use the equivalent
-                                                  !! barotropic mode instead of the first baroclinic mode.
-  real, optional,                           intent(in)  :: mono_N2_column_fraction !< The lower fraction
-                                                  !! of water column over which N2 is limited as monotonic
-                                                  !! for the purposes of calculating vertical modal structure.
-  real, optional,                           intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
-                                                  !! monotonic for the purposes of calculating vertical modal structure.
+  type(ocean_grid_type),            intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-        optional,                           intent(out) :: modal_structure !< Normalized model structure (non-dim)
+                                    intent(in)  :: h  !< Layer thickness in units of H (m or kg/m2)
+  type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed (m/s)
+  type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
+  logical, optional,                intent(in)  :: full_halos !< If true, do the calculation
+                                          !! over the entire computational domain.
+  logical, optional,                intent(in)  :: use_ebt_mode !< If true, use the equivalent
+                                          !! barotropic mode instead of the first baroclinic mode.
+  real, optional,                   intent(in)  :: mono_N2_column_fraction !< The lower fraction
+                                          !! of water column over which N2 is limited as monotonic
+                                          !! for the purposes of calculating vertical modal structure.
+  real, optional,                   intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
+                                          !! monotonic for the purposes of calculating vertical
+                                          !! modal structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+        optional,                   intent(out) :: modal_structure !< Normalized model structure (non-dim)
 
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
@@ -354,7 +356,8 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           do itt=1,max_itt
             lam_it(itt) = lam
             if (l_use_ebt_mode) then
-              ! This initialization of det,ddet imply Neumann boundary conditions so that first 3 rows of the matrix are
+              ! This initialization of det,ddet imply Neumann boundary conditions so that first 3 rows
+              ! of the matrix are
               !    /   b(1)-lam  igl(1)      0        0     0  ...  \
               !    |  igu(2)    b(2)-lam   igl(2)     0     0  ...  |
               !    |    0        igu(3)   b(3)-lam  igl(3)  0  ...  |
@@ -373,7 +376,8 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
               !    |    ...  0  igu(kc-1)  b(kc-1)-lam  igl(kc-1)  |
               !    \    ...  0     0        igu(kc)     b(kc)-lam  /
             else
-              ! This initialization of det,ddet imply Dirichlet boundary conditions so that first 3 rows of the matrix are
+              ! This initialization of det,ddet imply Dirichlet boundary conditions so that first 3 rows
+              ! of the matrix are
               !    /  b(2)-lam  igl(2)      0       0     0  ...  |
               !    |  igu(3)  b(3)-lam   igl(3)     0     0  ...  |
               !    |    0       igu43)  b(4)-lam  igl(4)  0  ...  |
@@ -1088,10 +1092,12 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   type(wave_speed_CS), pointer :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
-  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over which N2 is limited
-                                     !! as monotonic for the purposes of calculating vertical modal structure.
+  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
+                                     !! which N2 is limited as monotonic for the purposes of
+                                     !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
-                                      !! as monotonic for the purposes of calculating vertical modal structure.
+                                     !! as monotonic for the purposes of calculating the
+                                     !! vertical modal structure.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
@@ -1116,10 +1122,12 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   type(wave_speed_CS), pointer  :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                       !! barotropic mode instead of the first baroclinic mode.
-  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over which N2 is limited
-                                      !! as monotonic for the purposes of calculating vertical modal structure.
+  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
+                                      !! which N2 is limited as monotonic for the purposes of
+                                      !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
-                                      !! as monotonic for the purposes of calculating vertical modal structure.
+                                      !! as monotonic for the purposes of calculating the
+                                      !! vertical modal structure.
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")

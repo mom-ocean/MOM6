@@ -99,13 +99,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
                  optional, pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(in)    :: visc_rem_u !< The fraction of zonal momentum originally
-                             !! in a layer that remains after a time-step of viscosity, and the 
+                             !! in a layer that remains after a time-step of viscosity, and the
                              !! fraction of a time-step's worth of a barotropic acceleration that
                              !! a layer experiences after viscosity is applied.
                              !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(in)    :: visc_rem_v !< The fraction of meridional momentum originally
-                             !! in a layer that remains after a time-step of viscosity, and the 
+                             !! in a layer that remains after a time-step of viscosity, and the
                              !! fraction of a time-step's worth of a barotropic acceleration that
                              !! a layer experiences after viscosity is applied.
                              !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).

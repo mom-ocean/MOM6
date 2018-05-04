@@ -1125,12 +1125,12 @@ end subroutine DHH85_mid
 ! Do not use.
 subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
   ! Arguments
-  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
-  type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  real, intent(in)                                         :: Dt             !< Time step of MOM6 [s] for GOTM turbulence solver
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: u              !< Velocity i-component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: v              !< Velocity j-component (m/s)
+  type(ocean_grid_type),                  intent(in)    :: G      !< Ocean grid
+  type(verticalGrid_type),                intent(in)    :: GV     !< Ocean vertical grid
+  real, intent(in)                                      :: Dt     !< Time step of MOM6 [s] for GOTM turbulence solver
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer/level thicknesses (units of H)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: u      !< Velocity i-component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: v      !< Velocity j-component (m/s)
   type(Wave_parameters_CS), pointer                         :: Waves  !< Surface wave related control structure.
   ! Local variables
   REAL :: dTauUp, dTauDn, DVel
@@ -1200,13 +1200,13 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
   ! Work towards an explicit Coriolis Stokes method.
   !  perhaps not the best way forward, not accessed in the code.
   ! Arguments
-  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
-  type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  real, intent(in)                                         :: Dt             !< Time step of MOM6 [s] for GOTM turbulence solver
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: u              !< Velocity i-component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: v              !< Velocity j-component (m/s)
-  type(Wave_parameters_CS), pointer                         :: Waves  !< Surface wave related control structure.
+  type(ocean_grid_type),                  intent(in)    :: G    !< Ocean grid
+  type(verticalGrid_type),                intent(in)    :: GV   !< Ocean vertical grid
+  real, intent(in)                                      :: Dt   !< Time step of MOM6 [s] for GOTM turbulence solver
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer/level thicknesses (units of H)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< Velocity i-component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< Velocity j-component (m/s)
+  type(Wave_parameters_CS), pointer                        :: Waves  !< Surface wave related control structure.
 
   ! Local variables
   REAL :: DVel
@@ -1215,7 +1215,8 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
   do k = 1, G%ke
     do j = G%jscB, G%jecB
       do i = G%iscB, G%iecB
-        DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) +  0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
+               0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
         u(i,j,k) = u(i,j,k)+DVEL*DT
       enddo
     enddo
@@ -1224,7 +1225,8 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
   do k = 1, G%ke
     do j = G%jscB, G%jecB
       do i = G%iscB, G%iecB
-        DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) +  0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
+               0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
         v(i,j,k) = v(i,j,k)-DVEL*DT
       enddo
     enddo

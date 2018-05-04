@@ -64,7 +64,7 @@ end subroutine init_coord_adapt
 
 !> Clean up the coordinate control structure
 subroutine end_coord_adapt(CS)
-  type(adapt_CS), pointer :: CS
+  type(adapt_CS), pointer :: CS  !< The control structure for this module
 
   ! nothing to do
   if (.not. associated(CS)) return
@@ -74,7 +74,7 @@ end subroutine end_coord_adapt
 
 subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoomCoeff, &
      adaptBuoyCoeff, adaptDrho0, adaptDoMin)
-  type(adapt_CS),    pointer    :: CS
+  type(adapt_CS),    pointer    :: CS  !< The control structure for this module
   real, optional,    intent(in) :: adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoomCoeff
   real, optional,    intent(in) :: adaptBuoyCoeff, adaptDrho0
   logical, optional, intent(in) :: adaptDoMin
@@ -91,14 +91,17 @@ subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoom
 end subroutine set_adapt_params
 
 subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
-  type(adapt_CS),                              intent(in)    :: CS
+  type(adapt_CS),                              intent(in)    :: CS   !< The control structure for this module
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
-  integer,                                     intent(in)    :: i, j
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt, tInt, sInt
+  type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
+                                                                     !! thermodynamic variables
+  integer,                                     intent(in)    :: i, j !< The indices of the column to work on
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt !< Interface heights, in H (m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: tInt !< Interface temperatures, in C
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: sInt !< Interface salinities, in psu
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext ! updated interface positions
+  real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext !< updated interface positions
 
   ! Local variables
   integer :: k, nz

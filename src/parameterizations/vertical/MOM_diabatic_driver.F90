@@ -1681,15 +1681,19 @@ end subroutine diagnose_diabatic_diff_tendency
 !! in which case we distribute the flux into k > 1 layers.
 subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, &
                                               dt, G, GV, CS)
-  type(ocean_grid_type),                    intent(in) :: G        !< ocean grid structure
-  type(verticalGrid_type),                  intent(in) :: GV       !< ocean vertical grid structure
-  type(thermo_var_ptrs),                    intent(in) :: tv       !< points to updated thermodynamic fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness after boundary flux application (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to boundary flux application
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: saln_old !< salinity prior to boundary flux application (PPT)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old    !< thickness prior to boundary flux application (m or kg/m2)
-  real,                                     intent(in) :: dt       !< time step (sec)
-  type(diabatic_CS),                        pointer    :: CS       !< module control structure
+  type(ocean_grid_type),   intent(in) :: G        !< ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV       !< ocean vertical grid structure
+  type(thermo_var_ptrs),   intent(in) :: tv       !< points to updated thermodynamic fields
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h        !< thickness after boundary flux application (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: temp_old !< temperature prior to boundary flux application
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: saln_old !< salinity prior to boundary flux application (PPT)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_old    !< thickness prior to boundary flux application (m or kg/m2)
+  real,                    intent(in) :: dt       !< time step (sec)
+  type(diabatic_CS),       pointer    :: CS       !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
@@ -1822,13 +1826,14 @@ end subroutine diagnose_frazil_tendency
 !! of the diabatic processes to be used.
 subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
                                 tracer_flow_CSp, diag_to_Z_CSp)
-  type(time_type),         intent(in)    :: Time              !< current model time
-  type(ocean_grid_type),   intent(in)    :: G                 !< model grid structure
-  type(param_file_type),   intent(in)    :: param_file        !< the file to parse for parameter values
-  type(diag_ctrl), target, intent(inout) :: diag              !< regulates diagnostic output
-  type(diabatic_CS),       pointer       :: CS                !< module control structure
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp   !< points to control structure of tracer flow control module
-  type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp     !< pointer to Z-diagnostics control structure
+  type(time_type),         intent(in)    :: Time             !< current model time
+  type(ocean_grid_type),   intent(in)    :: G                !< model grid structure
+  type(param_file_type),   intent(in)    :: param_file       !< the file to parse for parameter values
+  type(diag_ctrl), target, intent(inout) :: diag             !< regulates diagnostic output
+  type(diabatic_CS),       pointer       :: CS               !< module control structure
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of the
+                                                             !! tracer flow control module
+  type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp    !< pointer to Z-diagnostics control structure
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
@@ -1865,7 +1870,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                                                              !! to enable diagnostics, like energy budgets
   type(cont_diag_ptrs),    intent(inout) :: CDp              !< pointers to terms in continuity equations
   type(diabatic_CS),       pointer       :: CS               !< module control structure
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of tracer flow control module
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of the
+                                                             !! tracer flow control module
   type(sponge_CS),         pointer       :: sponge_CSp       !< pointer to the sponge module control structure
   type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp    !< pointer to the Z-diagnostics control structure
@@ -2203,54 +2209,54 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       CS%diabatic_diff_tendency_diag = .true.
     endif
 
-    CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                                                 &
-        'diabatic_heat_tendency', diag%axesTL, Time,                                                                   &
-        'Diabatic diffusion heat tendency',                                                                            &
-        'W m-2',cmor_field_name='opottempdiff',                                                                        &
-        cmor_standard_name=                                                                                            &
-        'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing',&
-        cmor_long_name =                                                                                               &
-        'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing',&
+    CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                             &
+        'diabatic_heat_tendency', diag%axesTL, Time,                                               &
+        'Diabatic diffusion heat tendency',                                                        &
+        'W m-2',cmor_field_name='opottempdiff',                                                    &
+        cmor_standard_name='tendency_of_sea_water_potential_temperature_expressed_as_heat_content_'// &
+                           'due_to_parameterized_dianeutral_mixing',                               &
+        cmor_long_name='Tendency of sea water potential temperature expressed as heat content '//  &
+                       'due to parameterized dianeutral mixing',&
         v_extensive=.true.)
     if (CS%id_diabatic_diff_heat_tend > 0) then
       CS%diabatic_diff_tendency_diag = .true.
     endif
 
-    CS%id_diabatic_diff_salt_tend = register_diag_field('ocean_model',                                     &
-        'diabatic_salt_tendency', diag%axesTL, Time,                                                       &
-        'Diabatic diffusion of salt tendency',                                                             &
-        'kg m-2 s-1',cmor_field_name='osaltdiff',                                                          &
-        cmor_standard_name=                                                                                &
-        'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing', &
-        cmor_long_name =                                                                                   &
-        'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing', &
+    CS%id_diabatic_diff_salt_tend = register_diag_field('ocean_model',                   &
+        'diabatic_salt_tendency', diag%axesTL, Time,                                     &
+        'Diabatic diffusion of salt tendency',                                           &
+        'kg m-2 s-1',cmor_field_name='osaltdiff',                                        &
+        cmor_standard_name='tendency_of_sea_water_salinity_expressed_as_salt_content_'// &
+                           'due_to_parameterized_dianeutral_mixing',                     &
+        cmor_long_name='Tendency of sea water salinity expressed as salt content '//     &
+                       'due to parameterized dianeutral mixing', &
         v_extensive=.true.)
     if (CS%id_diabatic_diff_salt_tend > 0) then
       CS%diabatic_diff_tendency_diag = .true.
     endif
 
     ! This diagnostic should equal to roundoff if all is working well.
-    CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                                                               &
-        'diabatic_heat_tendency_2d', diag%axesT1, Time,                                                                                 &
-        'Depth integrated diabatic diffusion heat tendency',                                                                            &
-        'W m-2',cmor_field_name='opottempdiff_2d',                                                                                      &
-        cmor_standard_name=                                                                                                             &
-        'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
-        cmor_long_name =                                                                                                                &
-        'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing depth integrated')
+    CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                        &
+        'diabatic_heat_tendency_2d', diag%axesT1, Time,                                          &
+        'Depth integrated diabatic diffusion heat tendency',                                     &
+        'W m-2',cmor_field_name='opottempdiff_2d',                                               &
+        cmor_standard_name='tendency_of_sea_water_potential_temperature_expressed_as_heat_content_'//&
+                           'due_to_parameterized_dianeutral_mixing_depth_integrated',            &
+        cmor_long_name='Tendency of sea water potential temperature expressed as heat content '//&
+                       'due to parameterized dianeutral mixing depth integrated')
     if (CS%id_diabatic_diff_heat_tend_2d > 0) then
       CS%diabatic_diff_tendency_diag = .true.
     endif
 
     ! This diagnostic should equal to roundoff if all is working well.
-    CS%id_diabatic_diff_salt_tend_2d = register_diag_field('ocean_model',                                                  &
-        'diabatic_salt_tendency_2d', diag%axesT1, Time,                                                                    &
-        'Depth integrated diabatic diffusion salt tendency',                                                               &
-        'kg m-2 s-1',cmor_field_name='osaltdiff_2d',                                                                       &
-        cmor_standard_name=                                                                                                &
-        'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
-        cmor_long_name =                                                                                                   &
-        'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing depth integrated')
+    CS%id_diabatic_diff_salt_tend_2d = register_diag_field('ocean_model',                &
+        'diabatic_salt_tendency_2d', diag%axesT1, Time,                                  &
+        'Depth integrated diabatic diffusion salt tendency',                             &
+        'kg m-2 s-1',cmor_field_name='osaltdiff_2d',                                     &
+        cmor_standard_name='tendency_of_sea_water_salinity_expressed_as_salt_content_'// &
+                           'due_to_parameterized_dianeutral_mixing_depth_integrated',    &
+        cmor_long_name='Tendency of sea water salinity expressed as salt content '//     &
+                       'due to parameterized dianeutral mixing depth integrated')
     if (CS%id_diabatic_diff_salt_tend_2d > 0) then
       CS%diabatic_diff_tendency_diag = .true.
     endif
@@ -2369,7 +2375,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   endif
 
   ! initialize module for setting diffusivities
-  call set_diffusivity_init(Time, G, GV, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp, CS%tidal_mixing_CSp)
+  call set_diffusivity_init(Time, G, GV, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, &
+                            CS%int_tide_CSp, CS%tidal_mixing_CSp)
 
 
   ! set up the clocks for this module

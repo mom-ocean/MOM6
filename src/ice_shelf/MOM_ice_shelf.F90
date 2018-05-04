@@ -1,6 +1,6 @@
 !> Implements the thermodynamic aspects of ocean / ice-shelf interactions,
-!  along with a crude placeholder for a later implementation of full
-!  ice shelf dynamics, all using the MOM framework and coding style.
+!!  along with a crude placeholder for a later implementation of full
+!!  ice shelf dynamics, all using the MOM framework and coding style.
 module MOM_ice_shelf
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -150,7 +150,8 @@ type, public :: ice_shelf_CS ; private
 !!! OVS !!!
     t_boundary_values => NULL(), &
 
-    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress - exact form depends on basal law exponent
+    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress -
+                ! exact form depends on basal law exponent
                 ! and/or whether flow is "hybridized" a la Goldberg 2011
     taub_beta_eff_lower_tri => NULL(), &
     taub_beta_eff_upper_tri => NULL(), &
@@ -233,7 +234,8 @@ type, public :: ice_shelf_CS ; private
                     ! ~ once a day (maybe longer) because it will depend on ocean values
                     ! that are averaged over this time interval, and the solve will begin
                     ! to lose meaning if it is done too frequently
-  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve; the counter will have to be stored
+  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve;
+                                         ! the counter will have to be stored
   integer :: velocity_update_counter ! the "outer" timestep number
   integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)
 
@@ -812,7 +814,8 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
     CS%velocity_update_sub_counter = CS%velocity_update_sub_counter+1
 
     if (CS%GL_couple .and. .not. CS%solo_ice_sheet) then
-      call update_OD_ffrac (CS, state%ocean_mass, CS%velocity_update_sub_counter, CS%nstep_velocity, CS%time_step, CS%velocity_update_time_step)
+      call update_OD_ffrac(CS, state%ocean_mass, CS%velocity_update_sub_counter, CS%nstep_velocity, &
+                           CS%time_step, CS%velocity_update_time_step)
     else
       call update_OD_ffrac_uncoupled (CS)
     endif
@@ -3192,8 +3195,8 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
               ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_west_bdry .AND. (hmask(i-1,j).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                              ! and the stencil contains it
+                if (at_west_bdry .AND. (hmask(i-1,j).eq.3)) then ! at western bdry but there is a
+                              ! thickness bdry condition, and the stencil contains it
                   stencil (-1) = CS%thickness_boundary_values(i-1,j)
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(-1) / dxdyh
 
@@ -3240,8 +3243,8 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
               if (u_face .lt. 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
 
-                if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a
+                              ! thickness bdry condition, and the stencil contains it
 
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(1) / dxdyh
 
@@ -3302,13 +3305,15 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
             endif
 
             if ((i .eq. is) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i-1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 
               hmask(i,j) = 2
             elseif ((i .eq. ie) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i+1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 
               hmask(i,j) = 2
 
@@ -3423,8 +3428,8 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
 
                 ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_south_bdry .AND. (hmask(i,j-1).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_south_bdry .AND. (hmask(i,j-1).eq.3)) then ! at western bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(-1) / dxdyh
 
                 elseif (hmask(i,j-1) * hmask(i,j-2) .eq. 1) then  ! h(j-2) and h(j-1) are valid
@@ -3471,8 +3476,8 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
 
               if (v_face .lt. 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
 
-                if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(1) / dxdyh
                 elseif (hmask(i,j+1) * hmask(i,j+2) .eq. 1) then  ! h(j+2) and h(j+1) are valid
                   phi = slope_limiter (stencil(1)-stencil(2), stencil(0)-stencil(1))
@@ -3522,12 +3527,14 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
             endif
 
             if ((j .eq. js) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j-1) .eq. 1)) then
-                ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+                ! this is solely for the purposes of keeping the mask consistent while advancing
+                ! the front without having to call pass_var - if cell is empty and cell to left
+                ! is ice-covered then this cell will become partly covered
               hmask (i,j) = 2
             elseif ((j .eq. je) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j+1) .eq. 1)) then
-                ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+                ! this is solely for the purposes of keeping the mask consistent while advancing
+                ! the front without having to call pass_var - if cell is empty and cell to left
+                ! is ice-covered then this cell will become partly covered
               hmask (i,j) = 2
             endif
 
@@ -3809,7 +3816,8 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
   real      :: rho, rhow, sx, sy, neumann_val, dxh, dyh, dxdyh
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq
+  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
   integer :: i_off, j_off
 
   G => CS%grid
@@ -3983,28 +3991,35 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
         endif
 
 
-        if ((u_face_mask(i-1,j) .eq. 2) .OR. (hmask(i-1,j) .eq. 0) .OR. (hmask(i-1,j) .eq. 2) ) then ! left face of the cell is at a stress boundary
-          ! the depth-integrated longitudinal stress is equal to the difference of depth-integrated pressure on either side of the face
+        if ((u_face_mask(i-1,j) .eq. 2) .OR. (hmask(i-1,j) .eq. 0) .OR. (hmask(i-1,j) .eq. 2) ) then
+          ! left face of the cell is at a stress boundary
+          ! the depth-integrated longitudinal stress is equal to the difference of depth-integrated
+          ! pressure on either side of the face
           ! on the ice side, it is rho g h^2 / 2
           ! on the ocean side, it is rhow g (delta OD)^2 / 2
-          ! OD can be zero under the ice; but it is ASSUMED on the ice-free side of the face, topography elevation is not above the base of the
-          !     ice in the current cell
-          taud_x(i-1,j-1) = taud_x(i-1,j-1) - .5 * dyh * neumann_val  ! note negative sign is due to direction of normal vector
+          ! OD can be zero under the ice; but it is ASSUMED on the ice-free side of the face, topography elevation
+          !     is not above the base of the ice in the current cell
+
+          ! note negative sign due to direction of normal vector
+          taud_x(i-1,j-1) = taud_x(i-1,j-1) - .5 * dyh * neumann_val
           taud_x(i-1,j) = taud_x(i-1,j) - .5 * dyh * neumann_val
         endif
 
-        if ((u_face_mask(i,j) .eq. 2) .OR. (hmask(i+1,j) .eq. 0) .OR. (hmask(i+1,j) .eq. 2) ) then ! right face of the cell is at a stress boundary
+        if ((u_face_mask(i,j) .eq. 2) .OR. (hmask(i+1,j) .eq. 0) .OR. (hmask(i+1,j) .eq. 2) ) then
+          ! right face of the cell is at a stress boundary
           taud_x(i,j-1) = taud_x(i,j-1) + .5 * dyh * neumann_val
           taud_x(i,j) = taud_x(i,j) + .5 * dyh * neumann_val
         endif
 
-        if ((v_face_mask(i,j-1) .eq. 2) .OR. (hmask(i,j-1) .eq. 0) .OR. (hmask(i,j-1) .eq. 2) ) then ! south face of the cell is at a stress boundary
+        if ((v_face_mask(i,j-1) .eq. 2) .OR. (hmask(i,j-1) .eq. 0) .OR. (hmask(i,j-1) .eq. 2) ) then
+          ! south face of the cell is at a stress boundary
           taud_y(i-1,j-1) = taud_y(i-1,j-1) - .5 * dxh * neumann_val
           taud_y(i,j-1) = taud_y(i,j-1) - .5 * dxh * neumann_val
         endif
 
-        if ((v_face_mask(i,j) .eq. 2) .OR. (hmask(i,j+1) .eq. 0) .OR. (hmask(i,j+1) .eq. 2) ) then ! north face of the cell is at a stress boundary
-          taud_y(i-1,j) = taud_y(i-1,j) + .5 * dxh * neumann_val ! note negative sign is due to direction of normal vector
+        if ((v_face_mask(i,j) .eq. 2) .OR. (hmask(i,j+1) .eq. 0) .OR. (hmask(i,j+1) .eq. 2) ) then
+          ! north face of the cell is at a stress boundary
+          taud_y(i-1,j) = taud_y(i-1,j) + .5 * dxh * neumann_val ! note negative sign due to direction of normal vector
           taud_y(i,j) = taud_y(i,j) + .5 * dxh * neumann_val
         endif
 
@@ -4037,7 +4052,8 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
                           v_boundary_values, &
                           u_face_mask, v_face_mask, hmask
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
+  integer :: gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
   integer :: i_off, j_off
   real :: A, n, ux, uy, vx, vy, eps_min, domain_width
 
@@ -4399,7 +4415,8 @@ integer, intent(in)               :: is, ie, js, je
 
           endif
               Ucontr(iphi,jphi) = Ucontr(iphi,jphi) + .25 * area * uq * xquad(ilq) * xquad(jlq) * beta(i,j)
-!              if((i.eq.27) .and. (j.eq.8) .and. (iphi.eq.1) .and. (jphi.eq.1))  print *, "grid", uq, .25 * area * uq * xquad(ilq) * xquad(jlq)
+!              if((i.eq.27) .and. (j.eq.8) .and. (iphi.eq.1) .and. (jphi.eq.1)) &
+!                 print *, "grid", uq, .25 * area * uq * xquad(ilq) * xquad(jlq)
 
           !endif
         enddo ; enddo
@@ -4416,7 +4433,8 @@ integer, intent(in)               :: is, ie, js, je
           endif
           if (vmask (i-2+iphi,j-2+jphi) .eq. 1) then
             vret (i-2+iphi,j-2+jphi) = vret (i-2+iphi,j-2+jphi) + Vsubcontr (iphi,jphi) * beta(i,j)
-            !if ( (iphi.eq.1) .and. (jphi.eq.1)) print *,  i,j, Usubcontr (iphi,jphi) * beta(i,j), " ", Ucontr(iphi,jphi)
+            !if ( (iphi.eq.1) .and. (jphi.eq.1)) 8
+            !  print *,  i,j, Usubcontr (iphi,jphi) * beta(i,j), " ", Ucontr(iphi,jphi)
           endif
         enddo ; enddo
       endif
@@ -4470,8 +4488,8 @@ subroutine CG_action_subgrid_basal_bilinear (Phisub, H, U, V, DXDYH, D, dens_rat
                 uq = 0 ; vq = 0
                 do k=1,2
                   do l=1,2
-                    !Ucontr (m,n) = Ucontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * U(k,l)
-                    !Vcontr (m,n) = Vcontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * V(k,l)
+                    !Ucontr(m,n) = Ucontr(m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * U(k,l)
+                    !Vcontr(m,n) = Vcontr(m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * V(k,l)
                     uq = uq + Phisub(i,j,k,l,qx,qy) * U(k,l) ; vq = vq + Phisub(i,j,k,l,qx,qy) * V(k,l)
                   enddo
                 enddo
@@ -4479,7 +4497,8 @@ subroutine CG_action_subgrid_basal_bilinear (Phisub, H, U, V, DXDYH, D, dens_rat
                 Ucontr (m,n) = Ucontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * uq
                 Vcontr (m,n) = Vcontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * vq
 
- !               if ((i_m .eq. 27) .and. (j_m .eq. 8) .and. (m.eq.1) .and. (n.eq.1)) print *, "in subgrid", uq,  Phisub(i,j,m,n,qx,qy)
+ !               if ((i_m .eq. 27) .and. (j_m .eq. 8) .and. (m.eq.1) .and. (n.eq.1)) &
+                   print *, "in subgrid", uq,  Phisub(i,j,m,n,qx,qy)
 
               endif
 
@@ -5009,7 +5028,8 @@ subroutine apply_boundary_values_triangle (CS, time, u_boundary_contr, v_boundar
 
 end subroutine apply_boundary_values_triangle
 
-subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond, dens_ratio, u_boundary_contr, v_boundary_contr)
+subroutine apply_boundary_values_bilinear(CS, time, Phisub, H_node, float_cond, dens_ratio, &
+                                          u_boundary_contr, v_boundary_contr)
 
   type(time_type),       intent(in)    :: Time
   real, dimension (:,:,:,:,:,:),pointer:: Phisub
@@ -5207,7 +5227,8 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed
+  integer :: iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -5253,7 +5274,8 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
         nu_lower(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy+0.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         umid = 1./3 * (u(i-1,j-1)+u(i-1,j)+u(i,j-1))
         vmid = 1./3 * (v(i-1,j-1)+v(i-1,j)+v(i,j-1))
-        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
         ux = (u(i,j)-u(i-1,j)) / dxh
         vx = (v(i,j)-v(i-1,j)) / dxh
@@ -5263,7 +5285,8 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
         nu_upper(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy+0.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         umid = 1./3 * (u(i,j)+u(i-1,j)+u(i,j-1))
         vmid = 1./3 * (v(i,j)+v(i-1,j)+v(i,j-1))
-        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_upper (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        beta_eff_upper (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
       endif
     enddo
@@ -5288,7 +5311,8 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
+  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -5562,12 +5586,14 @@ subroutine update_velocity_masks (CS)
   ! sets masks for velocity solve
   ! ignores the fact that their might be ice-free cells - this only considers the computational boundary
 
-  ! !!!!IMPORTANT!!!! relies on thickness mask - assumed that this is called after hmask has been updated (and halo-updated)
+  ! !!!IMPORTANT!!! relies on thickness mask - assumed that this is called after hmask has been updated & halo-updated
 
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, k
+  integer :: isym, i, j, k, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq
+  integer :: giec, gjec, gisc, gjsc, isc, jsc, iec, jec
   integer :: i_off, j_off
   type(ocean_grid_type), pointer :: G => NULL()
-  real, dimension(:,:), pointer  :: umask, vmask, u_face_mask, v_face_mask, hmask, u_face_mask_boundary, v_face_mask_boundary
+  real, dimension(:,:), pointer  :: umask, vmask, u_face_mask, v_face_mask, hmask
+  real, dimension(:,:), pointer  :: u_face_mask_boundary, v_face_mask_boundary
 
   G => CS%grid
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -6027,7 +6053,8 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
 ! t_after_uflux - an array containing the temperature after advection in u-direction
 ! t_after_vflux - similar
 !
-!    This subroutine takes the velocity (on the Bgrid) and timesteps (HT)_t = - div (uHT) + (adot Tsurd -bdot Tbot) once and then calculates T=HT/H
+!    This subroutine takes the velocity (on the Bgrid) and timesteps
+!      (HT)_t = - div (uHT) + (adot Tsurd -bdot Tbot) once and then calculates T=HT/H
 !
 !    The flux overflows are included here. That is because they will be used to advect 3D scalars
 !    into partial cells
@@ -6271,8 +6298,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
               ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_west_bdry .AND. (hmask(i-1,j).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                              ! and the stencil contains it
+                if (at_west_bdry .AND. (hmask(i-1,j).eq.3)) then ! at western bdry but there is a
+                              ! thickness bdry condition, and the stencil contains it
                   stencil (-1) = CS%t_boundary_values(i-1,j)*CS%h_shelf(i-1,j)
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(-1) / dxdyh
 
@@ -6322,8 +6349,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
               if (u_face .lt. 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
 
-                if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
 
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(1) / dxdyh
 
@@ -6372,7 +6399,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
             if (at_west_bdry .AND. (hmask(i-1,j) .EQ. 3)) then
               u_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i-1,j))
-              flux_enter (i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i-1,j)*CS%thickness_boundary_values(i+1,j)
+              flux_enter (i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i-1,j)* &
+                                  CS%thickness_boundary_values(i+1,j)
             elseif (u_face_mask (i-1,j) .eq. 4.) then
               flux_enter (i,j,1) = G%dyT(i,j) * time_step * u_flux_boundary_values (i-1,j)*t_boundary(i-1,j)
 !              flux_enter (i,j,1) = G%dyh(i,j) * time_step *  CS%u_shelf(i,j)*t_boundary (i-1,j)
@@ -6381,7 +6409,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
             if (at_east_bdry .AND. (hmask(i+1,j) .EQ. 3)) then
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
-              flux_enter(i,j,2) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i+1,j)*CS%thickness_boundary_values(i+1,j)
+              flux_enter(i,j,2) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i+1,j)* &
+                                  CS%thickness_boundary_values(i+1,j)
             elseif (u_face_mask (i+1,j) .eq. 4.) then
               flux_enter (i,j,2) = G%dyT(i,j) * time_step * u_flux_boundary_values (i+1,j) * t_boundary(i+1,j)
 ! assume no flux bc for temp
@@ -6389,14 +6418,14 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
             endif
 
 !            if ((i .eq. is) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i-1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
-
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 !              hmask(i,j) = 2
 !            elseif ((i .eq. ie) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i+1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
-
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 !              hmask(i,j) = 2
 
 !            endif
@@ -6500,7 +6529,8 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
             if (v_face_mask (i,j-1) .eq. 4.) then
 
-              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values (i,j-1) * t_boundary(i,j-1)/ dxdyh
+              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values (i,j-1) * &
+                                 t_boundary(i,j-1)/ dxdyh
 ! assume no flux bc for temp
 !              flux_diff_cell = flux_diff_cell + dxh * time_step *  CS%v_shelf(i,j)*t_boundary (i,j-1) / dxdyh
 
@@ -6513,8 +6543,8 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
                 ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_south_bdry .AND. (hmask(i,j-1).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_south_bdry .AND. (hmask(i,j-1).eq.3)) then ! at western bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(-1) / dxdyh
 
                 elseif (hmask(i,j-1) * hmask(i,j-2) .eq. 1) then  ! h(j-2) and h(j-1) are valid
@@ -6564,8 +6594,8 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
               if (v_face .lt. 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
 
-                if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(1) / dxdyh
                 elseif (hmask(i,j+1) * hmask(i,j+2) .eq. 1) then  ! h(j+2) and h(j+1) are valid
                   phi = slope_limiter (stencil(1)-stencil(2), stencil(0)-stencil(1))
@@ -6602,7 +6632,8 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
             if (at_south_bdry .AND. (hmask(i,j-1) .EQ. 3)) then
               v_face = 0.5 * (CS%v_shelf(i-1,j-1) + CS%v_shelf(i,j-1))
-              flux_enter (i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j-1)*CS%thickness_boundary_values(i,j-1)
+              flux_enter (i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j-1)* &
+                                   CS%thickness_boundary_values(i,j-1)
             elseif (v_face_mask(i,j-1) .eq. 4.) then
               flux_enter (i,j,3) = G%dxT(i,j) * time_step * v_flux_boundary_values (i,j-1)*t_boundary(i,j-1)
 ! assume no flux bc for temp
@@ -6612,7 +6643,8 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
             if (at_north_bdry .AND. (hmask(i,j+1) .EQ. 3)) then
               v_face = 0.5 * (CS%v_shelf(i-1,j) + CS%v_shelf(i,j))
-              flux_enter (i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j+1)*CS%thickness_boundary_values(i,j+1)
+              flux_enter (i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j+1)* &
+                                   CS%thickness_boundary_values(i,j+1)
             elseif (v_face_mask(i,j+1) .eq. 4.) then
               flux_enter (i,j,4) = G%dxT(i,j) * time_step * v_flux_boundary_values (i,j+1)*t_boundary(i,j+1)
 ! assume no flux bc for temp
@@ -6620,12 +6652,14 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
             endif
 
 !            if ((j .eq. js) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j-1) .eq. 1)) then
- ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+               ! this is solely for the purposes of keeping the mask consistent while advancing
+               ! the front without having to call pass_var - if cell is empty and cell to left
+               ! is ice-covered then this cell will become partly covered
  !             hmask (i,j) = 2
  !           elseif ((j .eq. je) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j+1) .eq. 1)) then
-                ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+                ! this is solely for the purposes of keeping the mask consistent while advancing the
+                ! front without having to call pass_var - if cell is empty and cell to left is
+                ! ice-covered then this cell will become partly covered
 !              hmask (i,j) = 2
 !            endif
 
@@ -6674,7 +6708,8 @@ end subroutine ice_shelf_advect_temp_y
 !!    calc_shelf_driving_stress - Determine the driving stresses using h_shelf, (water) column thickness, bathymetry
 !!            - does not modify any permanent arrays
 !!    init_boundary_values -
-!!    bilinear_shape_functions - shape function for FEM solve using (convex) quadrilateral elements and bilinear nodal basis
+!!    bilinear_shape_functions - shape function for FEM solve using (convex) quadrilateral elements and
+!!                               bilinear nodal basis
 !!    calc_shelf_visc_bilinear - Glen's law viscosity and nonlinear sliding law (called by ice_shelf_solve_outer)
 !!    calc_shelf_visc_triangular - LET'S TAKE THIS OUT
 !!    apply_boundary_values_bilinear - same as CG_action_bilinear, but input is zero except for dirichlet bdry conds

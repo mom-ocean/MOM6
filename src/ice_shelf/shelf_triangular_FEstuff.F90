@@ -67,8 +67,8 @@ type, public :: ice_shelf_CS ; private
     v_boundary_values => NULL(), &
 
 
-    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress - exact form depends on basal law exponent
-                ! and/or whether flow is "hybridized" a la Goldberg 2011
+    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress - exact form depends on basal
+                ! law exponent and/or whether flow is "hybridized" a la Goldberg 2011
     taub_beta_eff_lower_tri => NULL(), &
     taub_beta_eff_upper_tri => NULL(), &
 
@@ -124,7 +124,8 @@ type, public :: ice_shelf_CS ; private
                     ! ~ once a day (maybe longer) because it will depend on ocean values
                     ! that are averaged over this time interval, and the solve will begin
                     ! to lose meaning if it is done too frequently
-  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve; the counter will have to be stored
+  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve;
+                    ! the counter will have to be stored
   integer :: velocity_update_counter ! the "outer" timestep number
   integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)
 
@@ -518,7 +519,8 @@ end subroutine matrix_diagonal_triangle
                        !~ hmask
 
   !~ type(ocean_grid_type), pointer :: G
-  !~ integer :: 0, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  !~ integer :: 0, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
+  !~ integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   !~ real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   !~ G => CS%grid
@@ -558,7 +560,8 @@ end subroutine matrix_diagonal_triangle
         !~ nu_lower(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         !~ umid = 1./3 * (u(i-1,j-1)+u(i-1,j)+u(i,j-1))
         !~ vmid = 1./3 * (v(i-1,j-1)+v(i-1,j)+v(i,j-1))
-        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        !~ beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
         !~ ux = (u(i,j)-u(i-1,j)) / dxh
         !~ vx = (v(i,j)-v(i-1,j)) / dxh
@@ -568,7 +571,8 @@ end subroutine matrix_diagonal_triangle
         !~ nu_upper(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         !~ umid = 1./3 * (u(i,j)+u(i-1,j)+u(i,j-1))
         !~ vmid = 1./3 * (v(i,j)+v(i-1,j)+v(i,j-1))
-        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_upper (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        !~ beta_eff_upper (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
       !~ endif
     !~ enddo

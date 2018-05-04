@@ -295,7 +295,8 @@ end subroutine ALE_end
 subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
+                                                                   !! last time step (m or Pa)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field (m/s)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
@@ -381,7 +382,8 @@ end subroutine ALE_main
 subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
+                                                                   !! last time step (m or Pa)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
@@ -514,7 +516,7 @@ end subroutine ALE_offline_inputs
 subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
                                                                    !! last time step (m or Pa)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_target !< Current 3D grid obtained after
@@ -556,9 +558,10 @@ end subroutine ALE_offline_tracer_final
 
 !> Check grid for negative thicknesses
 subroutine check_grid( G, GV, h, threshold )
-  type(ocean_grid_type),                     intent(in) :: G !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in) :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Current 3D grid obtained after the last time step (H units)
+  type(ocean_grid_type),                     intent(in) :: G  !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h  !< Current 3D grid obtained after the
+                                                              !! last time step (H units)
   real,                                      intent(in) :: threshold !< Value below which to flag issues (H units)
   ! Local variables
   integer :: i, j
@@ -586,7 +589,8 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
   type(remapping_CS),                      intent(in)    :: remapCS  !< Remapping parameters and options
   type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h      !< Current 3D grid obtained after the last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h     !< Current 3D grid obtained after the
+                                                                     !! last time step (m or Pa)
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
   real, dimension(:,:),          optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
@@ -640,7 +644,8 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, Reg, dt, dzRegrid, 
   real,          optional, intent(in)    :: dt     !< Model timestep to provide a timescale for regridding
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                  optional, intent(inout) :: dzRegrid !< Final change in interface positions
-  logical,       optional, intent(in)    :: initial !< Whether we're being called from an initialization routine (and expect diagnostics to work)
+  logical,       optional, intent(in)    :: initial !< Whether we're being called from an initialization
+                                                    !! routine (and expect diagnostics to work)
 
   ! Local variables
   integer :: i, j, k, nz
@@ -707,18 +712,21 @@ end subroutine ALE_regrid_accelerated
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.
 subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, dxInterface, u, v, debug, dt)
-  type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
-  type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure
-  type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
-  type(verticalGrid_type),                          intent(in)    :: GV            !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
-  type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),optional, intent(in)    :: dxInterface  !< Change in interface position (Hm or Pa)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), optional, intent(inout) :: u          !< Zonal velocity component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
-  logical,                                    optional, intent(in)    :: debug      !< If true, show the call tree
-  real,                                       optional, intent(in)    :: dt         !< time step for diagnostics
+  type(remapping_CS),                        intent(in)    :: CS_remapping !< Remapping control structure
+  type(ALE_CS),                              intent(in)    :: CS_ALE       !< ALE control structure
+  type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old        !< Thickness of source grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new        !< Thickness of destination grid (m or Pa)
+  type(tracer_registry_type),                pointer       :: Reg          !< Tracer registry structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
+                                   optional, intent(in)    :: dxInterface  !< Change in interface position (Hm or Pa)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                   optional, intent(inout) :: u          !< Zonal velocity component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                   optional, intent(inout) :: v          !< Meridional velocity component (m/s)
+  logical,                         optional, intent(in)    :: debug      !< If true, show the call tree
+  real,                            optional, intent(in)    :: dt         !< time step for diagnostics
   ! Local variables
   integer                                     :: i, j, k, m
   integer                                     :: nz, ntr
@@ -740,8 +748,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dxInterface. Otherwise,
   ! u and v can be remapped without dxInterface
   if ( .not. present(dxInterface) .and. (CS_ALE%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
-    call MOM_error(FATAL, "remap_all_state_vars: dxInterface must be present if using old algorithm and u/v are to"// &
-                          "be remapped")
+    call MOM_error(FATAL, "remap_all_state_vars: dxInterface must be present if using old algorithm "// &
+                          "and u/v are to be remapped")
   endif
 
   !### Try replacing both of these with GV%H_subroundoff
