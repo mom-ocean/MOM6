@@ -265,7 +265,8 @@ subroutine apply_topography_edits_from_file(D, G, param_file)
     j = jg(n) - G%jsd_global + 2
     if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
       if (new_depth(n)/=0.) then
-        write(*,'(a,3i5,f8.2,a,f8.2,2i4)') 'Ocean topography edit: ',n,ig(n),jg(n),D(i,j),'->',abs(new_depth(n)),i,j
+        write(*,'(a,3i5,f8.2,a,f8.2,2i4)') &
+          'Ocean topography edit: ',n,ig(n),jg(n),D(i,j),'->',abs(new_depth(n)),i,j
         D(i,j) = abs(new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
       else
         call MOM_error(FATAL, ' apply_topography_edits_from_file: '//&
@@ -445,13 +446,12 @@ end subroutine limit_topography
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets up the Coriolis parameter for a sphere
 subroutine set_rotation_planetary(f, G, param_file)
-  type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),                        intent(in)  :: param_file !< A structure to parse for run-time parameters
-! Arguments: f          - Coriolis parameter (vertical component) in s^-1
-!     (in)   G          - grid type
-!     (in)   param_file - parameter file type
+  type(dyn_horgrid_type), intent(in)  :: G  !< The dynamic horizontal grid
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
+                          intent(out) :: f  !< Coriolis parameter (vertical component) in s^-1
+  type(param_file_type),  intent(in)  :: param_file !< A structure to parse for run-time parameters
 
 ! This subroutine sets up the Coriolis parameter for a sphere
   character(len=30) :: mdl = "set_rotation_planetary" ! This subroutine's name.
@@ -474,13 +474,12 @@ end subroutine set_rotation_planetary
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets up the Coriolis parameter for a beta-plane or f-plane
 subroutine set_rotation_beta_plane(f, G, param_file)
-  type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),                        intent(in)  :: param_file !< A structure to parse for run-time parameters
-! Arguments: f          - Coriolis parameter (vertical component) in s^-1
-!     (in)   G          - grid type
-!     (in)   param_file - parameter file type
+  type(dyn_horgrid_type), intent(in)  :: G  !< The dynamic horizontal grid
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
+                          intent(out) :: f  !< Coriolis parameter (vertical component) in s^-1
+  type(param_file_type),  intent(in)  :: param_file !< A structure to parse for run-time parameters
 
 ! This subroutine sets up the Coriolis parameter for a beta-plane
   integer :: I, J
@@ -546,10 +545,13 @@ subroutine initialize_grid_rotation_angle(G, PF)
 end subroutine initialize_grid_rotation_angle
 
 ! -----------------------------------------------------------------------------
+!>   This subroutine sets the open face lengths at selected points to restrict
+!! passages to their observed widths based on a named set of sizes.
 subroutine reset_face_lengths_named(G, param_file, name)
   type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
-  character(len=*),       intent(in)    :: name
+  character(len=*),       intent(in)    :: name !< The name for the set of face lengths. Only "global_1deg"
+                                                !! is currently implemented.
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -671,6 +673,8 @@ end subroutine reset_face_lengths_named
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets the open face lengths at selected points to restrict
+!! passages to their observed widths from a arrays read from a file.
 subroutine reset_face_lengths_file(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   type(param_file_type), intent(in)     :: param_file !< A structure to parse for run-time parameters
@@ -738,6 +742,8 @@ end subroutine reset_face_lengths_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets the open face lengths at selected points to restrict
+!! passages to their observed widths from a list read from a file.
 subroutine reset_face_lengths_list(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
@@ -915,7 +921,8 @@ subroutine reset_face_lengths_list(G, param_file)
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
                 u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") so grid metric is unmodified."
           else
-            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
+            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
+                  "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
                   u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",G%dy_Cu(I,j),"m"
           endif
         endif
@@ -943,7 +950,8 @@ subroutine reset_face_lengths_list(G, param_file)
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") so grid metric is unmodified."
           else
-            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
+            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
+                  "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
                   v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",G%dx_Cv(I,j),"m"
           endif
         endif
@@ -965,11 +973,12 @@ end subroutine reset_face_lengths_list
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!>   This subroutine reads and counts the non-blank lines in the face length list file, after removing comments.
 subroutine read_face_length_list(iounit, filename, num_lines, lines)
-  integer,                          intent(in)  :: iounit
-  character(len=*),                 intent(in)  :: filename
-  integer,                          intent(out) :: num_lines
-  character(len=120), dimension(:), pointer     :: lines
+  integer,                          intent(in)  :: iounit    !< An open I/O unit number for the file
+  character(len=*),                 intent(in)  :: filename  !< The name of the face-length file to read
+  integer,                          intent(out) :: num_lines !< The number of non-blank lines in the file
+  character(len=120), dimension(:), pointer     :: lines  !< The non-blank lines, after removing comments
 
   !   This subroutine reads and counts the non-blank lines in the face length
   ! list file, after removing comments.
