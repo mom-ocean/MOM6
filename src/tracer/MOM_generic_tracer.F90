@@ -235,11 +235,11 @@ contains
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
                                                                  !! where, and what open boundary conditions are used.
     type(MOM_generic_tracer_CS),           pointer    :: CS      !< Pointer to the control structure for this module.
-    type(sponge_CS),                       pointer    :: sponge_CSp     !< Pointer to the control structure for the sponges.
+    type(sponge_CS),                       pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
     type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< Pointer  to the control structure for the
-                                                                        !! ALE sponges.
-    type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp  !< A pointer to the control structure for diagnostics
-                                                                        !! in depth space.
+                                                                 !! ALE sponges.
+    type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp  !< A pointer to the control structure
+                                                                 !! for diagnostics in depth space.
 
     character(len=fm_string_len), parameter :: sub_name = 'initialize_MOM_generic_tracer'
     logical :: OK
@@ -433,14 +433,14 @@ contains
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
                                                                 !! in m or kg !m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
                                                                 !! in m or kg !m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
                                               !! fluid entrained from the layer !above during this
                                               !! call will be added, in m or kg !m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
                                               !! fluid entrained from the layer !below during this
                                               !! call will be added, in m or kg !m-2.
     type(forcing),                         intent(in) :: fluxes
@@ -450,9 +450,9 @@ contains
     type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
     type(optics_type),                     intent(in) :: optics
     real,                        optional,intent(in)  :: evap_CFL_limit !< Limits how much water can be fluxed out of
-                                                                        !! the top layer Stored previously in diabatic CS.
+                                                              !! the top layer Stored previously in diabatic CS.
     real,                        optional,intent(in)  :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                                                        !!  can be applied Stored previously in diabatic CS.
+                                                              !!  can be applied Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
     !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
@@ -564,14 +564,17 @@ contains
     ! Use a tridiagonal solver to determine the concentrations after the
     ! surface source is applied and diapycnal advection and diffusion occurs.
     if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-      call generic_tracer_vertdiff_G(h_work, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+      ! Last arg is tau which is always 1 for MOM6
+      call generic_tracer_vertdiff_G(h_work, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1)
     else
-      call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+      ! Last arg is tau which is always 1 for MOM6
+      call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1)
     endif
 
     ! Update bottom fields after vertical processes
 
-    call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag)) !Second arg is tau which is always 1 for MOM
+    ! Second arg is tau which is always 1 for MOM6
+    call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all generic tracers and their fluxes
     call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
@@ -651,21 +654,22 @@ contains
   !> This subroutine find the global min and max of either of all
   !! available tracer concentrations, or of a tracer that is being
   !! requested specifically, returning the number of tracers it has gone through.
-  function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, xgmin, ygmin, zgmin, xgmax, ygmax, zgmax , G, CS, names, units)
+  function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, xgmin, ygmin, zgmin, &
+                                      xgmax, ygmax, zgmax , G, CS, names, units)
     use mpp_utilities_mod, only: mpp_array_global_min_max
-    integer,                            intent(in)    :: ind_start
-    logical, dimension(:),              intent(out)   :: got_minmax
-    real, dimension(:),                 intent(out)   :: gmin   !< Global minimum of each tracer, in kg
-                                                                !! times concentration units.
-    real, dimension(:),                 intent(out)   :: gmax   !< Global maximum of each tracer, in kg
-                                                                !! times concentration units.
-    real, dimension(:),                 intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
-    type(ocean_grid_type),              intent(in)    :: G      !< The ocean's grid structure
-    type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
-    character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
-    character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.
-    integer                                           :: MOM_generic_tracer_min_max !< Return value, the
-                                                                !! number of tracers done here.
+    integer,                        intent(in)    :: ind_start
+    logical, dimension(:),          intent(out)   :: got_minmax
+    real, dimension(:),             intent(out)   :: gmin   !< Global minimum of each tracer, in kg
+                                                            !! times concentration units.
+    real, dimension(:),             intent(out)   :: gmax   !< Global maximum of each tracer, in kg
+                                                            !! times concentration units.
+    real, dimension(:),             intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
+    type(ocean_grid_type),          intent(in)    :: G      !< The ocean's grid structure
+    type(MOM_generic_tracer_CS),    pointer       :: CS     !< Pointer to the control structure for this module.
+    character(len=*), dimension(:), intent(out)   :: names  !< The names of the stocks calculated.
+    character(len=*), dimension(:), intent(out)   :: units  !< The units of the stocks calculated.
+    integer                                       :: MOM_generic_tracer_min_max !< Return value, the
+                                                            !! number of tracers done here.
 
 ! Local variables
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
@@ -709,7 +713,8 @@ contains
 
 
       call mpp_array_global_min_max(tr_ptr, grid_tmask,isd,jsd,isc,iec,jsc,jec,nk , gmin(m), gmax(m), &
-                                    G%geoLonT,G%geoLatT,geo_z,xgmin(m), ygmin(m), zgmin(m), xgmax(m), ygmax(m), zgmax(m))
+                                    G%geoLonT,G%geoLatT,geo_z,xgmin(m), ygmin(m), zgmin(m), &
+                                    xgmax(m), ygmax(m), zgmax(m))
 
       got_minmax(m) = .true.
 

@@ -259,13 +259,17 @@ contains
     call set_axes_info(CS%Grid,CS%GV,PF,CS%diag_cs,set_vertical=.true.)
     do n=1,CS%ensemble_size
       write(fldnam,'(a,i2.2)') 'temp_prior_',n
-      CS%Ocean_prior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
+      CS%Ocean_prior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
+                                                 'ocean potential temperature','degC')
       write(fldnam,'(a,i2.2)') 'salt_prior_',n
-      CS%Ocean_prior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
+      CS%Ocean_prior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
+                                                 'ocean salinity','psu')
       write(fldnam,'(a,i2.2)') 'temp_posterior_',n
-      CS%Ocean_posterior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
+      CS%Ocean_posterior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
+                                                 'ocean potential temperature','degC')
       write(fldnam,'(a,i2.2)') 'salt_posterior_',n
-      CS%Ocean_posterior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
+      CS%Ocean_posterior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
+                                                 'ocean salinity','psu')
     enddo
 
    call mpp_get_data_domain(CS%mpp_domain,isd,ied,jsd,jed)
@@ -366,8 +370,10 @@ contains
            CS%mpp_domain, CS%Ocean_prior%T(:,:,:,m), complete=.true.)
       call mpp_redistribute(CS%domains(m)%mpp_domain, S,&
            CS%mpp_domain, CS%Ocean_prior%S(:,:,:,m), complete=.true.)
-      if (CS%Ocean_prior%id_t(m)>0) used=send_data(CS%Ocean_prior%id_t(m), CS%Ocean_prior%T(isc:iec,jsc:jec,:,m), CS%Time)
-      if (CS%Ocean_prior%id_s(m)>0) used=send_data(CS%Ocean_prior%id_s(m), CS%Ocean_prior%S(isc:iec,jsc:jec,:,m), CS%Time)
+      if (CS%Ocean_prior%id_t(m)>0) &
+        used=send_data(CS%Ocean_prior%id_t(m), CS%Ocean_prior%T(isc:iec,jsc:jec,:,m), CS%Time)
+      if (CS%Ocean_prior%id_s(m)>0) &
+        used=send_data(CS%Ocean_prior%id_s(m), CS%Ocean_prior%S(isc:iec,jsc:jec,:,m), CS%Time)
     enddo
     deallocate(T,S)
 

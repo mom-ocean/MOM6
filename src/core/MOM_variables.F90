@@ -281,7 +281,8 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
-  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically integrated fields.
+  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically
+                                                           !! integrated fields.
   type(coupler_1d_bc_type), &
                optional, intent(in)    :: gas_fields_ocn   !< If present, this type describes the ocean
                                               !! ocean and surface-ice fields that will participate

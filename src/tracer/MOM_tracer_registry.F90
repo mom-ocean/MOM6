@@ -158,10 +158,14 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   real, dimension(:,:,:), optional, pointer     :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:,:), optional, pointer     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:,:), optional, pointer     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: ad_2d_x      !< vert sum of diagnostic x-advect flux
+                                                                !! (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: ad_2d_y      !< vert sum of diagnostic y-advect flux
+                                                                !! (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux
+                                                                !! (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux
+                                                                !! (CONC m3/s or CONC*kg/s)
 
   real, dimension(:,:,:), optional, pointer     :: advection_xy !< convergence of lateral advective tracer fluxes
   logical,              optional, intent(in)    :: registry_diags !< If present and true, use the registry for
@@ -173,12 +177,15 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   character(len=*),     optional, intent(in)    :: flux_units   !< The units for the fluxes of this tracer.
   real,                 optional, intent(in)    :: flux_scale   !< A scaling factor used to convert the fluxes
                                                                 !! of this tracer to its desired units.
-  character(len=*),     optional, intent(in)    :: convergence_units   !< The units for the flux convergence of this tracer.
+  character(len=*),     optional, intent(in)    :: convergence_units !< The units for the flux convergence of
+                                                                !! this tracer.
   real,                 optional, intent(in)    :: convergence_scale !< A scaling factor used to convert the flux
                                                                 !! convergence of this tracer to its desired units.
-  character(len=*),     optional, intent(in)    :: cmor_tendprefix !< The CMOR name for the layer-integrated tendencies of this tracer.
-  integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the character
-                                                                !! string template to use in labeling diagnostics
+  character(len=*),     optional, intent(in)    :: cmor_tendprefix !< The CMOR name for the layer-integrated
+                                                                !! tendencies of this tracer.
+  integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the
+                                                                !! character string template to use in
+                                                                !! labeling diagnostics
   type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure;
                                                                 !! this tracer will be registered for
                                                                 !! restarts if this argument is present

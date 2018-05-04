@@ -1053,8 +1053,8 @@ end subroutine VarMix_init
 !! r(\Delta,L_d) = \frac{1}{1+(\alpha R)^p}
 !! \f]
 !!
-!! The resolution function can be applied independently to thickness diffusion (module mom_thickness_diffuse), tracer diffusion (mom_tracer_hordiff)
-!! lateral viscosity (mom_hor_visc).
+!! The resolution function can be applied independently to thickness diffusion (module mom_thickness_diffuse),
+!! tracer diffusion (mom_tracer_hordiff) lateral viscosity (mom_hor_visc).
 !!
 !! Robert Hallberg, 2013: Using a resolution function to regulate parameterizations of oceanic mesoscale eddy effects.
 !! Ocean Modelling, 71, pp 92-103.  http://dx.doi.org/10.1016/j.ocemod.2013.08.007
@@ -1075,8 +1075,8 @@ end subroutine VarMix_init
 !!
 !! \section section_Vicbeck Visbeck diffusivity
 !!
-!! This module also calculates factors used in setting the thickness diffusivity similar to a Visbeck et al., 1997, scheme.
-!! The factors are combined in mom_thickness_diffuse::thickness_diffuse() but calculated in this module.
+!! This module also calculates factors used in setting the thickness diffusivity similar to a Visbeck et al., 1997,
+!! scheme.  The factors are combined in mom_thickness_diffuse::thickness_diffuse() but calculated in this module.
 !!
 !! \f[
 !! \kappa_h = \alpha_s L_s^2 S N
@@ -1098,9 +1098,9 @@ end subroutine VarMix_init
 !!
 !! \section section_vertical_structure_khth Vertical structure function for KhTh
 !!
-!! The thickness diffusivity can be prescribed a vertical distribution with the shape of the equivalent barotropic velocity mode.
-!! The structure function is stored in the control structure for thie module (varmix_cs) but is calculated use subroutines in
-!! mom_wave_speed.
+!! The thickness diffusivity can be prescribed a vertical distribution with the shape of the equivalent barotropic
+!! velocity mode.  The structure function is stored in the control structure for thie module (varmix_cs) but is
+!! calculated using subroutines in mom_wave_speed.
 !!
 !! | Symbol                | Module parameter |
 !! | ------                | --------------- |

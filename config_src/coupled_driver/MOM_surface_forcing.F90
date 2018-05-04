@@ -632,7 +632,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
       call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
       call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
     endif
-    
+
     forces%initialized = .true.
   endif
 

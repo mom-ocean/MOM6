@@ -586,8 +586,10 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out) :: u_h, v_h
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(in)  :: ea, eb
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out) :: u_h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out) :: v_h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(in)  :: ea
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(in)  :: eb
 !   This subroutine calculates u_h and v_h (velocities at thickness
 ! points), optionally using the entrainments (in m) passed in as arguments.
 
@@ -739,7 +741,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       if (id_N2>0) then
         do i=is,ie
           pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
-          !### This should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k) ! This might change answers at roundoff.
+          !### This should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k)
+          !### This might change answers at roundoff.
         enddo
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
         do i=is,ie
@@ -750,7 +753,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
               !### It looks to me like there is bad logic here. - RWH
               ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
               pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
-              !### This line should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k) ! This might change answers at roundoff.
+              !### This line should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k)
+              !### This might change answers at roundoff.
             endif
             if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
               subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))

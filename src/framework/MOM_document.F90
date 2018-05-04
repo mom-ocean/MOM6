@@ -739,7 +739,7 @@ end subroutine doc_function
 
 subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
   character(len=*),  intent(in)  :: docFileBase !< The base file name for this set of parameters,
-                                             !! for example MOM_parameter_doc 
+                                             !! for example MOM_parameter_doc
   type(doc_type),    pointer     :: doc      !< A pointer to a structure that controls where the
                                              !! documentation occurs and its formatting
   logical, optional, intent(in)  :: minimal  !< If present and true, write out the files (.short) documenting

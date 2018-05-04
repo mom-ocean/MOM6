@@ -585,7 +585,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                   Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
                   reset_therm=Ocn_fluxes_used)
  !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
-    
+
   elseif (OS%single_step_call) then
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else

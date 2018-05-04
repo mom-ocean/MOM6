@@ -569,18 +569,21 @@ end subroutine MOM_grid_end
 !!
 !! Grid metrics and their inverses are labelled according to their staggered location on a Arakawa C (or B) grid.
 !! - Metrics centered on h- or T-points are labelled T, e.g. dxT is the distance across the cell in the x-direction.
-!! - Metrics centered on u-points are labelled Cu (C-grid u location). e.g. dyCu is the y-distance between two corners of a T-cell.
+!! - Metrics centered on u-points are labelled Cu (C-grid u location). e.g. dyCu is the y-distance between
+!!   two corners of a T-cell.
 !! - Metrics centered on v-points are labelled Cv (C-grid v location). e.g. dyCv is the y-distance between two -points.
 !! - Metrics centered on q-points are labelled Bu (B-grid u,v location). e.g. areaBu is the area centered on a q-point.
 !!
-!! \image html Grid_metrics.png "The labelling of distances (grid metrics) at various staggered location on an T-cell and around a q-point.
+!! \image html Grid_metrics.png
+!! "The labelling of distances (grid metrics) at various staggered location on an T-cell and around a q-point.
 !!
 !! Areas centered at T-, u-, v- and q- points are `areaT`, `areaCu`, `areaCv` and `areaBu` respectively.
 !!
 !! The reciprocal of metrics are pre-calculated and also stored in the ocean_grid_type with a I prepended to the name.
 !! For example, `1./areaT` is called `IareaT`, and `1./dyCv` is `IdyCv`.
 !!
-!! Geographic latitude and longitude (or model coordinates if not on a sphere) are stored in `geoLatT`, `geoLonT` for T-points.
+!! Geographic latitude and longitude (or model coordinates if not on a sphere) are stored in
+!! `geoLatT`, `geoLonT` for T-points.
 !! u-, v- and q- point coordinates are follow same pattern of replacing T with Cu, Cv and Bu respectively.
 !!
 !! Each location also has a 2D mask indicating whether the entire column is land or ocean.
