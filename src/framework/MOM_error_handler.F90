@@ -46,6 +46,7 @@ integer :: callTreeIndentLevel = 0
 
 contains
 
+!> This returns .true. if the current PE is the root PE.
 function is_root_pe()
   ! This returns .true. if the current PE is the root PE.
   logical :: is_root_pe
@@ -54,10 +55,12 @@ function is_root_pe()
   return
 end function is_root_pe
 
+!> This provides a convenient interface for writing an informative comment.
 subroutine MOM_mesg(message, verb, all_print)
-  character(len=*), intent(in)  :: message
-  integer, optional, intent(in) :: verb
-  logical, optional, intent(in) :: all_print
+  character(len=*), intent(in)  :: message !< A message to write out
+  integer, optional, intent(in) :: verb !< A level of verbosity for this message
+  logical, optional, intent(in) :: all_print !< If present and true, any PEs are
+                                             !! able to write this message.
   ! This provides a convenient interface for writing an informative comment.
   integer :: verb_msg
   logical :: write_msg
@@ -70,10 +73,13 @@ subroutine MOM_mesg(message, verb, all_print)
 
 end subroutine MOM_mesg
 
+!> This provides a convenient interface for writing an mpp_error message
+!! with run-time filter based on a verbosity.
 subroutine MOM_error(level, message, all_print)
-  integer,           intent(in) :: level
-  character(len=*),  intent(in) :: message
-  logical, optional, intent(in) :: all_print
+  integer,           intent(in) :: level !< The verbosity level of this message
+  character(len=*),  intent(in) :: message !< A message to write out
+  logical, optional, intent(in) :: all_print !< If present and true, any PEs are
+                                             !! able to write this message.
   ! This provides a convenient interface for writing an mpp_error message
   ! with run-time filter based on a verbosity.
   logical :: write_msg
@@ -93,8 +99,9 @@ subroutine MOM_error(level, message, all_print)
   end select
 end subroutine MOM_error
 
+!> This subroutine sets the level of verbosity filtering MOM error messages
 subroutine MOM_set_verbosity(verb)
-  integer, intent(in) :: verb
+  integer, intent(in) :: verb !< A level of verbosity to set
   character(len=80) :: msg
   if (verb>0 .and. verb<10) then
     verbosity=verb
@@ -104,13 +111,16 @@ subroutine MOM_set_verbosity(verb)
   endif
 end subroutine MOM_set_verbosity
 
+!> This subroutine gets the level of verbosity filtering MOM error messages
 function MOM_get_verbosity()
   integer :: MOM_get_verbosity
   MOM_get_verbosity = verbosity
 end function MOM_get_verbosity
 
+!> This tests whether the level of verbosity filtering MOM error messages is
+!! sufficient to write a message of verbosity level verb
 function MOM_verbose_enough(verb)
-  integer, intent(in) :: verb
+  integer, intent(in) :: verb !< A level of verbosity to test
   logical :: MOM_verbose_enough
   MOM_verbose_enough = (verbosity >= verb)
 end function MOM_verbose_enough
@@ -124,8 +134,8 @@ end function callTree_showQuery
 
 !> Writes a message about entering a subroutine if call tree reporting is active
 subroutine callTree_enter(mesg,n)
-  character(len=*)  :: mesg !< Message to write
-  integer, optional :: n !< An optional integer to write at end of message
+  character(len=*),  intent(in) :: mesg !< Message to write
+  integer, optional, intent(in) :: n !< An optional integer to write at end of message
   ! Local variables
   character(len=8) :: nAsString
   callTreeIndentLevel = callTreeIndentLevel + 1
@@ -155,8 +165,8 @@ end subroutine callTree_leave
 
 !> Writes a message about reaching a milestone if call tree reporting is active
 subroutine callTree_waypoint(mesg,n)
-  character(len=*) :: mesg !< Message to write
-  integer, optional :: n !< An optional integer to write at end of message
+  character(len=*),  intent(in) :: mesg !< Message to write
+  integer, optional, intent(in) :: n !< An optional integer to write at end of message
   ! Local variables
   character(len=8) :: nAsString
   if (callTreeIndentLevel<0) write(0,*) 'callTree_waypoint: error callTreeIndentLevel=',callTreeIndentLevel,trim(mesg)

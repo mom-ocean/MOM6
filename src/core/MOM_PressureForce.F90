@@ -44,18 +44,26 @@ contains
 
 !> A thin layer between the model and the Boussinesq and non-Boussinesq pressure force routines.
 subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv
-  type(PressureForce_CS),                    pointer     :: CS
-  type(ALE_CS),                              pointer     :: ALE_CSp
-  real, dimension(:,:),                     optional, pointer     :: p_atm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
-
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(out) :: PFu  !< Zonal pressure force acceleration (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(out) :: PFv  !< Meridional pressure force acceleration (m/s2)
+  type(PressureForce_CS),  pointer     :: CS   !< Pressure force control structure
+  type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
+  real, dimension(:,:), &
+                 optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+                                               !! atmosphere-ocean interface in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 optional, intent(out) :: pbce !< The baroclinic pressure anomaly in each layer
+                                               !! due to eta anomalies, in m2 s-2 H-1.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(out) :: eta  !< The bottom mass used to calculate PFu and PFv,
+                                               !! in H, with any tidal contributions.
 
   if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
     if (GV%Boussinesq) then

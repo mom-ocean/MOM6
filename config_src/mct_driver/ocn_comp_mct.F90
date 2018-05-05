@@ -1675,7 +1675,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   type(cpl_indices),      intent(inout) :: ind !< Structure with MCT attribute vectors and indices
   logical,                intent(in)    :: sw_decomp !< controls if shortwave is
                                                      !!decomposed into four components
-  real(kind=8),           intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  real(kind=8), optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
 
   ! local variables
   type(time_type) :: Master_time !< This allows step_MOM to temporarily change
@@ -1769,8 +1769,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes, &
-                                   OS%restart_CSp)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, S%restart_CSp)
   endif
 
   call disable_averaging(OS%diag)
@@ -1813,21 +1812,21 @@ end subroutine update_ocean_model
 !! the future.
 subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
                              c1, c2, c3, c4, restore_salt, restore_temp)
-  type(mech_forcing),         intent(inout)        :: forces !<  Driving mechanical forces
-  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes
-  type(time_type),            intent(in)           :: Time !< Model time
-  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid
-  type(surface_forcing_CS),   pointer              :: CS !< control structure returned by
-                                                   !! a previous call to surface_forcing_init
-  type(surface),              intent(in)           :: state !< control structure to ocean
-                                                   !! surface state fields.
-  real(kind=8),               intent(in)           :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
-  type(cpl_indices),          intent(inout)        :: ind !< Structure with MCT attribute vectors and indices
-  logical,                    intent(in)           :: sw_decomp !< controls if shortwave is
-                                                   !!decomposed into four components
-  real(kind=8),               intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-  logical, optional,          intent(in)            :: restore_salt, restore_temp !< Controls if salt and temp are
-                                                   !! restored
+  type(mech_forcing),         intent(inout) :: forces !<  Driving mechanical forces
+  type(forcing),              intent(inout) :: fluxes !< Surface fluxes
+  type(time_type),            intent(in)    :: Time !< Model time
+  type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid
+  type(surface_forcing_CS),   pointer       :: CS !< control structure returned by
+                                            !! a previous call to surface_forcing_init
+  type(surface),              intent(in)    :: state !< control structure to ocean
+                                            !! surface state fields.
+  real(kind=8),               intent(in)    :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
+  type(cpl_indices),          intent(inout) :: ind !< Structure with MCT attribute vectors and indices
+  logical,                    intent(in)    :: sw_decomp !< controls if shortwave is
+                                            !!decomposed into four components
+  real(kind=8),     optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  logical, optional,          intent(in)    :: restore_salt, restore_temp !< Controls if salt and temp are
+                                            !! restored
 
   ! local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -1942,9 +1941,11 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
   endif   ! endif for allocation and initialization
 
   if (CS%allow_flux_adjustments) then
-   fluxes%heat_added(:,:)=0.0
-   fluxes%salt_flux_added(:,:)=0.0
+    fluxes%heat_added(:,:)=0.0
+    fluxes%salt_flux_added(:,:)=0.0
   endif
+  if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
+  if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
   if (CS%area_surf < 0.0) then
     do j=js,je ; do i=is,ie
@@ -2293,7 +2294,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       endif
       ! CAUTION: with both rigid_sea_ice and ice shelves, we will need to make this
       ! a maximum for the second call.
-      forces%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=isd,ied ; do J=jsd,jed-1
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
@@ -2302,7 +2303,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
       endif
-      forces%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + Kv_rho_ice * mass_eff
     enddo ; enddo
   endif
 

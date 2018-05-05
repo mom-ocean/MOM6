@@ -1617,12 +1617,12 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
 
     do_any_shelf = .false.
     if (associated(forces%frac_shelf_v)) then
-      do I=Is,Ie
+      do i=is,ie
         if (forces%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
-          do_i(I) = .false.
+          do_i(i) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
         else
-          do_i(I) = .true. ; do_any_shelf = .true.
+          do_i(i) = .true. ; do_any_shelf = .true.
         endif
       enddo
     endif

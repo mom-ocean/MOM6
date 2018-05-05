@@ -24,10 +24,12 @@ use MOM, only : get_ocean_stocks, step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
-use MOM_domains, only : pass_vector, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains, only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains, only : TO_ALL, Omit_Corners
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
+use MOM_forcing_type, only : allocate_forcing_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : forcing_accumulate, copy_common_forcing_fields
 use MOM_forcing_type, only : copy_back_forcing_fields, set_net_mass_forcing
@@ -36,10 +38,11 @@ use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
+use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing, only : ice_ocn_bnd_type_chksum
+use MOM_surface_forcing, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing, only : forcing_save_restart
 use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
@@ -59,10 +62,8 @@ use coupler_types_mod, only : coupler_type_set_diags, coupler_type_send_data
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
-use MOM_forcing_type, only : allocate_forcing_type
 use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
-use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
 use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
@@ -141,27 +142,20 @@ end type ocean_public_type
 type, public :: ocean_state_type ; private
   ! This type is private, and can therefore vary between different ocean models.
   logical :: is_ocean_PE = .false.  !< True if this is an ocean PE.
-  type(time_type) :: Time    !< The ocean model's time and master clock.
-  integer :: Restart_control !< An integer that is bit-tested to determine whether
-                             !! incremental restart files are saved and whether they
-                             !! have a time stamped name.  +1 (bit 0) for generic
-                             !! files and +2 (bit 1) for time-stamped files.  A
-                             !! restart file is saved at the end of a run segment
-                             !! unless Restart_control is negative.
+  type(time_type) :: Time     !< The ocean model's time and master clock.
+  integer :: Restart_control  !< An integer that is bit-tested to determine whether
+                              !! incremental restart files are saved and whether they
+                              !! have a time stamped name.  +1 (bit 0) for generic
+                              !! files and +2 (bit 1) for time-stamped files.  A
+                              !! restart file is saved at the end of a run segment
+                              !! unless Restart_control is negative.
 
   integer :: nstep = 0        !< The number of calls to update_ocean.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
-  logical :: use_waves = .false.! If true use wave coupling.
+  logical :: use_waves        !< If true use wave coupling.
 
-  ! Many of the following variables do not appear to belong here. -RWH
-  logical :: icebergs_apply_rigid_boundary  ! If true, the icebergs can change ocean bd condition.
-  real :: kv_iceberg          ! The viscosity of the icebergs in m2/s (for ice rigidity)
-  real :: berg_area_threshold ! Fraction of grid cell which iceberg must occupy
-                              !so that fluxes below are set to zero. (0.5 is a
-                              !good value to use. Not applied for negative values.
-  real :: latent_heat_fusion  ! Latent heat of fusion
-  real :: density_iceberg     ! A typical density of icebergs in kg/m3 (for ice rigidity)
-
+  logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
+                              !! ocean dynamics and forcing fluxes.
   logical :: restore_salinity !< If true, the coupled MOM driver adds a term to
                               !! restore salinity to a specified value.
   logical :: restore_temp     !< If true, the coupled MOM driver adds a term to
@@ -210,6 +204,9 @@ type, public :: ocean_state_type ; private
     Ice_shelf_CSp => NULL()   !< A pointer to the control structure for the
                               !! ice shelf model that couples with MOM6.  This
                               !! is null if there is no ice shelf.
+  type(marine_ice_CS), pointer :: &
+    marine_ice_CSp => NULL()  !< A pointer to the control structure for the
+                              !! marine ice effects module.
   type(wave_parameters_cs), pointer :: &
     Waves !< A structure containing pointers to the surface wave fields
   type(surface_forcing_CS), pointer :: &
@@ -357,21 +354,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call get_param(param_file, mdl, "ICE_SHELF",  OS%use_ice_shelf, &
                  "If true, enables the ice shelf model.", default=.false.)
 
-  call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_apply_rigid_boundary, &
+  call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_alter_ocean, &
                  "If true, allows icebergs to change boundary condition felt by ocean", default=.false.)
-
-  if (OS%icebergs_apply_rigid_boundary) then
-    call get_param(param_file, mdl, "KV_ICEBERG",  OS%kv_iceberg, &
-                 "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
-    call get_param(param_file, mdl, "DENSITY_ICEBERGS",  OS%density_iceberg, &
-                 "A typical density of icebergs.", units="kg m-3", default=917.0)
-    call get_param(param_file, mdl, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
-                 "The latent heat of fusion.", units="J/kg", default=hlf)
-    call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
-                 "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
-                 "below berg are set to zero. Not applied for negative \n"//&
-                 " values.", units="non-dim", default=-1.0)
-  endif
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
@@ -387,17 +371,16 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
                               OS%diag, OS%forces, OS%fluxes)
   endif
-  if (OS%icebergs_apply_rigid_boundary)  then
-    !call allocate_forcing_type(OS%grid, OS%fluxes, iceberg=.true.)
-    !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
+  if (OS%icebergs_alter_ocean)  then
+    call marine_ice_init(OS%Time, OS%grid, param_file, OS%diag, OS%marine_ice_CSp)
     if (.not. OS%use_ice_shelf) &
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
 
-  call get_param(param_file,mdl,"USE_WAVES",OS%Use_Waves,&
-       "If true, enables surface wave modules.",default=.false.)
+  call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
+       "If true, enables surface wave modules.", default=.false.)
   if (OS%use_waves) then
-    call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%Waves,OS%diag)
+    call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, param_file, OS%Waves, OS%diag)
   else
     call MOM_wave_interface_init_lite(param_file)
   endif
@@ -450,7 +433,7 @@ end subroutine ocean_model_init
 !! storing the new ocean properties in Ocean_state.
 subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                               time_start_update, Ocean_coupling_time_step, &
-                              update_dyn, update_thermo)
+                              update_dyn, update_thermo, Ocn_fluxes_used)
   type(ice_ocean_boundary_type), &
                      intent(in)    :: Ice_ocean_boundary !< A structure containing the
                                               !! various forcing fields coming from the ice.
@@ -469,6 +452,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                               !! due to the ocean dynamics.
   logical, optional, intent(in)    :: update_thermo !< If present and false, do not do updates
                                               !! due to the ocean thermodynamics or remapping.
+  logical, optional, intent(in)    :: Ocn_fluxes_used !< If present, this indicates whether the
+                                              !! cumulative thermodynamic fluxes from the ocean,
+                                              !! like frazil, have been used and should be reset.
 
   type(time_type) :: Master_time ! This allows step_MOM to temporarily change
                                  ! the time that is seen by internal modules.
@@ -488,7 +474,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   type(time_type) :: Time2  ! A temporary time.
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
-  logical :: do_dyn, do_thermo
+  logical :: do_dyn       ! If true, step the ocean dynamics and transport.
+  logical :: do_thermo    ! If true, step the ocean thermodynamics.
   logical :: step_thermo           ! If true, take a thermodynamic step.
   integer :: secs, days
   integer :: is, ie, js, je
@@ -523,26 +510,30 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   weight = 1.0
 
+  call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
+                             OS%grid, OS%forcing_CSp)
+
   if (OS%fluxes%fluxes_used) then
-    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) ! Needed to allow diagnostics in convert_IOB
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%forces, OS%fluxes, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
+                               OS%grid, OS%forcing_CSp, OS%sfc_state, &
+                               OS%restore_salinity, OS%restore_temp)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
-    if (OS%icebergs_apply_rigid_boundary)  then
-      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-      call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%fluxes, OS%use_ice_shelf, &
-                    OS%density_iceberg, OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, &
-                    dt_coupling, OS%berg_area_threshold)
+    if (OS%icebergs_alter_ocean)  then
+      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
-    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
+    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid, skip_pres=.true.)
 
 #ifdef _USE_GENERIC_TRACER
+    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
     ! Indicate that there are new unused fluxes.
@@ -550,15 +541,17 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%fluxes%dt_buoy_accum = dt_coupling
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%forces, OS%flux_tmp, index_bnds, OS%Time, &
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
+
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
-    if (OS%icebergs_apply_rigid_boundary)  then
-     !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-     call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf, OS%density_iceberg, &
-            OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, dt_coupling, OS%berg_area_threshold)
+    if (OS%icebergs_alter_ocean)  then
+      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
@@ -578,15 +571,21 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   endif
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes, &
-                                   OS%restart_CSp)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
 
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  if(OS%offline_tracer_mode) then
+  if (OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
+  elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
+    ! The call sequence is being orchestrated from outside of update_ocean_model.
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
+                  Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
+                  reset_therm=Ocn_fluxes_used)
+ !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
+
   elseif (OS%single_step_call) then
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else
@@ -612,16 +611,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
         if (modulo(n-1,nts)==0) then
           dtdia = dt_dyn*min(nts,n_max-(n-1))
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
-                        do_dynamics=.false., do_thermodynamics=.true., &
+                        Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
         endif
 
         call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
-                      do_dynamics=.true., do_thermodynamics=.false., &
+                      Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
       else
         call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
-                      do_dynamics=.true., do_thermodynamics=.false., &
+                      Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
                       start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
         step_thermo = .false.
@@ -638,7 +637,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
           ! Back up Time2 to the start of the thermodynamic segment.
           Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
-                        do_dynamics=.false., do_thermodynamics=.true., &
+                        Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
         endif
       endif
@@ -673,6 +672,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 end subroutine update_ocean_model
 ! </SUBROUTINE> NAME="update_ocean_model"
 
+
 !=======================================================================
 ! <SUBROUTINE NAME="ocean_model_restart">
 !
@@ -680,118 +680,15 @@ end subroutine update_ocean_model
 ! write out restart file.
 ! Arguments:
 !   timestamp (optional, intent(in)) : A character string that represents the model time,
-!                                      used for writing restart. timestamp will append to
+!                                      used for writing restart. timestamp will prepend to
 !                                      the any restart file name as a prefix.
 ! </DESCRIPTION>
 !
-
-subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice, kv_ice, &
-                                  latent_heat_fusion, sfc_state, time_step, berg_area_threshold)
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  type(mech_forcing),    intent(inout) :: forces  !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes
-  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
-                                                    !! describe the surface state of the ocean.
-  logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
-  real, intent(in) :: kv_ice       !< The viscosity of ice, in m2 s-1.
-  real, intent(in) :: density_ice  !< A typical density of ice, in kg m-3.
-  real, intent(in) :: latent_heat_fusion   !< The latent heat of fusion, in J kg-1.
-  real, intent(in) :: time_step   !< The coupling time step, in s.
-  real, intent(in) :: berg_area_threshold  !< Area threshold for zeroing fluxes below iceberg
-! Arguments:
-!  (in)      fluxes - A structure of surface fluxes that may be used.
-!  (in)      G - The ocean's grid structure.
-  real :: fraz      ! refreezing rate in kg m-2 s-1
-  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion, in kg J-1 s-1.
-  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
-  !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
-  !which can then be used to change the top of ocean boundary condition used in
-  !the ocean model. This routine is taken from the add_shelf_flux subroutine
-  !within the ice shelf model.
-
-  if (.not. (((associated(fluxes%frac_shelf_h) .and. associated(forces%frac_shelf_u)) &
-    .and.(associated(forces%frac_shelf_v) .and. associated(fluxes%ustar_shelf)))&
-    .and.(associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)))) return
-
-  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
-            associated(fluxes%mass_berg) ) ) return
-
-  if (.not. use_ice_shelf) then
-    fluxes%frac_shelf_h(:,:) = 0.
-    forces%frac_shelf_u(:,:) = 0.
-    forces%frac_shelf_v(:,:) = 0.
-    fluxes%ustar_shelf(:,:) = 0.
-    forces%rigidity_ice_u(:,:) = 0.
-    forces%rigidity_ice_v(:,:) = 0.
-  endif
-
-  kv_rho_ice = kv_ice / density_ice
-
-  do j=jsd,jed ; do i=isd,ied
-    if (G%areaT(i,j) > 0.0) &
-      fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j)
-      fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  +  fluxes%ustar_berg(i,j)
-  enddo ; enddo
-  do j=jsd,jed ; do I=isd,ied-1
-    forces%frac_shelf_u(I,j) = 0.0
-    if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
-      forces%frac_shelf_u(I,j) = forces%frac_shelf_u(I,j) + &
-          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + &
-            (fluxes%area_berg(i+1,j)*G%areaT(i+1,j))) / &
-           (G%areaT(i,j) + G%areaT(i+1,j)) )
-    forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + kv_rho_ice * &
-                         min(fluxes%mass_berg(i,j), fluxes%mass_berg(i+1,j))
-  enddo ; enddo
-  do J=jsd,jed-1 ; do i=isd,ied
-    forces%frac_shelf_v(i,J) = 0.0
-    if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
-      forces%frac_shelf_v(i,J) = forces%frac_shelf_v(i,J) + &
-          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + &
-            (fluxes%area_berg(i,j+1)*G%areaT(i,j+1))) / &
-           (G%areaT(i,j) + G%areaT(i,j+1)) )
-    forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + kv_rho_ice * &
-                         min(fluxes%mass_berg(i,j), fluxes%mass_berg(i,j+1))
-  enddo ; enddo
-  call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
-
-  !Zero'ing out other fluxes under the tabular icebergs
-  if (berg_area_threshold >= 0.) then
-    I_dt_LHF = 1.0 / (time_step * latent_heat_fusion)
-    do j=jsd,jed ; do i=isd,ied
-      if (fluxes%frac_shelf_h(i,j) > berg_area_threshold) then  !Only applying for ice shelf covering most of cell
-
-        if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
-        if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
-        if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
-        if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
-
-        ! Add frazil formation diagnosed by the ocean model (J m-2) in the
-        ! form of surface layer evaporation (kg m-2 s-1). Update lprec in the
-        ! control structure for diagnostic purposes.
-
-        if (associated(sfc_state%frazil)) then
-          fraz = sfc_state%frazil(i,j) * I_dt_LHF
-          if (associated(fluxes%evap)) fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
-          !CS%lprec(i,j)=CS%lprec(i,j) - fraz
-          sfc_state%frazil(i,j) = 0.0
-        endif
-
-        !Alon: Should these be set to zero too?
-        if (associated(fluxes%sens)) fluxes%sens(i,j) = 0.0
-        if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
-        if (associated(fluxes%lprec)) fluxes%lprec(i,j) = 0.0
-      endif
-    enddo ; enddo
-  endif
-
-end subroutine add_berg_flux_to_shelf
-
 subroutine ocean_model_restart(OS, timestamp)
-  type(ocean_state_type),        pointer :: OS
-  character(len=*), intent(in), optional :: timestamp
+  type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
+                                               !! internal ocean state being saved to a restart file
+  character(len=*), optional, intent(in) :: timestamp !< An optional timestamp string that should be
+                                               !! prepended to the file name. (Currently this is unused.)
 
   if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
       call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
@@ -903,10 +800,11 @@ end subroutine ocean_model_save_restart
 
 subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
                                         gas_fields_ocn)
-  type(domain2D), intent(in)             :: input_domain
+  type(domain2D),          intent(in)    :: input_domain
   type(ocean_public_type), intent(inout) :: Ocean_sfc
-  type(diag_ctrl), intent(in)            :: diag
-  logical, intent(in), optional          :: maskmap(:,:)
+  type(diag_ctrl),         intent(in)    :: diag
+  logical, dimension(:,:), &
+                 optional, intent(in)    :: maskmap
   type(coupler_1d_bc_type), &
                  optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate
