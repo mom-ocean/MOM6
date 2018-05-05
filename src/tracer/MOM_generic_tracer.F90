@@ -311,7 +311,7 @@ contains
        elseif(.not. g_tracer%requires_restart) then
          !Do nothing for this tracer, it is initialized by the tracer package
           call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
-                            "skip initialization of generic tracer "//trim(g_tracer_name))                  
+                            "skip initialization of generic tracer "//trim(g_tracer_name))
        else !Do it old way if the tracer is not registered to start from a specific source file.
             !This path should be deprecated if all generic tracers are required to start from specified sources.
         if (len_trim(CS%IC_file) > 0) then
