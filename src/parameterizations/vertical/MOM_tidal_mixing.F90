@@ -553,8 +553,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
            'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'm')
 
-      CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
-           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'm')
+      CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model', &
+           'Polzin_decay_scale_scaled',diag%axesT1,Time, &
+           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, '// &
+           'scaled by N2_bot/N2_meanz', 'm')
 
       CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
            'Bottom Buoyancy frequency squared', 's-2')
@@ -649,7 +651,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
   integer :: i, k, is, ie
   real :: dh, hcorr, Simmons_coeff
-  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3] ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
+  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3]
+                                     ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
   type(tidal_mixing_diags), pointer :: dd
 
   is  = G%isc ; ie  = G%iec
@@ -1325,6 +1328,5 @@ subroutine tidal_mixing_end(CS)
   deallocate(CS)
 
 end subroutine tidal_mixing_end
-
 
 end module MOM_tidal_mixing

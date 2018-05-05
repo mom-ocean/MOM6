@@ -235,7 +235,8 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
   character(len=*),                 intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
-  logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                            !! symmetric computational domain.
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
@@ -261,7 +262,8 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                               !! symmetric computational domain.
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
 
@@ -425,7 +427,8 @@ subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
   real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: arrayU !< The u-component array to be checksummed
   real, dimension(HI%isd:,HI%JsdB:), intent(in) :: arrayV !< The v-component array to be checksummed
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                             !! symmetric computational domain.
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for these arrays.
 
@@ -445,7 +448,8 @@ subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
   real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: arrayU !< The u-component array to be checksummed
   real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: arrayV !< The v-component array to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                               !! symmetric computational domain.
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for these arrays.
 
@@ -465,7 +469,8 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                           !! symmetric computational domain.
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
@@ -608,7 +613,8 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                           !! symmetric computational domain.
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
 
@@ -874,7 +880,8 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                   intent(in) :: mesg  !< An identifying message
   integer,                  optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,                  optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                  optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                              !! symmetric computational domain.
   logical,                  optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                     optional, intent(in) :: scale     !< A scaling factor for this array.
 
@@ -1017,7 +1024,8 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   real, dimension(HI%isdB:,HI%Jsd:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                             !! symmetric computational domain.
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
@@ -1154,15 +1162,16 @@ end subroutine chksum_u_3d
 
 !---chksum_general interface routines
 !> Return the bitcount of an arbitrarily sized 3d array
-integer function chksum_general_3d( array, scale_factor, istart, iend, jstart, jend, kstart, kend ) result(subchk)
-  real, dimension(:,:,:) :: array    !< Array to be checksummed
-  real,    optional :: scale_factor  !< Factor to scale array by before checksum
-  integer, optional :: istart        !< Starting index in the i-direction
-  integer, optional :: iend          !< Ending index in the i-direction
-  integer, optional :: jstart        !< Starting index in the j-direction
-  integer, optional :: jend          !< Ending index in the j-direction
-  integer, optional :: kstart        !< Starting index in the k-direction
-  integer, optional :: kend          !< Ending index in the k-direction
+integer function chksum_general_3d( array, scale_factor, istart, iend, jstart, jend, kstart, kend ) &
+                            result(subchk)
+  real, dimension(:,:,:), intent(in) :: array    !< Array to be checksummed
+  real,    optional, intent(in) :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional, intent(in) :: istart        !< Starting index in the i-direction
+  integer, optional, intent(in) :: iend          !< Ending index in the i-direction
+  integer, optional, intent(in) :: jstart        !< Starting index in the j-direction
+  integer, optional, intent(in) :: jend          !< Ending index in the j-direction
+  integer, optional, intent(in) :: kstart        !< Starting index in the k-direction
+  integer, optional, intent(in) :: kend          !< Ending index in the k-direction
   integer :: i, j, k, bc, is, ie, js, je, ks, ke
   real :: scale
 
@@ -1191,12 +1200,12 @@ end function chksum_general_3d
 
 !> Return the bitcount of an arbitrarily sized 2d array by promotion to a 3d array
 integer function chksum_general_2d( array_2d, scale_factor, istart, iend, jstart, jend )
-  real, dimension(:,:) :: array_2d   !< Array to be checksummed
-  real,    optional :: scale_factor  !< Factor to scale array by before checksum
-  integer, optional :: istart        !< Starting index in the i-direction
-  integer, optional :: iend          !< Ending index in the i-direction
-  integer, optional :: jstart        !< Starting index in the j-direction
-  integer, optional :: jend          !< Ending index in the j-direction
+  real, dimension(:,:), intent(in) :: array_2d   !< Array to be checksummed
+  real,    optional, intent(in) :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional, intent(in) :: istart        !< Starting index in the i-direction
+  integer, optional, intent(in) :: iend          !< Ending index in the i-direction
+  integer, optional, intent(in) :: jstart        !< Starting index in the j-direction
+  integer, optional, intent(in) :: jend          !< Ending index in the j-direction
   integer :: is, ie, js, je
   real, dimension(:,:,:), allocatable :: array_3d !< Promotion from 2d to 3d array
 
@@ -1210,11 +1219,11 @@ end function chksum_general_2d
 
 !> Return the bitcount of an arbitrarily sized 1d array by promotion to a 3d array
 integer function chksum_general_1d( array_1d, scale_factor, istart, iend )
-  real, dimension(:) :: array_1d      !< Array to be checksummed
-  real,    optional  :: scale_factor  !< Factor to scale array by before checksum
-  integer, optional  :: istart        !< Starting index in the i-direction
-  integer, optional  :: iend          !< Ending index in the i-direction
-  integer :: is, ie, js, je
+  real, dimension(:), intent(in) :: array_1d      !< Array to be checksummed
+  real,    optional,  intent(in) :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional,  intent(in) :: istart        !< Starting index in the i-direction
+  integer, optional,  intent(in) :: iend          !< Ending index in the i-direction
+  integer :: is, ie
   real, dimension(:,:,:), allocatable :: array_3d !< Promotion from 2d to 3d array
 
   is = LBOUND(array_1d,1) ; ie = UBOUND(array_1d,1)
@@ -1232,7 +1241,8 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
-  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
+                                                             !! symmetric computational domain.
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
@@ -1512,8 +1522,9 @@ end function is_NaN_0d
 !> This function returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_1d(x, skip_mpp)
   real, dimension(:), intent(in) :: x !< The array to be checked for NaNs.
+  logical,  optional, intent(in) :: skip_mpp  !< If true, only check this array only
+                                              !! on the local PE (default false).
   logical :: is_NaN_1d
-  logical, optional :: skip_mpp  !< If true, only check this array only on the local PE (default false).
 
   integer :: i, n
   logical :: call_mpp

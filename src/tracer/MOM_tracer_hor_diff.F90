@@ -87,24 +87,30 @@ contains
 !! Multiple iterations are used (if necessary) so that there is no limit
 !! on the acceptable time increment.
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
-  type(ocean_grid_type),                 intent(inout) :: G       !< Grid type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h       !< Layer thickness (m or kg m-2)
-  real,                                  intent(in)    :: dt      !< time step (seconds)
-  type(MEKE_type),                       pointer       :: MEKE    !< MEKE type
-  type(VarMix_CS),                       pointer       :: VarMix  !< Variable mixing type
-  type(verticalGrid_type),               intent(in)    :: GV      !< ocean vertical grid structure
-  type(tracer_hor_diff_CS),              pointer       :: CS      !< module control structure
-  type(tracer_registry_type),            pointer       :: Reg     !< registered tracers
-  type(thermo_var_ptrs),                 intent(in)    :: tv      !< A structure containing pointers to any available
-                                                                  !! thermodynamic fields, including potential temp and
-                                                                  !! salinity or mixed layer density. Absent fields have
-                                                                  !! NULL ptrs, and these may (probably will) point to
-                                                                  !! some of the same arrays as Tr does.  tv is required
-                                                                  !! for epipycnal mixing between mixed layer and the interior.
+  type(ocean_grid_type),      intent(inout) :: G       !< Grid type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              intent(in)    :: h       !< Layer thickness (m or kg m-2)
+  real,                       intent(in)    :: dt      !< time step (seconds)
+  type(MEKE_type),            pointer       :: MEKE    !< MEKE type
+  type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
+  type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
+  type(tracer_hor_diff_CS),   pointer       :: CS      !< module control structure
+  type(tracer_registry_type), pointer       :: Reg     !< registered tracers
+  type(thermo_var_ptrs),      intent(in)    :: tv      !< A structure containing pointers to any available
+                                                       !! thermodynamic fields, including potential temp and
+                                                       !! salinity or mixed layer density. Absent fields have
+                                                       !! NULL ptrs, and these may (probably will) point to
+                                                       !! some of the same arrays as Tr does.  tv is required
+                                                       !! for epipycnal mixing between mixed layer and the interior.
   ! Optional inputs for offline tracer transport
-  logical,                           optional             :: do_online_flag
-  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(in) :: read_khdt_x
-  real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: read_khdt_y
+  logical,          optional, intent(in)    :: do_online_flag !< If present and true, do online
+                                                       !! tracer transport with stored velcities.
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                    optional, intent(in)    :: read_khdt_x !< If present, these are the zonal
+                                                       !! diffusivities from previous run.
+  real, dimension(SZI_(G),SZJB_(G)), &
+                    optional, intent(in)    :: read_khdt_y !< If present, these are the meridional
+                                                       !! diffusivities from previous run.
 
 
   real, dimension(SZI_(G),SZJ_(G)) :: &

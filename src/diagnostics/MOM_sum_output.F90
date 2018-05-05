@@ -38,15 +38,15 @@ module MOM_sum_output
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
-use MOM_coms, only : reproducing_sum
-use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_to_real, real_to_EFP
+use MOM_coms, only : reproducing_sum, EFP_to_real, real_to_EFP
+use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=)
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, get_filename_appendix
-use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
+use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
+use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
@@ -949,24 +949,18 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
   endif
 end subroutine write_energy
 
-!> This subroutine accumates the net input of volume, and perhaps later salt and
-!! heat, through the ocean surface for use in diagnosing conservation.
+!> This subroutine accumates the net input of volume, salt and heat, through
+!! the ocean surface for use in diagnosing conservation.
 subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
-  type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible forcing fields.  Unused fields are unallocated.
+  type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible
+                                              !! forcing fields.  Unused fields are unallocated.
   type(surface),         intent(in) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real,                  intent(in) :: dt     !< The amount of time over which to average, in s.
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
-  type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call to MOM_sum_output_init.
+  type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
+                                              !! to MOM_sum_output_init.
 
-! This subroutine accumates the net input of volume, and perhaps later salt and
-! heat, through the ocean surface for use in diagnosing conservation.
-! Arguments: fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields are unallocated.
-!  (in)      dt - The amount of time over which to average.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 MOM_sum_output_init.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     FW_in, &   ! The net fresh water input, integrated over a timestep in kg.
     salt_in, & ! The total salt added by surface fluxes, integrated

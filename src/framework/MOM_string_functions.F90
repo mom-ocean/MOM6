@@ -149,7 +149,9 @@ function left_reals(r,sep)
   ! Arguments
   character(len=1320) :: left_reals
   real, intent(in) :: r(:)
-  character(len=*), optional :: sep
+  character(len=*), optional, intent(in) :: sep !< The separator between
+                                    !! successive values, by default it is ', '.
+
   ! Local variables
   integer :: j, n, b, ns
   logical :: doWrite

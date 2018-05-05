@@ -66,8 +66,10 @@ subroutine build_zstar_column(CS, depth, total_thickness, zInterface, &
   real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in m or H)
   real,                     intent(in)    :: total_thickness !< Column thickness (positive in the same units as depth)
   real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-  real, optional,           intent(in)    :: z_rigid_top !< The height of a rigid top (negative in the same units as depth)
-  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top in the same units as depth
+  real, optional,           intent(in)    :: z_rigid_top !< The height of a rigid top (negative in the
+                                                         !! same units as depth)
+  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top in the
+                                                      !! same units as depth
   real, optional,           intent(in)    :: zScale !< Scaling factor from the target coordinate resolution
                                                     !! in m to desired units for zInterface, perhaps m_to_H
   ! Local variables

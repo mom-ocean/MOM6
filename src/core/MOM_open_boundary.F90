@@ -745,7 +745,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "I=%,J=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
-  type(param_file_type), intent(in)  :: PF
+  type(param_file_type), intent(in)   :: PF  !< Parameter file handle
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
   integer :: j, a_loop
@@ -848,7 +848,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "J=%,I=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
-  type(param_file_type), intent(in)  :: PF
+  type(param_file_type),   intent(in) :: PF  !< Parameter file handle
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
   integer :: i, a_loop
@@ -955,7 +955,8 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   integer,          intent(out) :: n !< The value of J=n, if segment_str begins with I=, or the value of I=n
   character(len=*), intent(out) :: action_str(:) !< The "string" part of segment_str
   ! Local variables
-  character(len=24) :: word1, word2, m_word, n_word !< Words delineated by commas in a string in form of "I=%,J=%:%,string"
+  character(len=24) :: word1, word2, m_word, n_word !< Words delineated by commas in a string in form of
+                                                    !! "I=%,J=%:%,string"
   integer :: l_max !< Either ni_global or nj_global, depending on whether segment_str begins with "I=" or "J="
   integer :: mn_max !< Either nj_global or ni_global, depending on whether segment_str begins with "I=" or "J="
   integer :: j
@@ -1039,14 +1040,17 @@ end subroutine parse_segment_str
 
 !> Parse an OBC_SEGMENT_%%%_DATA string
  subroutine parse_segment_data_str(segment_str, var, value, filenam, fieldnam, fields, num_fields, debug )
-   character(len=*), intent(in)             :: segment_str !< A string in form of "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
-   character(len=*), intent(in),  optional  :: var         !< The name of the variable for which parameters are needed
-   character(len=*), intent(out), optional  :: filenam     !< The name of the input file if using "file" method
-   character(len=*), intent(out), optional  :: fieldnam    !< The name of the variable in the input file if using "file" method
-   real,             intent(out), optional  :: value       !< A constant value if using the "value" method
-   character(len=*), dimension(MAX_OBC_FIELDS), intent(out), optional :: fields   !< List of fieldnames for each segment
-   integer, intent(out), optional           :: num_fields
-   logical, intent(in), optional            :: debug
+   character(len=*),           intent(in)   :: segment_str !< A string in form of
+                                                          !! "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
+   character(len=*), optional, intent(in)   :: var        !< The name of the variable for which parameters are needed
+   character(len=*), optional, intent(out)  :: filenam    !< The name of the input file if using "file" method
+   character(len=*), optional, intent(out)  :: fieldnam   !< The name of the variable in the input file if using
+                                                          !! "file" method
+   real,             optional, intent(out)  :: value      !< A constant value if using the "value" method
+   character(len=*), dimension(MAX_OBC_FIELDS), &
+                     optional, intent(out)  :: fields     !< List of fieldnames for each segment
+   integer, optional, intent(out)           :: num_fields !< The number of fields in the segment data
+   logical, optional, intent(in)            :: debug      !< If present and true, write verbose debugging messages
    ! Local variables
    character(len=128) :: word1, word2, word3, method
    integer :: lword, nfields, n, m, orient
@@ -1124,10 +1128,11 @@ end subroutine parse_segment_str
 
 !> Parse an OBC_SEGMENT_%%%_PARAMS string
  subroutine parse_segment_param_real(segment_str, var, param_value, debug )
-   character(len=*), intent(in)             :: segment_str !< A string in form of "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
-   character(len=*), intent(in)             :: var         !< The name of the variable for which parameters are needed
-   real,             intent(out)            :: param_value !< The value of the parameter
-   logical, intent(in), optional            :: debug
+   character(len=*),  intent(in)  :: segment_str !< A string in form of
+                                                 !! "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
+   character(len=*),  intent(in)  :: var         !< The name of the variable for which parameters are needed
+   real,              intent(out) :: param_value !< The value of the parameter
+   logical, optional, intent(in)  :: debug       !< If present and true, write verbose debugging messages
    ! Local variables
    character(len=128) :: word1, word2, word3, method
    integer :: lword, nfields, n, m, orient
@@ -1218,13 +1223,14 @@ subroutine open_boundary_init(G, param_file, OBC)
 
 end subroutine open_boundary_init
 
-logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, apply_Flather_OBC, apply_nudged_OBC, needs_ext_seg_data)
-  type(ocean_OBC_type), pointer     :: OBC !< Open boundary control structure
-  logical, optional,    intent(in)  :: apply_open_OBC      !< If present, returns True if specified_*_BCs_exist_globally is true
-  logical, optional,    intent(in)  :: apply_specified_OBC !< If present, returns True if specified_*_BCs_exist_globally is true
-  logical, optional,    intent(in)  :: apply_Flather_OBC   !< If present, returns True if Flather_*_BCs_exist_globally is true
-  logical, optional,    intent(in)  :: apply_nudged_OBC    !< If present, returns True if nudged_*_BCs_exist_globally is true
-  logical, optional,    intent(in)  :: needs_ext_seg_data  !< If present, returns True if external segment data needed
+logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, apply_Flather_OBC, &
+                                     apply_nudged_OBC, needs_ext_seg_data)
+  type(ocean_OBC_type), pointer    :: OBC !< Open boundary control structure
+  logical, optional,    intent(in) :: apply_open_OBC      !< Returns True if open_*_BCs_exist_globally is true
+  logical, optional,    intent(in) :: apply_specified_OBC !< Returns True if specified_*_BCs_exist_globally is true
+  logical, optional,    intent(in) :: apply_Flather_OBC   !< Returns True if Flather_*_BCs_exist_globally is true
+  logical, optional,    intent(in) :: apply_nudged_OBC    !< Returns True if nudged_*_BCs_exist_globally is true
+  logical, optional,    intent(in) :: needs_ext_seg_data  !< Returns True if external segment data needed
   open_boundary_query = .false.
   if (.not. associated(OBC)) return
   if (present(apply_open_OBC)) open_boundary_query = OBC%open_u_BCs_exist_globally .or. &
@@ -2293,15 +2299,19 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (OBC%brushcutter_mode) then
           if (segment%is_E_or_W) then
             if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
-              segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset)+1:2,:)
+              segment%field(m)%buffer_src(is_obc,:,:) = &
+                  tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset)+1:2,:)
             else
-              segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset):2,:)
+              segment%field(m)%buffer_src(is_obc,:,:) = &
+                  tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset):2,:)
             endif
           else
             if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
-              segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset)+1:2,1,:)
+              segment%field(m)%buffer_src(:,js_obc,:) = &
+                  tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset)+1:2,1,:)
             else
-              segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset):2,1,:)
+              segment%field(m)%buffer_src(:,js_obc,:) = &
+                  tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset):2,1,:)
             endif
           endif
         else
@@ -2324,15 +2334,19 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           if (OBC%brushcutter_mode) then
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
-                segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset)+1:2,:)
+                segment%field(m)%dz_src(is_obc,:,:) = &
+                    tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset)+1:2,:)
               else
-                segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset):2,:)
+                segment%field(m)%dz_src(is_obc,:,:) = &
+                    tmp_buffer(1,2*(js_obc+G%jdg_offset)+1:2*(je_obc+G%jdg_offset):2,:)
               endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
-                segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset)+1:2,1,:)
+                segment%field(m)%dz_src(:,js_obc,:) = &
+                    tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset)+1:2,1,:)
               else
-                segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset):2,1,:)
+                segment%field(m)%dz_src(:,js_obc,:) = &
+                    tmp_buffer(2*(is_obc+G%idg_offset)+1:2*(ie_obc+G%idg_offset):2,1,:)
               endif
             endif
           else
@@ -2730,9 +2744,9 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                                       !! available subsequently to the tracer registry.
   type(param_file_type), intent(in)     :: param_file !< file to parse for  model parameter values
   type(OBC_segment_type), intent(inout) :: segment    !< current segment data structure
-  real, optional                        :: OBC_scalar !< If present, use scalar value for segment tracer
+  real, optional, intent(in)            :: OBC_scalar !< If present, use scalar value for segment tracer
                                                       !! inflow concentration.
-  logical, optional                     :: OBC_array  !< If true, use array values for segment tracer
+  logical, optional, intent(in)         :: OBC_array  !< If true, use array values for segment tracer
                                                       !! inflow concentration.
 
 

@@ -3895,12 +3895,12 @@ end subroutine bulkmixedlayer_init
 !! and +25% at x~3.5, but the exponential deemphasizes the importance of
 !! large x.  When L=0, EF4 returns E/((H+E)*H).
 function EF4(H, E, L, dR_de)
-real, intent(in)              :: H !< Total thickness, in m or kg m-2. (Intent in) The units of h
-                                   !! are referred to as H below.
-real, intent(in)              :: E !< Entrainment, in units of H.
-real, intent(in)              :: L !< The e-folding scale in H-1.
-real, intent(inout), optional :: dR_de !< The partial derivative of the result R with E, in H-2.
-real :: EF4
+  real,           intent(in)    :: H !< Total thickness, in m or kg m-2. (Intent in) The units of h
+                                     !! are referred to as H below.
+  real,           intent(in)    :: E !< Entrainment, in units of H.
+  real,           intent(in)    :: L !< The e-folding scale in H-1.
+  real, optional, intent(inout) :: dR_de !< The partial derivative of the result R with E, in H-2.
+  real :: EF4
 ! This subroutine returns an approximation to the integral
 !   R = exp(-L*(H+E)) integral(LH to L(H+E)) L/(1-(1+x)exp(-x)) dx.
 ! The approximation to the integrand is good to within -2% at x~.3

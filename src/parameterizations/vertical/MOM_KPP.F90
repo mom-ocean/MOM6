@@ -40,7 +40,8 @@ integer, private, parameter :: NLT_SHAPE_CVMix     = 0 !< Use the CVMix profile
 integer, private, parameter :: NLT_SHAPE_LINEAR    = 1 !< Linear, \f$ G(\sigma) = 1-\sigma \f$
 integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 !< Parabolic, \f$ G(\sigma) = (1-\sigma)^2 \f$
 integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 !< Cubic, \f$ G(\sigma) = 1 + (2\sigma-3) \sigma^2\f$
-integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 !< Original shape, \f$ G(\sigma) = \frac{27}{4} \sigma (1-\sigma)^2 \f$
+integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 !< Original shape,
+                                                       !!    \f$ G(\sigma) = \frac{27}{4} \sigma (1-\sigma)^2 \f$
 
 integer, private, parameter :: SW_METHOD_ALL_SW = 0 !< Use all shortwave radiation
 integer, private, parameter :: SW_METHOD_MXL_SW = 1 !< Use shortwave radiation absorbed in mixing layer
@@ -74,7 +75,8 @@ type, public :: KPP_CS ; private
   logical :: computeEkman              !< If True, compute Ekman depth limit for OBLdepth
   logical :: computeMoninObukhov       !< If True, compute Monin-Obukhov limit for OBLdepth
   logical :: passiveMode               !< If True, makes KPP passive meaning it does NOT alter the diffusivity
-  real    :: deepOBLoffset             !< If non-zero, is a distance from the bottom that the OBL can not penetrate through (m)
+  real    :: deepOBLoffset             !< If non-zero, is a distance from the bottom that the OBL can not
+                                       !! penetrate through (m)
   real    :: minOBLdepth               !< If non-zero, is a minimum depth for the OBL (m)
   real    :: surf_layer_ext            !< Fraction of OBL depth considered in the surface layer (nondim)
   real    :: minVtsqr                  !< Min for the squared unresolved velocity used in Rib CVMix calculation (m2/s2)
@@ -84,10 +86,13 @@ type, public :: KPP_CS ; private
   character(len=30) :: MatchTechnique  !< Method used in CVMix for setting diffusivity and NLT profile functions
   integer :: NLT_shape                 !< MOM6 over-ride of CVMix NLT shape function
   logical :: applyNonLocalTrans        !< If True, apply non-local transport to heat and scalars
-  logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero; for testing purposes.
+  logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero;
+                                       !! for testing purposes.
   logical :: KPPisAdditive             !< If True, will add KPP diffusivity to initial diffusivity.
-                                       !! If False, will replace initial diffusivity wherever KPP diffusivity is non-zero.
-  real    :: min_thickness             !< A minimum thickness used to avoid division by small numbers in the vicinity of vanished layers.
+                                       !! If False, will replace initial diffusivity wherever KPP diffusivity
+                                       !! is non-zero.
+  real    :: min_thickness             !< A minimum thickness used to avoid division by small numbers
+                                       !! in the vicinity of vanished layers.
   ! smg: obsolete below
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
@@ -169,8 +174,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
   type(time_type),         intent(in)    :: Time      !< Time
   type(KPP_CS),            pointer       :: CS        !< Control structure
-  logical, optional,       intent(out)   :: passive   !< Copy of %passiveMode
-  type(wave_parameters_CS), pointer, optional :: Waves !<Wave CS
+  logical,       optional, intent(out)   :: passive   !< Copy of %passiveMode
+  type(wave_parameters_CS), optional, pointer :: Waves !< Wave CS
 
   ! Local variables
 #include "version_variable.h"
@@ -530,24 +535,24 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                          nonLocalTransScalar, Waves)
 
   ! Arguments
-  type(KPP_CS),                           pointer       :: CS             !< Control structure
-  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
-  type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  type(wave_parameters_CS), pointer, optional           :: Waves          !<Wave CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp           !< potential/cons temp (deg C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt           !< Salinity (ppt)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u              !< Velocity i-component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v              !< Velocity j-component (m/s)
-  type(EOS_type),                         pointer       :: EOS            !< Equation of state
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)    :: uStar          !< Surface friction velocity (m/s)
+  type(KPP_CS),                               pointer       :: CS    !< Control structure
+  type(ocean_grid_type),                      intent(in)    :: G     !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
+  type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp  !< potential/cons temp (deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity (ppt)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component (m/s)
+  type(EOS_type),                             pointer       :: EOS   !< Equation of state
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt       !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
-                                                                          !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks       !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
-                                                                          !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv       !< (in)  Vertical viscosity w/o KPP (m2/s)
-                                                                          !< (out) Vertical viscosity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (m2/s)
+                                                                    !< (out) Vertical viscosity including KPP (m2/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
@@ -1197,15 +1202,15 @@ end subroutine KPP_get_BLD
 subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
                                       dt, scalar, C_p)
 
-  type(KPP_CS),                               intent(in)    :: CS            !< Control structure
-  type(ocean_grid_type),                      intent(in)    :: G             !< Ocean grid
-  type(verticalGrid_type),                    intent(in)    :: GV            !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h             !< Layer/level thickness (units of H)
+  type(KPP_CS),                               intent(in)    :: CS        !< Control structure
+  type(ocean_grid_type),                      intent(in)    :: G         !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV        !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h         !< Layer/level thickness (units of H)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux      !< Surface flux of scalar (H/s * scalar)
-  real,                                       intent(in)    :: dt            !< Time-step (s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar        !< temperature
-  real,                                       intent(in)    :: C_p           !< Seawater specific heat capacity (J/(kg*K))
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux  !< Surface flux of scalar (H/s * scalar)
+  real,                                       intent(in)    :: dt        !< Time-step (s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar    !< temperature
+  real,                                       intent(in)    :: C_p       !< Seawater specific heat capacity (J/(kg*K))
 
   integer :: i, j, k
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dtracer
@@ -1331,7 +1336,7 @@ end subroutine KPP_end
 !! which is called directly by this module.
 !!
 !! The formulation and implementation of KPP is described in great detail in the
-!! [CVMix manual](https://github.com/CVMix/CVMix-description/raw/master/cvmix.pdf) (written by our own Stephen Griffies).
+!! [CVMix manual](https://github.com/CVMix/CVMix-description/raw/master/cvmix.pdf) (written by our own Steve Griffies).
 !!
 !! \subsection section_KPP_nutshell KPP in a nutshell
 !!
@@ -1348,11 +1353,13 @@ end subroutine KPP_end
 !! Instead, the entire non-local transport term can be equivalently written
 !! \f[ K \gamma_s(\sigma) = C_s G(\sigma) Q_s \f]
 !! where \f$ Q_s \f$ is the surface flux of \f$ s \f$ and \f$ C_s \f$ is a constant.
-!! The vertical structure of the redistribution (non-local) term is solely due  to the shape function, \f$ G(\sigma) \f$.
+!! The vertical structure of the redistribution (non-local) term is solely due  to the shape function,
+!! \f$ G(\sigma) \f$.
 !! In our implementation of KPP, we allow the shape functions used for \f$ K \f$ and for the non-local transport
 !! to be chosen independently.
 !!
-!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/CVMix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ "Extreme values of non-local transport"
+!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/CVMix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ
+!! "Extreme values of non-local transport"
 !!
 !! The particular shape function most widely used in the atmospheric community is
 !! \f[ G(\sigma) = \sigma (1-\sigma)^2 \f]
@@ -1362,7 +1369,8 @@ end subroutine KPP_end
 !!  \f$ G^\prime(0) = 1 \f$, and
 !!  \f$ G^\prime(1) = 0 \f$.
 !! Large et al, 1994, alter the function so as to match interior diffusivities but we have found that this leads
-!! to inconsistencies within the formulation (see google groups thread [Extreme values of non-local transport][google_thread_NLT]).
+!! to inconsistencies within the formulation (see google groups thread
+!! [Extreme values of non-local transport][google_thread_NLT]).
 !! Instead, we use either the above form, or even simpler forms that use alternative upper boundary conditions.
 !!
 !! The KPP boundary layer depth is a function of the bulk Richardson number, Rib.

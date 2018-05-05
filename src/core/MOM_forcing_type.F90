@@ -194,6 +194,10 @@ type, public :: mech_forcing
                                !! This may point to p_surf or to p_surf_full.
     net_mass_src  => NULL(), & !< The net mass source to the ocean, in kg m-2 s-1.
 
+  ! iceberg related inputs
+    area_berg  => NULL(), &    !< area of ocean surface covered by icebergs (m2/m2)
+    mass_berg  => NULL(), &    !< mass of icebergs (kg/m2)
+
   ! land ice-shelf related inputs
     frac_shelf_u  => NULL(), &   !< Fractional ice shelf coverage of u-cells, nondimensional
                                  !! from 0 to 1. This is only associated if ice shelves are
@@ -203,6 +207,9 @@ type, public :: mech_forcing
                                  !< enabled, and is exactly 0 away from shelves or on land.
     rigidity_ice_u => NULL(), &  !< Depth-integrated lateral viscosity of ice
     rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
+
+  logical :: initialized = .false. !< This indicates whether the appropriate
+                                 !! arrays have been initialized.
 end type mech_forcing
 
 !> Structure that defines the id handles for the forcing type
@@ -309,67 +316,73 @@ contains
 !! This routine multiplies fluxes by dt, so that the result is an accumulation of fluxes
 !! over a time step.
 subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                           &
-                  DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+                  FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent, &
                   h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
-                  aggregate_FW_forcing, nonpenSW, netmassInOut_rate,net_Heat_Rate,      &
+                  aggregate_FW, nonpenSW, netmassInOut_rate,net_Heat_Rate,      &
                   net_salt_rate, pen_sw_bnd_Rate, skip_diags)
 
-  type(ocean_grid_type),    intent(in)    :: G                        !< ocean grid structure
-  type(verticalGrid_type),  intent(in)    :: GV                       !< ocean vertical grid structure
-  type(forcing),            intent(inout) :: fluxes                   !< structure containing pointers to possible
-                                                                      !! forcing fields. NULL unused fields.
-  type(optics_type),        pointer       :: optics                   !< pointer to optics
-  integer,                  intent(in)    :: nsw                      !< number of bands of penetrating SW
-  integer,                  intent(in)    :: j                        !< j-index to work on
-  real,                     intent(in)    :: dt                       !< time step in seconds
-  real,                     intent(in)    :: DepthBeforeScalingFluxes !< min ocean depth before scale away fluxes (H)
-  logical,                  intent(in)    :: useRiverHeatContent      !< logical for river heat content
-  logical,                  intent(in)    :: useCalvingHeatContent    !< logical for calving heat content
+  type(ocean_grid_type),    intent(in)    :: G              !< ocean grid structure
+  type(verticalGrid_type),  intent(in)    :: GV             !< ocean vertical grid structure
+  type(forcing),            intent(inout) :: fluxes         !< structure containing pointers to possible
+                                                            !! forcing fields. NULL unused fields.
+  type(optics_type),        pointer       :: optics         !< pointer to optics
+  integer,                  intent(in)    :: nsw            !< number of bands of penetrating SW
+  integer,                  intent(in)    :: j              !< j-index to work on
+  real,                     intent(in)    :: dt             !< time step in seconds
+  real,                     intent(in)    :: FluxRescaleDepth !< min ocean depth before scale away fluxes (H)
+  logical,                  intent(in)    :: useRiverHeatContent   !< logical for river heat content
+  logical,                  intent(in)    :: useCalvingHeatContent !< logical for calving heat content
   real, dimension(SZI_(G),SZK_(G)), &
-                            intent(in)    :: h                        !< layer thickness (in H units)
+                            intent(in)    :: h              !< layer thickness (in H units)
   real, dimension(SZI_(G),SZK_(G)), &
-                            intent(in)    :: T                        !< layer temperatures (deg C)
-  real, dimension(SZI_(G)), intent(out)   :: netMassInOut             !< net mass flux (non-Bouss) or volume flux
-                                                                      !! (if Bouss) of water in/out of ocean over
-                                                                      !! a time step (H units)
-  real, dimension(SZI_(G)), intent(out)   :: netMassOut               !< net mass flux (non-Bouss) or volume flux
-                                                                      !! (if Bouss) of water leaving ocean surface
-                                                                      !! over a time step (H units).
-                                                                      !! netMassOut < 0 means mass leaves ocean.
-  real, dimension(SZI_(G)), intent(out)   :: net_heat                 !< net heat at the surface accumulated over a
-                                                                      !! time step for coupler + restoring.
-                                                                      !! Exclude two terms from net_heat:
-                                                                      !! (1) downwelling (penetrative) SW,
-                                                                      !! (2) evaporation heat content,
-                                                                      !! (since do not yet know evap temperature).
-                                                                      !! Units of net_heat are (K * H).
-  real, dimension(SZI_(G)), intent(out)   :: net_salt                 !< surface salt flux into the ocean accumulated
-                                                                      !! over a time step (ppt * H)
-  real, dimension(:,:),     intent(out)   :: pen_SW_bnd               !< penetrating SW flux, split into bands.
-                                                                      !! Units are (deg K * H) and array size
-                                                                      !! nsw x SZI_(G), where nsw=number of SW bands
-                                                                      !! in pen_SW_bnd. This heat flux is not part
-                                                                      !! of net_heat.
-  type(thermo_var_ptrs),    intent(inout) :: tv                       !< structure containing pointers to available
-                                                                      !! thermodynamic fields. Used to keep
-                                                                      !! track of the heat flux associated with net
-                                                                      !! mass fluxes into the ocean.
-  logical,                  intent(in)    :: aggregate_FW_forcing     !< For determining how to aggregate forcing.
-  real, dimension(SZI_(G)), optional, intent(out)  :: nonpenSW        !< non-downwelling SW; use in net_heat.
-                                                                      !! Sum over SW bands when diagnosing nonpenSW.
-                                                                      !! Units are (K * H).
-  real, dimension(SZI_(G)), optional, intent(out)  :: net_Heat_rate   !< Rate of net surface heating in H K s-1.
-  real, dimension(SZI_(G)), optional, intent(out)  :: net_salt_rate   !< Surface salt flux into the ocean in ppt H s-1.
-  real, dimension(SZI_(G)), optional, intent(out)  :: netmassInOut_rate !< Rate of net mass flux into the ocean in H s-1.
-  real, dimension(:,:),     optional, intent(out)  :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating in degC H s-1.
-  logical,                  optional, intent(in)   :: skip_diags      !< If present and true, skip calculating diagnostics
+                            intent(in)    :: T              !< layer temperatures (deg C)
+  real, dimension(SZI_(G)), intent(out)   :: netMassInOut   !< net mass flux (non-Bouss) or volume flux
+                                                            !! (if Bouss) of water in/out of ocean over
+                                                            !! a time step (H units)
+  real, dimension(SZI_(G)), intent(out)   :: netMassOut     !< net mass flux (non-Bouss) or volume flux
+                                                            !! (if Bouss) of water leaving ocean surface
+                                                            !! over a time step (H units).
+                                                            !! netMassOut < 0 means mass leaves ocean.
+  real, dimension(SZI_(G)), intent(out)   :: net_heat       !< net heat at the surface accumulated over a
+                                                            !! time step for coupler + restoring.
+                                                            !! Exclude two terms from net_heat:
+                                                            !! (1) downwelling (penetrative) SW,
+                                                            !! (2) evaporation heat content,
+                                                            !! (since do not yet know evap temperature).
+                                                            !! Units of net_heat are (K * H).
+  real, dimension(SZI_(G)), intent(out)   :: net_salt       !< surface salt flux into the ocean accumulated
+                                                            !! over a time step (ppt * H)
+  real, dimension(:,:),     intent(out)   :: pen_SW_bnd     !< penetrating SW flux, split into bands.
+                                                            !! Units are (deg K * H) and array size
+                                                            !! nsw x SZI_(G), where nsw=number of SW bands
+                                                            !! in pen_SW_bnd. This heat flux is not part
+                                                            !! of net_heat.
+  type(thermo_var_ptrs),    intent(inout) :: tv             !< structure containing pointers to available
+                                                            !! thermodynamic fields. Used to keep
+                                                            !! track of the heat flux associated with net
+                                                            !! mass fluxes into the ocean.
+  logical,                  intent(in)    :: aggregate_FW     !< For determining how to aggregate forcing.
+  real, dimension(SZI_(G)), &
+                  optional, intent(out)  :: nonpenSW        !< non-downwelling SW; use in net_heat.
+                                                            !! Sum over SW bands when diagnosing nonpenSW.
+                                                            !! Units are (K * H).
+  real, dimension(SZI_(G)), &
+                  optional, intent(out)  :: net_Heat_rate   !< Rate of net surface heating in H K s-1.
+  real, dimension(SZI_(G)), &
+                  optional, intent(out)  :: net_salt_rate   !< Surface salt flux into the ocean in ppt H s-1.
+  real, dimension(SZI_(G)), &
+                  optional, intent(out)  :: netmassInOut_rate !< Rate of net mass flux into the ocean in H s-1.
+  real, dimension(:,:),     &
+                  optional, intent(out)  :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating
+                                                            !! in degC H s-1.
+  logical,        optional, intent(in)   :: skip_diags      !< If present and true, skip calculating diagnostics
 
   ! local
   real :: htot(SZI_(G))       ! total ocean depth (m for Bouss or kg/m^2 for non-Bouss)
   real :: Pen_sw_tot(SZI_(G)) ! sum across all bands of Pen_SW (K * H)
   real :: pen_sw_tot_rate(SZI_(G)) ! Similar but sum but as a rate (no dt in calculation)
   real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited (1/H)
-  real :: scale               ! scale scales away fluxes if depth < DepthBeforeScalingFluxes
+  real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth
   real :: J_m2_to_H           ! converts J/m^2 to H units (m for Bouss and kg/m^2 for non-Bouss)
   real :: Irho0               ! 1.0 / Rho0
   real :: I_Cp                ! 1.0 / C_p
@@ -393,7 +406,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   if (present(pen_sw_bnd_rate)) do_PSWBR = .true.
   !}BGR
 
-  Ih_limit  = 1.0 / DepthBeforeScalingFluxes
+  Ih_limit  = 1.0 / FluxRescaleDepth
   Irho0     = 1.0 / GV%Rho0
   I_Cp      = 1.0 / fluxes%C_p
   J_m2_to_H = 1.0 / (GV%H_to_kg_m2 * fluxes%C_p)
@@ -630,11 +643,12 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
       ! applyBoundaryFluxes such that the meaning is as the sum of all incoming components.
       if (associated(fluxes%heat_content_massin))  then
-        if (aggregate_FW_forcing) then
+        if (aggregate_FW) then
           if (netMassInOut(i) > 0.0) then ! net is "in"
             fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
           else ! net is "out"
-            fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * GV%H_to_kg_m2 / dt
+            fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * &
+                                               T(i,1) * GV%H_to_kg_m2 / dt
           endif
         else
           fluxes%heat_content_massin(i,j) = 0.
@@ -644,11 +658,12 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! Initialize heat_content_massout that is diagnosed in mixedlayer_convection or
       ! applyBoundaryFluxes such that the meaning is as the sum of all outgoing components.
       if (associated(fluxes%heat_content_massout)) then
-        if (aggregate_FW_forcing) then
+        if (aggregate_FW) then
           if (netMassInOut(i) > 0.0) then ! net is "in"
             fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
           else ! net is "out"
-            fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * GV%H_to_kg_m2 / dt
+            fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * &
+                                               T(i,1) * GV%H_to_kg_m2 / dt
           endif
         else
           fluxes%heat_content_massout(i,j) = 0.0
@@ -730,58 +745,59 @@ end subroutine extractFluxes1d
 !> 2d wrapper for 1d extract fluxes from surface fluxes type.
 !! This subroutine extracts fluxes from the surface fluxes type. It multiplies the
 !! fluxes by dt, so that the result is an accumulation of the fluxes over a time step.
-subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt,                                  &
-                  DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
-                  h, T, netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv,   &
-                  aggregate_FW_forcing)
+subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
+                           useRiverHeatContent, useCalvingHeatContent, h, T, &
+                           netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv, &
+                           aggregate_FW)
 
-  type(ocean_grid_type),                 intent(in)    :: G                        !< ocean grid structure
-  type(verticalGrid_type),               intent(in)    :: GV                       !< ocean vertical grid structure
-  type(forcing),                         intent(inout) :: fluxes                   !< structure containing pointers to forcing.
-  type(optics_type),                     pointer       :: optics                   !< pointer to optics
-  integer,                               intent(in)    :: nsw                      !< number of bands of penetrating SW
-  real,                                  intent(in)    :: dt                       !< time step in seconds
-  real,                                  intent(in)    :: DepthBeforeScalingFluxes !< min ocean depth before scale away fluxes (H)
-  logical,                               intent(in)    :: useRiverHeatContent      !< logical for river heat content
-  logical,                               intent(in)    :: useCalvingHeatContent    !< logical for calving heat content
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h                        !< layer thickness (in H units)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T                        !< layer temperatures (deg C)
-  real, dimension(SZI_(G),SZJ_(G)),        intent(out) :: netMassInOut             !<  net mass flux (non-Bouss) or volume flux
-                                                                                   !! (if Bouss) of water in/out of ocean over
-                                                                                   !! a time step (H units)
-  real, dimension(SZI_(G),SZJ_(G)),        intent(out) :: netMassOut               !< net mass flux (non-Bouss) or volume flux
-                                                                                   !! (if Bouss) of water leaving ocean surface
-                                                                                   !! over a time step (H units).
-  real, dimension(SZI_(G),SZJ_(G)),        intent(out) :: net_heat                 !< net heat at the surface accumulated over a
-                                                                                   !! time step associated with coupler + restore.
-                                                                                   !! Exclude two terms from net_heat:
-                                                                                   !! (1) downwelling (penetrative) SW,
-                                                                                   !! (2) evaporation heat content,
-                                                                                   !! (since do not yet know temperature of evap).
-                                                                                   !! Units of net_heat are (K * H).
-  real, dimension(SZI_(G),SZJ_(G)),        intent(out) :: net_salt                 !< surface salt flux into the ocean accumulated
-                                                                                   !! over a time step (ppt * H)
-  real, dimension(:,:,:),                intent(out)   :: pen_SW_bnd               !< penetrating shortwave flux, split into bands.
-                                                                                   !! Units (deg K * H) & array size nsw x SZI_(G),
-                                                                                   !! where nsw=number of SW bands in pen_SW_bnd.
-                                                                                   !! This heat flux is not in net_heat.
-  type(thermo_var_ptrs),                 intent(inout) :: tv                       !< structure containing pointers to available
-                                                                                   !! thermodynamic fields. Here it is used to keep
-                                                                                   !! track of the heat flux associated with net
-                                                                                   !! mass fluxes into the ocean.
-  logical,                               intent(in)    :: aggregate_FW_forcing     !< For determining how to aggregate the forcing.
-
+  type(ocean_grid_type),            intent(in)    :: G                 !< ocean grid structure
+  type(verticalGrid_type),          intent(in)    :: GV                !< ocean vertical grid structure
+  type(forcing),                    intent(inout) :: fluxes            !< structure containing pointers to forcing.
+  type(optics_type),                pointer       :: optics            !< pointer to optics
+  integer,                          intent(in)    :: nsw               !< number of bands of penetrating SW
+  real,                             intent(in)    :: dt                !< time step in seconds
+  real,                             intent(in)    :: FluxRescaleDepth  !< min ocean depth before scale away fluxes (H)
+  logical,                          intent(in)    :: useRiverHeatContent   !< logical for river heat content
+  logical,                          intent(in)    :: useCalvingHeatContent !< logical for calving heat content
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(in)    :: h                 !< layer thickness (in H units)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(in)    :: T                 !< layer temperatures (deg C)
+  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: netMassInOut      !<  net mass flux (non-Bouss) or volume flux
+                                                                       !! (if Bouss) of water in/out of ocean over
+                                                                       !! a time step (H units)
+  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: netMassOut        !< net mass flux (non-Bouss) or volume flux
+                                                                       !! (if Bouss) of water leaving ocean surface
+                                                                       !! over a time step (H units).
+  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: net_heat          !< net heat at the surface accumulated over a
+                                                                       !! time step associated with coupler + restore.
+                                                                       !! Exclude two terms from net_heat:
+                                                                       !! (1) downwelling (penetrative) SW,
+                                                                       !! (2) evaporation heat content,
+                                                                       !! (since do not yet know temperature of evap).
+                                                                       !! Units of net_heat are (K * H).
+  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: net_salt          !< surface salt flux into the ocean accumulated
+                                                                       !! over a time step (ppt * H)
+  real, dimension(:,:,:),           intent(out)   :: pen_SW_bnd        !< penetrating shortwave flux, split into bands.
+                                                                       !! Units (deg K * H) & array size nsw x SZI_(G),
+                                                                       !! where nsw=number of SW bands in pen_SW_bnd.
+                                                                       !! This heat flux is not in net_heat.
+  type(thermo_var_ptrs),            intent(inout) :: tv                !< structure containing pointers to available
+                                                                       !! thermodynamic fields. Here it is used to keep
+                                                                       !! track of the heat flux associated with net
+                                                                       !! mass fluxes into the ocean.
+  logical,                          intent(in)    :: aggregate_FW      !< For determining how to aggregate the forcing.
 
   integer :: j
-!$OMP parallel do default(none) shared(G, GV, fluxes, optics, nsw,dt,DepthBeforeScalingFluxes, &
+!$OMP parallel do default(none) shared(G, GV, fluxes, optics, nsw,dt,FluxRescaleDepth, &
 !$OMP                                  useRiverHeatContent, useCalvingHeatContent,             &
 !$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv, &
-!$OMP                                  aggregate_FW_forcing)
+!$OMP                                  aggregate_FW)
   do j=G%jsc, G%jec
     call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                      &
-            DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent,&
+            FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent,&
             h(:,j,:), T(:,j,:), netMassInOut(:,j), netMassOut(:,j),              &
-            net_heat(:,j), net_salt(:,j), pen_SW_bnd(:,:,j), tv, aggregate_FW_forcing)
+            net_heat(:,j), net_salt(:,j), pen_SW_bnd(:,:,j), tv, aggregate_FW)
   enddo
 
 end subroutine extractFluxes2d
@@ -805,8 +821,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
   real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy flux (m^2/s^3)
   real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux (K H/s)
   real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux (ppt H/s)
-  logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip  calculating
-                                                                              !! diagnostics inside extractFluxes1d()
+  logical,                        optional, intent(in)    :: skip_diags     !< If present and true, skip calculating
+                                                                            !! diagnostics inside extractFluxes1d()
   ! local variables
   integer                                   :: nsw, start, npts, k
   real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
@@ -893,7 +909,7 @@ subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoy flux (m^2/s^3)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux (K H)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux (ppt H)
-  logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip  calculating
+  logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip calculating
                                                                               !! diagnostics inside extractFluxes1d()
   ! local variables
   real, dimension( SZI_(G) ) :: netT ! net temperature flux (K m/s)
@@ -1515,7 +1531,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
   handles%id_total_net_heat_surface = register_scalar_field('ocean_model',                      &
       'total_net_heat_surface', Time, diag,                                                     &
-      long_name='Area integrated surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments',    &
+      long_name='Area integrated surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments', &
       units='W',                                                                                &
       cmor_field_name='total_hfds',                                                             &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_integrated',             &
@@ -1602,7 +1618,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
   handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                       &
       'net_heat_surface_ga', Time, diag,                                                      &
-      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments',    &
+      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments', &
       units='W m-2',                                                                          &
       cmor_field_name='ave_hfds',                                                             &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_averaged',             &
@@ -1719,12 +1735,14 @@ end subroutine register_forcing_type_diags
 
 !> Accumulate the forcing over time steps
 subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
-  type(forcing),         intent(in)    :: flux_tmp
+  type(forcing),         intent(in)    :: flux_tmp !< A temporary structure with current
+                                                 !!thermodynamic forcing fields
   type(mech_forcing),    intent(in)    :: forces !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes
+  type(forcing),         intent(inout) :: fluxes !< A structure containing time-averaged
+                                                 !! thermodynamic forcing fields
   real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  real,                  intent(out)   :: wt2
+  real,                  intent(out)   :: wt2  !< The relative weight of the new fluxes
 
   ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
@@ -1844,14 +1862,18 @@ end subroutine forcing_accumulate
 
 !> This subroutine copies the computational domains of common forcing fields
 !! from a mech_forcing type to a (thermodynamic) forcing type.
-subroutine copy_common_forcing_fields(forces, fluxes, G)
+subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
   type(mech_forcing),      intent(in)    :: forces   !< A structure with the driving mechanical forces
   type(forcing),           intent(inout) :: fluxes   !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in)    :: G        !< grid type
+  logical,       optional, intent(in)    :: skip_pres !< If present and true, do not copy pressure fields.
 
   real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  logical :: do_pres
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  do_pres = .true. ; if (present(skip_pres)) do_pres = .not.skip_pres
 
   if (associated(forces%ustar) .and. associated(fluxes%ustar)) then
     do j=js,je ; do i=is,ie
@@ -1859,22 +1881,24 @@ subroutine copy_common_forcing_fields(forces, fluxes, G)
     enddo ; enddo
   endif
 
-  if (associated(forces%p_surf) .and. associated(fluxes%p_surf)) then
-    do j=js,je ; do i=is,ie
-      fluxes%p_surf(i,j) = forces%p_surf(i,j)
-    enddo ; enddo
-  endif
+  if (do_pres) then
+    if (associated(forces%p_surf) .and. associated(fluxes%p_surf)) then
+      do j=js,je ; do i=is,ie
+        fluxes%p_surf(i,j) = forces%p_surf(i,j)
+      enddo ; enddo
+    endif
 
-  if (associated(forces%p_surf_full) .and. associated(fluxes%p_surf_full)) then
-    do j=js,je ; do i=is,ie
-      fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
-    enddo ; enddo
-  endif
+    if (associated(forces%p_surf_full) .and. associated(fluxes%p_surf_full)) then
+      do j=js,je ; do i=is,ie
+        fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
+      enddo ; enddo
+    endif
 
-  if (associated(forces%p_surf_SSH, forces%p_surf_full)) then
-    fluxes%p_surf_SSH => fluxes%p_surf_full
-  elseif (associated(forces%p_surf_SSH, forces%p_surf)) then
-    fluxes%p_surf_SSH => fluxes%p_surf
+    if (associated(forces%p_surf_SSH, forces%p_surf_full)) then
+      fluxes%p_surf_SSH => fluxes%p_surf_full
+    elseif (associated(forces%p_surf_SSH, forces%p_surf)) then
+      fluxes%p_surf_SSH => fluxes%p_surf
+    endif
   endif
 
 end subroutine copy_common_forcing_fields
@@ -2010,7 +2034,7 @@ end subroutine mech_forcing_diags
 !> Offer buoyancy forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
 subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
-  type(forcing),         intent(in)    :: fluxes    !< flux type
+  type(forcing),         intent(in)    :: fluxes    !< A structure containing thermodynamic forcing fields
   type(surface),         intent(in)    :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   real,                  intent(in)    :: dt        !< time step
@@ -2229,7 +2253,8 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       call post_data(handles%id_total_heat_content_massin, total_transport, diag)
     endif
 
-    if (handles%id_net_heat_coupler > 0 .or. handles%id_total_net_heat_coupler > 0 .or. handles%id_net_heat_coupler_ga > 0. ) then
+    if (handles%id_net_heat_coupler > 0 .or. handles%id_total_net_heat_coupler > 0 .or. &
+        handles%id_net_heat_coupler_ga > 0. ) then
       do j=js,je ; do i=is,ie
       res(i,j) = 0.0
       if (associated(fluxes%LW))         res(i,j) = res(i,j) + fluxes%LW(i,j)
@@ -2248,7 +2273,8 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       endif
     endif
 
-    if (handles%id_net_heat_surface > 0 .or. handles%id_total_net_heat_surface > 0 .or. handles%id_net_heat_surface_ga > 0. ) then
+    if (handles%id_net_heat_surface > 0 .or. handles%id_total_net_heat_surface > 0 .or. &
+        handles%id_net_heat_surface_ga > 0. ) then
       do j=js,je ; do i=is,ie
         res(i,j) = 0.0
         if (associated(fluxes%LW))                   res(i,j) = res(i,j) + fluxes%LW(i,j)
@@ -2498,7 +2524,7 @@ end subroutine forcing_diagnostics
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, iceberg, salt)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
-  type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
+  type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
   logical, optional,     intent(in) :: heat    !< If present and true, allocate heat fluxes
   logical, optional,     intent(in) :: ustar   !< If present and true, allocate ustar and related fields
@@ -2594,6 +2620,10 @@ subroutine allocate_mech_forcing(G, forces, stress, ustar, shelf, press, iceberg
   call myAlloc(forces%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
   call myAlloc(forces%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
 
+  !These fields should only on allocated when iceberg area is being passed through the coupler.
+  call myAlloc(forces%area_berg,isd,ied,jsd,jed, iceberg)
+  call myAlloc(forces%mass_berg,isd,ied,jsd,jed, iceberg)
+
 end subroutine allocate_mech_forcing
 
 !> Allocates and zeroes-out array.
@@ -2667,13 +2697,15 @@ subroutine deallocate_mech_forcing(forces)
   if (associated(forces%taux))  deallocate(forces%taux)
   if (associated(forces%tauy))  deallocate(forces%tauy)
   if (associated(forces%ustar)) deallocate(forces%ustar)
-  if (associated(forces%p_surf))      deallocate(forces%p_surf)
-  if (associated(forces%p_surf_full)) deallocate(forces%p_surf_full)
+  if (associated(forces%p_surf))         deallocate(forces%p_surf)
+  if (associated(forces%p_surf_full))    deallocate(forces%p_surf_full)
   if (associated(forces%net_mass_src))   deallocate(forces%net_mass_src)
   if (associated(forces%rigidity_ice_u)) deallocate(forces%rigidity_ice_u)
   if (associated(forces%rigidity_ice_v)) deallocate(forces%rigidity_ice_v)
   if (associated(forces%frac_shelf_u))   deallocate(forces%frac_shelf_u)
   if (associated(forces%frac_shelf_v))   deallocate(forces%frac_shelf_v)
+  if (associated(forces%area_berg))      deallocate(forces%area_berg)
+  if (associated(forces%mass_berg))      deallocate(forces%mass_berg)
 
 end subroutine deallocate_mech_forcing
 
