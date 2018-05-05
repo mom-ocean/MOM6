@@ -59,9 +59,9 @@ subroutine solve_linear_system( A, B, X, system_size )
     ! entries of column i in rows below row i. Once a valid
     ! pivot is found (say in row k), rows i and k are swaped.
     k = i
-    do while ( ( .NOT. found_pivot ) .AND. ( k .LE. system_size ) )
+    do while ( ( .NOT. found_pivot ) .AND. ( k <= system_size ) )
 
-        if ( abs( A(k,i) ) .GT. eps ) then  ! a valid pivot is found
+        if ( abs( A(k,i) ) > eps ) then  ! a valid pivot is found
           found_pivot = .true.
         else                                ! Go to the next row to see
                                             ! if there is a valid pivot there

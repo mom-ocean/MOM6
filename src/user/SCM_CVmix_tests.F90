@@ -104,13 +104,13 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
       eta(K+1) = eta(K) - h(i,j,k)*GV%H_to_m ! Interface below layer (in m)
       zC = 0.5*( eta(K) + eta(K+1) )        ! Z of middle of layer (in m)
       DZ = min(0., zC + UpperLayerTempMLD)
-      if (DZ.ge.0.0) then ! in Layer 1
+      if (DZ >= 0.0) then ! in Layer 1
         T(i,j,k) = UpperLayerTemp
       else ! in Layer 2
         T(i,j,k) = LowerLayerTemp + LowerLayerdTdZ * DZ
       endif
       DZ = min(0., zC + UpperLayerSaltMLD)
-      if (DZ.ge.0.0) then ! in Layer 1
+      if (DZ >= 0.0) then ! in Layer 1
         S(i,j,k) = UpperLayerSalt
       else ! in Layer 2
         S(i,j,k) = LowerLayerSalt + LowerLayerdSdZ * DZ

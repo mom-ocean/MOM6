@@ -108,10 +108,10 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
       ! taper ice shelf in area where there is no sidestress -
       ! but do not interfere with hmask
 
-      if ((G%geoLonCv(i,j) .gt. len_sidestress).and. &
-          (len_sidestress .gt. 0.)) then
+      if ((G%geoLonCv(i,j) > len_sidestress).and. &
+          (len_sidestress > 0.)) then
         udh = exp (-(G%geoLonCv(i,j)-len_sidestress)/5.0) * h_shelf(i,j)
-        if (udh .le. 25.0) then
+        if (udh <= 25.0) then
           h_shelf(i,j) = 0.0
           area_shelf_h (i,j) = 0.0
         else
@@ -121,11 +121,11 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
 
       ! update thickness mask
 
-      if (area_shelf_h (i,j) .ge. G%areaT(i,j)) then
+      if (area_shelf_h (i,j) >= G%areaT(i,j)) then
         hmask(i,j) = 1.
       elseif (area_shelf_h (i,j) .eq. 0.0) then
         hmask(i,j) = 0.
-      elseif ((area_shelf_h(i,j) .gt. 0) .and. (area_shelf_h(i,j) .le. G%areaT(i,j))) then
+      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
         hmask(i,j) = 2.
       else
         call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
@@ -176,7 +176,7 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
 
     do i=G%isc,G%iec
 
-      if ((j.ge.jsc) .and. (j.le.jec)) then
+      if ((j >= jsc) .and. (j <= jec)) then
 
         if (G%geoLonCu(i-1,j) >= edge_pos) then
         ! Everything past the edge is open ocean.
@@ -329,13 +329,13 @@ end subroutine initialize_ice_thickness_channel
 !       ! side boundaries: no flow
 
 !       if (G%jdg_offset+j .eq. gjsc+1) then !bot boundary
-!         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) .le. len_stress) then
+!         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) <= len_stress) then
 !           v_face_mask_boundary (i,j-1) = 0.
 !         else
 !           v_face_mask_boundary (i,j-1) = 1.
 !         endif
 !       elseif (G%jdg_offset+j .eq. gjec) then !top boundary
-!         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) .le. len_stress) then
+!         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) <= len_stress) then
 !           v_face_mask_boundary (i,j) = 0.
 !         else
 !           v_face_mask_boundary (i,j) = 1.

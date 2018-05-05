@@ -115,9 +115,9 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
 
       x = -z_unif(k)
 
-      if ( x .le. x1 ) then
+      if ( x <= x1 ) then
         t = y1*x/x1;
-      else if ( (x .gt. x1 ) .and. ( x .lt. x2 )) then
+      else if ( (x > x1 ) .and. ( x < x2 )) then
         t = y1 + (y2-y1) * (x-x1) / (x2-x1)
       else
         t = y2 + (1.0-y2) * (x-x2) / (1.0-x2)
@@ -157,7 +157,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     ! are strictly positive
     do k = nz,1,-1
 
-      if ( z_inter(k) .LT. (z_inter(k+1) + GV%Angstrom_Z) ) then
+      if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_Z) ) then
         z_inter(k) = z_inter(k+1) + GV%Angstrom_Z
       end if
 
