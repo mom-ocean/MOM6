@@ -145,7 +145,7 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! by using the edge value in the neighboring cell.
   u0_r = u0 + 0.5 * slope
 
-  if ( (u1 - u0) * (ppoly_E(2,1) - u0_r) .LT. 0.0 ) then
+  if ( (u1 - u0) * (ppoly_E(2,1) - u0_r) < 0.0 ) then
     slope = 2.0 * ( ppoly_E(2,1) - u0 )
   end if
 
@@ -173,7 +173,7 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 
   u0_l = u1 - 0.5 * slope
 
-  if ( (u1 - u0) * (u0_l - ppoly_E(N-1,2)) .LT. 0.0 ) then
+  if ( (u1 - u0) * (u0_l - ppoly_E(N-1,2)) < 0.0 ) then
     slope = 2.0 * ( u1 - ppoly_E(N-1,2) )
   end if
 

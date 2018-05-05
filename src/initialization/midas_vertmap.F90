@@ -371,7 +371,7 @@ do j=1,ny
     enddo ! k-loop
 
     do k=2,nlay  ! simply fill vanished layers with adjacent value
-      if (e_1d(k)-e_1d(k+1) .le. epsln) tr(i,j,k)=tr(i,j,k-1)
+      if (e_1d(k)-e_1d(k+1) <= epsln) tr(i,j,k)=tr(i,j,k-1)
     enddo
 
   enddo i_loop

@@ -477,7 +477,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       if (add_np) then
          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
          do i=1,id
-            if (abs(tr_in(i,jd)-missing_value) .gt. abs(roundoff*missing_value)) then
+            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
                pole = pole+last_row(i)
                npole = npole+1.0
             endif
@@ -503,7 +503,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
     do j=1,jdp
       do i=1,id
-         if (abs(tr_inp(i,j)-missing_value) .gt. abs(roundoff*missing_value)) then
+         if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
            mask_in(i,j)=1.0
             tr_inp(i,j) = tr_inp(i,j) * conversion
          else
@@ -532,7 +532,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     mask_out=1.0
     do j=js,je
       do i=is,ie
-        if (abs(tr_out(i,j)-missing_value) .lt. abs(roundoff*missing_value)) mask_out(i,j)=0.
+        if (abs(tr_out(i,j)-missing_value) < abs(roundoff*missing_value)) mask_out(i,j)=0.
       enddo
     enddo
 
@@ -541,14 +541,14 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     nPoints = 0 ; varAvg = 0.
     do j=js,je
       do i=is,ie
-        if (mask_out(i,j) .lt. 1.0) then
+        if (mask_out(i,j) < 1.0) then
           tr_out(i,j)=missing_value
         else
           good(i,j)=1.0
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
+        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) < 1.0) fill(i,j)=1.0
       enddo
     enddo
     call pass_var(fill,G%Domain)
@@ -750,7 +750,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       if (add_np) then
          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
          do i=1,id
-            if (abs(tr_in(i,jd)-missing_value) .gt. abs(roundoff*missing_value)) then
+            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
                pole = pole+last_row(i)
                npole = npole+1.0
             endif
@@ -776,7 +776,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     do j=1,jdp
       do i=1,id
-         if (abs(tr_inp(i,j)-missing_value) .gt. abs(roundoff*missing_value)) then
+         if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
            mask_in(i,j)=1.0
            tr_inp(i,j) = tr_inp(i,j) * conversion
          else
@@ -805,7 +805,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     mask_out=1.0
     do j=js,je
       do i=is,ie
-        if (abs(tr_out(i,j)-missing_value) .lt. abs(roundoff*missing_value)) mask_out(i,j)=0.
+        if (abs(tr_out(i,j)-missing_value) < abs(roundoff*missing_value)) mask_out(i,j)=0.
       enddo
     enddo
 
@@ -814,14 +814,14 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     nPoints = 0 ; varAvg = 0.
     do j=js,je
       do i=is,ie
-        if (mask_out(i,j) .lt. 1.0) then
+        if (mask_out(i,j) < 1.0) then
           tr_out(i,j)=missing_value
         else
           good(i,j)=1.0
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
+        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) < 1.0) fill(i,j)=1.0
       enddo
     enddo
     call pass_var(fill,G%Domain)

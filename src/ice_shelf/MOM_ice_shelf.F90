@@ -315,7 +315,7 @@ function slope_limiter (num, denom)
 
   if (denom .eq. 0) then
     slope_limiter = 0
-  elseif (num*denom .le. 0) then
+  elseif (num*denom <= 0) then
     slope_limiter = 0
   else
     r = num/denom
@@ -885,7 +885,7 @@ subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
         if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = 0.0
         if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
 
-        if (CS%lprec(i,j) / CS%density_ice * time_step .lt. CS%h_shelf (i,j)) then
+        if (CS%lprec(i,j) / CS%density_ice * time_step < CS%h_shelf (i,j)) then
            CS%h_shelf (i,j) = CS%h_shelf (i,j) - CS%lprec(i,j) / CS%density_ice * time_step
         else
            ! the ice is about to melt away
@@ -2120,7 +2120,7 @@ subroutine initialize_diagnostic_fields (CS, FE, Time)
   do j=jsd,jed
     do i=isd,ied
       OD = G%bathyT(i,j) - rhoi/rhow * h_shelf (i,j)
-      if (OD.ge.0) then
+      if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         OD_av (i,j) = OD
         float_frac(i,j) = 0.
@@ -2374,12 +2374,12 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
         do k=0,1
           do l=0,1
             if ((CS%hmask(i,j) .eq. 1) .and. &
-              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%bathyT(i,j) .le. 0)) then
+              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%bathyT(i,j) <= 0)) then
               nodefloat = nodefloat + 1
             endif
           enddo
         enddo
-        if ((nodefloat .gt. 0) .and. (nodefloat .lt. 4)) then
+        if ((nodefloat > 0) .and. (nodefloat < 4)) then
           !print *,"nodefloat",nodefloat
           float_cond (i,j) = 1.0
           CS%float_frac (i,j) = 1.0
@@ -2410,7 +2410,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
     do j=jsd,jed
       do i=isd,ied
 
-        if (((i .gt. isd) .and. (j .gt. jsd)) .or. (isym .eq. 1)) then
+        if (((i > isd) .and. (j > jsd)) .or. (isym .eq. 1)) then
           X(:,:) = geolonq (i-1:i,j-1:j)*1000
           Y(:,:) = geolatq (i-1:i,j-1:j)*1000
         else
@@ -2485,7 +2485,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
       if (CS%vmask(i,j) .eq. 1) then
         err_tempv = MAX(ABS (Av(i,j) + v_bdry_cont(i,j) - TAUDY(i,j)), err_tempu)
       endif
-      if (err_tempv .ge. err_init) then
+      if (err_tempv >= err_init) then
         err_init = err_tempv
       endif
     enddo
@@ -2575,7 +2575,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
           if (CS%vmask(i,j) .eq. 1) then
             err_tempv = MAX(ABS (Av(i,j) + v_bdry_cont(i,j) - TAUDY(i,j)), err_tempu)
           endif
-          if (err_tempv .ge. err_max) then
+          if (err_tempv >= err_max) then
             err_max = err_tempv
           endif
         enddo
@@ -2597,10 +2597,10 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
             err_tempv = MAX(ABS (v_last(i,j)- v(i,j)), err_tempu)
             tempv = SQRT(v(i,j)**2+tempu**2)
           endif
-          if (err_tempv .ge. err_max) then
+          if (err_tempv >= err_max) then
             err_max = err_tempv
           endif
-          if  (tempv .ge. max_vel) then
+          if  (tempv >= max_vel) then
             max_vel = tempv
           endif
         enddo
@@ -2617,7 +2617,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
     if (is_root_pe()) print *,"nonlinear residual: ",err_max/err_init
 
-    if (err_max .le. CS%nonlinear_tolerance * err_init) then
+    if (err_max <= CS%nonlinear_tolerance * err_init) then
       if (is_root_pe()) &
         print *,"exiting nonlinear solve after ",iter," iterations"
       exit
@@ -3050,7 +3050,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 !         print *,"|r|",dot_p1
 !     endif
 
-    if (dot_p1 .le. CS%cg_tolerance * resid0) then
+    if (dot_p1 <= CS%cg_tolerance * resid0) then
       iters = iter
       conv_flag = 1
       exit
@@ -3144,15 +3144,15 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do j=jsd+1,jed-1
-    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+        ((j+j_off) >= G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
 !     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo)
       do i=is,ie
 
-        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+i_off) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) >= G%domain%nihalo+1)) then
 
           if (i+i_off .eq. G%domain%nihalo+1) then
             at_west_bdry=.true.
@@ -3191,7 +3191,7 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
   !                print *, j, u_face, stencil(-1)
   !            endif
 
-              if (u_face .gt. 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
+              if (u_face > 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
 
               ! i may not cover all the cases.. but i cover the realistic ones
 
@@ -3213,7 +3213,7 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
                 endif
 
-              elseif (u_face .lt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+              elseif (u_face < 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
                 if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * &
@@ -3241,7 +3241,7 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
 
-              if (u_face .lt. 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
+              if (u_face < 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
 
                 if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a
                               ! thickness bdry condition, and the stencil contains it
@@ -3262,7 +3262,7 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
                 endif
 
-              elseif (u_face .gt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+              elseif (u_face > 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
 
                 if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
 
@@ -3384,15 +3384,15 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do i=isd+2,ied-2
-    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+       ((i+i_off) >= G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-             ((j+j_off) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+             ((j+j_off) >= G%domain%njhalo+1)) then
 
           if (j+j_off .eq. G%domain%njhalo+1) then
             at_south_bdry=.true.
@@ -3424,7 +3424,7 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
               ! get u-velocity at center of left face
               v_face = 0.5 * (CS%v_shelf(i-1,j-1) + CS%v_shelf(i,j-1))
 
-              if (v_face .gt. 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
+              if (v_face > 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
 
                 ! i may not cover all the cases.. but i cover the realistic ones
 
@@ -3444,7 +3444,7 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(-1)
                 endif
 
-              elseif (v_face .lt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face < 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
                 if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then  ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
@@ -3474,7 +3474,7 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
             ! get u-velocity at center of right face
               v_face = 0.5 * (CS%v_shelf(i-1,j) + CS%v_shelf(i,j))
 
-              if (v_face .lt. 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
+              if (v_face < 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
 
                 if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a
                                             ! thickness bdry condition, and the stencil contains it
@@ -3489,7 +3489,7 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(1)
                 endif
 
-              elseif (v_face .gt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face > 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
                 if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then         ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(-1), stencil(1)-stencil(0))
@@ -3616,33 +3616,33 @@ subroutine shelf_advance_front (CS, flux_enter)
 
     iter_flag = 0
 
-    if (iter_count .gt. 0) then
+    if (iter_count > 0) then
       flux_enter (:,:,:) = flux_enter_replace(:,:,:)
       flux_enter_replace (:,:,:) = 0.0
     endif
 
     iter_count = iter_count + 1
 
-    ! if iter_count .ge. 3 then some halo updates need to be done...
+    ! if iter_count >= 3 then some halo updates need to be done...
 
 
 
     do j=jsc-1,jec+1
 
-      if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-         ((j+j_off) .ge. G%domain%njhalo+1)) then
+      if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+         ((j+j_off) >= G%domain%njhalo+1)) then
 
       do i=isc-1,iec+1
 
-         if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+i_off) .ge. G%domain%nihalo+1)) then
+         if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) >= G%domain%nihalo+1)) then
         ! first get reference thickness by averaging over cells that are fluxing into this cell
             n_flux = 0
             h_reference = 0.0
             tot_flux = 0.0
 
             do k=1,2
-              if (flux_enter(i,j,k) .gt. 0) then
+              if (flux_enter(i,j,k) > 0) then
                 n_flux = n_flux + 1
                 h_reference = h_reference + h_shelf(i+2*k-3,j)
                 tot_flux = tot_flux + flux_enter(i,j,k)
@@ -3651,7 +3651,7 @@ subroutine shelf_advance_front (CS, flux_enter)
             enddo
 
             do k=1,2
-              if (flux_enter(i,j,k+2) .gt. 0) then
+              if (flux_enter(i,j,k+2) > 0) then
                 n_flux = n_flux + 1
                 h_reference = h_reference + h_shelf (i,j+2*k-3)
                 tot_flux = tot_flux + flux_enter(i,j,k+2)
@@ -3659,7 +3659,7 @@ subroutine shelf_advance_front (CS, flux_enter)
               endif
             enddo
 
-            if (n_flux .gt. 0) then
+            if (n_flux > 0) then
               dxdyh = G%areaT(i,j)
               h_reference = h_reference / real(n_flux)
               partial_vol = h_shelf (i,j) * area_shelf_h (i,j) + tot_flux
@@ -3668,7 +3668,7 @@ subroutine shelf_advance_front (CS, flux_enter)
                 hmask (i,j) = 1
                 h_shelf (i,j) = h_reference
                 area_shelf_h(i,j) = dxdyh
-              elseif ((partial_vol / dxdyh) .lt. h_reference) then
+              elseif ((partial_vol / dxdyh) < h_reference) then
                 hmask (i,j) = 2
         !         mass_shelf (i,j) = partial_vol * rho
                 area_shelf_h (i,j) = partial_vol / h_reference
@@ -3734,7 +3734,7 @@ subroutine shelf_advance_front (CS, flux_enter)
 
   call mpp_max(iter_count)
 
-  if (is_root_pe() .and. (iter_count.gt.1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
+  if (is_root_pe() .and. (iter_count > 1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
 
   if (associated(flux_enter_replace)) deallocate(flux_enter_replace)
 
@@ -3751,9 +3751,9 @@ subroutine ice_shelf_min_thickness_calve (CS, h_shelf, area_shelf_h,hmask)
 
   do j=G%jsd,G%jed
     do i=G%isd,G%ied
-!      if ((h_shelf(i,j) .lt. CS%min_thickness_simple_calve) .and. (hmask(i,j).eq.1) .and. &
+!      if ((h_shelf(i,j) < CS%min_thickness_simple_calve) .and. (hmask(i,j).eq.1) .and. &
 !           (CS%float_frac(i,j) .eq. 0.0)) then
-       if ((h_shelf(i,j) .lt. CS%min_thickness_simple_calve) .and. (area_shelf_h(i,j).gt. 0.)) then
+       if ((h_shelf(i,j) < CS%min_thickness_simple_calve) .and. (area_shelf_h(i,j) > 0.)) then
         h_shelf(i,j) = 0.0
         area_shelf_h(i,j) = 0.0
         hmask(i,j) = 0.0
@@ -4093,7 +4093,7 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
       endif
 
       if ((hmask(i,j) .eq. 0) .or. (hmask(i,j) .eq. 1) .or. (hmask(i,j) .eq. 2)) then
-        if ((i.le.iec).and.(i.ge.isc)) then
+        if ((i <= iec).and.(i >= isc)) then
           if (u_face_mask (i-1,j) .eq. 3) then
             u_boundary_values (i-1,j-1) = (1 - ((G%geoLatBu(i-1,j-1) - 0.5*CS%len_lat)*2./CS%len_lat)**2) * &
                   1.5 * input_flux / input_thick
@@ -4483,7 +4483,7 @@ subroutine CG_action_subgrid_basal_bilinear (Phisub, H, U, V, DXDYH, D, dens_rat
               hloc = Phisub(i,j,1,1,qx,qy)*H(1,1)+Phisub(i,j,1,2,qx,qy)*H(1,2)+&
                 Phisub(i,j,2,1,qx,qy)*H(2,1)+Phisub(i,j,2,2,qx,qy)*H(2,2)
 
-              if (dens_ratio * hloc - D .gt. 0) then
+              if (dens_ratio * hloc - D > 0) then
               !if (.true.) then
                 uq = 0 ; vq = 0
                 do k=1,2
@@ -4835,7 +4835,7 @@ subroutine CG_diagonal_subgrid_basal_bilinear (Phisub, H, DXDYH, D, dens_ratio, 
               hloc = Phisub(i,j,1,1,qx,qy)*H(1,1)+Phisub(i,j,1,2,qx,qy)*H(1,2)+&
                 Phisub(i,j,2,1,qx,qy)*H(2,1)+Phisub(i,j,2,2,qx,qy)*H(2,2)
 
-              if (dens_ratio * hloc - D .gt. 0) then
+              if (dens_ratio * hloc - D > 0) then
                 Ucontr (m,n) = Ucontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy)**2
                 Vcontr (m,n) = Vcontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy)**2
               endif
@@ -5393,7 +5393,7 @@ subroutine update_OD_ffrac (CS, ocean_mass, counter, nstep_velocity, time_step, 
     do j=jsc,jec
       do i=isc,iec
         CS%float_frac(i,j) = 1.0 - (CS%float_frac_rt(i,j) / real(nstep_velocity))
-!    if ((CS%float_frac(i,j) .gt. 0) .and. (CS%float_frac(i,j) .lt. 1)) then
+!    if ((CS%float_frac(i,j) > 0) .and. (CS%float_frac(i,j) < 1)) then
 !        print *,"PARTLY GROUNDED", CS%float_frac(i,j),i,j,mpp_pe()
 !    endif
         CS%OD_av(i,j) = CS%OD_rt(i,j) / real(nstep_velocity)
@@ -5433,7 +5433,7 @@ subroutine update_OD_ffrac_uncoupled (CS)
   do j=jsd,jed
     do i=isd,ied
       OD = G%bathyT(i,j) - rhoi/rhow * h_shelf (i,j)
-      if (OD.ge.0) then
+      if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         OD_av (i,j) = OD
         float_frac(i,j) = 0.
@@ -5700,7 +5700,7 @@ subroutine update_velocity_masks (CS)
         !  vmask (i-1:i,j) = 0.
         !endif
 
-        if (i .lt. G%ied) then
+        if (i < G%ied) then
           if ((hmask(i+1,j) .eq. 0) &
               .OR. (hmask(i+1,j) .eq. 2)) then
             !right boundary or adjacent to unfilled cell
@@ -5708,21 +5708,21 @@ subroutine update_velocity_masks (CS)
           endif
         endif
 
-        if (i .gt. G%isd) then
+        if (i > G%isd) then
           if ((hmask(i-1,j) .eq. 0) .OR. (hmask(i-1,j) .eq. 2)) then
             !adjacent to unfilled cell
             u_face_mask (i-1,j) = 2.
           endif
         endif
 
-        if (j .gt. G%jsd) then
+        if (j > G%jsd) then
           if ((hmask(i,j-1) .eq. 0) .OR. (hmask(i,j-1) .eq. 2)) then
             !adjacent to unfilled cell
             v_face_mask (i,j-1) = 2.
           endif
         endif
 
-        if (j .lt. G%jed) then
+        if (j < G%jed) then
           if ((hmask(i,j+1) .eq. 0) .OR. (hmask(i,j+1) .eq. 2)) then
             !adjacent to unfilled cell
             v_face_mask (i,j) = 2.
@@ -5774,7 +5774,7 @@ subroutine interpolate_H_to_B (CS, h_shelf, hmask, H_node)
           endif
         enddo
       enddo
-      if (num_h .gt. 0) then
+      if (num_h > 0) then
         H_node(i,j) = summ / num_h
       endif
     enddo
@@ -5852,7 +5852,7 @@ N = size(A,2)
 OPEN(unit=fin,FILE=fname,STATUS='REPLACE',ACCESS='SEQUENTIAL',&
    ACTION='WRITE',IOSTAT=iock)
 
-if (M .gt. 1300) THEN
+if (M > 1300) THEN
    WRITE(fin) 'SECOND DIMENSION TOO LARGE'
    CLOSE(fin)
    RETURN
@@ -5940,7 +5940,7 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
   ! dumtimeprint=time_type_to_real(Time)/spy
   if (is_root_pe()) print *, "TIME in ice shelf call, yrs: ", time_type_to_real(Time)/spy
 
-  do while (time_step_remain .gt. 0.0)
+  do while (time_step_remain > 0.0)
 
   min_ratio = 1.0e16
   n=n+1
@@ -5972,7 +5972,7 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
 
    time_step_int = min(CS%CFL_factor * min_ratio * (365*86400), time_step)
 
-   if (time_step_int .lt. min_time_step) then
+   if (time_step_int < min_time_step) then
      call MOM_error (FATAL, "MOM_ice_shelf:solo_time_step: abnormally small timestep")
    else
      if (is_root_pe()) then
@@ -5980,7 +5980,7 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
      endif
    endif
 
-   if (time_step_int .ge. time_step_remain) then
+   if (time_step_int >= time_step_remain) then
      time_step_int = time_step_remain
      time_step_remain = 0.0
    else
@@ -5999,7 +5999,7 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
 
    ! if the last mini-timestep is a day or less, we cannot expect velocities to change by much.
    ! do not update them
-   if (time_step_int .gt. 1000) then
+   if (time_step_int > 1000) then
      call update_velocity_masks (CS)
 
 !     call savearray2 ("Umask"//"p"//trim(procnum)//"_"//trim(stepnum),CS%umask,CS%write_output_to_file)
@@ -6108,7 +6108,7 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   do j=jsd,jed
     do i=isd,ied
       t_bd = CS%t_boundary_values(i,j)
-!      if (CS%hmask(i,j) .gt. 1) then
+!      if (CS%hmask(i,j) > 1) then
       if ((CS%hmask(i,j) .eq. 3) .or. (CS%hmask(i,j) .eq. -2)) then
           CS%t_shelf(i,j) = CS%t_boundary_values(i,j)
       endif
@@ -6141,7 +6141,7 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   do j=jsd,jed
     do i=isd,ied
 !      if (CS%hmask(i,j) .eq. 1) then
-      if (CS%h_shelf(i,j) .gt. 0.0) then
+      if (CS%h_shelf(i,j) > 0.0) then
         CS%t_shelf (i,j) = th_after_vflux(i,j)/CS%h_shelf (i,j)
       else
           CS%t_shelf(i,j) = -10.0
@@ -6152,7 +6152,7 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   do j=jsd,jed
     do i=isd,ied
       t_bd = CS%t_boundary_values(i,j)
-!      if (CS%hmask(i,j) .gt. 1) then
+!      if (CS%hmask(i,j) > 1) then
       if ((CS%hmask(i,j) .eq. 3) .or. (CS%hmask(i,j) .eq. -2)) then
           CS%t_shelf(i,j) = t_bd
 !          CS%t_shelf(i,j) = -15.0
@@ -6163,7 +6163,7 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   do j=jsc,jec
     do i=isc,iec
       if ((CS%hmask(i,j) .eq. 1) .or. (CS%hmask(i,j) .eq. 2)) then
-        if (CS%h_shelf(i,j) .gt. 0.0) then
+        if (CS%h_shelf(i,j) > 0.0) then
 !          CS%t_shelf (i,j) = CS%t_shelf (i,j) + time_step*(adot*Tsurf -melt_rate (i,j)*Tbot(i,j))/CS%h_shelf (i,j)
           CS%t_shelf (i,j) = CS%t_shelf (i,j) + time_step*(adot*Tsurf -3/spy*Tbot(i,j))/CS%h_shelf (i,j)
         else
@@ -6244,15 +6244,15 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do j=jsd+1,jed-1
-    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+        ((j+j_off) >= G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
 !     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo)
       do i=is,ie
 
-        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+i_off) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) >= G%domain%nihalo+1)) then
 
           if (i+i_off .eq. G%domain%nihalo+1) then
             at_west_bdry=.true.
@@ -6294,7 +6294,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
   !                print *, j, u_face, stencil(-1)
   !            endif
 
-              if (u_face .gt. 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
+              if (u_face > 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
 
               ! i may not cover all the cases.. but i cover the realistic ones
 
@@ -6316,7 +6316,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
                 endif
 
-              elseif (u_face .lt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+              elseif (u_face < 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
                 if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * &
@@ -6347,7 +6347,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
 
-              if (u_face .lt. 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
+              if (u_face < 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
 
                 if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a
                                             ! thickness bdry condition, and the stencil contains it
@@ -6368,7 +6368,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
                 endif
 
-              elseif (u_face .gt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+              elseif (u_face > 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
 
                 if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
 
@@ -6497,15 +6497,15 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do i=isd+2,ied-2
-    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+       ((i+i_off) >= G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-             ((j+j_off) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+             ((j+j_off) >= G%domain%njhalo+1)) then
 
           if (j+j_off .eq. G%domain%njhalo+1) then
             at_south_bdry=.true.
@@ -6539,7 +6539,7 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
               ! get u-velocity at center of left face
               v_face = 0.5 * (CS%v_shelf(i-1,j-1) + CS%v_shelf(i,j-1))
 
-              if (v_face .gt. 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
+              if (v_face > 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
 
                 ! i may not cover all the cases.. but i cover the realistic ones
 
@@ -6559,7 +6559,7 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(-1)
                 endif
 
-              elseif (v_face .lt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face < 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
                 if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then  ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
@@ -6592,7 +6592,7 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
             ! get u-velocity at center of right face
               v_face = 0.5 * (CS%v_shelf(i-1,j) + CS%v_shelf(i,j))
 
-              if (v_face .lt. 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
+              if (v_face < 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
 
                 if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a
                                             ! thickness bdry condition, and the stencil contains it
@@ -6607,7 +6607,7 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(1)
                 endif
 
-              elseif (v_face .gt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face > 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
                 if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then         ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(-1), stencil(1)-stencil(0))

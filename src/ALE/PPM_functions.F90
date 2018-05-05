@@ -193,7 +193,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients, h_n
 
   ! Limit the right slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )
-  if ( abs(u1_r) .GT. abs(slope) ) then
+  if ( abs(u1_r) > abs(slope) ) then
     u1_r = slope
   end if
 
@@ -210,11 +210,11 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients, h_n
   exp1 = (u0_r - u0_l) * (u0 - 0.5*(u0_l+u0_r))
   exp2 = (u0_r - u0_l) * (u0_r - u0_l) / 6.0
 
-  if ( exp1 .GT. exp2 ) then
+  if ( exp1 > exp2 ) then
     u0_l = 3.0 * u0 - 2.0 * u0_r
   end if
 
-  if ( exp1 .LT. -exp2 ) then
+  if ( exp1 < -exp2 ) then
     u0_r = 3.0 * u0 - 2.0 * u0_l
   end if
 
@@ -246,7 +246,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients, h_n
 
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )
-  if ( abs(u1_l) .GT. abs(slope) ) then
+  if ( abs(u1_l) > abs(slope) ) then
     u1_l = slope
   end if
 
@@ -263,11 +263,11 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients, h_n
   exp1 = (u0_r - u0_l) * (u1 - 0.5*(u0_l+u0_r))
   exp2 = (u0_r - u0_l) * (u0_r - u0_l) / 6.0
 
-  if ( exp1 .GT. exp2 ) then
+  if ( exp1 > exp2 ) then
     u0_l = 3.0 * u1 - 2.0 * u0_r
   end if
 
-  if ( exp1 .LT. -exp2 ) then
+  if ( exp1 < -exp2 ) then
     u0_r = 3.0 * u1 - 2.0 * u0_l
   end if
 

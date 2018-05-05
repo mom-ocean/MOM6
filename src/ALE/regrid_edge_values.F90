@@ -118,7 +118,7 @@ subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
     sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
     sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
 
-    if ( (sigma_l * sigma_r) .GT. 0.0 ) then
+    if ( (sigma_l * sigma_r) > 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
@@ -130,11 +130,11 @@ subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
     ! JCP 2008 Eqs 19 and 20)
     slope = slope * h_c * 0.5
 
-    if ( (u_l-u0_l)*(u0_l-u_c) .LT. 0.0 ) then
+    if ( (u_l-u0_l)*(u0_l-u_c) < 0.0 ) then
       u0_l = u_c - sign( min( abs(slope), abs(u0_l-u_c) ), slope )
     end if
 
-    if ( (u_r-u0_r)*(u0_r-u_c) .LT. 0.0 ) then
+    if ( (u_r-u0_r)*(u0_r-u_c) < 0.0 ) then
       u0_r = u_c + sign( min( abs(slope), abs(u0_r-u_c) ), slope )
     end if
 
@@ -227,7 +227,7 @@ subroutine check_discontinuous_edge_values( N, u, edge_values )
     ! Right cell average
     um_plus = u(k+1)
 
-    if ( (u0_plus - u0_minus)*(um_plus - um_minus) .LT. 0.0 ) then
+    if ( (u0_plus - u0_minus)*(um_plus - um_minus) < 0.0 ) then
       u0_avg = 0.5 * ( u0_minus + u0_plus )
       u0_avg = max( min( u0_avg, max(um_minus, um_plus) ), min(um_minus, um_plus) )
       edge_values(k,2) = u0_avg

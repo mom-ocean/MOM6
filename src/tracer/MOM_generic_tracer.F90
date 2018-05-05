@@ -294,9 +294,9 @@ contains
          !Check/apply the bounds for each g_tracer
          do k=1,nk ; do j=jsc,jec ; do i=isc,iec
             if (tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
-              if (tr_ptr(i,j,k) .lt. g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
+              if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
               !Jasmin does not want to apply the maximum for now
-              !if (tr_ptr(i,j,k) .gt. g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
+              !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
             endif
          enddo; enddo ; enddo
 
@@ -355,7 +355,7 @@ contains
     grid_tmask(:,:,:) = 0.0
     grid_kmt(:,:) = 0
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
-       if (G%mask2dT(i,j) .gt. 0) then
+       if (G%mask2dT(i,j) > 0) then
           grid_tmask(i,j,:) = 1.0
           grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
        endif

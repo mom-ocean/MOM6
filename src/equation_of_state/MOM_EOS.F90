@@ -2335,7 +2335,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
   if ((EOS%form_of_EOS .ne. EOS_TEOS10) .and. (EOS%form_of_EOS .ne. EOS_NEMO)) return
 
   do k=1,kd ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if (mask_z(i,j,k) .ge. 1.0) then
+    if (mask_z(i,j,k) >= 1.0) then
      S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
 !     p=press(k)/10000. !convert pascal to dbar
 !     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),p,G%geoLonT(i,j),G%geoLatT(i,j))

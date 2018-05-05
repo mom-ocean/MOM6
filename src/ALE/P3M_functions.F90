@@ -154,7 +154,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect
     sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
     sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
 
-    if ( (sigma_l * sigma_r) .GT. 0.0 ) then
+    if ( (sigma_l * sigma_r) > 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
@@ -173,11 +173,11 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect
 
     ! The edge slopes are limited from above by the respective
     ! one-sided slopes
-    if ( abs(u1_l) .GT. abs(sigma_l) ) then
+    if ( abs(u1_l) > abs(sigma_l) ) then
       u1_l = sigma_l
     end if
 
-    if ( abs(u1_r) .GT. abs(sigma_r) ) then
+    if ( abs(u1_r) > abs(sigma_r) ) then
       u1_r = sigma_r
     end if
 
@@ -268,7 +268,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
 
   ! Limit the right slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 ) / ( h0 + hNeglect )
-  if ( abs(u1_r) .GT. abs(slope) ) then
+  if ( abs(u1_r) > abs(slope) ) then
     u1_r = slope
   end if
 
@@ -285,7 +285,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! Check whether the edge values are monotonic. For example, if the left edge
   ! value is larger than the right edge value while the slope is positive, the
   ! edge values are inconsistent and we need to modify the left edge value
-  if ( (u0_r-u0_l) * slope .LT. 0.0 ) then
+  if ( (u0_r-u0_l) * slope < 0.0 ) then
     u0_l = u0_r
     u1_l = 0.0
     u1_r = 0.0
@@ -328,7 +328,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
 
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 ) / ( h1 + hNeglect )
-  if ( abs(u1_l) .GT. abs(slope) ) then
+  if ( abs(u1_l) > abs(slope) ) then
     u1_l = slope
   end if
 
@@ -345,7 +345,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! Check whether the edge values are monotonic. For example, if the right edge
   ! value is smaller than the left edge value while the slope is positive, the
   ! edge values are inconsistent and we need to modify the right edge value
-  if ( (u0_r-u0_l) * slope .LT. 0.0 ) then
+  if ( (u0_r-u0_l) * slope < 0.0 ) then
     u0_r = u0_l
     u1_l = 0.0
     u1_r = 0.0
@@ -461,19 +461,19 @@ integer function is_cubic_monotonic( ppoly_coefficients, k )
 
   rho = b*b - 4.0*a*c
 
-  if ( rho .GE. 0.0 ) then
-    if ( abs(c) .GT. 1e-15 ) then
+  if ( rho >= 0.0 ) then
+    if ( abs(c) > 1e-15 ) then
       xi_0 = 0.5 * ( -b - sqrt( rho ) ) / c
       xi_1 = 0.5 * ( -b + sqrt( rho ) ) / c
-    else if ( abs(b) .GT. 1e-15 ) then
+    else if ( abs(b) > 1e-15 ) then
       xi_0 = - a / b
       xi_1 = - a / b
     end if
 
     ! If one of the roots of the first derivative lies in (0,1),
     ! the cubic is not monotonic.
-    if ( ( (xi_0 .GT. eps) .AND. (xi_0 .LT. 1.0-eps) ) .OR. &
-         ( (xi_1 .GT. eps) .AND. (xi_1 .LT. 1.0-eps) ) ) then
+    if ( ( (xi_0 > eps) .AND. (xi_0 < 1.0-eps) ) .OR. &
+         ( (xi_1 > eps) .AND. (xi_1 < 1.0-eps) ) ) then
       monotonic = 0
     else
       monotonic = 1
@@ -547,11 +547,11 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
 
   ! If the edge slopes are inconsistent w.r.t. the limited PLM slope,
   ! set them to zero
-  if ( u1_l*slope .LE. 0.0 ) then
+  if ( u1_l*slope <= 0.0 ) then
     u1_l = 0.0
   end if
 
-  if ( u1_r*slope .LE. 0.0 ) then
+  if ( u1_r*slope <= 0.0 ) then
     u1_r = 0.0
   end if
 
@@ -569,7 +569,7 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
     xi_ip = - a2 / (3.0 * a3)
 
     ! If the inflexion point lies in [0,1], change boolean value
-    if ( (xi_ip .GE. 0.0) .AND. (xi_ip .LE. 1.0) ) then
+    if ( (xi_ip >= 0.0) .AND. (xi_ip <= 1.0) ) then
       found_ip = 1
     end if
   end if
@@ -583,8 +583,8 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
     slope_ip = a1 + 2.0*a2*xi_ip + 3.0*a3*xi_ip*xi_ip
 
     ! Check whether slope is consistent
-    if ( slope_ip*slope .LT. 0.0 ) then
-      if ( abs(sigma_l) .LT. abs(sigma_r)  ) then
+    if ( slope_ip*slope < 0.0 ) then
+      if ( abs(sigma_l) < abs(sigma_r)  ) then
         inflexion_l = 1
       else
         inflexion_r = 1
@@ -602,17 +602,17 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
     u1_l_tmp = 1.5*(u0_r-u0_l)/h - 0.5*u1_r
     u1_r_tmp = 3.0*(u0_r-u0_l)/h - 2.0*u1_l
 
-    if ( (u1_l_tmp*slope .LT. 0.0) .AND. (u1_r_tmp*slope .LT. 0.0) ) then
+    if ( (u1_l_tmp*slope < 0.0) .AND. (u1_r_tmp*slope < 0.0) ) then
 
       u1_l = 0.0
       u1_r = 3.0 * (u0_r - u0_l) / h
 
-    else if (u1_l_tmp*slope .LT. 0.0) then
+    else if (u1_l_tmp*slope < 0.0) then
 
       u1_r = u1_r_tmp
       u1_l = 1.5*(u0_r - u0_l)/h - 0.5*u1_r
 
-    else if (u1_r_tmp*slope .LT. 0.0) then
+    else if (u1_r_tmp*slope < 0.0) then
 
       u1_l = u1_l_tmp
       u1_r = 3.0*(u0_r - u0_l)/h - 2.0*u1_l
@@ -632,17 +632,17 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
     u1_l_tmp = 3.0*(u0_r-u0_l)/h - 2.0*u1_r
     u1_r_tmp = 1.5*(u0_r-u0_l)/h - 0.5*u1_l
 
-    if ( (u1_l_tmp*slope .LT. 0.0) .AND. (u1_r_tmp*slope .LT. 0.0) ) then
+    if ( (u1_l_tmp*slope < 0.0) .AND. (u1_r_tmp*slope < 0.0) ) then
 
       u1_l = 3.0 * (u0_r - u0_l) / h
       u1_r = 0.0
 
-    else if (u1_l_tmp*slope .LT. 0.0) then
+    else if (u1_l_tmp*slope < 0.0) then
 
       u1_r = u1_r_tmp
       u1_l = 3.0*(u0_r - u0_l)/h - 2.0*u1_r
 
-    else if (u1_r_tmp*slope .LT. 0.0) then
+    else if (u1_r_tmp*slope < 0.0) then
 
       u1_l = u1_l_tmp
       u1_r = 1.5*(u0_r - u0_l)/h - 0.5*u1_l
@@ -656,11 +656,11 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
 
   end if ! end treating case with inflexion point on the right
 
-  if ( abs(u1_l*h) .LT. eps ) then
+  if ( abs(u1_l*h) < eps ) then
     u1_l = 0.0
   end if
 
-  if ( abs(u1_r*h) .LT. eps ) then
+  if ( abs(u1_r*h) < eps ) then
     u1_r = 0.0
   end if
 

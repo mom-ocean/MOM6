@@ -793,7 +793,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
     !Filter land values
     do j = G%jsd,G%jed ; do I = G%Isd,G%Ied
-      if (abs(temp_x(i,j)).gt.10. .or. abs(temp_y(i,j)).gt.10. ) then
+      if (abs(temp_x(i,j)) > 10. .or. abs(temp_y(i,j)) > 10.) then
          ! Assume land-mask and zero out
          temp_x(i,j)=0.0
          temp_y(i,j)=0.0
@@ -857,7 +857,7 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, I, J, &
       Top = Bottom
       MidPoint = Bottom + GV%H_to_m * h(kk)/2.
       Bottom = Bottom + GV%H_to_m * h(kk)
-      if (MidPoint.gt.DPT_LASL .and. kk.gt.1 .and. ContinueLoop) then
+      if (MidPoint > DPT_LASL .and. kk > 1 .and. ContinueLoop) then
         ShearDirection = atan2(V_H(1)-V_H(kk),U_H(1)-U_H(kk))
         ContinueLoop = .false.
       endif
@@ -944,7 +944,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL, LA)
   real :: u10
 
 
-  if (ustar .gt. 0.0) then
+  if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
     call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
     ! surface Stokes drift
@@ -1024,9 +1024,9 @@ subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
     Top = Bottom
     MidPoint = Bottom - GV%H_to_m * h(kk)/2.
     Bottom = Bottom - GV%H_to_m * h(kk)
-    if (AvgDepth .lt. Bottom) then !Whole cell within H_LA
+    if (AvgDepth < Bottom) then !Whole cell within H_LA
       Sum = Sum + Profile(kk) * (GV%H_to_m * H(kk))
-    elseif (AvgDepth .lt. top) then !partial cell within H_LA
+    elseif (AvgDepth < top) then !partial cell within H_LA
       Sum = Sum + Profile(kk) * (top-AvgDepth)
     endif
   enddo
@@ -1101,7 +1101,7 @@ subroutine DHH85_mid(WAVES,GV, ust, zpt,US)
   Bnn = 1.0
   Snn = 0.08 * (1.0 + 4.0 * WaveAge**3)
   Cnn = 1.7
-  if (WA.lt. 1.) then
+  if (WA < 1.) then
     Cnn = Cnn - 6.0*log10(WA)
   endif
   !/
@@ -1147,7 +1147,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
           dTauDn =  0.5*(WAVES%Kvs(i,j,k+1)+WAVES%Kvs(i+1,j,k+1))*&
                (waves%us_x(i,j,k)-waves%us_x(i,j,k+1))&
                /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-        elseif (k.lt.G%ke-1) then
+        elseif (k < G%ke-1) then
           dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i+1,j,k))*&
                (waves%us_x(i,j,k-1)-waves%us_x(i,j,k))&
                /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
@@ -1174,7 +1174,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
           dTauDn = 0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1))&
                *(waves%us_y(i,j,k)-waves%us_y(i,j,k+1))&
                /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-        elseif (k.lt.G%ke-1) then
+        elseif (k < G%ke-1) then
           dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i,j+1,k))*&
                (waves%us_y(i,j,k-1)-waves%us_y(i,j,k))&
                /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
