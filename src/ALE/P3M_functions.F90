@@ -133,7 +133,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect
     u_c = u(k)
     h_c = h(k)
 
-    if ( k .EQ. 1 ) then
+    if ( k == 1 ) then
       h_l = h(k)
       u_l = u(k)
     else
@@ -141,7 +141,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect
       u_l = u(k-1)
     end if
 
-    if ( k .EQ. N ) then
+    if ( k == N ) then
       h_r = h(k)
       u_r = u(k)
     else
@@ -190,7 +190,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect
     ! If cubic is not monotonic, monotonize it by modifiying the
     ! edge slopes, store the new edge slopes and recompute the
     ! cubic coefficients
-    if ( monotonic .EQ. 0 ) then
+    if ( monotonic == 0 ) then
       call monotonize_cubic( h_c, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r )
     end if
 
@@ -301,7 +301,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   call build_cubic_interpolant( h, i0, ppoly_E, ppoly_S, ppoly_coefficients )
   monotonic = is_cubic_monotonic( ppoly_coefficients, i0 )
 
-  if ( monotonic .EQ. 0 ) then
+  if ( monotonic == 0 ) then
     call monotonize_cubic( h0, u0_l, u0_r, 0.0, slope, slope, u1_l, u1_r )
 
     ! Rebuild cubic after monotonization
@@ -360,7 +360,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   call build_cubic_interpolant( h, i1, ppoly_E, ppoly_S, ppoly_coefficients )
   monotonic = is_cubic_monotonic( ppoly_coefficients, i1 )
 
-  if ( monotonic .EQ. 0 ) then
+  if ( monotonic == 0 ) then
     call monotonize_cubic( h1, u0_l, u0_r, slope, 0.0, slope, u1_l, u1_r )
 
     ! Rebuild cubic after monotonization
@@ -564,7 +564,7 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   ! There is a possible root (and inflexion point) only if a3 is nonzero.
   ! When a3 is zero, the second derivative of the cubic is constant (the
   ! cubic degenerates into a parabola) and no inflexion point exists.
-  if ( a3 .NE. 0.0 ) then
+  if ( a3 /= 0.0 ) then
     ! Location of inflexion point
     xi_ip = - a2 / (3.0 * a3)
 
@@ -579,7 +579,7 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   ! decide on which side we want to collapse the inflexion point.
   ! If the inflexion point lies on one of the edges, the cubic is
   ! guaranteed to be monotonic
-  if ( found_ip .EQ. 1 ) then
+  if ( found_ip == 1 ) then
     slope_ip = a1 + 2.0*a2*xi_ip + 3.0*a3*xi_ip*xi_ip
 
     ! Check whether slope is consistent
@@ -597,7 +597,7 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   ! 'inflexion_l' and 'inflexion_r' are set to 0 and nothing is to be done.
 
   ! Move inflexion point on the left
-  if ( inflexion_l .EQ. 1 ) then
+  if ( inflexion_l == 1 ) then
 
     u1_l_tmp = 1.5*(u0_r-u0_l)/h - 0.5*u1_r
     u1_r_tmp = 3.0*(u0_r-u0_l)/h - 2.0*u1_l
@@ -627,7 +627,7 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   end if ! end treating case with inflexion point on the left
 
   ! Move inflexion point on the right
-  if ( inflexion_r .EQ. 1 ) then
+  if ( inflexion_r == 1 ) then
 
     u1_l_tmp = 3.0*(u0_r-u0_l)/h - 2.0*u1_r
     u1_r_tmp = 1.5*(u0_r-u0_l)/h - 0.5*u1_l

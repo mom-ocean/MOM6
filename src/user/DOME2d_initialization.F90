@@ -309,7 +309,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   end select
 
   ! Modify salinity and temperature when z coordinates are used
-  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_ZSTAR ) then
+  if ( coordinateMode(verticalCoordinate) == REGRIDDING_ZSTAR ) then
     index_bay_z = Nint ( dome2d_depth_bay * G%ke )
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
@@ -321,7 +321,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   endif ! Z initial conditions
 
   ! Modify salinity and temperature when sigma coordinates are used
-  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_SIGMA ) then
+  if ( coordinateMode(verticalCoordinate) == REGRIDDING_SIGMA ) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
@@ -333,8 +333,8 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
   ! Modify temperature when rho coordinates are used
   T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0
-  if (( coordinateMode(verticalCoordinate) .eq. REGRIDDING_RHO ) .or. &
-      ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_LAYER )) then
+  if (( coordinateMode(verticalCoordinate) == REGRIDDING_RHO ) .or. &
+      ( coordinateMode(verticalCoordinate) == REGRIDDING_LAYER )) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then

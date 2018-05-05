@@ -262,7 +262,7 @@ endif
 
 do j=1,ny
   i_loop: do i=1,nx
-    if (nlevs_data(i,j) .eq. 0 .or. wet(i,j) .eq. 0.) then
+    if (nlevs_data(i,j) == 0 .or. wet(i,j) == 0.) then
       tr(i,j,:) = land_fill
       cycle i_loop
     endif
@@ -297,7 +297,7 @@ do j=1,ny
 
         if (debug_) then
            if (PRESENT(i_debug)) then
-             if (i.eq.i_debug.and.j.eq.j_debug) then
+             if (i == i_debug.and.j == j_debug) then
                 print *,'0001 k,k_top,k_bot,sum(wt),sum(z2-z1) = ',k,k_top,k_bot,sum(wt),sum(z2-z1)
              endif
            endif
@@ -321,7 +321,7 @@ do j=1,ny
 !        endif
         if (debug_) then
            if (PRESENT(i_debug)) then
-             if (i.eq.i_debug.and.j.eq.j_debug) then
+             if (i == i_debug.and.j == j_debug) then
                 print *,'0002 k,k_top,k_bot,k_bot_prev,sl_tr = ',k,k_top,k_bot,k_bot_prev,sl_tr
              endif
            endif
@@ -333,7 +333,7 @@ do j=1,ny
 
         if (debug_) then
            if (PRESENT(i_debug)) then
-             if (i.eq.i_debug.and.j.eq.j_debug) then
+             if (i == i_debug.and.j == j_debug) then
                 print *,'0003 k,tr = ',k,tr(i,j,k)
              endif
            endif
@@ -357,7 +357,7 @@ do j=1,ny
 
           if (debug_) then
              if (PRESENT(i_debug)) then
-               if (i.eq.i_debug.and.j.eq.j_debug) then
+               if (i == i_debug.and.j == j_debug) then
                   print *,'0004 k,kz,nlevs,sl_tr,tr = ',k,kz,nlevs_data(i,j),sl_tr,tr(i,j,k)
                   print *,'0005 k,kz,tr(kz),tr(kz-1),tr(kz+1) = ',k,kz,tr_1d(kz),tr_1d(kz-1),tr_1d(kz+1),z_edges(kz+2)
                endif
@@ -792,7 +792,7 @@ do j=1,ny
       if (dir == 1) then
         do k=2,nlevs_data(i,j)-1
           if (rho_(i,k) - rho_(i,k-1) < 0.0 ) then
-            if (k.eq.2) then
+            if (k == 2) then
               rho_(i,k-1)=rho_(i,k)-epsln
             else
               drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
@@ -807,7 +807,7 @@ do j=1,ny
       else
         do k=nlevs_data(i,j)-1,2,-1
           if (rho_(i,k+1) - rho_(i,k) < 0.0) then
-            if (k .eq. nlevs_data(i,j)-1) then
+            if (k == nlevs_data(i,j)-1) then
               rho_(i,k+1)=rho_(i,k-1)+epsln
             else
               drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
@@ -922,7 +922,7 @@ nm=fill_boundaries(bad,cyclic_x,tripolar_n)
 
 do j=1,nj
   do i=1,ni
-    if (fill(i,j) .eq. 1) then
+    if (fill(i,j) == 1) then
       B(i,j,1)=1-nm(i+1,j);B(i,j,2)=1-nm(i-1,j)
       B(i,j,3)=1-nm(i,j+1);B(i,j,4)=1-nm(i,j-1)
     endif
@@ -932,7 +932,7 @@ enddo
 do n=1,niter
   do j=1,nj
     do i=1,ni
-      if (fill(i,j) .eq. 1) then
+      if (fill(i,j) == 1) then
         bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
         Isum = 1.0/bsum
         res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&

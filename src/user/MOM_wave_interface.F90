@@ -688,7 +688,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     varread1 = 'wavenumber' !Old method gives wavenumber
     varread2 = 'frequency'  !New method gives frequency
     rcode_wn = NF90_OPEN(trim(SurfBandFileName), NF90_NOWRITE, ncid)
-    if (rcode_wn .ne. 0) then
+    if (rcode_wn /= 0) then
       call MOM_error(FATAL,"error opening file "//trim(SurfBandFileName)//&
             " in MOM_wave_interface.")
     endif
@@ -696,49 +696,49 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     rcode_wn = NF90_INQ_VARID(ncid, varread1, varid_wn)
     rcode_fr = NF90_INQ_VARID(ncid, varread2, varid_fr)
 
-    if (rcode_wn .ne. 0 .and. rcode_fr .ne. 0) then
+    if (rcode_wn /= 0 .and. rcode_fr /= 0) then
       call MOM_error(FATAL,"error finding variable "//trim(varread1)//&
          " or "//trim(varread2)//" in file "//trim(SurfBandFileName)//" in MOM_wave_interface.")
 
-    elseif (rcode_wn.eq.0) then
+    elseif (rcode_wn == 0) then
       ! wavenumbers found:
       PartitionMode=0
       rcode_wn = NF90_INQUIRE_VARIABLE(ncid, varid_wn, ndims=ndims, &
            dimids=dims)
-      if (rcode_wn .ne. 0) then
+      if (rcode_wn /= 0) then
         call MOM_error(FATAL, &
              'error inquiring dimensions MOM_wave_interface.')
       endif
       rcode_wn = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-      if (rcode_wn .ne. 0) then
+      if (rcode_wn /= 0) then
         call MOM_error(FATAL,"error reading dimension 1 data for "// &
              trim(varread1)//" in file "// trim(SurfBandFileName)//          &
              " in MOM_wave_interface.")
       endif
       rcode_wn = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-      if (rcode_wn .ne. 0) then
+      if (rcode_wn /= 0) then
         call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
           " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
       endif
       ! Allocating size of wavenumber bins
       allocate( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
-    elseif (rcode_fr.eq.0) then
+    elseif (rcode_fr == 0) then
       ! frequencies found:
       PartitionMode=1
       rcode_fr = NF90_INQUIRE_VARIABLE(ncid, varid_fr, ndims=ndims, &
            dimids=dims)
-      if (rcode_fr .ne. 0) then
+      if (rcode_fr /= 0) then
         call MOM_error(FATAL,&
              'error inquiring dimensions MOM_wave_interface.')
       endif
       rcode_fr = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-      if (rcode_fr .ne. 0) then
+      if (rcode_fr /= 0) then
         call MOM_error(FATAL,"error reading dimension 1 data for "// &
              trim(varread2)//" in file "// trim(SurfBandFileName)// &
              " in MOM_wave_interface.")
       endif
       rcode_fr = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-      if (rcode_fr .ne. 0) then
+      if (rcode_fr /= 0) then
         call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
              " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
       endif
@@ -758,7 +758,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     start = 1; count = 1; count(1) = id
     if (PartitionMode==0) then
       rcode_wn = NF90_GET_VAR(ncid, dim_id(1), CS%WaveNum_Cen, start, count)
-      if (rcode_wn .ne. 0) then
+      if (rcode_wn /= 0) then
         call MOM_error(FATAL,&
              "error reading dimension 1 values for var_name "// &
              trim(varread1)//",dim_name "//trim(dim_name(1))//  &
@@ -767,7 +767,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
       NUMBANDS = ID
     elseif (PartitionMode==1) then
       rcode_fr = NF90_GET_VAR(ncid, dim_id(1), CS%Freq_Cen, start, count)
-      if (rcode_fr .ne. 0) then
+      if (rcode_fr /= 0) then
         call MOM_error(FATAL,&
              "error reading dimension 1 values for var_name "// &
              trim(varread2)//",dim_name "//trim(dim_name(1))//  &
@@ -1142,7 +1142,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
   do k = 1, G%ke
     do j = G%jscB, G%jecB
       do i = G%iscB, G%iecB
-        if (k.eq.1) then
+        if (k == 1) then
           dTauUp = 0.
           dTauDn =  0.5*(WAVES%Kvs(i,j,k+1)+WAVES%Kvs(i+1,j,k+1))*&
                (waves%us_x(i,j,k)-waves%us_x(i,j,k+1))&
@@ -1154,7 +1154,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
           dTauDn =  0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i+1,j,k+1))*&
                (waves%us_x(i,j,k)-waves%us_x(i,j,k+1))&
                /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-        elseif (k.eq.G%ke) then
+        elseif (k == G%ke) then
           dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i+1,j,k))*&
                (waves%us_x(i,j,k-1)-waves%us_x(i,j,k))&
                /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
@@ -1169,7 +1169,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
   do k = 1, G%ke
     do j = G%jscB, G%jecB
       do i = G%iscB, G%iecB
-        if (k.eq.1) then
+        if (k == 1) then
           dTauUp = 0.
           dTauDn = 0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1))&
                *(waves%us_y(i,j,k)-waves%us_y(i,j,k+1))&
@@ -1181,7 +1181,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
           dTauDn =  0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1))*&
                (waves%us_y(i,j,k)-waves%us_y(i,j,k+1))&
                /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-        elseif (k.eq.G%ke) then
+        elseif (k == G%ke) then
           dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i,j+1,k))*&
                (waves%us_y(i,j,k-1)-waves%us_y(i,j,k))&
                /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )

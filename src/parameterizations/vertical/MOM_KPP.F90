@@ -303,7 +303,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  '\t MatchBoth         = match gradient for both diffusivity and NLT\n'//                 &
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
-  if (CS%MatchTechnique.eq.'ParabolicNonLocal') then
+  if (CS%MatchTechnique == 'ParabolicNonLocal') then
      ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
      !  May be used during CVMix initialization.
      Cs_is_one=.true.
@@ -960,16 +960,16 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
 
       !BGR/ Add option for use of surface buoyancy flux with total sw flux.
-      if (CS%SW_METHOD .eq. SW_METHOD_ALL_SW) then
+      if (CS%SW_METHOD == SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
-      elseif (CS%SW_METHOD .eq. SW_METHOD_MXL_SW) then
+      elseif (CS%SW_METHOD == SW_METHOD_MXL_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
-      elseif (CS%SW_METHOD .eq. SW_METHOD_LV1_SW) then
+      elseif (CS%SW_METHOD == SW_METHOD_LV1_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
 
       ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.
-      if (.not. (CS%MatchTechnique.eq.'MatchBoth')) then
+      if (.not. (CS%MatchTechnique == 'MatchBoth')) then
          Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
          Kviscosity(:)     = 0. ! Viscosity (m2/s)
       else

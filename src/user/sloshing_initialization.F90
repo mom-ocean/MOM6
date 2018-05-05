@@ -138,11 +138,11 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
       x = G%geoLonT(i,j) / G%len_lon
       displ(k) = a0 * cos(acos(-1.0)*x) + weight_z;
 
-      if ( k .EQ. 1 ) then
+      if ( k == 1 ) then
         displ(k) = 0.0
       end if
 
-      if ( k .EQ. nz+1 ) then
+      if ( k == nz+1 ) then
         displ(k) = 0.0
       end if
 

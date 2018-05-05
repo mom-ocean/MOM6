@@ -123,7 +123,7 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
 
       if (area_shelf_h (i,j) >= G%areaT(i,j)) then
         hmask(i,j) = 1.
-      elseif (area_shelf_h (i,j) .eq. 0.0) then
+      elseif (area_shelf_h (i,j) == 0.0) then
         hmask(i,j) = 0.
       elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
         hmask(i,j) = 2.
@@ -209,7 +209,7 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
         endif
       endif
 
-      if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
+      if ((i+G%idg_offset) == G%domain%nihalo+1) then
         hmask(i-1,j) = 3.0
       endif
 
@@ -311,7 +311,7 @@ end subroutine initialize_ice_thickness_channel
 
 !       ! upstream boundary - set either dirichlet or flux condition
 
-!       if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
+!       if ((i+G%idg_offset) == G%domain%nihalo+1) then
 !         if (flux_bdry) then
 !           u_face_mask_boundary (i-1,j) = 4.0
 !           u_flux_boundary_values (i-1,j) = input_flux
@@ -328,14 +328,14 @@ end subroutine initialize_ice_thickness_channel
 
 !       ! side boundaries: no flow
 
-!       if (G%jdg_offset+j .eq. gjsc+1) then !bot boundary
-!         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) <= len_stress) then
+!       if (G%jdg_offset+j == gjsc+1) then !bot boundary
+!         if (len_stress == 0. .OR. G%geoLonCv(i,j-1) <= len_stress) then
 !           v_face_mask_boundary (i,j-1) = 0.
 !         else
 !           v_face_mask_boundary (i,j-1) = 1.
 !         endif
-!       elseif (G%jdg_offset+j .eq. gjec) then !top boundary
-!         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) <= len_stress) then
+!       elseif (G%jdg_offset+j == gjec) then !top boundary
+!         if (len_stress == 0. .OR. G%geoLonCv(i,j-1) <= len_stress) then
 !           v_face_mask_boundary (i,j) = 0.
 !         else
 !           v_face_mask_boundary (i,j) = 1.
@@ -344,7 +344,7 @@ end subroutine initialize_ice_thickness_channel
 
 !       ! downstream boundary - CFBC
 
-!       if (i+G%idg_offset .eq. giec) then
+!       if (i+G%idg_offset == giec) then
 !         u_face_mask_boundary(i,j) = 2.0
 !       endif
 

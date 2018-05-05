@@ -1448,7 +1448,7 @@ subroutine neutral_surface_T_eval(nk, ns, k_sub, Ks, Ps, T_mean, T_int, deg, iMe
 
   ks_top = k_sub
   ks_bot = k_sub + 1
-  if ( Ks(ks_top) .ne. Ks(ks_bot) ) then
+  if ( Ks(ks_top) /= Ks(ks_bot) ) then
     call MOM_error(FATAL, "Neutral surfaces span more than one layer")
   endif
   kl = Ks(k_sub)
@@ -2231,7 +2231,7 @@ logical function test_rnp(expected_pos, test_pos, title)
   if (test_rnp) then
     write(stdunit,'(A, f20.16, " .neq. ", f20.16, " <-- WRONG")') title, expected_pos, test_pos
   else
-    write(stdunit,'(A, f20.16, " .eq.  ", f20.16)') title, expected_pos, test_pos
+    write(stdunit,'(A, f20.16, " ==  ", f20.16)') title, expected_pos, test_pos
   endif
 end function test_rnp
 !> Deallocates neutral_diffusion control structure

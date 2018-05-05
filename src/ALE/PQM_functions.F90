@@ -191,7 +191,7 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
     ! monotonic, edge slopes are consistent and the cell is not an extremum.
     ! We now need to check and encorce the monotonicity of the quartic within
     ! the cell
-    if ( (inflexion_l .EQ. 0) .AND. (inflexion_r .EQ. 0) ) then
+    if ( (inflexion_l == 0) .AND. (inflexion_r == 0) ) then
 
       a = u0_l
       b = h_c * u1_l
@@ -208,7 +208,7 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
       rho = alpha2 * alpha2 - 4.0 * alpha1 * alpha3
 
       ! Check whether inflexion points exist
-      if (( alpha1 .ne. 0.0 ) .and. ( rho >= 0.0 )) then
+      if (( alpha1 /= 0.0 ) .and. ( rho >= 0.0 )) then
 
         sqrt_rho = sqrt( rho )
 
@@ -273,7 +273,7 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
 
       ! If alpha1 is zero, the second derivative of the quartic reduces
       ! to a straight line
-      if (( alpha1 .eq. 0.0 ) .and. ( alpha2 .ne. 0.0 )) then
+      if (( alpha1 == 0.0 ) .and. ( alpha2 /= 0.0 )) then
 
           x1 = - alpha3 / alpha2
           if ( (x1 >= 0.0) .AND. (x1 <= 1.0) ) then
@@ -298,7 +298,7 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
     end if ! end checking whether to shift inflexion points
 
     ! At this point, we know onto which edge to shift inflexion points
-    if ( inflexion_l .EQ. 1 ) then
+    if ( inflexion_l == 1 ) then
 
       ! We modify the edge slopes so that both inflexion points
       ! collapse onto the left edge
@@ -323,7 +323,7 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
 
       end if
 
-    else if ( inflexion_r .EQ. 1 ) then
+    else if ( inflexion_r == 1 ) then
 
       ! We modify the edge slopes so that both inflexion points
       ! collapse onto the right edge
@@ -608,7 +608,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! Compute coefficient for rational function based on mean and right
   ! edge value and slope
-  if (u1_r.ne.0.) then ! HACK by AJA
+  if (u1_r /= 0.) then ! HACK by AJA
     beta = 2.0 * ( u0_r - um ) / ( (h0 + hNeglect)*u1_r) - 1.0
   else
     beta = 0.
@@ -651,7 +651,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! Check whether inflexion points exist. If so, transform the quartic
   ! so that both inflexion points coalesce on the left edge.
-  if (( alpha1 .ne. 0.0 ) .and. ( rho >= 0.0 )) then
+  if (( alpha1 /= 0.0 ) .and. ( rho >= 0.0 )) then
 
     sqrt_rho = sqrt( rho )
 
@@ -673,7 +673,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   end if
 
-  if (( alpha1 .eq. 0.0 ) .and. ( alpha2 .ne. 0.0 )) then
+  if (( alpha1 == 0.0 ) .and. ( alpha2 /= 0.0 )) then
 
     x1 = - alpha3 / alpha2
     if ( (x1 >= 0.0) .and. (x1 <= 1.0) ) then
@@ -685,7 +685,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   end if
 
-  if ( inflexion_l .eq. 1 ) then
+  if ( inflexion_l == 1 ) then
 
     ! We modify the edge slopes so that both inflexion points
     ! collapse onto the left edge
@@ -757,7 +757,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! Compute coefficient for rational function based on mean and left
   ! edge value and slope
-  if (um-u0_l.ne.0.) then ! HACK by AJA
+  if (um-u0_l /= 0.) then ! HACK by AJA
     beta = 0.5*h1*u1_l / (um-u0_l) - 1.0
   else
     beta = 0.
@@ -766,7 +766,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   ar = u0_l
 
   ! Right edge value estimate based on rational function
-  if (1+beta.ne.0.) then ! HACK by AJA
+  if (1+beta /= 0.) then ! HACK by AJA
     u0_r = (ar + 2*br + beta*br ) / ((1+beta)*(1+beta))
   else
     u0_r = um + 0.5 * slope ! PLM
@@ -804,7 +804,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! Check whether inflexion points exist. If so, transform the quartic
   ! so that both inflexion points coalesce on the right edge.
-  if (( alpha1 .ne. 0.0 ) .and. ( rho >= 0.0 )) then
+  if (( alpha1 /= 0.0 ) .and. ( rho >= 0.0 )) then
 
     sqrt_rho = sqrt( rho )
 
@@ -826,7 +826,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   end if
 
-  if (( alpha1 .eq. 0.0 ) .and. ( alpha2 .ne. 0.0 )) then
+  if (( alpha1 == 0.0 ) .and. ( alpha2 /= 0.0 )) then
 
     x1 = - alpha3 / alpha2
     if ( (x1 >= 0.0) .and. (x1 <= 1.0) ) then
@@ -838,7 +838,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   end if
 
-  if ( inflexion_r .eq. 1 ) then
+  if ( inflexion_r == 1 ) then
 
     ! We modify the edge slopes so that both inflexion points
     ! collapse onto the right edge

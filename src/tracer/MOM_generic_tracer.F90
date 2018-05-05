@@ -266,7 +266,7 @@ contains
     g_tracer=>CS%g_tracer_list
 
     do
-      if (INDEX(CS%IC_file, '_NULL_') .ne. 0) then
+      if (INDEX(CS%IC_file, '_NULL_') /= 0) then
          call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&
                               "Bypassing the MOM initialization of ALL generic tracers!")
@@ -293,7 +293,7 @@ contains
 
          !Check/apply the bounds for each g_tracer
          do k=1,nk ; do j=jsc,jec ; do i=isc,iec
-            if (tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
+            if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
               if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
               !Jasmin does not want to apply the maximum for now
               !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
@@ -301,9 +301,9 @@ contains
          enddo; enddo ; enddo
 
          !jgj: Reset CASED to 0 below K=1
-         if (trim(g_tracer_name) .eq. 'cased') then
+         if (trim(g_tracer_name) == 'cased') then
             do k=2,nk ; do j=jsc,jec ; do i=isc,iec
-               if (tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
+               if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
                  tr_ptr(i,j,k) = 0.0
                endif
             enddo; enddo ; enddo
@@ -404,7 +404,7 @@ contains
     if (associated(CS%g_diag_list)) then
        g_diag=>CS%g_diag_list
        do
-          if (g_diag%Z_diag .ne. 0) &
+          if (g_diag%Z_diag /= 0) &
                call register_Z_tracer(g_diag%field_ptr, trim(g_diag%name),g_diag%longname , g_diag%units, &
                day, G, diag_to_Z_CSp)
 

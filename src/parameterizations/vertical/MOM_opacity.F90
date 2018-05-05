@@ -609,12 +609,12 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The number of bands of penetrating shortwave radiation.", &
                  default=1)
   if (CS%Opacity_scheme == DOUBLE_EXP ) then
-    if (optics%nbands.ne.2) then
+    if (optics%nbands /= 2) then
       call MOM_error(FATAL, "set_opacity: "// &
          "Cannot use a double_exp opacity scheme with nbands!=2.")
     endif
   elseif (CS%Opacity_scheme == SINGLE_EXP ) then
-    if (optics%nbands.ne.1) then
+    if (optics%nbands /= 1) then
       call MOM_error(FATAL, "set_opacity: "// &
          "Cannot use a single_exp opacity scheme with nbands!=1.")
     endif

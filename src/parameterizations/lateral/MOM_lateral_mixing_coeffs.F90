@@ -934,10 +934,10 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "used which introduced potential restart issues.  This flag will be \n"//&
                  "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
-      if (CS%Res_coef_visc .ne. CS%Res_coef_khth) call MOM_error(FATAL, &
+      if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_SCALE_COEF.")
-      if (CS%Res_fn_power_visc .ne. CS%Res_fn_power_khth) call MOM_error(FATAL, &
+      if (CS%Res_fn_power_visc /= CS%Res_fn_power_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
