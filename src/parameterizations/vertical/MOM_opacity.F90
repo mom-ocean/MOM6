@@ -286,7 +286,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                          associated(fluxes%sw_nir_dif))
 
   chl_data(:,:) = 0.0
-  if(present(chl_in)) then
+  if (present(chl_in)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,1) ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_in(i,j,k) < 0.0)) then
@@ -312,7 +312,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   endif
 
   if (CS%id_chl > 0) then
-    if(present(chl_in)) then
+    if (present(chl_in)) then
       call post_data(CS%id_chl, chl_in(:,:,1), CS%diag)
     else
       call post_data(CS%id_chl, chl_data, CS%diag)
@@ -368,7 +368,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         enddo
       enddo ; enddo
     case default
-        call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
+      call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
     end select
 
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,CS,G,chl_in,optics,nbands) &

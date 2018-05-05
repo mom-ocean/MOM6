@@ -1308,7 +1308,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call enable_averaging(time_interval, Time_end, CS%diag)
 
   ! Check to see if this is the first iteration of the offline interval
-  if(accumulated_time==0) then
+  if (accumulated_time==0) then
     first_iter = .true.
   else ! This is probably unnecessary but is used to guard against unwanted behavior
     first_iter = .false.
@@ -1323,17 +1323,17 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
   ! Increment the amount of time elapsed since last read and check if it's time to roll around
   accumulated_time = mod(accumulated_time + int(time_interval), dt_offline)
-  if(accumulated_time==0) then
+  if (accumulated_time==0) then
     last_iter = .true.
   else
     last_iter = .false.
   endif
 
-  if(CS%use_ALE_algorithm) then
+  if (CS%use_ALE_algorithm) then
     ! If this is the first iteration in the offline timestep, then we need to read in fields and
     ! perform the main advection.
     if (first_iter) then
-      if(is_root_pe()) print *, "Reading in new offline fields"
+      if (is_root_pe()) print *, "Reading in new offline fields"
       ! Read in new transport and other fields
       ! call update_transport_from_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
       !     CS%tv%T, CS%tv%S, fluxes, CS%use_ALE_algorithm)
@@ -1368,7 +1368,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
     endif
 
     ! Last thing that needs to be done is the final ALE remapping
-    if(last_iter) then
+    if (last_iter) then
       if (CS%diabatic_first) then
         call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
             CS%h, uhtr, vhtr, converged=adv_converged)
@@ -1387,7 +1387,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         endif
       endif
 
-      if(is_root_pe()) print *, "Last iteration of offline interval"
+      if (is_root_pe()) print *, "Last iteration of offline interval"
 
       ! Apply freshwater fluxes out of the ocean
       call offline_fw_fluxes_out_ocean(G, GV, CS%offline_CSp, fluxes, CS%h)
@@ -1408,7 +1408,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
     ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in
     ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
     ! exchange with the atmosphere
-    if(time_interval .NE. dt_offline) then
+    if (time_interval .NE. dt_offline) then
       call MOM_error(FATAL, &
           "For offline tracer mode in a non-ALE configuration, dt_offline must equal time_interval")
     endif

@@ -577,7 +577,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
   h_neglect = GV%H_subroundoff
 
-  if(.not.CS%Use_MLD_Iteration) MAX_OBL_IT=1
+  if (.not.CS%Use_MLD_Iteration) MAX_OBL_IT=1
   C1_3 = 1.0 / 3.0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   IdtdR0 = 1.0 / (dt__diag * GV%Rho0)

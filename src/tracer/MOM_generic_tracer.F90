@@ -178,7 +178,7 @@ contains
 
     !Get the tracer list
     call generic_tracer_get_list(CS%g_tracer_list)
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     ! For each tracer name get its T_prog index and get its fields
 
@@ -205,7 +205,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo
@@ -260,13 +260,13 @@ contains
 
     CS%diag=>diag
     !Get the tracer list
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
 
     do
-      if(INDEX(CS%IC_file, '_NULL_') .ne. 0) then
+      if (INDEX(CS%IC_file, '_NULL_') .ne. 0) then
          call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&
                               "Bypassing the MOM initialization of ALL generic tracers!")
@@ -279,7 +279,7 @@ contains
       if (.not.restart .or. (CS%tracers_may_reinit .and. &
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
-       if(g_tracer%requires_src_info ) then
+       if (g_tracer%requires_src_info ) then
          call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                              "initializing generic tracer "//trim(g_tracer_name)//&
                              " using MOM_initialize_tracer_from_Z ")
@@ -293,17 +293,17 @@ contains
 
          !Check/apply the bounds for each g_tracer
          do k=1,nk ; do j=jsc,jec ; do i=isc,iec
-            if(tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
-              if(tr_ptr(i,j,k) .lt. g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
+            if (tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
+              if (tr_ptr(i,j,k) .lt. g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
               !Jasmin does not want to apply the maximum for now
-              !if(tr_ptr(i,j,k) .gt. g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
+              !if (tr_ptr(i,j,k) .gt. g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
             endif
          enddo; enddo ; enddo
 
          !jgj: Reset CASED to 0 below K=1
-         if(trim(g_tracer_name) .eq. 'cased') then
+         if (trim(g_tracer_name) .eq. 'cased') then
             do k=2,nk ; do j=jsc,jec ; do i=isc,iec
-               if(tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
+               if (tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
                  tr_ptr(i,j,k) = 0.0
                endif
             enddo; enddo ; enddo
@@ -343,7 +343,7 @@ contains
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
-      if(.NOT. associated(g_tracer_next)) exit
+      if (.NOT. associated(g_tracer_next)) exit
       g_tracer=>g_tracer_next
     enddo
     !! end section to re-initialize generic tracers
@@ -376,7 +376,7 @@ contains
 
     ! Register Z diagnostic output.
     !Get the tracer list
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
@@ -393,7 +393,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo
@@ -401,16 +401,16 @@ contains
     !For each special diagnostics name get its  fields
     !Get the diag list
     call generic_tracer_get_diag_list(CS%g_diag_list)
-    if(associated(CS%g_diag_list)) then
+    if (associated(CS%g_diag_list)) then
        g_diag=>CS%g_diag_list
        do
-          if(g_diag%Z_diag .ne. 0) &
+          if (g_diag%Z_diag .ne. 0) &
                call register_Z_tracer(g_diag%field_ptr, trim(g_diag%name),g_diag%longname , g_diag%units, &
                day, G, diag_to_Z_CSp)
 
           !traverse the linked list till hit NULL
           g_diag=>g_diag%next
-          if(.NOT. associated(g_diag)) exit
+          if (.NOT. associated(g_diag)) exit
 
        enddo
     endif
@@ -473,7 +473,7 @@ contains
     isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
 
     !Get the tracer list
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
          trim(sub_name)//": No tracer in the list.")
 
 #ifdef _USE_MOM6_DIAG
@@ -493,7 +493,7 @@ contains
     !
     g_tracer=>CS%g_tracer_list
     do
-       if(_allocated(g_tracer%trunoff)) then
+       if (_allocated(g_tracer%trunoff)) then
           call g_tracer_get_alias(g_tracer,g_tracer_name)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'stf',   stf_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
@@ -505,7 +505,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo
@@ -553,7 +553,7 @@ contains
 
          !traverse the linked list till hit NULL
          call g_tracer_get_next(g_tracer, g_tracer_next)
-        if(.NOT. associated(g_tracer_next)) exit
+        if (.NOT. associated(g_tracer_next)) exit
         g_tracer=>g_tracer_next
       enddo
     endif
@@ -623,7 +623,7 @@ contains
       return
     endif ; endif
 
-    if(.NOT. associated(CS%g_tracer_list)) return ! No stocks.
+    if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
     m=1 ; g_tracer=>CS%g_tracer_list
     do
@@ -642,7 +642,7 @@ contains
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
-      if(.NOT. associated(g_tracer_next)) exit
+      if (.NOT. associated(g_tracer_next)) exit
       g_tracer=>g_tracer_next
       m = m+1
     enddo
@@ -688,7 +688,7 @@ contains
     MOM_generic_tracer_min_max = 0
     if (.not.associated(CS)) return
 
-    if(.NOT. associated(CS%g_tracer_list)) return ! No stocks.
+    if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask)
@@ -721,7 +721,7 @@ contains
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
-      if(.NOT. associated(g_tracer_next)) exit
+      if (.NOT. associated(g_tracer_next)) exit
       g_tracer=>g_tracer_next
       m = m+1
     enddo
@@ -768,7 +768,7 @@ contains
          tau=1,sosga=sosga,model_time=get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all tracers in this module
-!    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+!    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
 !         "No tracer in the list.")
 !    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
     !Niki: The problem with calling diagnostic outputs here is that this subroutine is called every dt_cpld
@@ -794,7 +794,7 @@ contains
     endif
 
     call generic_tracer_get_list(g_tracer_list)
-    if(.NOT. associated(g_tracer_list)) then
+    if (.NOT. associated(g_tracer_list)) then
        call mpp_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
        return
     endif
@@ -806,7 +806,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo

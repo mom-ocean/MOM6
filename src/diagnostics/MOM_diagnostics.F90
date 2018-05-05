@@ -344,7 +344,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       endif
     else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
-        if(associated(p_surf)) then ! Pressure loading at top of surface layer (Pa)
+        if (associated(p_surf)) then ! Pressure loading at top of surface layer (Pa)
           do i=is,ie
             pressure_1d(i) = p_surf(i,j)
           enddo
@@ -932,8 +932,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_KE > 0) call post_data(CS%id_KE, CS%KE, CS%diag)
   endif
 
-  if(.not.G%symmetric) then
-    if(associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_CorAdv) .OR. &
+  if (.not.G%symmetric) then
+    if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_CorAdv) .OR. &
        associated(CS%KE_adv) .OR. associated(CS%KE_visc)  .OR. associated(CS%KE_horvisc).OR. &
        associated(CS%KE_dia) ) then
         call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)

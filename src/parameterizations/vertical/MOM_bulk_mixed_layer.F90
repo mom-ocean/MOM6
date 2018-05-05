@@ -548,7 +548,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
       d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0
     enddo ; enddo
 
-    if(id_clock_EOS>0) call cpu_clock_begin(id_clock_EOS)
+    if (id_clock_EOS>0) call cpu_clock_begin(id_clock_EOS)
     ! Calculate an estimate of the mid-mixed layer pressure (in Pa)
     do i=is,ie ; p_ref(i) = 0.0 ; enddo
     do k=1,CS%nkml ; do i=is,ie
@@ -564,21 +564,21 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
                              ie-is+1, tv%eqn_of_state)
     enddo
-    if(id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
+    if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 
     if (CS%ML_resort) then
-      if(id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
+      if (id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
       if (CS%ML_presort_nz_conv_adj > 0) &
         call convective_adjustment(h(:,1:), u, v, R0(:,1:), Rcv(:,1:), T(:,1:), &
                                    S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, GV, CS, &
                                    CS%ML_presort_nz_conv_adj)
 
       call sort_ML(h(:,1:), R0(:,1:), eps, G, GV, CS, ksort)
-      if(id_clock_resort>0) call cpu_clock_end(id_clock_resort)
+      if (id_clock_resort>0) call cpu_clock_end(id_clock_resort)
     else
       do k=1,nz ; do i=is,ie ; ksort(i,k) = k ; enddo ; enddo
 
-      if(id_clock_adjustment>0) call cpu_clock_begin(id_clock_adjustment)
+      if (id_clock_adjustment>0) call cpu_clock_begin(id_clock_adjustment)
       !  Undergo instantaneous entrainment into the buffer layers and mixed layers
       ! to remove hydrostatic instabilities.  Any water that is lighter than
       ! currently in the mixed or buffer layer is entrained.
@@ -586,7 +586,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                                  S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, GV, CS)
       do i=is,ie ; h_CA(i) = h(i,1) ; enddo
 
-      if(id_clock_adjustment>0) call cpu_clock_end(id_clock_adjustment)
+      if (id_clock_adjustment>0) call cpu_clock_end(id_clock_adjustment)
     endif
 
     if (associated(fluxes%lrunoff) .and. CS%do_rivermix) then
@@ -611,7 +611,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
     endif
 
 
-    if(id_clock_conv>0) call cpu_clock_begin(id_clock_conv)
+    if (id_clock_conv>0) call cpu_clock_begin(id_clock_conv)
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
@@ -635,7 +635,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                                dKE_FC, j, ksort, G, GV, CS, tv, fluxes, dt,       &
                                aggregate_FW_forcing)
 
-    if(id_clock_conv>0) call cpu_clock_end(id_clock_conv)
+    if (id_clock_conv>0) call cpu_clock_end(id_clock_conv)
 
     !   Now the mixed layer undergoes mechanically forced entrainment.
     ! The mixed layer may entrain down to the Monin-Obukhov depth if the
@@ -643,7 +643,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
 
     !    First the TKE at the depth of free convection that is available
     !  to drive mixing is calculated.
-    if(id_clock_mech>0) call cpu_clock_begin(id_clock_mech)
+    if (id_clock_mech>0) call cpu_clock_begin(id_clock_mech)
 
     call find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                            TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
@@ -662,7 +662,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
     if (CS%TKE_diagnostics) then ; do i=is,ie
       CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) - Idt_diag*TKE(i)
     enddo ; endif
-    if(id_clock_mech>0) call cpu_clock_end(id_clock_mech)
+    if (id_clock_mech>0) call cpu_clock_end(id_clock_mech)
 
     ! Calculate the homogeneous mixed layer properties and store them in layer 0.
     do i=is,ie ; if (htot(i) > 0.0) then
@@ -692,10 +692,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
 ! these unused layers (but not currently in the code).
 
     if (CS%ML_resort) then
-      if(id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
+      if (id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
       call resort_ML(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), GV%Rlay, eps, &
                      d_ea, d_eb, ksort, G, GV, CS, dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
-      if(id_clock_resort>0) call cpu_clock_end(id_clock_resort)
+      if (id_clock_resort>0) call cpu_clock_end(id_clock_resort)
     endif
 
     if (CS%limit_det .or. (CS%id_Hsfc_max > 0) .or. (CS%id_Hsfc_min > 0)) then
@@ -726,7 +726,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
 ! Move water left in the former mixed layer into the buffer layer and
 ! from the buffer layer into the interior.  These steps might best be
 ! treated in conjuction.
-    if(id_clock_detrain>0) call cpu_clock_begin(id_clock_detrain)
+    if (id_clock_detrain>0) call cpu_clock_begin(id_clock_detrain)
     if (CS%nkbl == 1) then
       call mixedlayer_detrain_1(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
                                 GV%Rlay, dt, dt__diag, d_ea, d_eb, j, G, GV, CS, &
@@ -739,7 +739,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
       ! This code only works with 1 or 2 buffer layers.
       call MOM_error(FATAL, "MOM_mixed_layer: CS%nkbl must be 1 or 2 for now.")
     endif
-    if(id_clock_detrain>0) call cpu_clock_end(id_clock_detrain)
+    if (id_clock_detrain>0) call cpu_clock_end(id_clock_detrain)
 
 
     if (CS%id_Hsfc_used > 0) then
@@ -1221,7 +1221,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                  (dRcv_dT(i)*(Net_heat(i) + Pen_absorbed) - &
                   dRcv_dS(i) * (netMassIn(i) * S(i,1) - Net_salt(i)))
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
-    if(associated(fluxes%heat_content_massin))                            &
+    if (associated(fluxes%heat_content_massin))                            &
            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) &
                        + T_precip * netMassIn(i) * GV%H_to_kg_m2 * fluxes%C_p * Idt
     if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
@@ -1274,7 +1274,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*GV%H_to_kg_m2*fluxes%C_p*Idt
         ! by uncommenting the lines here.
         ! we will also then completely remove TempXpme from the model.
-        if(associated(fluxes%heat_content_massout))                            &
+        if (associated(fluxes%heat_content_massout))                            &
            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
                                     - T(i,k)*h_evap*GV%H_to_kg_m2 * fluxes%C_p * Idt
         if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
@@ -3868,7 +3868,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
   if (CS%id_PE_detrain2 > 0) call safe_alloc_alloc(CS%diag_PE_detrain2, isd, ied, jsd, jed)
   if (CS%id_ML_depth > 0) call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
 
-  if(CS%allow_clocks_in_omp_loops) then
+  if (CS%allow_clocks_in_omp_loops) then
     id_clock_detrain = cpu_clock_id('(Ocean mixed layer detrain)', grain=CLOCK_ROUTINE)
     id_clock_mech = cpu_clock_id('(Ocean mixed layer mechanical entrainment)', grain=CLOCK_ROUTINE)
     id_clock_conv = cpu_clock_id('(Ocean mixed layer convection)', grain=CLOCK_ROUTINE)

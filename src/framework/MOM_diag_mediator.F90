@@ -242,7 +242,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
-  if(G%symmetric) then
+  if (G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
@@ -886,7 +886,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
             'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-     !elseif(associated(diag%axes%mask2d)) then
+     !elseif (associated(diag%axes%mask2d)) then
      !  used = send_data(diag%fms_diag_id, locfield, &
      !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
       else
@@ -900,7 +900,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=mask)
-      elseif(associated(diag%axes%mask2d)) then
+      elseif (associated(diag%axes%mask2d)) then
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=diag%axes%mask2d)
@@ -939,7 +939,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
   logical :: staggered_in_x, staggered_in_y
   real, dimension(:,:,:), pointer :: h_diag
 
-  if(present(alt_h)) then
+  if (present(alt_h)) then
     h_diag => alt_h
   else
     h_diag => diag_cs%h
@@ -1136,7 +1136,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
               'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
           used = send_data(diag%fms_diag_id, locfield, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-       !elseif(associated(diag%axes%mask3d)) then
+       !elseif (associated(diag%axes%mask3d)) then
        !  used = send_data(diag_field_id, locfield, &
        !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask3d)
         else
@@ -1150,7 +1150,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
           used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                            weight=diag_cs%time_int, rmask=mask)
-        elseif(associated(diag%axes%mask3d)) then
+        elseif (associated(diag%axes%mask3d)) then
           call assert(size(locfield) == size(diag%axes%mask3d), &
               'post_data_3d_low: mask3d size mismatch: '//diag%debug_str)
           used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
@@ -1333,7 +1333,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
   logical :: active
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   diag_cs => axes%diag_cs
   dm_id = -1
@@ -1359,19 +1359,19 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
       remap_axes => null()
       if ((axes%id .eq. diag_cs%axesTL%id)) then
           remap_axes => diag_cs%remap_axesTL(i)
-      elseif(axes%id .eq. diag_cs%axesBL%id) then
+      elseif (axes%id .eq. diag_cs%axesBL%id) then
           remap_axes => diag_cs%remap_axesBL(i)
-      elseif(axes%id .eq. diag_cs%axesCuL%id ) then
+      elseif (axes%id .eq. diag_cs%axesCuL%id ) then
           remap_axes => diag_cs%remap_axesCuL(i)
-      elseif(axes%id .eq. diag_cs%axesCvL%id) then
+      elseif (axes%id .eq. diag_cs%axesCvL%id) then
           remap_axes => diag_cs%remap_axesCvL(i)
-      elseif(axes%id .eq. diag_cs%axesTi%id) then
+      elseif (axes%id .eq. diag_cs%axesTi%id) then
           remap_axes => diag_cs%remap_axesTi(i)
-      elseif(axes%id .eq. diag_cs%axesBi%id) then
+      elseif (axes%id .eq. diag_cs%axesBi%id) then
           remap_axes => diag_cs%remap_axesBi(i)
-      elseif(axes%id .eq. diag_cs%axesCui%id ) then
+      elseif (axes%id .eq. diag_cs%axesCui%id ) then
           remap_axes => diag_cs%remap_axesCui(i)
-      elseif(axes%id .eq. diag_cs%axesCvi%id) then
+      elseif (axes%id .eq. diag_cs%axesCvi%id) then
           remap_axes => diag_cs%remap_axesCvi(i)
       endif
       ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
@@ -1453,7 +1453,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name, cm_string, msg
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   register_diag_field_expand_cmor = .false.
   diag_cs => axes%diag_cs
@@ -1848,7 +1848,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
   MOM_missing_value = diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   dm_id = -1
   diag => null()
@@ -1957,7 +1957,7 @@ function register_static_field(module_name, field_name, axes, &
   character(len=9) :: axis_name
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   diag_cs => axes%diag_cs
   dm_id = -1
@@ -2520,7 +2520,7 @@ function i2s(a,n_in)
     integer :: i,n
 
     n=size(a)
-    if(present(n_in)) n = n_in
+    if (present(n_in)) n = n_in
 
     i2s = ''
     do i=1,n

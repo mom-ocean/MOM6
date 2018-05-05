@@ -1062,7 +1062,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'nondim')
 #endif
 
-  if(CS%allow_clocks_in_omp_loops) then
+  if (CS%allow_clocks_in_omp_loops) then
     id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
   endif
   id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)

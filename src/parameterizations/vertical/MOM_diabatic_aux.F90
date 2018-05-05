@@ -1168,7 +1168,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
         enddo ! k
 
       ! Check if trying to apply fluxes over land points
-      elseif((abs(netHeat(i))+abs(netSalt(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
+      elseif ((abs(netHeat(i))+abs(netSalt(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
 
         if (.not. CS%ignore_fluxes_over_land) then
            call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
@@ -1203,7 +1203,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 
     ! Save temperature before increment with SW heating
     ! and initialize CS%penSWflux_diag to zero.
-    if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
+    if (CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k)     = T2d(i,k)
         CS%penSWflux_diag(i,j,k) = 0.0
@@ -1235,7 +1235,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
     ! Also diagnose the penetrative SW heat flux at base of layer.
-    if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
+    if (CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
       ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
@@ -1248,7 +1248,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock.
       ! CS%penSWflux_diag = rsdo  and CS%penSW_diag = rsdoabsorb
       ! rsdoabsorb(k) = rsdo(k) - rsdo(k+1), so that rsdo(k) = rsdo(k+1) + rsdoabsorb(k)
-      if(CS%id_penSWflux_diag > 0) then
+      if (CS%id_penSWflux_diag > 0) then
         do k=nz,1,-1 ; do i=is,ie
           CS%penSWflux_diag(i,j,k) = CS%penSW_diag(i,j,k) + CS%penSWflux_diag(i,j,k+1)
         enddo ; enddo
@@ -1257,7 +1257,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     endif
 
     ! Fill CS%nonpenSW_diag
-    if(CS%id_nonpenSW_diag > 0) then
+    if (CS%id_nonpenSW_diag > 0) then
       do i=is,ie
         CS%nonpenSW_diag(i,j) = nonpenSW(i)
       enddo

@@ -3734,7 +3734,7 @@ subroutine shelf_advance_front (CS, flux_enter)
 
   call mpp_max(iter_count)
 
-  if(is_root_pe() .and. (iter_count.gt.1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
+  if (is_root_pe() .and. (iter_count.gt.1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
 
   if (associated(flux_enter_replace)) deallocate(flux_enter_replace)
 
@@ -4415,7 +4415,7 @@ integer, intent(in)               :: is, ie, js, je
 
           endif
               Ucontr(iphi,jphi) = Ucontr(iphi,jphi) + .25 * area * uq * xquad(ilq) * xquad(jlq) * beta(i,j)
-!              if((i.eq.27) .and. (j.eq.8) .and. (iphi.eq.1) .and. (jphi.eq.1)) &
+!              if ((i.eq.27) .and. (j.eq.8) .and. (iphi.eq.1) .and. (jphi.eq.1)) &
 !                 print *, "grid", uq, .25 * area * uq * xquad(ilq) * xquad(jlq)
 
           !endif
@@ -5852,7 +5852,7 @@ N = size(A,2)
 OPEN(unit=fin,FILE=fname,STATUS='REPLACE',ACCESS='SEQUENTIAL',&
    ACTION='WRITE',IOSTAT=iock)
 
-IF(M .gt. 1300) THEN
+if (M .gt. 1300) THEN
    WRITE(fin) 'SECOND DIMENSION TOO LARGE'
    CLOSE(fin)
    RETURN
@@ -5866,7 +5866,7 @@ DO i=1,M
   END DO
 
 
-  IF(i.eq.1) THEN
+  if (i.eq.1) THEN
 
    lh = LEN(TRIM(ln))
 
@@ -5893,7 +5893,7 @@ DO i=1,M
 
   WRITE(UNIT=fin,IOSTAT=iock,FMT=TRIM(FMT1)) TRIM(ln)
 
-  IF(iock .ne. 0) THEN
+  if (iock .ne. 0) THEN
      PRINT*,iock
   END IF
 END DO
