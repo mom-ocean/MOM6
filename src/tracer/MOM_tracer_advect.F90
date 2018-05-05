@@ -121,8 +121,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
-  if(present(max_iter_in)) max_iter = max_iter_in
-  if(present(x_first_in))  x_first = x_first_in
+  if (present(max_iter_in)) max_iter = max_iter_in
+  if (present(x_first_in))  x_first = x_first_in
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, hprev, G%Domain)
@@ -309,9 +309,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
   enddo ! Iterations loop
 
-  if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
-  if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
-  if(present(h_out)) h_out(:,:,:) = hprev(:,:,:)
+  if (present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
+  if (present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
+  if (present(h_out)) h_out(:,:,:) = hprev(:,:,:)
 
   call cpu_clock_end(id_clock_advect)
 

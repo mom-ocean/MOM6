@@ -205,7 +205,7 @@ subroutine calculate_TFreeze_teos10_array(S, pres, T_Fr, start, npts)
     zs = S(j)
     zp = pres(j)* Pa2db         !Convert pressure from Pascal to decibar
 
-    if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
+    if (S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
     T_Fr(j) = gsw_ct_freezing_exact(zs,zp,saturation_fraction)
  enddo
 

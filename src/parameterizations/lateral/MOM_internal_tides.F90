@@ -324,7 +324,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
         CS%En(i,j,a,fr,m) = 0.0
-        if(abs(CS%En(i,j,a,fr,m))>1.0)then! only print if large
+        if (abs(CS%En(i,j,a,fr,m))>1.0)then! only print if large
           print *, 'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g
           print *, 'En=',CS%En(i,j,a,fr,m)
           print *, 'Setting En to zero'
@@ -440,7 +440,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
         Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
         !! for debugging print profile, etc. Delete later
-        !if(id_g .eq. 260 .and. &
+        !if (id_g .eq. 260 .and. &
         !   jd_g .eq. 50 .and. &
         !   tot_En_mode(i,j,1,1)>500.0) then
         !  print *, 'Profiles for mode ',m,' and frequency ',fr
@@ -761,7 +761,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
     !  do a=1,CS%nAngle
     !    frac_per_sector = En(i,j,a,fr,m)/En_tot
     !    TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot
-    !    if(TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
+    !    if (TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
     !      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
     !    else
     !      call MOM_error(WARNING, "itidal_lowmode_loss: energy loss greater than avalable, "// &
@@ -796,10 +796,10 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   ! Arguments:
   !  (out)      TKE_loss_sum - total energy loss rate due to specified mechanism, in W m-2.
 
-  if(mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)   ! not used for mixing yet
-  if(mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)   ! not used for mixing yet
-  if(mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j) ! currently used for mixing
-  if(mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j) ! not used for mixing yet
+  if (mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)   ! not used for mixing yet
+  if (mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)   ! not used for mixing yet
+  if (mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j) ! currently used for mixing
+  if (mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j) ! not used for mixing yet
 
 end subroutine get_lowmode_loss
 
@@ -923,7 +923,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
     enddo; enddo
 
     ! Advect in angular space
-    if(.not.use_PPMang) then
+    if (.not.use_PPMang) then
       ! Use simple upwind
       do  A=0,na ; do i=is,ie
         if (CFL_ang(i,j,A) > 0.0) then
@@ -941,7 +941,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
 
   ! Update and copy back to En.
     do a=1,na ; do i=is,ie
-      !if(En2d(i,a)+(Flux_E(i,A-1)-Flux_E(i,A)) < 0.0)then ! for debugging
+      !if (En2d(i,a)+(Flux_E(i,A-1)-Flux_E(i,A)) < 0.0)then ! for debugging
       !  print *,"refract: OutFlux>Available" ; !stop
       !endif
       En(i,j,a) = En2d(i,a) + (Flux_E(i,A-1) - Flux_E(i,A))
@@ -1519,7 +1519,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
-    !  if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
     !    print *,"propagate_x: OutFlux>Available" ; !stop
     !  endif
     !enddo
@@ -1588,7 +1588,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
     do j=jsh,jeh ; do i=ish,ieh
       Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx (J)
       Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx (J)
-      !if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+      !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
       !  print *,"propagate_y: OutFlux>Available prior to reflection" ; !stop
       !  print *,"flux_y_south=",flux_y(i,J-1)
       !  print *,"flux_y_north=",flux_y(i,J)
@@ -1616,7 +1616,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
-    !  if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
     !    print *,"propagate_y: OutFlux>Available" ; !stop
     !  endif
     !enddo
@@ -2516,7 +2516,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
                      G%domain, timelevel=1)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if(is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
+    if (is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
   enddo ; enddo
   call pass_var(CS%refl_angle,G%domain)
 

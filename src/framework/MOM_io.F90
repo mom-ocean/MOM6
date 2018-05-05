@@ -323,7 +323,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     end select
     pack = 1
 
-    if(present(checksums)) then
+    if (present(checksums)) then
        call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack, checksum=checksums(k,:))
     else

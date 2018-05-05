@@ -585,9 +585,9 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
     i2 = i+i_off ; j2 = j+j_off
     fluxes%sw(i2,j2) = fluxes%sw(i2,j2) * diurnal_factor
     fluxes%sw_vis_dir(i2,j2) = fluxes%sw_vis_dir(i2,j2) * diurnal_factor
-    fluxes%sw_vis_dif (i2,j2) = fluxes%sw_vis_dif (i2,j2) * diurnal_factor
+    fluxes%sw_vis_dif(i2,j2) = fluxes%sw_vis_dif(i2,j2) * diurnal_factor
     fluxes%sw_nir_dir(i2,j2) = fluxes%sw_nir_dir(i2,j2) * diurnal_factor
-    fluxes%sw_nir_dif (i2,j2) = fluxes%sw_nir_dif (i2,j2) * diurnal_factor
+    fluxes%sw_nir_dif(i2,j2) = fluxes%sw_nir_dif(i2,j2) * diurnal_factor
   enddo ; enddo
 
 end subroutine offline_add_diurnal_sw
@@ -707,17 +707,17 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
         timelevel=ridx_sum)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
-    fluxes%sw_vis_dif (:,:) = fluxes%sw_vis_dir
+    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
     fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
-    fluxes%sw_nir_dif (:,:) = fluxes%sw_nir_dir
+    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir
     fluxes%sw = fluxes%sw_vis_dir + fluxes%sw_vis_dif + fluxes%sw_nir_dir + fluxes%sw_nir_dif
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)<1.0) then
         fluxes%sw(i,j) = 0.0
         fluxes%sw_vis_dir(i,j) = 0.0
         fluxes%sw_nir_dir(i,j) = 0.0
-        fluxes%sw_vis_dif (i,j) = 0.0
-        fluxes%sw_nir_dif (i,j) = 0.0
+        fluxes%sw_vis_dif(i,j) = 0.0
+        fluxes%sw_nir_dif(i,j) = 0.0
       endif
     enddo ; enddo
     call pass_var(fluxes%sw,G%Domain)

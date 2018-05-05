@@ -87,7 +87,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 !$OMP do
   do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
   if (present(sfc_flux)) then
-    if(convert_flux) then
+    if (convert_flux) then
 !$OMP do
       do j = js, je; do i = is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
@@ -100,7 +100,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     endif
   endif
   if (present(btm_flux)) then
-    if(convert_flux) then
+    if (convert_flux) then
 !$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
@@ -268,12 +268,12 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   if ( (.not. associated(fluxes%netMassIn)) .or. (.not. associated(fluxes%netMassOut)) ) return
 
   in_flux(:,:) = 0.0 ; out_flux(:,:) = 0.0
-  if(present(in_flux_optional)) then
+  if (present(in_flux_optional)) then
     do j=js,je ; do i=is,ie
       in_flux(i,j) = in_flux_optional(i,j)
     enddo; enddo
   endif
-  if(present(out_flux_optional)) then
+  if (present(out_flux_optional)) then
     do j=js,je ; do i=is,ie
       out_flux(i,j) = out_flux_optional(i,j)
     enddo ; enddo

@@ -412,7 +412,7 @@ call ta_iter_1(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
                bt, dic, ft, pt, sit, st, ta, x1, fl, df)
 call ta_iter_1(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
                bt, dic, ft, pt, sit, st, ta, x2, fh, df)
-if(fl .lt. 0.0) then
+if (fl .lt. 0.0) then
   xl=x1
   xh=x2
 else
@@ -453,7 +453,7 @@ do j=1,maxit  !{
   endif
   call ta_iter_1(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
                  bt, dic, ft, pt, sit, st, ta, drtsafe, f, df)
-  if(f .lt. 0.0) then
+  if (f .lt. 0.0) then
     xl=drtsafe
     fl=f
   else

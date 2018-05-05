@@ -818,7 +818,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
-  if(PRESENT(maskmap)) then
+  if (PRESENT(maskmap)) then
      call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
   else
      call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)

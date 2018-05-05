@@ -208,7 +208,7 @@ contains
     allocate(CS%domains(CS%ensemble_size))
     CS%domains(CS%ensemble_id)%mpp_domain => G%Domain%mpp_domain
     do n=1,CS%ensemble_size
-      if(.not. associated(CS%domains(n)%mpp_domain)) allocate(CS%domains(n)%mpp_domain)
+      if (.not. associated(CS%domains(n)%mpp_domain)) allocate(CS%domains(n)%mpp_domain)
       call set_root_pe(CS%ensemble_pelist(n,1))
       call mpp_broadcast_domain(CS%domains(n)%mpp_domain)
     enddo
@@ -248,7 +248,7 @@ contains
     call initialize_remapping(CS%remapCS,'PLM')
     call set_regrid_params(CS%regridCS, min_thickness=0.)
     call mpp_get_data_domain(G%Domain%mpp_domain,isd,ied,jsd,jed)
-    if(.not. associated(CS%h)) then
+    if (.not. associated(CS%h)) then
         allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke)); CS%h(:,:,:)=0.0
 ! assign thicknesses
         call ALE_initThicknessToCoord(CS%ALE_CS,G,CS%GV,CS%h)
@@ -350,7 +350,7 @@ contains
 
     !! switch to global pelist
     call set_current_pelist(CS%filter_pelist)
-    if(is_root_pe()) print *, 'Setting prior'
+    if (is_root_pe()) print *, 'Setting prior'
 
     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
     call mpp_get_compute_domain(CS%domains(CS%ensemble_id)%mpp_domain,is,ie,js,je)
@@ -410,12 +410,12 @@ contains
 
      !! switch to global pelist
      call set_current_pelist(CS%filter_pelist)
-     if(is_root_pe()) print *, 'Getting posterior'
+     if (is_root_pe()) print *, 'Getting posterior'
 
      get_inc = .true.
-     if(present(increment)) get_inc = increment
+     if (present(increment)) get_inc = increment
 
-     if(get_inc) then
+     if (get_inc) then
        allocate(Ocean_increment)
        call init_ocean_ensemble(Ocean_increment,CS%Grid,CS%GV,CS%ensemble_size)
        Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
@@ -423,7 +423,7 @@ contains
      endif
      isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
      do m=1,CS%ensemble_size
-       if(get_inc) then
+       if (get_inc) then
          call mpp_redistribute(CS%mpp_domain, Ocean_increment%T(:,:,:,m), &
                  CS%domains(m)%mpp_domain, CS%tv%T, complete=.true.)
          call mpp_redistribute(CS%mpp_domain, Ocean_increment%S(:,:,:,m), &
@@ -436,14 +436,14 @@ contains
        endif
 
        if (CS%Ocean_posterior%id_t(m)>0) then
-         if(get_inc) then
+         if (get_inc) then
            used=send_data(CS%Ocean_posterior%id_t(m), Ocean_increment%T(isc:iec,jsc:jec,:,m), CS%Time)
          else
            used=send_data(CS%Ocean_posterior%id_t(m), CS%Ocean_posterior%T(isc:iec,jsc:jec,:,m), CS%Time)
          endif
        endif
        if (CS%Ocean_posterior%id_s(m)>0) then
-         if(get_inc) then
+         if (get_inc) then
            used=send_data(CS%Ocean_posterior%id_s(m), Ocean_increment%S(isc:iec,jsc:jec,:,m), CS%Time)
          else
            used=send_data(CS%Ocean_posterior%id_s(m), CS%Ocean_posterior%S(isc:iec,jsc:jec,:,m), CS%Time)
@@ -525,9 +525,9 @@ contains
       CS%Time=increment_time(CS%Time,CS%assim_frequency*3600)
 
       call get_date(Time, yr, mon, day, hr, min, sec)
-      if(pe() .eq. mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
+      if (pe() .eq. mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
       call get_date(CS%time, yr, mon, day, hr, min, sec)
-      if(pe() .eq. mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
+      if (pe() .eq. mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
     endif
     if (CS%Time < Time) then
         call MOM_error(FATAL, " set_analysis_time: " // &

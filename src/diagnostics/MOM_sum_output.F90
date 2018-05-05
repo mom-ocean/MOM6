@@ -232,7 +232,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
   call get_filename_appendix(filename_appendix)
-  if(len_trim(filename_appendix) > 0) then
+  if (len_trim(filename_appendix) > 0) then
      energyfile = trim(energyfile) //'.'//trim(filename_appendix)
   end if
 
@@ -881,7 +881,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
          write(*,'("      Total ",a,": ",ES24.16,X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
 
-         if(Tr_minmax_got(m)) then
+         if (Tr_minmax_got(m)) then
            write(*,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
                 Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
            write(*,'(64X,"Global Max:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &

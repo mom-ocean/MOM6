@@ -299,7 +299,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       h_pre(i,j,k) = h_new(i,j,k)
     enddo ; enddo ; enddo
 
-    if(CS%debug) then
+    if (CS%debug) then
       call hchksum(h_vol,"h_vol before advect",G%HI)
       call uvchksum("[uv]htr_sub before advect", uhtr_sub, vhtr_sub, G%HI)
       write(debug_msg, '(A,I4.4)') 'Before advect ', iter

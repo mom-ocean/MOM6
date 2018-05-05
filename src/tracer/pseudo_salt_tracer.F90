@@ -290,7 +290,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     CS%diff(i,j,k) = CS%ps(i,j,k)-tv%S(i,j,k)
   enddo ; enddo ; enddo
 
-  if(debug) then
+  if (debug) then
     call hchksum(tv%S,"salt post pseudo-salt vertdiff", G%HI)
     call hchksum(CS%ps,"pseudo_salt post pseudo-salt vertdiff", G%HI)
   endif

@@ -870,7 +870,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       endif
 
       ! apply some constraints on OBLdepth
-      if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
+      if (CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
       OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
       OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
       kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
@@ -945,7 +945,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
        !   endif
 
        !   ! apply some constraints on OBLdepth
-       !   if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
+       !   if (CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
        !   OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
        !   OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
        !   kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
@@ -1073,7 +1073,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! saln
 
       ! set the KPP diffusivity and viscosity to zero for testing purposes
-      if(CS%KPPzeroDiffusivity) then
+      if (CS%KPPzeroDiffusivity) then
          Kdiffusivity(:,1) = 0.0
          Kdiffusivity(:,2) = 0.0
          Kviscosity(:)     = 0.0

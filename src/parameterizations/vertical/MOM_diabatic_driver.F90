@@ -429,7 +429,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (associated(tv%T) .AND. associated(tv%frazil)) then
     ! For frazil diagnostic, the first call covers the first half of the time step
     call enable_averaging(0.5*dt, Time_end - set_time(int(floor(0.5*dt+0.5))), CS%diag)
-    if(CS%frazil_tendency_diag) then
+    if (CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
       enddo ; enddo ; enddo
@@ -732,7 +732,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
     ! increment heat and salt diffusivity.
     ! CS%useKPP==.true. already has extra_T and extra_S included
-    if(.not. CS%useKPP) then
+    if (.not. CS%useKPP) then
       do K=2,nz ; do j=js,je ; do i=is,ie
         Kd_heat(i,j,K) = Kd_heat(i,j,K) + visc%Kd_extra_T(i,j,K)
         Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K)
@@ -787,7 +787,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   endif
 
   ! Save fields before boundary forcing is applied for tendency diagnostics
-  if(CS%boundary_forcing_tendency_diag) then
+  if (CS%boundary_forcing_tendency_diag) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       h_diag(i,j,k)    = h(i,j,k)
       temp_diag(i,j,k) = tv%T(i,j,k)
@@ -868,7 +868,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     ! diagnose the tendencies due to boundary forcing
     ! At this point, the diagnostic grids have not been updated since the call to the boundary layer scheme
     !  so all tendency diagnostics need to be posted on h_diag, and grids rebuilt afterwards
-    if(CS%boundary_forcing_tendency_diag) then
+    if (CS%boundary_forcing_tendency_diag) then
       call diagnose_boundary_forcing_tendency(tv, h, temp_diag, saln_diag, h_diag, dt, G, GV, CS)
       if (CS%id_boundary_forcing_h > 0) call post_data(CS%id_boundary_forcing_h, h, CS%diag, alt_h = h_diag)
     endif
@@ -1094,7 +1094,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       if (associated(tv%S) .and. associated(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, GV, CS%diabatic_aux_CSp)
 
-      if(CS%diabatic_diff_tendency_diag) then
+      if (CS%diabatic_diff_tendency_diag) then
         do k=1,nz ; do j=js,je ; do i=is,ie
           temp_diag(i,j,k) = tv%T(i,j,k)
           saln_diag(i,j,k) = tv%S(i,j,k)
@@ -1102,7 +1102,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       endif
 
       ! Changes T and S via the tridiagonal solver; no change to h
-      if(CS%tracer_tridiag) then
+      if (CS%tracer_tridiag) then
           call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
           call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
       else
@@ -1113,7 +1113,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       ! Note: hold here refers to the thicknesses from before the dual-entraintment when using
       ! the bulk mixed layer scheme. Otherwise in ALE-mode, layer thicknesses will have changed
       ! In either case, tendencies should be posted on hold
-      if(CS%diabatic_diff_tendency_diag) then
+      if (CS%diabatic_diff_tendency_diag) then
         call diagnose_diabatic_diff_tendency(tv, hold, temp_diag, saln_diag, dt, G, GV, CS)
         if (CS%id_diabatic_diff_h > 0) call post_data(CS%id_diabatic_diff_h, hold, CS%diag, alt_h = hold)
       endif
@@ -1460,7 +1460,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! the end of the diabatic processes.
   if (associated(tv%T) .AND. associated(tv%frazil)) then
     call enable_averaging(0.5*dt, Time_end, CS%diag)
-    if(CS%frazil_tendency_diag) then
+    if (CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
       enddo ; enddo ; enddo
@@ -1622,19 +1622,19 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   do k=1,nz ; do j=js,je ; do i=is,ie
     work_3d(i,j,k) = (tv%T(i,j,k)-temp_old(i,j,k))*Idt
   enddo ; enddo ; enddo
-  if(CS%id_diabatic_diff_temp_tend > 0) then
+  if (CS%id_diabatic_diff_temp_tend > 0) then
     call post_data(CS%id_diabatic_diff_temp_tend, work_3d, CS%diag, alt_h = h)
   endif
 
   ! heat tendency
-  if(CS%id_diabatic_diff_heat_tend > 0 .or. CS%id_diabatic_diff_heat_tend_2d > 0) then
+  if (CS%id_diabatic_diff_heat_tend > 0 .or. CS%id_diabatic_diff_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = h(i,j,k) * GV%H_to_kg_m2 * tv%C_p * work_3d(i,j,k)
     enddo ; enddo ; enddo
-    if(CS%id_diabatic_diff_heat_tend > 0) then
+    if (CS%id_diabatic_diff_heat_tend > 0) then
       call post_data(CS%id_diabatic_diff_heat_tend, work_3d, CS%diag, alt_h = h)
     endif
-    if(CS%id_diabatic_diff_heat_tend_2d > 0) then
+    if (CS%id_diabatic_diff_heat_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
         do k=1,nz
@@ -1646,7 +1646,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   endif
 
   ! salinity tendency
-  if(CS%id_diabatic_diff_saln_tend > 0) then
+  if (CS%id_diabatic_diff_saln_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = (tv%S(i,j,k)-saln_old(i,j,k))*Idt
     enddo ; enddo ; enddo
@@ -1654,14 +1654,14 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   endif
 
   ! salt tendency
-  if(CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then
+  if (CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = h(i,j,k) * GV%H_to_kg_m2 * CS%ppt2mks * work_3d(i,j,k)
     enddo ; enddo ; enddo
-    if(CS%id_diabatic_diff_salt_tend > 0) then
+    if (CS%id_diabatic_diff_salt_tend > 0) then
       call post_data(CS%id_diabatic_diff_salt_tend, work_3d, CS%diag, alt_h = h)
     endif
-    if(CS%id_diabatic_diff_salt_tend_2d > 0) then
+    if (CS%id_diabatic_diff_salt_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
         do k=1,nz
@@ -1706,7 +1706,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   work_2d(:,:)   = 0.0
 
   ! Thickness tendency
-  if(CS%id_boundary_forcing_h_tendency > 0) then
+  if (CS%id_boundary_forcing_h_tendency > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = (h(i,j,k) - h_old(i,j,k))*Idt
     enddo ; enddo ; enddo
@@ -1714,7 +1714,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   endif
 
   ! temperature tendency
-  if(CS%id_boundary_forcing_temp_tend > 0) then
+  if (CS%id_boundary_forcing_temp_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = (tv%T(i,j,k)-temp_old(i,j,k))*Idt
     enddo ; enddo ; enddo
@@ -1722,14 +1722,14 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   endif
 
   ! heat tendency
-  if(CS%id_boundary_forcing_heat_tend > 0 .or. CS%id_boundary_forcing_heat_tend_2d > 0) then
+  if (CS%id_boundary_forcing_heat_tend > 0 .or. CS%id_boundary_forcing_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = GV%H_to_kg_m2 * tv%C_p * Idt * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * temp_old(i,j,k))
     enddo ; enddo ; enddo
-    if(CS%id_boundary_forcing_heat_tend > 0) then
+    if (CS%id_boundary_forcing_heat_tend > 0) then
       call post_data(CS%id_boundary_forcing_heat_tend, work_3d, CS%diag, alt_h = h_old)
     endif
-    if(CS%id_boundary_forcing_heat_tend_2d > 0) then
+    if (CS%id_boundary_forcing_heat_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
         do k=1,nz
@@ -1741,7 +1741,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   endif
 
   ! salinity tendency
-  if(CS%id_boundary_forcing_saln_tend > 0) then
+  if (CS%id_boundary_forcing_saln_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = (tv%S(i,j,k)-saln_old(i,j,k))*Idt
     enddo ; enddo ; enddo
@@ -1749,14 +1749,14 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   endif
 
   ! salt tendency
-  if(CS%id_boundary_forcing_salt_tend > 0 .or. CS%id_boundary_forcing_salt_tend_2d > 0) then
+  if (CS%id_boundary_forcing_salt_tend > 0 .or. CS%id_boundary_forcing_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = GV%H_to_kg_m2 * CS%ppt2mks * Idt * (h(i,j,k) * tv%S(i,j,k) - h_old(i,j,k) * saln_old(i,j,k))
     enddo ; enddo ; enddo
-    if(CS%id_boundary_forcing_salt_tend > 0) then
+    if (CS%id_boundary_forcing_salt_tend > 0) then
       call post_data(CS%id_boundary_forcing_salt_tend, work_3d, CS%diag, alt_h = h_old)
     endif
-    if(CS%id_boundary_forcing_salt_tend_2d > 0) then
+    if (CS%id_boundary_forcing_salt_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
         do k=1,nz
@@ -1807,7 +1807,7 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS)
 
     ! As a consistency check, we must have
     ! FRAZIL_HEAT_TENDENCY_2d = HFSIFRAZIL
-    if(CS%id_frazil_heat_tend_2d > 0) then
+    if (CS%id_frazil_heat_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
         do k=1,nz
@@ -1965,7 +1965,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
                  "If true, apply an arbitrary generation site for internal tide testing", &
                  default=.false.)
-    if(CS%int_tide_source_test)then
+    if (CS%int_tide_source_test)then
       call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)
       call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
@@ -1978,7 +1978,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     ! GET UNIFORM MODE VELOCITY FOR TESTING (BDM)
     call get_param(param_file, mod, "UNIFORM_CG", CS%uniform_cg, &
                  "If true, set cg = cg_test everywhere for test case", default=.false.)
-    if(CS%uniform_cg)then
+    if (CS%uniform_cg)then
       call get_param(param_file, mod, "CG_TEST", CS%cg_test, &
                  "Uniform group velocity of internal tide for test case", default=1.)
     endif

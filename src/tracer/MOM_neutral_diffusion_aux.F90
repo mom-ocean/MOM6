@@ -465,7 +465,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
 
       ! For the logic to find neutral surfaces to work properly, the function needs to converge to zero
       !  or a small negative value
-      if( (fb <= 0.) .and. (fb >= -CS%drho_tol) ) then
+      if ((fb <= 0.) .and. (fb >= -CS%drho_tol)) then
         refine_nondim_position = b
         exit
       endif
