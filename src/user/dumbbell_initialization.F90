@@ -344,7 +344,7 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
              S(i,j,k)=S_ref - 0.5*S_range
            enddo
          endif
-!         if (j.eq.G%jsc) print *,'i,Sponge S= ',i,S(i,1,1)
+!         if (j == G%jsc) print *,'i,Sponge S= ',i,S(i,1,1)
        enddo
 
      enddo

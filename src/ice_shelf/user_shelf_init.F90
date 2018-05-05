@@ -232,7 +232,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
     endif ; endif ; endif
 
-    if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
+    if ((i+G%idg_offset) == G%domain%nihalo+1) then
       hmask(i-1,j) = 3.0
     endif
 

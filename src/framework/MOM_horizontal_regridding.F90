@@ -191,15 +191,15 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
      do j=js,je
         i_loop: do i=is,ie
 
-           if (good_(i,j) .eq. 1.0 .or. fill(i,j) .eq. 0.) cycle i_loop
+           if (good_(i,j) == 1.0 .or. fill(i,j) == 0.) cycle i_loop
 
            ge=good_(i+1,j);gw=good_(i-1,j)
            gn=good_(i,j+1);gs=good_(i,j-1)
            east=0.0;west=0.0;north=0.0;south=0.0
-           if (ge.eq.1.0) east=aout(i+1,j)*ge
-           if (gw.eq.1.0) west=aout(i-1,j)*gw
-           if (gn.eq.1.0) north=aout(i,j+1)*gn
-           if (gs.eq.1.0) south=aout(i,j-1)*gs
+           if (ge == 1.0) east=aout(i+1,j)*ge
+           if (gw == 1.0) west=aout(i-1,j)*gw
+           if (gn == 1.0) north=aout(i,j+1)*gn
+           if (gs == 1.0) south=aout(i,j-1)*gs
 
            ngood = ge+gw+gn+gs
            if (ngood > 0.) then
@@ -219,13 +219,13 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
      if (nfill == nfill_prev .and. PRESENT(prev)) then
         do j=js,je
            do i=is,ie
-              if (fill_pts(i,j).eq.1.0) then
+              if (fill_pts(i,j) == 1.0) then
                  aout(i,j)=prev(i,j)
                  fill_pts(i,j)=0.0
               endif
            enddo
         enddo
-     else if (nfill .eq. nfill_prev) then
+     else if (nfill == nfill_prev) then
         print *,&
              'Unable to fill missing points using either data at the same vertical level from a connected basin'//&
              'or using a point from a previous vertical level.  Make sure that the original data has some valid'//&
@@ -243,7 +243,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
         call pass_var(aout,G%Domain)
         do j=js,je
            do i=is,ie
-              if (fill(i,j) .eq. 1) then
+              if (fill(i,j) == 1) then
                  east=max(good(i+1,j),fill(i+1,j)) ; west=max(good(i-1,j),fill(i-1,j))
                  north=max(good(i,j+1),fill(i,j+1)) ; south=max(good(i,j-1),fill(i,j-1))
                  !### Appropriate parentheses should be added here, but they will change answers.
@@ -264,7 +264,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
 
   do j=js,je
      do i=is,ie
-        if (good_(i,j).eq.0.0 .and. fill_pts(i,j) .eq. 1.0) then
+        if (good_(i,j) == 0.0 .and. fill_pts(i,j) == 1.0) then
            print *,'in fill_miss, fill, good,i,j= ',fill_pts(i,j),good_(i,j),i,j
            call MOM_error(FATAL,"MOM_initialize: "// &
                 "fill is true and good is false after fill_miss, how did this happen? ")
@@ -348,40 +348,40 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
 
   rcode = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
+  if (rcode /= 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
                            " in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, varnam, varid)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(varnam)//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(varnam)//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
 
   rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
-  if (rcode .ne. 0) call MOM_error(FATAL,'error inquiring dimensions hinterp_extrap')
+  if (rcode /= 0) call MOM_error(FATAL,'error inquiring dimensions hinterp_extrap')
   if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(varnam)//" in file "// &
               trim(filename)//" has too few dimensions.")
 
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(2), dim_name(2), len=jd)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(2), dim_id(2))
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(2))//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(2))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(3), dim_name(3), len=kd)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(3), dim_id(3))
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
 
 
   missing_value=0.0
   rcode = NF90_GET_ATT(ncid, varid, "_FillValue", missing_value)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding missing value for "//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding missing value for "//&
        trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
 
   if (allocated(lon_in)) deallocate(lon_in)
@@ -397,15 +397,15 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   start = 1; count = 1; count(1) = id
   rcode = NF90_GET_VAR(ncid, dim_id(1), lon_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
                 trim(varnam)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
   start = 1; count = 1; count(1) = jd
   rcode = NF90_GET_VAR(ncid, dim_id(2), lat_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
                 trim(varnam)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
   start = 1; count = 1; count(1) = kd
   rcode = NF90_GET_VAR(ncid, dim_id(3), z_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
                 trim(varnam//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
 
   call cpu_clock_end(id_clock_read)
@@ -470,7 +470,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     if (is_root_pe()) then
       start = 1; start(3) = k; count = 1; count(1) = id; count(2) = jd
       rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-      if (rcode .ne. 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+      if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
            "error reading level "//trim(laynum)//" of variable "//&
            trim(varnam)//" in file "// trim(filename))
 
@@ -982,7 +982,7 @@ nm=fill_boundaries(bad,cyclic_x,tripolar_n)
 
 do j=1,nj
   do i=1,ni
-    if (fill(i,j) .eq. 1) then
+    if (fill(i,j) == 1) then
       B(i,j,1)=1-nm(i+1,j);B(i,j,2)=1-nm(i-1,j)
       B(i,j,3)=1-nm(i,j+1);B(i,j,4)=1-nm(i,j-1)
     endif
@@ -992,7 +992,7 @@ enddo
 do n=1,niter
   do j=1,nj
     do i=1,ni
-      if (fill(i,j) .eq. 1) then
+      if (fill(i,j) == 1) then
         bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
         Isum = 1.0/bsum
         res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&

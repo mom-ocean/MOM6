@@ -88,11 +88,11 @@ subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
     ! boundary cell and the right neighbor of the right boundary cell
     ! is assumed to be the same as the right boundary cell. This
     ! effectively makes boundary cells look like extrema.
-    if ( k .EQ. 1 ) then
+    if ( k == 1 ) then
       k0 = 1
       k1 = 1
       k2 = 2
-    else if ( k .EQ. N ) then
+    else if ( k == N ) then
       k0 = N-1
       k1 = N
       k2 = N
@@ -179,7 +179,7 @@ subroutine average_discontinuous_edge_values( N, edge_values )
     ! Edge value on the right of the edge
     u0_plus  = edge_values(k+1,1)
 
-    if ( u0_minus .NE. u0_plus ) then
+    if ( u0_minus /= u0_plus ) then
       u0_avg = 0.5 * ( u0_minus + u0_plus )
       edge_values(k,2) = u0_avg
       edge_values(k+1,1) = u0_avg

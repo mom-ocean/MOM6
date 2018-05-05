@@ -440,8 +440,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
         Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
         !! for debugging print profile, etc. Delete later
-        !if (id_g .eq. 260 .and. &
-        !   jd_g .eq. 50 .and. &
+        !if (id_g == 260 .and. &
+        !   jd_g == 50 .and. &
         !   tot_En_mode(i,j,1,1)>500.0) then
         !  print *, 'Profiles for mode ',m,' and frequency ',fr
         !  print *, 'id_g=', id_g, 'jd_g=', jd_g
@@ -661,7 +661,7 @@ subroutine sum_En(G, CS, En, label)
     En_sum = En_sum + tmpForSumming
   enddo
   En_sum_diff = En_sum - CS%En_sum
-  if (CS%En_sum .ne. 0.0) then
+  if (CS%En_sum /= 0.0) then
     En_sum_pdiff= (En_sum_diff/CS%En_sum)*100.0
   else
     En_sum_pdiff= 0.0;
@@ -1790,7 +1790,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
       id_g = i + G%idg_offset
       ! redistribute energy in angular space if ray will hit boundary
       ! i.e., if energy is in a reflecting cell
-      if (angle_c(i,j) .ne. CS%nullangle) then
+      if (angle_c(i,j) /= CS%nullangle) then
         do a=1,NAngle
           if (En(i,j,a) > 0.0) then
             ! if ray is incident, keep specified boundary angle
@@ -1818,7 +1818,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
               endif
               a_r = nint(angle_r/Angle_size) + 1
               do while (a_r > Nangle) ; a_r = a_r - Nangle ; enddo
-              if (a .ne. a_r) then
+              if (a /= a_r) then
                 En_reflected(a_r) = part_refl(i,j)*En(i,j,a)
                 En(i,j,a)   = (1.0-part_refl(i,j))*En(i,j,a)
               endif
@@ -2536,7 +2536,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   do j=jsd,jed
     do i=isd,ied
       ! flag cells with partial reflection
-      if (CS%refl_angle(i,j) .ne. CS%nullangle .and. &
+      if (CS%refl_angle(i,j) /= CS%nullangle .and. &
         CS%refl_pref(i,j) < 1.0 .and. CS%refl_pref(i,j) > 0.0) then
         CS%refl_pref_logical(i,j) = .true.
       endif

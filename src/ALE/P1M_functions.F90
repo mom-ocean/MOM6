@@ -151,7 +151,7 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 
   ! Using the limited slope, the left edge value is reevaluated and
   ! the interpolant coefficients recomputed
-  if ( h0 .NE. 0.0 ) then
+  if ( h0 /= 0.0 ) then
     ppoly_E(1,1) = u0 - 0.5 * slope
   else
     ppoly_E(1,1) = u0
@@ -177,7 +177,7 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
     slope = 2.0 * ( u1 - ppoly_E(N-1,2) )
   end if
 
-  if ( h1 .NE. 0.0 ) then
+  if ( h1 /= 0.0 ) then
     ppoly_E(N,2) = u1 + 0.5 * slope
   else
     ppoly_E(N,2) = u1

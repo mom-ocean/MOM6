@@ -275,7 +275,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
     do i=is,ie ; if (cn(i,j)>0.0)then
       !----for debugging, remove later----
       ig = i + G%idg_offset ; jg = j + G%jdg_offset
-      !if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
+      !if (ig == CS%int_tide_source_x .and. jg == CS%int_tide_source_y) then
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
@@ -534,7 +534,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             CS%num_intfaces(i,j)      = nzm
 
             !----for debugging; delete later----
-            !if (ig .eq. ig_stop .and. jg .eq. jg_stop) then
+            !if (ig == ig_stop .and. jg == jg_stop) then
               !print *, 'cn(ig,jg)=', cn(i,j)
               !print *, "e_guess=", e_guess(1:kc-1)
               !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
@@ -680,7 +680,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     !enddo ; enddo
     !print *, 'A(2,1),A(2,2),A(1,2)=', A_check(2,1), A_check(2,2), A_check(1,2)
     !y_check = matmul(A_check,x)
-    !if (all(y_check .ne. y))then
+    !if (all(y_check /= y))then
     !  print *, "tridiag_solver: Uh oh, something's not right!"
     !  print *, "y=", y
     !  print *, "y_check=", y_check

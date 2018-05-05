@@ -860,7 +860,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
 
 
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
-  if (CS%KE_Scheme.eq.KE_ARAKAWA) then
+  if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
@@ -871,7 +871,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
                    +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
                 )*0.25*G%IareaT(i,j)
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_SIMPLE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme which does not take into account any geometric factors
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -881,7 +881,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

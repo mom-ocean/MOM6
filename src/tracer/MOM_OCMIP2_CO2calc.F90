@@ -336,7 +336,7 @@ real :: logf_of_s
 ! recommended (xacc of 10**-9 drops precision to 2 significant
 ! figures).
 !
-      if (mask(i,j) .ne. 0.0) then  !{
+      if (mask(i,j) /= 0.0) then  !{
         htotal(i,j) = drtsafe(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw,   &
                                 ks, kf, bt, dic_in(i,j), ft, pt_in(i,j),&
                                 sit_in(i,j), st, ta_in(i,j),            &
@@ -433,7 +433,7 @@ do j=1,maxit  !{
     dxold=dx
     dx=0.5*(xh-xl)
     drtsafe=xl+dx
-    if (xl .eq. drtsafe) then
+    if (xl == drtsafe) then
 !     write (6,*) 'Exiting drtsafe at A on iteration  ', j, ', ph = ', -log10(drtsafe)
       return
     endif
@@ -442,7 +442,7 @@ do j=1,maxit  !{
     dx=f/df
     temp=drtsafe
     drtsafe=drtsafe-dx
-    if (temp .eq. drtsafe) then
+    if (temp == drtsafe) then
 !     write (6,*) 'Exiting drtsafe at B on iteration  ', j, ', ph = ', -log10(drtsafe)
       return
     endif

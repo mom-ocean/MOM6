@@ -849,7 +849,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             enddo
 
             ! print resutls (for debugging only)
-            !if (ig .eq. 83 .and. jg .eq. 2) then
+            !if (ig == 83 .and. jg == 2) then
             !  if (nmodes>1)then
             !    print *,  "Results after finding first mode:"
             !    print *, "first guess at lam_1=", 1./speed2_tot
@@ -878,7 +878,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
               ! set number of intervals within search range
               numint = nint((lamMax - lamMin)/lamInc)
 
-              !if (ig .eq. 144 .and. jg .eq. 5) then
+              !if (ig == 144 .and. jg == 5) then
               !  print *, 'Looking for other eigenvalues at', ig, jg
               !  print *, 'Wave_speed: lamMin=',         lamMin
               !  print *, 'Wave_speed: cnMax=',          1/sqrt(lamMin)
@@ -899,7 +899,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                 xl = xr - lamInc
                 call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
                                  nrows,xr,det_r,ddet_r)
-                !if (ig .eq. 83 .and. jg .eq. 2) then
+                !if (ig == 83 .and. jg == 2) then
                 !  print *, "Move interval"
                 !  print *, "iint=",iint
                 !  print *, "@ xr=",xr
@@ -911,7 +911,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                     nrootsfound = nrootsfound + 1
                     xbl(nrootsfound) = xl
                     xbr(nrootsfound) = xr
-                    !if (ig .eq. 144 .and. jg .eq. 5) then
+                    !if (ig == 144 .and. jg == 5) then
                     !  print *, "Root located without subdivision!"
                     !  print *, "between xbl=",xl,"and xbr=",xr
                     !endif
@@ -939,7 +939,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                             nrootsfound = nrootsfound + 1
                             xbl(nrootsfound) = xl_sub
                             xbr(nrootsfound) = xr
-                            !if (ig .eq. 144 .and. jg .eq. 5) then
+                            !if (ig == 144 .and. jg == 5) then
                             !  print *, "Root located after subdiving",sub_it," times!"
                             !  print *, "between xbl=",xl_sub,"and xbr=",xr
                             !endif
@@ -954,7 +954,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                         call MOM_error(WARNING, "wave_speed: root not found "// &
                                        " after sub_it_max subdivisions of original"// &
                                        " interval.")
-                        !if (ig .eq. 144 .and. jg .eq. 5) then
+                        !if (ig == 144 .and. jg == 5) then
                           !print *, "xbl=",xbl
                           !print *, "xbr=",xbr
                           !print *, "Wave_speed: kc=",kc
@@ -979,7 +979,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                   ! oops, lamMax not large enough - could add code to increase (BDM)
                   ! set unfound modes to zero for now (BDM)
                   cn(i,j,nrootsfound+2:nmodes) = 0.0
-                  !if (ig .eq. 83 .and. jg .eq. 2) then
+                  !if (ig == 83 .and. jg == 2) then
                   !  call MOM_error(WARNING, "wave_speed: not all modes found "// &
                   !                       " within search range: increase numint.")
                   !  print *, "Increase lamMax at ig=",ig," jg=",jg
@@ -1030,7 +1030,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
       ! ----- Spot check - comment out later (BDM) ----------
       !ig = G%idg_offset + i
       !jg = G%jdg_offset + j
-      !if (ig .eq. 83 .and. jg .eq. 2) then
+      !if (ig == 83 .and. jg == 2) then
       !!  print *, "nmodes=",nmodes
       !  print *, "lam_1=",lam_1
       !  print *, "lamMin=",lamMin
@@ -1065,9 +1065,9 @@ subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
   real :: I_rescale ! inverse of rescale
   integer :: n      ! row (layer interface) index
 
-  if (size(b) .ne. nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
-  if (size(a) .ne. nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
-  if (size(c) .ne. nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
+  if (size(b) /= nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
+  if (size(a) /= nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
+  if (size(c) /= nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
 
   I_rescale = 1.0/rescale
 

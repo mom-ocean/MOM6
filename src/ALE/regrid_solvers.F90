@@ -79,7 +79,7 @@ subroutine solve_linear_system( A, B, X, system_size )
 
     ! If the pivot is in a row that is different than row i, that is if
     ! k is different than i, we need to swap those two rows
-    if ( k .NE. i ) then
+    if ( k /= i ) then
       do j = 1,system_size
         swap_a = A(i,j)
         A(i,j) = A(k,j)

@@ -1408,7 +1408,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
     ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in
     ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
     ! exchange with the atmosphere
-    if (time_interval .NE. dt_offline) then
+    if (time_interval /= dt_offline) then
       call MOM_error(FATAL, &
           "For offline tracer mode in a non-ALE configuration, dt_offline must equal time_interval")
     endif

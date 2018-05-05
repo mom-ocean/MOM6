@@ -566,7 +566,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                      dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
                      u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
-!                if (j.eq.10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k.eq.1) &
+!                if (j == 10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k == 1) &
 !                  print *,'tres=',segment%tr_Reg%Tr(m)%tres(I,j,k),&
 !                segment%tr_Reg%Tr(m)%t(I,j,k), fac1
               endif

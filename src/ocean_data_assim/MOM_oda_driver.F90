@@ -310,7 +310,7 @@ contains
          T_grid%mask(i,j,k) = 1.0
        end if
      end do; end do
-     if (k .eq. 1) then
+     if (k == 1) then
        T_grid%z(:,:,k) = global2D/2
      else
        T_grid%z(:,:,k) = T_grid%z(:,:,k-1) + (global2D + global2D_old)/2
@@ -525,9 +525,9 @@ contains
       CS%Time=increment_time(CS%Time,CS%assim_frequency*3600)
 
       call get_date(Time, yr, mon, day, hr, min, sec)
-      if (pe() .eq. mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
+      if (pe() == mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
       call get_date(CS%time, yr, mon, day, hr, min, sec)
-      if (pe() .eq. mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
+      if (pe() == mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
     endif
     if (CS%Time < Time) then
         call MOM_error(FATAL, " set_analysis_time: " // &

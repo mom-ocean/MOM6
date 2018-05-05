@@ -267,14 +267,14 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     end select
 
     ! Check profile consistency
-    if (CS%use_CVMix_tidal .and. (CS%int_tide_profile.eq.STLAURENT_02 .or. &
-                                  CS%int_tide_profile.eq.POLZIN_09)) then
+    if (CS%use_CVMix_tidal .and. (CS%int_tide_profile == STLAURENT_02 .or. &
+                                  CS%int_tide_profile == POLZIN_09)) then
       call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profile"// &
         " "//trim(int_tide_profile_str)//" unavailable in CVMix. Available "//&
         "profiles in CVMix are "//trim(SIMMONS_PROFILE_STRING)//" and "//&
         trim(SCHMITTNER_PROFILE_STRING)//".")
-    else if (.not.CS%use_CVMix_tidal .and. (CS%int_tide_profile.eq.SIMMONS_04.or. &
-                                            CS%int_tide_profile.eq.SCHMITTNER)) then
+    else if (.not.CS%use_CVMix_tidal .and. (CS%int_tide_profile == SIMMONS_04.or. &
+                                            CS%int_tide_profile == SCHMITTNER)) then
       call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profiles "// &
         trim(SIMMONS_PROFILE_STRING)//" and "//trim(SCHMITTNER_PROFILE_STRING)//&
         " are available only when USE_CVMix_TIDAL is True.")
