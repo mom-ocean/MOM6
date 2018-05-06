@@ -224,7 +224,7 @@ character(len=120) function extract_word(string, separators, n)
   extract_word = ''
   lastCharIsSeperator = .true.
   ns = len_trim(string)
-  i = 0; b=0; e=0; nw=0;
+  i = 0; b=0; e=0; nw=0
   do while (i<ns)
     i = i+1
     if (lastCharIsSeperator) then ! search for end of word

@@ -1032,7 +1032,7 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
     if (CS%Kd_max>0.) then
       CS%Kd(i,j,k) = MIN(CS%Kd_max, CS%Kd(i,j,k))
     endif
-  enddo ; enddo ; enddo ;
+  enddo ; enddo ; enddo
 
   do k=1,nz ; do J=js-1,je ; do i=is,ie
     if (CS%G%mask2dCv(i,J)<1.0) then

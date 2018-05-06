@@ -365,7 +365,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
 ! Arguments:
 !  (in)      G             = ocean grid structure
 !  (in)      GV            = The ocean's vertical grid structure.
-!  (in)      h             = layer thickness (units of m or kg/m^2);
+!  (in)      h             = layer thickness (units of m or kg/m^2)
 !                            units of h are referred to as H below.
 !  (in)      opacity_band  = opacity in each band of penetrating shortwave
 !                            radiation, in m-1. The indicies are band, i, k.

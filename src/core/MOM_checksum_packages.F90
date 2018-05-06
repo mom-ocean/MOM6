@@ -143,7 +143,7 @@ end subroutine MOM_thermo_chksum
 subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
   character(len=*),      intent(in) :: mesg !< A message that appears on the chksum lines.
   type(surface),         intent(inout) :: sfc !< transparent ocean surface state
-                                              !! structure shared with the calling routine;
+                                              !! structure shared with the calling routine
                                               !! data in this structure is intent out.
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   integer,     optional, intent(in) :: haloshift !< The width of halos to check (default 0).

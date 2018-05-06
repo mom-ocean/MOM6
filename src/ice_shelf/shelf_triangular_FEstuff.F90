@@ -124,7 +124,7 @@ type, public :: ice_shelf_CS ; private
                     ! ~ once a day (maybe longer) because it will depend on ocean values
                     ! that are averaged over this time interval, and the solve will begin
                     ! to lose meaning if it is done too frequently
-  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve;
+  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve
                     ! the counter will have to be stored
   integer :: velocity_update_counter ! the "outer" timestep number
   integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)

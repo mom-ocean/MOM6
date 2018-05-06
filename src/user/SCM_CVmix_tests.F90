@@ -25,7 +25,7 @@ public SCM_CVMix_tests_buoyancy_forcing
 public SCM_CVMix_tests_CS
 
 !> Container for surface forcing parameters
-type SCM_CVMix_tests_CS ;
+type SCM_CVMix_tests_CS
 private
   logical :: UseWindStress  !< True to use wind stress
   logical :: UseHeatFlux  !< True to use heat flux

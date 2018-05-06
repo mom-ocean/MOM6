@@ -234,7 +234,7 @@ type, public :: ice_shelf_CS ; private
                     ! ~ once a day (maybe longer) because it will depend on ocean values
                     ! that are averaged over this time interval, and the solve will begin
                     ! to lose meaning if it is done too frequently
-  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve;
+  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve
                                          ! the counter will have to be stored
   integer :: velocity_update_counter ! the "outer" timestep number
   integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)
@@ -5794,7 +5794,7 @@ subroutine ice_shelf_end(CS)
   deallocate(CS%t_flux) ; deallocate(CS%lprec)
   deallocate(CS%salt_flux)
 
-  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze);
+  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze)
   deallocate(CS%exch_vel_t) ; deallocate(CS%exch_vel_s)
 
   deallocate(CS%h_shelf) ; deallocate(CS%hmask)
@@ -5802,7 +5802,7 @@ subroutine ice_shelf_end(CS)
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     deallocate(CS%u_shelf) ; deallocate(CS%v_shelf)
 !!! OVS !!!
-    deallocate(CS%t_shelf); deallocate(CS%tmask);
+    deallocate(CS%t_shelf); deallocate(CS%tmask)
     deallocate(CS%t_boundary_values)
     deallocate(CS%u_boundary_values) ; deallocate(CS%v_boundary_values)
     deallocate(CS%ice_visc_bilinear)

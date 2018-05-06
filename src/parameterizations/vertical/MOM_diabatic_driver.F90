@@ -258,7 +258,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness (m for Bouss / kg/m2 for non-Bouss)
-  type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields;
+  type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
   real, dimension(:,:),                      pointer       :: Hml       !< active mixed layer depth
   type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
@@ -387,7 +387,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (showCallTree) call callTree_enter("diabatic(), MOM_diabatic_driver.F90")
 
 
-  ! Offer diagnostics of various state varables at the start of diabatic;
+  ! Offer diagnostics of various state varables at the start of diabatic
   ! these are mostly for debugging purposes.
   if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
   if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
@@ -2189,7 +2189,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   endif
 
 
-  ! diagnostics for tendencies of temp and saln due to diabatic processes;
+  ! diagnostics for tendencies of temp and saln due to diabatic processes
   ! available only for ALE algorithm.
   ! diagnostics for tendencies of temp and heat due to frazil
   CS%id_diabatic_diff_h = register_diag_field('ocean_model', 'diabatic_diff_h', diag%axesTL, Time, &
@@ -2261,7 +2261,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       CS%diabatic_diff_tendency_diag = .true.
     endif
 
-    ! diagnostics for tendencies of thickness temp and saln due to boundary forcing;
+    ! diagnostics for tendencies of thickness temp and saln due to boundary forcing
     ! available only for ALE algorithm.
   ! diagnostics for tendencies of temp and heat due to frazil
     CS%id_boundary_forcing_h = register_diag_field('ocean_model', 'boundary_forcing_h', diag%axesTL, Time, &

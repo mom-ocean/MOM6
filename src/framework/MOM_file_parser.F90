@@ -885,7 +885,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   ! return variables indicating whether this variable is defined and the string
   ! that contains the value of this variable.
   found = .false.
-  oval = 0; ival = 0;
+  oval = 0; ival = 0
   max_vals = SIZE(value_string)
   do is=1,max_vals ; value_string(is) = " " ; enddo
 

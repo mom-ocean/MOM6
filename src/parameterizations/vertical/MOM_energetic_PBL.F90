@@ -1252,7 +1252,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! There is not enough energy to support the mixing, so reduce the
               ! diffusivity to what can be supported.
               Kddt_h_max = Kddt_h_g0 ; Kddt_h_min = 0.0
-              TKE_left_max = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0) ;
+              TKE_left_max = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0)
               TKE_left_min = tot_TKE
 
               ! As a starting guess, take the minimum of a false position estimate
@@ -1925,7 +1925,7 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
 
   z0sm = 0.11 * nu / USTair; !Compute z0smooth from ustar guess
   u10 = USTair/sqrt(0.001);  !Guess for u10
-  u10a = 1000;
+  u10a = 1000
 
   CT=0
   do while (abs(u10a/u10-1.)>0.001)

@@ -426,7 +426,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 !      call mpp_get_field_atts(fields(i),name)
 !      !if (trim(name) /= trim(vars%name) then
 !      !write (mesg,'("Reopening file ",a," variable ",a," is called ",a,".")',&
-!      !    filename,vars%name,name);
+!      !    filename,vars%name,name)
 !      !call MOM_error(NOTE,"MOM_io: "//mesg)
 !    enddo
   endif

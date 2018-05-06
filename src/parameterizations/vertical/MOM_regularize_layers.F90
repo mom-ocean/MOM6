@@ -109,7 +109,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! layer detrainment, in the same units as
                                                   !! h - usually m or kg m-2 (i.e., H).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment, in the same units as h - usually
                                                   !! m or kg m-2 (i.e., H).
@@ -168,7 +168,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! layer detrainment, in the same units as h -
                                                   !! usually m or kg m-2 (i.e., H).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment, in the same units as h - usually
                                                   !! m or kg m-2 (i.e., H).

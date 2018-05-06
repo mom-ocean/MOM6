@@ -190,7 +190,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   c1 = 0.0 ; if (CS%shelf_slope_scale > 0.0) c1 = 1.0 / CS%shelf_slope_scale
 
 
-  do j=G%jsd,G%jed ;
+  do j=G%jsd,G%jed
 
    if (((j+G%jdg_offset) <= G%domain%njglobal+G%domain%njhalo) .AND. &
        ((j+G%jdg_offset) >= G%domain%njhalo+1)) then

@@ -782,7 +782,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
   endif
 
   do b=1,NumBands
-    temp_x(:,:)=0.0;temp_y(:,:)=0.0;
+    temp_x(:,:)=0.0;temp_y(:,:)=0.0
     varname = '                    '
     write(varname,"(A3,I0)")'Usx',b
     call data_override('OCN',trim(varname), temp_x, day_center)
@@ -1252,7 +1252,7 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
 
   z0sm = 0.11 * nu / USTair; !Compute z0smooth from ustar guess
   u10 = USTair/sqrt(0.001);  !Guess for u10
-  u10a = 1000;
+  u10a = 1000
 
   CT=0
   do while (abs(u10a/u10-1.)>0.001)

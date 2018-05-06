@@ -104,7 +104,7 @@ program MOM_main
   ! simulation does not exceed its CPU time limit.  nmax is determined by
   ! evaluating the CPU time used between successive calls to write_cputime.
   ! Initially it is set to be very large.
-  integer :: nmax=2000000000;
+  integer :: nmax=2000000000
 
   ! A structure containing several relevant directory paths.
   type(directories) :: dirs

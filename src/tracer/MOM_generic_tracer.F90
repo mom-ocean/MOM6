@@ -546,7 +546,7 @@ contains
         if (g_tracer_is_prog(g_tracer)) then
           do k=1,nk ;do j=jsc,jec ; do i=isc,iec
             h_work(i,j,k) = h_old(i,j,k)
-          enddo ; enddo ; enddo;
+          enddo ; enddo ; enddo
           call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, fluxes, h_work, &
               evap_CFL_limit, minimum_forcing_depth)
         endif
