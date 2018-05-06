@@ -497,7 +497,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
     call mpp_sync()
     call mpp_broadcast(tr_inp,id*jdp,root_PE())
-    call mpp_sync_self ()
+    call mpp_sync_self()
 
     mask_in=0.0
 
@@ -770,7 +770,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     call mpp_sync()
     call mpp_broadcast(tr_inp,id*jdp,root_PE())
-    call mpp_sync_self ()
+    call mpp_sync_self()
 
     mask_in=0.0
 
