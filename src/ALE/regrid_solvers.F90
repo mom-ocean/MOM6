@@ -25,20 +25,17 @@ public :: solve_linear_system, solve_tridiagonal_system
 contains
 
 ! -----------------------------------------------------------------------------
-! Solve the linear system AX = B
-! -----------------------------------------------------------------------------
+!> Solve the linear system AX = B by Gaussian elimination
 subroutine solve_linear_system( A, B, X, system_size )
+  real, dimension(:,:), intent(inout) :: A  !< The matrix being inverted
+  real, dimension(:),   intent(inout) :: B  !< system right-hand side
+  real, dimension(:),   intent(inout) :: X  !< solution vector
+  integer, intent(in)                 :: system_size !< The size of the system
 ! -----------------------------------------------------------------------------
 ! This routine uses Gauss's algorithm to transform the system's original
 ! matrix into an upper triangular matrix. Back substitution yields the answer.
 ! The matrix A must be square and its size must be that of the vectors B and X.
 ! -----------------------------------------------------------------------------
-
-  ! Arguments
-  real, dimension(:,:), intent(inout)   :: A
-  real, dimension(:), intent(inout)     :: B
-  real, dimension(:), intent(inout)     :: X
-  integer                               :: system_size
 
   ! Local variables
   integer               :: i, j, k
@@ -127,18 +124,18 @@ end subroutine solve_linear_system
 
 
 ! -----------------------------------------------------------------------------
-! Solve the tridiagonal system AX = B
-! -----------------------------------------------------------------------------
+!> Solve the tridiagonal system AX = B
 subroutine solve_tridiagonal_system( Al, Ad, Au, B, X, system_size )
+  real, dimension(:), intent(inout) :: Ad  !< Maxtix center diagonal
+  real, dimension(:), intent(inout) :: Al  !< Matrix lower diagonal
+  real, dimension(:), intent(inout) :: Au  !< Matrix upper diagonal
+  real, dimension(:), intent(inout) :: B   !< system right-hand side
+  real, dimension(:), intent(inout) :: X   !< solution vector
+  integer, intent(in)               :: system_size !< The size of the system
 ! -----------------------------------------------------------------------------
 ! This routine uses Thomas's algorithm to solve the tridiagonal system AX = B.
 ! (A is made up of lower, middle and upper diagonals)
 ! -----------------------------------------------------------------------------
-  ! Arguments
-  real, dimension(:), intent(inout) :: Al, Ad, Au   ! lo., mid. and up. diagonals
-  real, dimension(:), intent(inout) :: B            ! system right-hand side
-  real, dimension(:), intent(inout) :: X            ! solution vector
-  integer, intent(in)               :: system_size
 
   ! Local variables
   integer                               :: k        ! Loop index

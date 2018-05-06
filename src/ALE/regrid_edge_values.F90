@@ -43,9 +43,15 @@ real, parameter :: hMinFrac      = 1.e-5  ! A minimum fraction for min(h)/sum(h)
 contains
 
 !------------------------------------------------------------------------------
-! Bound edge values by neighboring cell averages
-!------------------------------------------------------------------------------
-subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
+!> Bound edge values by neighboring cell averages
+subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_val !< Potentially modified edge values,
+                                           !! with the same units as u.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 ! ------------------------------------------------------------------------------
 ! In this routine, we loop on all cells to bound their left and right
 ! edge values by the cell averages. That is, the left edge value must lie
@@ -56,15 +62,6 @@ subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
 ! Any extrapolation scheme is applied after this routine has been called.
 ! Therefore, boundary cells are treated as if they were local extrama.
 ! ------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values,
-                                           !! with the same units as u.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
 
   ! Local variables
   integer       :: k            ! loop index
@@ -111,8 +108,8 @@ subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
     u_c = u(k1)
     u_r = u(k2)
 
-    u0_l = edge_values(k,1)
-    u0_r = edge_values(k,2)
+    u0_l = edge_val(k,1)
+    u0_r = edge_val(k,2)
 
     sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
     sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
@@ -143,8 +140,8 @@ subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
     u0_r = max( min( u0_r, max(u_r, u_c) ), min(u_r, u_c) )
 
     ! Store edge values
-    edge_values(k,1) = u0_l
-    edge_values(k,2) = u0_r
+    edge_val(k,1) = u0_l
+    edge_val(k,2) = u0_r
 
   end do ! loop on interior edges
 
@@ -152,17 +149,15 @@ end subroutine bound_edge_values
 
 
 !------------------------------------------------------------------------------
-! Average discontinuous edge values (systematically)
-!------------------------------------------------------------------------------
-subroutine average_discontinuous_edge_values( N, edge_values )
+!> Replace discontinuous collocated edge values with their average
+subroutine average_discontinuous_edge_values( N, edge_val )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:,:), intent(inout) :: edge_val !< Edge values that may be modified;
+                                           !! the second index size is 2.
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
-! If so, compute the average and replace the edge values by the average.!
+! If so, compute the average and replace the edge values by the average.
 ! ------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:,:), intent(inout) :: edge_values
 
   ! Local variables
   integer       :: k            ! loop index
@@ -174,15 +169,15 @@ subroutine average_discontinuous_edge_values( N, edge_values )
   do k = 1,N-1
 
     ! Edge value on the left of the edge
-    u0_minus = edge_values(k,2)
+    u0_minus = edge_val(k,2)
 
     ! Edge value on the right of the edge
-    u0_plus  = edge_values(k+1,1)
+    u0_plus  = edge_val(k+1,1)
 
     if ( u0_minus /= u0_plus ) then
       u0_avg = 0.5 * ( u0_minus + u0_plus )
-      edge_values(k,2) = u0_avg
-      edge_values(k+1,1) = u0_avg
+      edge_val(k,2) = u0_avg
+      edge_val(k+1,1) = u0_avg
     end if
 
   end do ! end loop on interior edges
@@ -191,18 +186,15 @@ end subroutine average_discontinuous_edge_values
 
 
 !------------------------------------------------------------------------------
-! Check discontinuous edge values and take average is not monotonic
-!------------------------------------------------------------------------------
-subroutine check_discontinuous_edge_values( N, u, edge_values )
+!> Check discontinuous edge values and replace them with their average if not monotonic
+subroutine check_discontinuous_edge_values( N, u, edge_val )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
+  real, dimension(:,:), intent(inout) :: edge_val !< Cell edge values with the same units as u.
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so and if they are not monotonic, replace each edge value by their average.
 ! ------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values
 
   ! Local variables
   integer       :: k            ! loop index
@@ -216,10 +208,10 @@ subroutine check_discontinuous_edge_values( N, u, edge_values )
   do k = 1,N-1
 
     ! Edge value on the left of the edge
-    u0_minus = edge_values(k,2)
+    u0_minus = edge_val(k,2)
 
     ! Edge value on the right of the edge
-    u0_plus  = edge_values(k+1,1)
+    u0_plus  = edge_val(k+1,1)
 
     ! Left cell average
     um_minus = u(k)
@@ -230,8 +222,8 @@ subroutine check_discontinuous_edge_values( N, u, edge_values )
     if ( (u0_plus - u0_minus)*(um_plus - um_minus) < 0.0 ) then
       u0_avg = 0.5 * ( u0_minus + u0_plus )
       u0_avg = max( min( u0_avg, max(um_minus, um_plus) ), min(um_minus, um_plus) )
-      edge_values(k,2) = u0_avg
-      edge_values(k+1,1) = u0_avg
+      edge_val(k,2) = u0_avg
+      edge_val(k+1,1) = u0_avg
     end if
 
   end do ! end loop on interior edges
@@ -241,7 +233,14 @@ end subroutine check_discontinuous_edge_values
 
 !------------------------------------------------------------------------------
 !> Compute h2 edge values (explicit second order accurate)
-subroutine edge_values_explicit_h2( N, h, u, edge_values, h_neglect )
+subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 ! ------------------------------------------------------------------------------
 ! Compute edge values based on second-order explicit estimates.
 ! These estimates are based on a straight line spanning two cells and evaluated
@@ -254,16 +253,7 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values, h_neglect )
 !
 ! Boundary edge values are set to be equal to the boundary cell averages.
 ! ------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
-
+ 
   ! Local variables
   integer   :: k        ! loop index
   real      :: h0, h1   ! cell widths
@@ -288,24 +278,31 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values, h_neglect )
     u1 = u(k)
 
     ! Compute left edge value
-    edge_values(k,1) = ( u0*h1 + u1*h0 ) / ( h0 + h1 )
+    edge_val(k,1) = ( u0*h1 + u1*h0 ) / ( h0 + h1 )
 
     ! Left edge value of the current cell is equal to right edge
     ! value of left cell
-    edge_values(k-1,2) = edge_values(k,1)
+    edge_val(k-1,2) = edge_val(k,1)
 
   end do ! end loop on interior cells
 
   ! Boundary edge values are simply equal to the boundary cell averages
-  edge_values(1,1) = u(1)
-  edge_values(N,2) = u(N)
+  edge_val(1,1) = u(1)
+  edge_val(N,2) = u(N)
 
 end subroutine edge_values_explicit_h2
 
 
 !------------------------------------------------------------------------------
 !> Compute h4 edge values (explicit fourth order accurate)
-subroutine edge_values_explicit_h4( N, h, u, edge_values, h_neglect )
+subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order explicit estimates.
 ! These estimates are based on a cubic interpolant spanning four cells
@@ -324,15 +321,6 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values, h_neglect )
 !
 ! For this fourth-order scheme, at least four cells must exist.
 ! -----------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j
@@ -387,8 +375,8 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values, h_neglect )
 
     e = e / ( h0 + h1 + h2 + h3)
 
-    edge_values(i,1) = e
-    edge_values(i-1,2) = e
+    edge_val(i,1) = e
+    edge_val(i-1,2) = e
 
 #ifdef __DO_SAFETY_CHECKS__
     if (e /= e) then
@@ -422,14 +410,14 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values, h_neglect )
   call solve_linear_system( A, B, C, 4 )
 
   ! First edge value
-  edge_values(1,1) = evaluation_polynomial( C, 4, x(1) )
+  edge_val(1,1) = evaluation_polynomial( C, 4, x(1) )
 
   ! Second edge value
-  edge_values(1,2) = evaluation_polynomial( C, 4, x(2) )
-  edge_values(2,1) = edge_values(1,2)
+  edge_val(1,2) = evaluation_polynomial( C, 4, x(2) )
+  edge_val(2,1) = edge_val(1,2)
 
 #ifdef __DO_SAFETY_CHECKS__
-  if (edge_values(1,1) /= edge_values(1,1) .or. edge_values(1,2) /= edge_values(1,2)) then
+  if (edge_val(1,1) /= edge_val(1,1) .or. edge_val(1,2) /= edge_val(1,2)) then
     write(0,*) 'NaN in explicit_edge_h4 at k=',1
     write(0,*) 'A=',A
     write(0,*) 'B=',B
@@ -460,14 +448,14 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values, h_neglect )
   call solve_linear_system( A, B, C, 4 )
 
   ! Last edge value
-  edge_values(N,2) = evaluation_polynomial( C, 4, x(5) )
+  edge_val(N,2) = evaluation_polynomial( C, 4, x(5) )
 
   ! Second to last edge value
-  edge_values(N,1) = evaluation_polynomial( C, 4, x(4) )
-  edge_values(N-1,2) = edge_values(N,1)
+  edge_val(N,1) = evaluation_polynomial( C, 4, x(4) )
+  edge_val(N-1,2) = edge_val(N,1)
 
 #ifdef __DO_SAFETY_CHECKS__
-  if (edge_values(N,1) /= edge_values(N,1) .or. edge_values(N,2) /= edge_values(N,2)) then
+  if (edge_val(N,1) /= edge_val(N,1) .or. edge_val(N,2) /= edge_val(N,2)) then
     write(0,*) 'NaN in explicit_edge_h4 at k=',N
     write(0,*) 'A='
     do i = 1,4
@@ -490,7 +478,14 @@ end subroutine edge_values_explicit_h4
 
 !------------------------------------------------------------------------------
 !> Compute ih4 edge values (implicit fourth order accurate)
-subroutine edge_values_implicit_h4( N, h, u, edge_values, h_neglect )
+subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order implicit estimates.
 !
@@ -514,15 +509,6 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values, h_neglect )
 ! There are N+1 unknowns and we are able to write N-1 equations. The
 ! boundary conditions close the system.
 ! -----------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
@@ -627,18 +613,25 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values, h_neglect )
   call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
 
   do i = 2,N
-    edge_values(i,1)   = tri_x(i)
-    edge_values(i-1,2) = tri_x(i)
+    edge_val(i,1)   = tri_x(i)
+    edge_val(i-1,2) = tri_x(i)
   end do
-  edge_values(1,1) = tri_x(1)
-  edge_values(N,2) = tri_x(N+1)
+  edge_val(1,1) = tri_x(1)
+  edge_val(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h4
 
 
 !------------------------------------------------------------------------------
 !> Compute ih6 edge values (implicit sixth order accurate)
-subroutine edge_values_implicit_h6( N, h, u, edge_values, h_neglect )
+subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 ! -----------------------------------------------------------------------------
 ! Sixth-order implicit estimates of edge values are based on a four-cell,
 ! three-edge stencil. A tridiagonal system is set up and is based on
@@ -671,15 +664,6 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values, h_neglect )
 !          often. Figuring out closed-form expressions for these coefficients
 !          on nonuniform meshes turned out to be intractable.
 ! -----------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
-                                           !! same units as u; the second index size is 2.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j, k              ! loop indexes
@@ -1124,11 +1108,11 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values, h_neglect )
   call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
 
   do i = 2,N
-    edge_values(i,1)   = tri_x(i)
-    edge_values(i-1,2) = tri_x(i)
+    edge_val(i,1)   = tri_x(i)
+    edge_val(i-1,2) = tri_x(i)
   end do
-  edge_values(1,1) = tri_x(1)
-  edge_values(N,2) = tri_x(N+1)
+  edge_val(1,1) = tri_x(1)
+  edge_val(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h6
 

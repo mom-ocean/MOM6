@@ -22,9 +22,8 @@ real, parameter :: hNeglect_dflt = 1.E-30
 contains
 
 !------------------------------------------------------------------------------
-! PQM_reconstruction
-! -----------------------------------------------------------------------------
-subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect )
+!>  PQM_reconstruction does reconstruction by quartic polynomials within each cell.
+subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
 !------------------------------------------------------------------------------
 ! Reconstruction by quartic polynomials within each cell.
 !
@@ -37,15 +36,18 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
-                                          !! the purpose of cell reconstructions
-                                          !! in the same units as h
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
+                                           !! with the same units as u.
+  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial,
+                                           !! in the units of u over the units of h.
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
+                                           !! with the same units as u.
+  real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
+                                           !! the purpose of cell reconstructions
+                                           !! in the same units as h
 
   ! Local variables
   integer   :: k                ! loop index
@@ -75,11 +77,11 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_
     e = 30.0 * u(k) + 2.5*h_c*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
 
     ! Store coefficients
-    ppoly_coefficients(k,1) = a
-    ppoly_coefficients(k,2) = b
-    ppoly_coefficients(k,3) = c
-    ppoly_coefficients(k,4) = d
-    ppoly_coefficients(k,5) = e
+    ppoly_coef(k,1) = a
+    ppoly_coef(k,2) = b
+    ppoly_coef(k,3) = c
+    ppoly_coef(k,4) = d
+    ppoly_coef(k,5) = e
 
   end do ! end loop on cells
 
@@ -87,8 +89,7 @@ end subroutine PQM_reconstruction
 
 
 !------------------------------------------------------------------------------
-! Limit pqm
-! -----------------------------------------------------------------------------
+!> Limit the piecewise quartic method reconstruction
 subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
 !------------------------------------------------------------------------------
 ! Standard PQM limiter (White & Adcroft, JCP 2008).
@@ -369,9 +370,8 @@ end subroutine PQM_limiter
 
 
 !------------------------------------------------------------------------------
-! pqm boundary extrapolation
-! -----------------------------------------------------------------------------
-subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
+!> piecewise quartic method boundary extrapolation
+subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -395,11 +395,13 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
+                                           !! with the same units as u.
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
+                                           !! with the same units as u.
 
   ! Local variables
   integer       :: i0, i1
@@ -421,7 +423,7 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
-  b = ppoly_coefficients(i1,2)
+  b = ppoly_coef(i1,2)
   u1_r = b *(h0/h1)     ! derivative evaluated at xi = 0.0,
                         ! expressed w.r.t. xi (local coord. system)
 
@@ -460,11 +462,11 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   c = 3.0 * ( u0_r + u0_l - 2.0 * u0 )
 
   ! The quartic is reduced to a parabola in the boundary cell
-  ppoly_coefficients(i0,1) = a
-  ppoly_coefficients(i0,2) = b
-  ppoly_coefficients(i0,3) = c
-  ppoly_coefficients(i0,4) = 0.0
-  ppoly_coefficients(i0,5) = 0.0
+  ppoly_coef(i0,1) = a
+  ppoly_coef(i0,2) = b
+  ppoly_coef(i0,3) = c
+  ppoly_coef(i0,4) = 0.0
+  ppoly_coef(i0,5) = 0.0
 
   ! ----- Right boundary -----
   i0 = N-1
@@ -476,10 +478,10 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 
   ! Compute the right edge slope in neighboring cell and express it in
   ! the global coordinate system
-  b = ppoly_coefficients(i0,2)
-  c = ppoly_coefficients(i0,3)
-  d = ppoly_coefficients(i0,4)
-  e = ppoly_coefficients(i0,5)
+  b = ppoly_coef(i0,2)
+  c = ppoly_coef(i0,3)
+  d = ppoly_coef(i0,4)
+  e = ppoly_coef(i0,5)
   u1_l = (b + 2*c + 3*d + 4*e)      ! derivative evaluated at xi = 1.0
   u1_l = u1_l * (h1/h0)
 
@@ -518,19 +520,18 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   c = 3.0 * ( u0_r + u0_l - 2.0 * u1 )
 
   ! The quartic is reduced to a parabola in the boundary cell
-  ppoly_coefficients(i1,1) = a
-  ppoly_coefficients(i1,2) = b
-  ppoly_coefficients(i1,3) = c
-  ppoly_coefficients(i1,4) = 0.0
-  ppoly_coefficients(i1,5) = 0.0
+  ppoly_coef(i1,1) = a
+  ppoly_coef(i1,2) = b
+  ppoly_coef(i1,3) = c
+  ppoly_coef(i1,4) = 0.0
+  ppoly_coef(i1,5) = 0.0
 
 end subroutine PQM_boundary_extrapolation
 
 
 !------------------------------------------------------------------------------
-! pqm boundary extrapolation using rational function
-! -----------------------------------------------------------------------------
-subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect )
+!> pqm boundary extrapolation using a rational function
+subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -554,15 +555,18 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
-                                          !! the purpose of cell reconstructions
-                                          !! in the same units as h.
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
+                                           !! with the same units as u.
+  real, dimension(:,:), intent(inout) :: ppoly_S    !< Edge slope of polynomial,
+                                           !! in the units of u over the units of h.
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
+                                           !! with the same units as u.
+  real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
+                                           !! the purpose of cell reconstructions
+                                           !! in the same units as h.
 
   ! Local variables
   integer :: i0, i1
@@ -600,8 +604,8 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! The right edge value and slope of the boundary cell are taken to be the
   ! left edge value and slope of the adjacent cell
-  a = ppoly_coefficients(i1,1)
-  b = ppoly_coefficients(i1,2)
+  a = ppoly_coef(i1,1)
+  b = ppoly_coef(i1,2)
 
   u0_r = a          ! edge value
   u1_r = b / (h1 + hNeglect) ! edge slope (w.r.t. global coord.)
@@ -725,11 +729,11 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   e = 30.0 * um + 2.5*h0*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
 
     ! Store coefficients
-  ppoly_coefficients(i0,1) = a
-  ppoly_coefficients(i0,2) = b
-  ppoly_coefficients(i0,3) = c
-  ppoly_coefficients(i0,4) = d
-  ppoly_coefficients(i0,5) = e
+  ppoly_coef(i0,1) = a
+  ppoly_coef(i0,2) = b
+  ppoly_coef(i0,3) = c
+  ppoly_coef(i0,4) = d
+  ppoly_coef(i0,5) = e
 
   ! ----- Right boundary (BOTTOM) -----
   i0 = N-1
@@ -747,11 +751,11 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! The left edge value and slope of the boundary cell are taken to be the
   ! right edge value and slope of the adjacent cell
-  a = ppoly_coefficients(i0,1)
-  b = ppoly_coefficients(i0,2)
-  c = ppoly_coefficients(i0,3)
-  d = ppoly_coefficients(i0,4)
-  e = ppoly_coefficients(i0,5)
+  a = ppoly_coef(i0,1)
+  b = ppoly_coef(i0,2)
+  c = ppoly_coef(i0,3)
+  d = ppoly_coef(i0,4)
+  e = ppoly_coef(i0,5)
   u0_l = a + b + c + d + e                  ! edge value
   u1_l = (b + 2*c + 3*d + 4*e) / h0         ! edge slope (w.r.t. global coord.)
 
@@ -877,11 +881,11 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   d = -60.0 * um + h1 *(6.0*u1_l - 4.0*u1_r) + 28.0*u0_r + 32.0*u0_l
   e = 30.0 * um + 2.5*h1*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
 
-  ppoly_coefficients(i1,1) = a
-  ppoly_coefficients(i1,2) = b
-  ppoly_coefficients(i1,3) = c
-  ppoly_coefficients(i1,4) = d
-  ppoly_coefficients(i1,5) = e
+  ppoly_coef(i1,1) = a
+  ppoly_coef(i1,2) = b
+  ppoly_coef(i1,3) = c
+  ppoly_coef(i1,4) = d
+  ppoly_coef(i1,5) = e
 
 end subroutine PQM_boundary_extrapolation_v1
 
