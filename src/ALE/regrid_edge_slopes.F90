@@ -32,6 +32,13 @@ contains
 !------------------------------------------------------------------------------
 !> Compute ih4 edge slopes (implicit third order accurate)
 subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes, with the
+                                           !! same units as u divided by the units of h.
+  real, optional,       intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 ! -----------------------------------------------------------------------------
 ! Compute edge slopes based on third-order implicit estimates. Note that
 ! the estimates are fourth-order accurate on uniform grids
@@ -57,15 +64,6 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
 ! There are N+1 unknowns and we are able to write N-1 equations. The
 ! boundary conditions close the system.
 ! -----------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes, with the
-                                           !! same units as u divided by the units of h.
-  real, optional,       intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
@@ -188,6 +186,13 @@ end subroutine edge_slopes_implicit_h3
 !------------------------------------------------------------------------------
 !> Compute ih5 edge values (implicit fifth order accurate)
 subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes, with the
+                                           !! same units as u divided by the units of h.
+  real, optional,       intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 ! -----------------------------------------------------------------------------
 ! Fifth-order implicit estimates of edge values are based on a four-cell,
 ! three-edge stencil. A tridiagonal system is set up and is based on
@@ -220,15 +225,6 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
 !          often. Figuring out closed-form expressions for these coefficients
 !          on nonuniform meshes turned out to be intractable.
 ! -----------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
-  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
-  real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes, with the
-                                           !! same units as u divided by the units of h.
-  real, optional,       intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j, k              ! loop indexes

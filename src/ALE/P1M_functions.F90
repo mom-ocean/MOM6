@@ -39,9 +39,8 @@ contains
 
 
 !------------------------------------------------------------------------------
-! p1m interpolation
-!------------------------------------------------------------------------------
-subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coefficients, h_neglect )
+!> Linearly interpolate between edge values
+subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
 ! ------------------------------------------------------------------------------
 ! Linearly interpolate between edge values.
 ! The resulting piecewise interpolant is stored in 'ppoly'.
@@ -62,7 +61,7 @@ subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coefficients, h_neglect )
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values,
                                            !! with the same units as u.
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !< Potentially modified
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Potentially modified
                                            !! piecewise polynomial coefficients, mainly
                                            !! with the same units as u.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width
@@ -85,8 +84,8 @@ subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coefficients, h_neglect )
     u0_l = ppoly_E(k,1)
     u0_r = ppoly_E(k,2)
 
-    ppoly_coefficients(k,1) = u0_l
-    ppoly_coefficients(k,2) = u0_r - u0_l
+    ppoly_coef(k,1) = u0_l
+    ppoly_coef(k,2) = u0_r - u0_l
 
   end do ! end loop on interior cells
 
@@ -94,9 +93,8 @@ end subroutine P1M_interpolation
 
 
 !------------------------------------------------------------------------------
-! p1m boundary extrapolation
-! -----------------------------------------------------------------------------
-subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
+!> Interpolation by linear polynomials within boundary cells
+subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
 !------------------------------------------------------------------------------
 ! Interpolation by linear polynomials within boundary cells.
 ! The left and right edge values in the left and right boundary cells,
@@ -106,18 +104,20 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 ! h:     thicknesses of grid cells
 ! u:     cell averages to use in constructing piecewise polynomials
 ! ppoly_E : edge values of piecewise polynomials
-! ppoly_coefficients : coefficients of piecewise polynomials
+! ppoly_coef : coefficients of piecewise polynomials
 !
 ! It is assumed that the size of the array 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed here.
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,            intent(in)    :: N ! Number of cells
-  real, dimension(:), intent(in)    :: h ! cell widths (size N)
-  real, dimension(:), intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell averages (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E !< edge values of piecewise polynomials,
+                                           !! with the same units as u.
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly
+                                           !! with the same units as u.
 
   ! Local variables
   real          :: u0, u1               ! cell averages
@@ -157,8 +157,8 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
     ppoly_E(1,1) = u0
   end if
 
-  ppoly_coefficients(1,1) = ppoly_E(1,1)
-  ppoly_coefficients(1,2) = ppoly_E(1,2) - ppoly_E(1,1)
+  ppoly_coef(1,1) = ppoly_E(1,1)
+  ppoly_coef(1,2) = ppoly_E(1,2) - ppoly_E(1,1)
 
   ! ------------------------------------------
   ! Right edge value in the left boundary cell
@@ -183,8 +183,8 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
     ppoly_E(N,2) = u1
   end if
 
-  ppoly_coefficients(N,1) = ppoly_E(N,1)
-  ppoly_coefficients(N,2) = ppoly_E(N,2) - ppoly_E(N,1)
+  ppoly_coef(N,1) = ppoly_E(N,1)
+  ppoly_coef(N,2) = ppoly_E(N,2) - ppoly_E(N,1)
 
 end subroutine P1M_boundary_extrapolation
 

@@ -18,8 +18,7 @@ use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 
 implicit none ; private
 
-type, public :: interp_CS_type
-  private
+type, public :: interp_CS_type ; private
 
   !> The following parameter is only relevant when used with the target
   !! interface densities regridding scheme. It indicates which interpolation
@@ -476,7 +475,9 @@ end function get_polynomial_coordinate
 
 !> Numeric value of interpolation_scheme corresponding to scheme name
 integer function interpolation_scheme(interp_scheme)
-  character(len=*), intent(in) :: interp_scheme !< Name of interpolation scheme
+  character(len=*), intent(in) :: interp_scheme !< Name of the interpolation scheme
+        !! Valid values include "P1M_H2", "P1M_H4", "P1M_IH2", "PLM", "PPM_H4",
+        !!   "PPM_IH4", "P3M_IH4IH3", "P3M_IH6IH5", "PQM_IH4IH3", and "PQM_IH6IH5"
 
   select case ( uppercase(trim(interp_scheme)) )
     case ("P1M_H2");     interpolation_scheme = INTERPOLATION_P1M_H2
@@ -494,18 +495,23 @@ integer function interpolation_scheme(interp_scheme)
   end select
 end function interpolation_scheme
 
+!> Store the interpolation_scheme value in the interp_CS based on the input string.
 subroutine set_interp_scheme(CS, interp_scheme)
-  type(interp_CS_type),  intent(inout) :: CS
-  character(len=*),      intent(in)    :: interp_scheme
+  type(interp_CS_type), intent(inout) :: CS  !< A control structure for regrid_interp
+  character(len=*),     intent(in) :: interp_scheme !< Name of the interpolation scheme
+        !! Valid values include "P1M_H2", "P1M_H4", "P1M_IH2", "PLM", "PPM_H4",
+        !!   "PPM_IH4", "P3M_IH4IH3", "P3M_IH6IH5", "PQM_IH4IH3", and "PQM_IH6IH5"
 
   CS%interpolation_scheme = interpolation_scheme(interp_scheme)
 end subroutine set_interp_scheme
 
-subroutine set_interp_extrap(CS, extrapolation)
-  type(interp_CS_type), intent(inout) :: CS
-  logical,              intent(in)    :: extrapolation
+!> Store the boundary_extrapolation value in the interp_CS
+subroutine set_interp_extrap(CS, extrap)
+  type(interp_CS_type), intent(inout) :: CS  !< A control structure for regrid_interp
+  logical,              intent(in)    :: extrap !< Indicate whether high-order boundary
+                                             !! extrapolation should be used in boundary cells
 
-  CS%boundary_extrapolation = extrapolation
+  CS%boundary_extrapolation = extrap
 end subroutine set_interp_extrap
 
 end module regrid_interp
