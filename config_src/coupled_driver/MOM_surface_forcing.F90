@@ -1009,7 +1009,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
   CS%diag => diag
 
-  call write_version_number (version)
+  call write_version_number(version)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
 

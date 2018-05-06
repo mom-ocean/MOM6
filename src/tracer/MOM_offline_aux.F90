@@ -578,7 +578,7 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
 
     call diurnal_solar(G%geoLatT(i,j)*rad, G%geoLonT(i,j)*rad, Time_start, cosz=cosz_dt, &
                        fracday=fracday_dt, rrsun=rrsun_dt, dt_time=dt_here)
-    call daily_mean_solar (G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
+    call daily_mean_solar(G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
     diurnal_factor = cosz_dt*fracday_dt*rrsun_dt / &
                      max(1e-30, cosz_day*fracday_day*rrsun_day)
 

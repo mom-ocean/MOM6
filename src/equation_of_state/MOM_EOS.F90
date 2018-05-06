@@ -1680,10 +1680,10 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
     S_node(9) = 0.5 * ( S_node(6) + S_node(8) )
     S_node(7) = 0.5 * ( S_node(3) + S_node(4) )
 
-    call calculate_density ( T_node, S_node, p_node, r_node, 1, 9, EOS )
+    call calculate_density( T_node, S_node, p_node, r_node, 1, 9, EOS )
     r_node = r_node - rho_ref
 
-    call compute_integral_quadratic ( x, y, r_node, intx_dpa(i-ioff,j-joff) )
+    call compute_integral_quadratic( x, y, r_node, intx_dpa(i-ioff,j-joff) )
 
     intx_dpa(i-ioff,j-joff) = intx_dpa(i-ioff,j-joff) * G_e
 
@@ -1755,8 +1755,8 @@ subroutine compute_integral_quadratic ( x, y, f, integral )
   do k = 1,9
 
     ! Evaluate shape functions and gradients for isomorphism
-    call evaluate_shape_bilinear ( xi(k), eta(k), phiiso, &
-                                   dphiisodxi, dphiisodeta )
+    call evaluate_shape_bilinear( xi(k), eta(k), phiiso, &
+                                  dphiisodxi, dphiisodeta )
 
     ! Determine gradient of global coordinate at integration point
     dxdxi  = 0.0
@@ -1775,7 +1775,7 @@ subroutine compute_integral_quadratic ( x, y, f, integral )
     jacobian_k = dxdxi*dydeta - dydxi*dxdeta
 
     ! Evaluate shape functions for interpolation
-    call evaluate_shape_quadratic ( xi(k), eta(k), phi, dphidxi, dphideta )
+    call evaluate_shape_quadratic( xi(k), eta(k), phi, dphidxi, dphideta )
 
     ! Evaluate function at integration point
     f_k = 0.0

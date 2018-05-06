@@ -223,7 +223,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8)
     CS%max_Energy = 10.0 * maxvel**2
-    call log_param (param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
+    call log_param(param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
   endif
 
   call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
