@@ -136,7 +136,7 @@ type, public :: sum_output_CS ; private
                                 ! Start_time is set in MOM_initialization.F90
   integer, pointer :: ntrunc    ! The number of times the velocity has been
                                 ! truncated since the last call to write_energy.
-  real    :: max_Energy         ! The maximum permitted energy per unit mass;
+  real    :: max_Energy         ! The maximum permitted energy per unit mass
                                 ! If there is more energy than this, the model
                                 ! should stop, in m2 s-2.
   integer :: maxtrunc           ! The number of truncations per energy save
@@ -1328,7 +1328,7 @@ subroutine read_depth_list(G, CS, filename)
 
   mdl = "MOM_sum_output read_depth_list:"
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
+  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
     call MOM_error(FATAL,mdl//" Difficulties opening "//trim(filename)// &
         " - "//trim(NF90_STRERROR(status)))

@@ -22,7 +22,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 !> Variable mixing coefficients
-type, public :: VarMix_CS ;
+type, public :: VarMix_CS
   logical :: use_variable_mixing  !< If true, use the variable mixing.
   logical :: Resoln_scaled_Kh     !< If true, scale away the Laplacian viscosity
                                   !! when the deformation radius is well resolved.
@@ -685,7 +685,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
   enddo ! k
 !$OMP do
-  do j = js,je;
+  do j = js,je
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
     enddo ; enddo

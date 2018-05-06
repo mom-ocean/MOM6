@@ -222,7 +222,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   type(diffusivity_diags)  :: dd ! structure w/ arrays of pointers to avail diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_f, S_f      ! temperature and salinity (deg C and ppt);
+    T_f, S_f      ! temperature and salinity (deg C and ppt)
                   ! massless layers filled vertically by diffusion.
 
   real, dimension(SZI_(G),SZK_(G)) :: &
@@ -1851,7 +1851,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   ! These default values always need to be set.
   CS%BBL_mixing_as_max = .true.
-  CS%Kdml = 0.0 ; CS%cdrag = 0.003 ; CS%BBL_effic = 0.0 ;
+  CS%Kdml = 0.0 ; CS%cdrag = 0.003 ; CS%BBL_effic = 0.0
   CS%bulkmixedlayer = (GV%nkml > 0)
 
 

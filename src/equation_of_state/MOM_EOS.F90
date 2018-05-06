@@ -1575,7 +1575,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
     !rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
     !       rho_ref
 
-    rho_anom = 1000.0 + S(i,j) - rho_ref;
+    rho_anom = 1000.0 + S(i,j) - rho_ref
     dpa(i-ioff,j-joff) = G_e*dz*rho_anom
 
     ! Use a Bode's-rule-like fifth-order accurate estimate of

@@ -248,7 +248,7 @@ end subroutine initialize_ice_thickness_channel
 !                  "flux condition", default=.true.)
 
 !   select case ( trim(config) )
-!     case ("CHANNEL");
+!     case ("CHANNEL")
 !       call initialize_ice_shelf_boundary_channel(u_face_mask_boundary, &
 !         v_face_mask_boundary, u_flux_boundary_values, v_flux_boundary_values, &
 !         u_boundary_values, v_boundary_values, h_boundary_values, hmask, G, &

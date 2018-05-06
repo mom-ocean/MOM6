@@ -1039,7 +1039,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
-    enddo ; enddo ;
+    enddo ; enddo
   endif ! Simmons
 
   ! Polzin:
@@ -1125,7 +1125,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
-    enddo ; enddo;
+    enddo ; enddo
   endif ! Polzin
 
 end subroutine add_int_tide_diffusivity

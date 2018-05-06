@@ -162,10 +162,10 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
         enddo ; enddo ; enddo
       else
         !$OMP parallel do default(shared)
-        do j=js,je ; do i=is,ie ;
+        do j=js,je ; do i=is,ie
           optics%sw_pen_band(1,i,j) = (CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
           optics%sw_pen_band(2,i,j) = (1.-CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
-        enddo ; enddo ;
+        enddo ; enddo
       endif
     else
       do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands

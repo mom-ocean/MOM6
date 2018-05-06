@@ -2977,7 +2977,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
       h_det_to_h1 = h_to_bl - h_det_to_h2
       h_ml_to_h1 = MAX(h_min_bl-h_det_to_h1,0.0)
 
-      Ih = 1.0/h_min_bl;
+      Ih = 1.0/h_min_bl
       Ihdet = 0.0 ; if (h_to_bl > 0.0) Ihdet = 1.0 / h_to_bl
       Ih1f = 1.0 / (h_det_to_h1 + h_ml_to_h1)
 

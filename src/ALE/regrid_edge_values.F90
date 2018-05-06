@@ -152,7 +152,7 @@ end subroutine bound_edge_values
 !> Replace discontinuous collocated edge values with their average
 subroutine average_discontinuous_edge_values( N, edge_val )
   integer,              intent(in)    :: N !< Number of cells
-  real, dimension(:,:), intent(inout) :: edge_val !< Edge values that may be modified;
+  real, dimension(:,:), intent(inout) :: edge_val !< Edge values that may be modified
                                            !! the second index size is 2.
 ! ------------------------------------------------------------------------------
 ! For each interior edge, check whether the edge values are discontinuous.
@@ -253,7 +253,7 @@ subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
 !
 ! Boundary edge values are set to be equal to the boundary cell averages.
 ! ------------------------------------------------------------------------------
- 
+
   ! Local variables
   integer   :: k        ! loop index
   real      :: h0, h1   ! cell widths

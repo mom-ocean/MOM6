@@ -654,7 +654,7 @@ subroutine sum_En(G, CS, En, label)
   call get_time(CS%Time, seconds)
   days = real(seconds) * Isecs_per_day
 
-  En_sum = 0.0;
+  En_sum = 0.0
   tmpForSumming = 0.0
   do a=1,CS%nAngle
     tmpForSumming = global_area_mean(En(:,:,a),G)*G%areaT_global
@@ -664,7 +664,7 @@ subroutine sum_En(G, CS, En, label)
   if (CS%En_sum /= 0.0) then
     En_sum_pdiff= (En_sum_diff/CS%En_sum)*100.0
   else
-    En_sum_pdiff= 0.0;
+    En_sum_pdiff= 0.0
   endif
   CS%En_sum = En_sum
   !! Print to screen
@@ -864,7 +864,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   enddo
 
   !### There should also be refraction due to cn.grad(grid_orientation).
-  CFL_ang(:,:,:) = 0.0;
+  CFL_ang(:,:,:) = 0.0
   do j=js,je
   ! Copy En into angle space with halos.
     do a=1,na ; do i=is,ie
@@ -1096,10 +1096,10 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
 
   if (CS%corner_adv) then
     ! IMPLEMENT CORNER ADVECTION IN HORIZONTAL--------------------
-    ! FIND AVERAGE GROUP VELOCITY (SPEED) AT CELL CORNERS;
+    ! FIND AVERAGE GROUP VELOCITY (SPEED) AT CELL CORNERS
     ! NOTE: THIS HAS NOT BE ADAPTED FOR REFLECTION YET (BDM)!!
     ! Fix indexing here later
-    speed(:,:) = 0;
+    speed(:,:) = 0
     do J=jsh-1,jeh ; do I=ish-1,ieh
       f2 = G%CoriolisBu(I,J)**2
       speed(I,J) = 0.25*(cn(i,j) + cn(i+1,j) + cn(i+1,j+1) + cn(i,j+1)) * &
@@ -1199,7 +1199,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   real :: TwoPi, Angle_size
   real :: energized_angle ! angle through center of current wedge
   real :: theta ! angle at edge of wedge
-  real :: Nsubrays     ! number of sub-rays for averaging;
+  real :: Nsubrays     ! number of sub-rays for averaging
                        ! count includes the two rays that bound the current wedge,
                        ! i.e. those at -dtheta/2 and +dtheta/2 from energized angle
   real :: I_Nsubwedges ! inverse of number of sub-wedges
@@ -1323,7 +1323,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
       aW = 0.0; aSW = 0.0; aS = 0.0; ! initialize areas
       aSE = 0.0; aE = 0.0; aC = 0.0; ! initialize areas
       if (0.0 <= theta .and. theta < 0.25*TwoPi) then
-          xCrn = x(I-1,J-1); yCrn = y(I-1,J-1);
+          xCrn = x(I-1,J-1); yCrn = y(I-1,J-1)
           ! west area
           a1 = (yN - yCrn)*(0.5*(xN + xCrn))
           a2 = (yCrn - yW)*(0.5*(xCrn + xW))
@@ -1349,7 +1349,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a4 = (yN - yNE)*(0.5*(xN + xNE))
           aC = a1 + a2 + a3 + a4
       elseif (0.25*TwoPi <= theta .and. theta < 0.5*TwoPi) then
-          xCrn = x(I,J-1); yCrn = y(I,J-1);
+          xCrn = x(I,J-1); yCrn = y(I,J-1)
           ! south area
           a1 = (yCrn - yS)*(0.5*(xCrn + xS))
           a2 = (yS - ySW)*(0.5*(xS + xSW))
@@ -1375,7 +1375,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a4 = (yNW - yN)*(0.5*(xNW + xN))
           aC = a1 + a2 + a3 + a4
       elseif (0.5*TwoPi <= theta .and. theta < 0.75*TwoPi) then
-          xCrn = x(I,J); yCrn = y(I,J);
+          xCrn = x(I,J); yCrn = y(I,J)
           ! east area
           a1 = (yE - ySE)*(0.5*(xE + xSE))
           a2 = (ySE - yS)*(0.5*(xSE + xS))
@@ -1401,7 +1401,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a4 = (yW - yCrn)*(0.5*(xW + xCrn))
           aC = a1 + a2 + a3 + a4
       elseif (0.75*TwoPi <= theta .and. theta <= 1.00*TwoPi) then
-          xCrn = x(I-1,J); yCrn = y(I-1,J);
+          xCrn = x(I-1,J); yCrn = y(I-1,J)
           ! north area
           a1 = (yNE - yE)*(0.5*(xNE + xE))
           a2 = (yE - yCrn)*(0.5*(xE + xCrn))
@@ -1413,7 +1413,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a2 = (yCrn - yW)*(0.5*(xCrn + xW))
           a3 = (yW - yNW)*(0.5*(xW + xNW))
           a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aNW = a1 + a2 + a3 + a4;
+          aNW = a1 + a2 + a3 + a4
           ! west area
           a1 = (yCrn - yS)*(0.5*(xCrn + xS))
           a2 = (yS - ySW)*(0.5*(xS + xSW))
@@ -1768,7 +1768,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   isc = G%isc  ; iec = G%iec  ; jsc = G%jsc  ; jec = G%jec
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
 
-  TwoPi = 8.0*atan(1.0);
+  TwoPi = 8.0*atan(1.0)
   Angle_size = TwoPi / (real(NAngle))
 
   do a=1,NAngle
@@ -2498,7 +2498,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
-    ! Compute the fixed part; units are [kg m-2] here;
+    ! Compute the fixed part; units are [kg m-2] here
     ! will be multiplied by N and En to get into [W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * h2(i,j)

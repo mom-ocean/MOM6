@@ -116,7 +116,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
       x = -z_unif(k)
 
       if ( x <= x1 ) then
-        t = y1*x/x1;
+        t = y1*x/x1
       else if ( (x > x1 ) .and. ( x < x2 )) then
         t = y1 + (y2-y1) * (x-x1) / (x2-x1)
       else
@@ -136,7 +136,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1
 
       x = G%geoLonT(i,j) / G%len_lon
-      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z;
+      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z
 
       if ( k == 1 ) then
         displ(k) = 0.0
@@ -236,7 +236,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   !  S(:,:,k) = S(:,:,k-1) + delta_S
   !end do
 
-  deltah = G%max_depth / nz;
+  deltah = G%max_depth / nz
   do j=js,je ; do i=is,ie
     xi0 = 0.0
     do k = 1,nz

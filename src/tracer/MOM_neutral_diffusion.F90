@@ -483,7 +483,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
 
         dTracer(:) = 0.
-        do ks = 1,CS%nsurf-1 ;
+        do ks = 1,CS%nsurf-1
           k = CS%uKoL(I,j,ks)
           dTracer(k) = dTracer(k) + Coef_x(I,j)   * uFlx(I,j,ks)
           k = CS%uKoR(I-1,j,ks)
@@ -513,7 +513,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
       do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
         trans_x_2d(I,j) = 0.
         if (G%mask2dCu(I,j)>0.) then
-          do ks = 1,CS%nsurf-1 ;
+          do ks = 1,CS%nsurf-1
             trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
           enddo
           trans_x_2d(I,j) = trans_x_2d(I,j) * Idt
@@ -528,7 +528,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
       do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
         trans_y_2d(i,J) = 0.
         if (G%mask2dCv(i,J)>0.) then
-          do ks = 1,CS%nsurf-1 ;
+          do ks = 1,CS%nsurf-1
             trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
           enddo
           trans_y_2d(i,J) = trans_y_2d(i,J) * Idt
@@ -1850,7 +1850,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 1.0, 0.0, 0.5, 1.0/), & ! pR
                                    (/0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column slightly cooler')
-  Tl = (/18.,14.,10./) ; Tr = (/20.,16.,12./) ;
+  Tl = (/18.,14.,10./) ; Tr = (/20.,16.,12./)
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )

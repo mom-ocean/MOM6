@@ -1099,7 +1099,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, &
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
   type(wave_parameters_CS), &
-                  optional, pointer       :: Waves  !< Container for wave related parameters;
+                  optional, pointer       :: Waves  !< Container for wave related parameters
                                                     !! the fields in Waves are intent in here.
 
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
@@ -2611,7 +2611,7 @@ end subroutine adjust_ssh_for_p_atm
 subroutine extract_surface_state(CS, sfc_state)
   type(MOM_control_struct), pointer       :: CS !< Master MOM control structure
   type(surface),            intent(inout) :: sfc_state !< transparent ocean surface state
-                                                !! structure shared with the calling routine;
+                                                !! structure shared with the calling routine
                                                 !! data in this structure is intent out.
 
   ! local

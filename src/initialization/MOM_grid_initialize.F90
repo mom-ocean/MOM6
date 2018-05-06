@@ -477,7 +477,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
 
-  PI = 4.0*atan(1.0) ;
+  PI = 4.0*atan(1.0)
 
   call get_param(param_file, mdl, "AXIS_UNITS", units_temp, &
                  "The units for the Cartesian axes. Valid entries are: \n"//&

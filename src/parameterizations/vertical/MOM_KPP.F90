@@ -86,7 +86,7 @@ type, public :: KPP_CS ; private
   character(len=30) :: MatchTechnique  !< Method used in CVMix for setting diffusivity and NLT profile functions
   integer :: NLT_shape                 !< MOM6 over-ride of CVMix NLT shape function
   logical :: applyNonLocalTrans        !< If True, apply non-local transport to heat and scalars
-  logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero;
+  logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero
                                        !! for testing purposes.
   logical :: KPPisAdditive             !< If True, will add KPP diffusivity to initial diffusivity.
                                        !! If False, will replace initial diffusivity wherever KPP diffusivity
@@ -486,7 +486,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%id_EnhVt2 = register_diag_field('ocean_model', 'EnhVt2', diag%axesTL, Time, &
       'Langmuir number enhancement to Vt2 as used by [CVMix] KPP','nondim')
 
-  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0;
+  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0
   if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
   if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
