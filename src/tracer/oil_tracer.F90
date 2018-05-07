@@ -301,7 +301,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       CS%oil_source_i=i
       CS%oil_source_j=j
     endif
-  enddo; enddo
+  enddo ; enddo
 
   CS%Time => day
   CS%diag => diag

@@ -798,14 +798,14 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
          temp_x(i,j)=0.0
          temp_y(i,j)=0.0
       endif
-    enddo; enddo
+    enddo ; enddo
     ! Interpolate to u/v grids
     do j = G%jsc,G%jec ; do I = G%IscB,G%IecB
       CS%STKx0(I,j,b) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
-    enddo; enddo
+    enddo ; enddo
     do j = G%JscB,G%JecB ; do i = G%isc,G%iec
       CS%STKy0(i,J,b) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
-    enddo; enddo
+    enddo ; enddo
     ! Disperse into halo on u/v grids
     call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain, To_ALL)
   enddo
@@ -895,7 +895,7 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, I, J, &
 
   if (.not.(WaveMethod==LF17)) then
     LA = max(0.1,sqrt(USTAR/(LA_STK+1.e-8)))
-  end if
+  endif
 
   if (LA_Misalignment) then
     WaveDirection = atan2(LA_STKy,LA_STKx)

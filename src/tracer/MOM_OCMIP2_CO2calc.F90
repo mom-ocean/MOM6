@@ -421,7 +421,7 @@ else
   swap=fl
   fl=fh
   fh=swap
-end if
+endif
 drtsafe=0.5*(x1+x2)
 dxold=abs(x2-x1)
 dx=dxold
@@ -446,7 +446,7 @@ do j=1,maxit  !{
 !     write (6,*) 'Exiting drtsafe at B on iteration  ', j, ', ph = ', -log10(drtsafe)
       return
     endif
-  end if
+  endif
   if (abs(dx) < xacc) then
 !     write (6,*) 'Exiting drtsafe at C on iteration  ', j, ', ph = ', -log10(drtsafe)
     return
@@ -459,7 +459,7 @@ do j=1,maxit  !{
   else
     xh=drtsafe
     fh=f
-  end if
+  endif
 enddo  !} j
 
 return

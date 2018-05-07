@@ -45,7 +45,7 @@ real function evaluation_polynomial( coeff, ncoef, x )
   f = 0.0
   do k = 1,ncoef
     f = f + coeff(k) * ( x**(k-1) )
-  end do
+  enddo
 
   evaluation_polynomial = f
 
@@ -73,7 +73,7 @@ real function first_derivative_polynomial( coeff, ncoef, x )
   f = 0.0
   do k = 2,ncoef
     f = f + REAL(k-1)*coeff(k) * ( x**(k-2) )
-  end do
+  enddo
 
   first_derivative_polynomial = f
 
@@ -99,7 +99,7 @@ real function integration_polynomial( xi0, xi1, Coeff, npoly )
 
   do k = 1,npoly+1
     integral = integral + Coeff(k) * (xi1**k - xi0**k) / real(k)
-  end do
+  enddo
 !
 !One non-answer-changing way of unrolling the above is:
 !  k=1

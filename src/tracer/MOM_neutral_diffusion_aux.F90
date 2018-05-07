@@ -507,7 +507,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         fa = fb
         fb = fc
         fc = fa
-      end if
+      endif
       tol = 2. * machep * abs ( sb ) + CS%xtol
       m = 0.5 * ( c - sb )
       if ( abs ( m ) <= tol .or. fb == 0. ) then
@@ -526,12 +526,12 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
           r = fb / fc
           p = s0 * ( 2. * m * q * ( q - r ) - ( sb - sa ) * ( r - 1. ) )
           q = ( q - 1. ) * ( r - 1. ) * ( s0 - 1. )
-        end if
+        endif
         if ( 0. < p ) then
           q = - q
         else
           p = - p
-        end if
+        endif
         s0 = e
         e = d
         if ( 2. * p < 3. * m * q - abs ( tol * q ) .and. &
@@ -540,17 +540,17 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         else
           e = m
           d = e
-        end if
-      end if
+        endif
+      endif
       sa = sb
       fa = fb
       if ( tol < abs ( d ) ) then
         sb = sb + d
-      else if ( 0. < m ) then
+      elseif ( 0. < m ) then
         sb = sb + tol
       else
         sb = sb - tol
-      end if
+      endif
       call drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
                        sb, fb)
       if ( ( 0. < fb .and. 0. < fc ) .or. &
@@ -559,7 +559,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         fc = fa
         e = sb - sa
         d = e
-      end if
+      endif
     enddo
     ! Modified from original to ensure that the minimum is found
     fa = ABS(fa) ; fb = ABS(fb) ; fc = ABS(fc)

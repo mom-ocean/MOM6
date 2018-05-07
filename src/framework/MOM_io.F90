@@ -216,7 +216,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
-  end do
+  enddo
 
   if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
     if (.not.domain_set) call MOM_error(FATAL, "create_file: "//&
@@ -260,13 +260,13 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     ! Set appropriate units, depending on the value.
     if (timeunit < 0.0) then
       time_units = "days" ! The default value.
-    else if ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+    elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
       time_units = "seconds"
-    else if ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+    elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
       time_units = "hours"
-    else if ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+    elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
       time_units = "days"
-    else if ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+    elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
       time_units = "years"
     else
       write(time_units,'(es8.2," s")') timeunit

@@ -643,7 +643,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
           if (oldfn >= ustarsq) then
             cycle
-          else if ((oldfn + Dfn) <= ustarsq) then
+          elseif ((oldfn + Dfn) <= ustarsq) then
             Dh = h_at_vel(i,k)
           else
             Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
@@ -659,7 +659,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
             if (oldfn >= ustarsq) then
               cycle
-            else if ((oldfn + Dfn) <= ustarsq) then
+            elseif ((oldfn + Dfn) <= ustarsq) then
               Dh = h_at_vel(i,k)
             else
               Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)

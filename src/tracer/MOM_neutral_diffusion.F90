@@ -394,14 +394,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
     hEff_sum(:,:) = 0.
     do k = 1,CS%nsurf-1 ; do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
       hEff_sum(i,j) = hEff_sum(i,j) + CS%uhEff(i,j,k)
-    enddo ; enddo; enddo
+    enddo ; enddo ; enddo
     call post_data(CS%id_uhEff_2d, hEff_sum, CS%diag)
   endif
   if (CS%id_vhEff_2d>0) then
     hEff_sum(:,:) = 0.
     do k = 1,CS%nsurf-1 ; do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
       hEff_sum(i,j) = hEff_sum(i,j) + CS%vhEff(i,j,k)
-    enddo ; enddo; enddo
+    enddo ; enddo ; enddo
     call post_data(CS%id_vhEff_2d, hEff_sum, CS%diag)
   endif
 

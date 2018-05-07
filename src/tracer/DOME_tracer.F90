@@ -214,7 +214,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !      This adds the stripes of tracer to every layer.
             CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + tr_y
         enddo
-      enddo; enddo; enddo
+      enddo ; enddo ; enddo
 
       if (NTR > 7) then
         do j=js,je ; do i=is,ie

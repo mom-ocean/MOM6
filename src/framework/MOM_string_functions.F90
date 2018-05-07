@@ -42,7 +42,7 @@ function lowercase(input_string)
   do k=1, len_trim(input_string)
     if (lowercase(k:k) >= 'A' .and. lowercase(k:k) <= 'Z') &
         lowercase(k:k) = achar(ichar(lowercase(k:k))+co)
-  end do
+  enddo
 end function lowercase
 
 function uppercase(input_string)
@@ -59,7 +59,7 @@ function uppercase(input_string)
   do k=1, len_trim(input_string)
     if (uppercase(k:k) >= 'a' .and. uppercase(k:k) <= 'z') &
         uppercase(k:k) = achar(ichar(uppercase(k:k))+co)
-  end do
+  enddo
 end function uppercase
 
 function left_int(i)

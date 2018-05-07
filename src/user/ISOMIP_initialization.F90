@@ -238,7 +238,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
       h(i,j,:) = GV%m_to_H * delta_h
-    end do ; end do
+    enddo ; enddo
 
   case default
       call MOM_error(FATAL,"isomip_initialize: "// &
@@ -570,7 +570,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
        do j=js,je ; do i=is,ie
          delta_h = G%bathyT(i,j) / dfloat(nz)
          h(i,j,:) = delta_h
-       end do ; end do
+       enddo ; enddo
 
       case default
          call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &

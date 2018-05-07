@@ -120,7 +120,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   if (calc_modal_structure) then
     do k=1,nz; do j=js,je; do i=is,ie
       modal_structure(i,j,k) = 0.0
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
   endif
 
   S => tv%S ; T => tv%T

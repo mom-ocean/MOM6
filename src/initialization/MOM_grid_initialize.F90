@@ -538,7 +538,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   if (units_temp(1:1) == 'k') then ! Axes are measured in km.
     dx_everywhere = 1000.0 * G%len_lon / (REAL(niglobal))
     dy_everywhere = 1000.0 * G%len_lat / (REAL(njglobal))
-  else if (units_temp(1:1) == 'm') then ! Axes are measured in m.
+  elseif (units_temp(1:1) == 'm') then ! Axes are measured in m.
     dx_everywhere = G%len_lon / (REAL(niglobal))
     dy_everywhere = G%len_lat / (REAL(njglobal))
   else ! Axes are measured in degrees of latitude and longitude.
@@ -679,7 +679,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !   G%dxBu(I,J) = G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
     G%dyBu(I,J) = G%Rad_Earth * dLat*PI_180
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = grid_LonT(i)
@@ -690,7 +690,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     G%dxCv(i,J) = G%Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
 !   G%dxCv(i,J) = G%Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
     G%dyCv(i,J) = G%Rad_Earth * dLat*PI_180
-  enddo; enddo
+  enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
     G%geoLonCu(I,j) = grid_lonB(I)
@@ -701,7 +701,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     G%dxCu(I,j) = G%Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
 !   G%dxCu(I,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
     G%dyCu(I,j) = G%Rad_Earth * dLat*PI_180
-  enddo; enddo
+  enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_LonT(i)
@@ -717,7 +717,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
 !   G%areaT(i,j) = Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
     G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   call callTree_leave("set_grid_metrics_spherical()")
 end subroutine set_grid_metrics_spherical
@@ -1207,7 +1207,7 @@ function Int_dj_dy(y, GP)
 
     if (y >= y_eq_enhance) then
       r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
-    else if (y <= -y_eq_enhance) then
+    elseif (y <= -y_eq_enhance) then
       r = r - I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
     else
       r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0) * &
