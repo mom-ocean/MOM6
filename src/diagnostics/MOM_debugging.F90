@@ -96,12 +96,12 @@ end subroutine MOM_debugging_init
 
 subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
-  character(len=*),                    intent(in)    :: mesg
+  character(len=*),                    intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%jsd:,:),   intent(in)    :: u_comp
-  real, dimension(G%isd:,G%JsdB:,:),   intent(in)    :: v_comp
-  integer,                   optional, intent(in)    :: is, ie, js, je
-  integer,                   optional, intent(in)    :: direction
+  real, dimension(G%IsdB:,G%jsd:,:),   intent(in)    :: u_comp !< The u-component of the vector to be checked for consistency
+  real, dimension(G%isd:,G%JsdB:,:),   intent(in)    :: v_comp !< The u-component of the vector to be checked for consistency
+  integer,                   optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
+  integer,                   optional, intent(in)    :: direction !< the direction flag to be passed to pass_vector
 ! Arguments: u_comp - The u-component of the vector being checked.
 !  (in)      v_comp - The v-component of the vector being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -125,12 +125,12 @@ end subroutine  check_redundant_vC3d
 
 subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
-  character(len=*),                intent(in)    :: mesg
+  character(len=*),                intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),           intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp
-  real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp
-  integer,               optional, intent(in)    :: is, ie, js, je
-  integer,               optional, intent(in)    :: direction
+  real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector to be checked for consistency
+  real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp !< The u-component of the vector to be checked for consistency
+  integer,               optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
+  integer,               optional, intent(in)    :: direction !< the direction flag to be passed to pass_vector
 ! Arguments: u_comp - The u-component of the vector being checked.
 !  (in)      v_comp - The v-component of the vector being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -199,10 +199,10 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 end subroutine  check_redundant_vC2d
 
 subroutine check_redundant_sB3d(mesg, array, G, is, ie, js, je)
-  character(len=*),                     intent(in)    :: mesg
+  character(len=*),                     intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),                intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:,:),   intent(in)    :: array
-  integer,                    optional, intent(in)    :: is, ie, js, je
+  real, dimension(G%IsdB:,G%JsdB:,:),   intent(in)    :: array !< The array to be checked for consistency
+  integer,                    optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
 ! Arguments: array - The array being checked.
 !  (in)      mesg - A message indicating what is being checked.
 !  (in)      G - The ocean's grid structure.
@@ -224,10 +224,10 @@ end subroutine  check_redundant_sB3d
 
 
 subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je)
-  character(len=*),                 intent(in)    :: mesg
+  character(len=*),                 intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: array
-  integer,                optional, intent(in)    :: is, ie, js, je
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: array !< The array to be checked for consistency
+  integer,                optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
 ! Arguments: array - The array being checked.
 !  (in)      mesg - A message indicating what is being checked.
 !  (in)      G - The ocean's grid structure.
@@ -284,12 +284,12 @@ end subroutine  check_redundant_sB2d
 
 subroutine check_redundant_vB3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
-  character(len=*),                    intent(in)    :: mesg
+  character(len=*),                    intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: u_comp
-  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: v_comp
-  integer,                   optional, intent(in)    :: is, ie, js, je
-  integer,                   optional, intent(in)    :: direction
+  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: u_comp !< The u-component of the vector to be checked for consistency
+  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: v_comp !< The u-component of the vector to be checked for consistency
+  integer,                   optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
+  integer,                   optional, intent(in)    :: direction !< the direction flag to be passed to pass_vector
 ! Arguments: u_comp - The u-component of the vector being checked.
 !  (in)      v_comp - The v-component of the vector being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -313,12 +313,12 @@ end subroutine  check_redundant_vB3d
 
 subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
-  character(len=*),                intent(in)    :: mesg
+  character(len=*),                intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: u_comp
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: v_comp
-  integer,               optional, intent(in)    :: is, ie, js, je
-  integer,               optional, intent(in)    :: direction
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: u_comp !< The u-component of the vector to be checked for consistency
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: v_comp !< The u-component of the vector to be checked for consistency
+  integer,               optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
+  integer,               optional, intent(in)    :: direction !< the direction flag to be passed to pass_vector
 ! Arguments: u_comp - The u-component of the vector being checked.
 !  (in)      v_comp - The v-component of the vector being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -388,10 +388,10 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 end subroutine  check_redundant_vB2d
 
 subroutine check_redundant_sT3d(mesg, array, G, is, ie, js, je)
-  character(len=*),                     intent(in)    :: mesg
+  character(len=*),                     intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),                intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:,:),     intent(in)    :: array
-  integer,                    optional, intent(in)    :: is, ie, js, je
+  real, dimension(G%isd:,G%jsd:,:),     intent(in)    :: array !< The array to be checked for consistency
+  integer,                    optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
 ! Arguments: array - The array being checked.
 !  (in)      mesg - A message indicating what is being checked.
 !  (in)      G - The ocean's grid structure.
@@ -413,10 +413,10 @@ end subroutine  check_redundant_sT3d
 
 
 subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
-  character(len=*),                 intent(in)    :: mesg
+  character(len=*),                 intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:),   intent(in)    :: array
-  integer,                optional, intent(in)    :: is, ie, js, je
+  real, dimension(G%isd:,G%jsd:),   intent(in)    :: array !< The array to be checked for consistency
+  integer,                optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
 ! Arguments: array - The array being checked.
 !  (in)      mesg - A message indicating what is being checked.
 !  (in)      G - The ocean's grid structure.
@@ -459,12 +459,12 @@ end subroutine  check_redundant_sT2d
 
 subroutine check_redundant_vT3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction)
-  character(len=*),                    intent(in)    :: mesg
+  character(len=*),                    intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: u_comp
-  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: v_comp
-  integer,                   optional, intent(in)    :: is, ie, js, je
-  integer,                   optional, intent(in)    :: direction
+  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: u_comp !< The u-component of the vector to be checked for consistency
+  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: v_comp !< The u-component of the vector to be checked for consistency
+  integer,                   optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
+  integer,                   optional, intent(in)    :: direction !< the direction flag to be passed to pass_vector
 ! Arguments: u_comp - The u-component of the vector being checked.
 !  (in)      v_comp - The v-component of the vector being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -488,12 +488,12 @@ end subroutine  check_redundant_vT3d
 
 subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction)
-  character(len=*),                intent(in)    :: mesg
+  character(len=*),                intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),           intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:),  intent(in)    :: u_comp
-  real, dimension(G%isd:,G%jsd:),  intent(in)    :: v_comp
-  integer,               optional, intent(in)    :: is, ie, js, je
-  integer,               optional, intent(in)    :: direction
+  real, dimension(G%isd:,G%jsd:),  intent(in)    :: u_comp !< The u-component of the vector to be checked for consistency
+  real, dimension(G%isd:,G%jsd:),  intent(in)    :: v_comp !< The u-component of the vector to be checked for consistency
+  integer,               optional, intent(in)    :: is, ie, js, je !< The range of indices to check for consistency
+  integer,               optional, intent(in)    :: direction !< the direction flag to be passed to pass_vector
 ! Arguments: u_comp - The u-component of the vector being checked.
 !  (in)      v_comp - The v-component of the vector being checked.
 !  (in)      mesg - A message indicating what is being checked.
