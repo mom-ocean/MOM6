@@ -1575,7 +1575,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
     !rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
     !       rho_ref
 
-    rho_anom = 1000.0 + S(i,j) - rho_ref;
+    rho_anom = 1000.0 + S(i,j) - rho_ref
     dpa(i-ioff,j-joff) = G_e*dz*rho_anom
 
     ! Use a Bode's-rule-like fifth-order accurate estimate of
@@ -1680,10 +1680,10 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
     S_node(9) = 0.5 * ( S_node(6) + S_node(8) )
     S_node(7) = 0.5 * ( S_node(3) + S_node(4) )
 
-    call calculate_density ( T_node, S_node, p_node, r_node, 1, 9, EOS )
+    call calculate_density( T_node, S_node, p_node, r_node, 1, 9, EOS )
     r_node = r_node - rho_ref
 
-    call compute_integral_quadratic ( x, y, r_node, intx_dpa(i-ioff,j-joff) )
+    call compute_integral_quadratic( x, y, r_node, intx_dpa(i-ioff,j-joff) )
 
     intx_dpa(i-ioff,j-joff) = intx_dpa(i-ioff,j-joff) * G_e
 
@@ -1755,8 +1755,8 @@ subroutine compute_integral_quadratic ( x, y, f, integral )
   do k = 1,9
 
     ! Evaluate shape functions and gradients for isomorphism
-    call evaluate_shape_bilinear ( xi(k), eta(k), phiiso, &
-                                   dphiisodxi, dphiisodeta )
+    call evaluate_shape_bilinear( xi(k), eta(k), phiiso, &
+                                  dphiisodxi, dphiisodeta )
 
     ! Determine gradient of global coordinate at integration point
     dxdxi  = 0.0
@@ -1775,7 +1775,7 @@ subroutine compute_integral_quadratic ( x, y, f, integral )
     jacobian_k = dxdxi*dydeta - dydxi*dxdeta
 
     ! Evaluate shape functions for interpolation
-    call evaluate_shape_quadratic ( xi(k), eta(k), phi, dphidxi, dphideta )
+    call evaluate_shape_quadratic( xi(k), eta(k), phi, dphidxi, dphideta )
 
     ! Evaluate function at integration point
     f_k = 0.0
@@ -2332,10 +2332,10 @@ subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "convert_temp_salt_to_TEOS10 called with an unassociated EOS_type EOS.")
 
-  if ((EOS%form_of_EOS .ne. EOS_TEOS10) .and. (EOS%form_of_EOS .ne. EOS_NEMO)) return
+  if ((EOS%form_of_EOS /= EOS_TEOS10) .and. (EOS%form_of_EOS /= EOS_NEMO)) return
 
   do k=1,kd ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if (mask_z(i,j,k) .ge. 1.0) then
+    if (mask_z(i,j,k) >= 1.0) then
      S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
 !     p=press(k)/10000. !convert pascal to dbar
 !     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),p,G%geoLonT(i,j),G%geoLatT(i,j))

@@ -1678,7 +1678,7 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
   ! reference surface layer salinity and temperature and a specified range.
   ! Note that the linear distribution is set up with respect to the layer
   ! number, not the physical position).
-  integer :: k;
+  integer :: k
   real  :: delta_S, delta_T
   real  :: S_top, T_top ! Reference salinity and temerature within surface layer
   real  :: S_range, T_range ! Range of salinities and temperatures over the vertical
@@ -1705,10 +1705,10 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
   if (just_read) return ! All run-time parameters have been read, so return.
 
 ! ! Prescribe salinity
-! delta_S = S_range / ( G%ke - 1.0 );
-! S(:,:,1) = S_top;
+! delta_S = S_range / ( G%ke - 1.0 )
+! S(:,:,1) = S_top
 ! do k = 2,G%ke
-!   S(:,:,k) = S(:,:,k-1) + delta_S;
+!   S(:,:,k) = S(:,:,k-1) + delta_S
 ! end do
   do k = 1,G%ke
     S(:,:,k) = S_top - S_range*((real(k)-0.5)/real(G%ke))
@@ -1716,13 +1716,13 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
   end do
 
 ! ! Prescribe temperature
-! delta_T = T_range / ( G%ke - 1.0 );
-! T(:,:,1) = T_top;
+! delta_T = T_range / ( G%ke - 1.0 )
+! T(:,:,1) = T_top
 ! do k = 2,G%ke
-!   T(:,:,k) = T(:,:,k-1) + delta_T;
+!   T(:,:,k) = T(:,:,k-1) + delta_T
 ! end do
-! delta = 1;
-! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0;
+! delta = 1
+! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_linear

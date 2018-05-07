@@ -445,7 +445,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
     tracer => Reg%Tr(m)
 
     ! for diagnostics
-    if(tracer%id_dfxy_conc    > 0 .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 .or. &
+    if (tracer%id_dfxy_conc    > 0 .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 .or. &
        tracer%id_dfx_2d       > 0 .or. tracer%id_dfy_2d > 0) then
        Idt              = 1.0/dt
        tendency(:,:,:)  = 0.0
@@ -483,7 +483,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
 
         dTracer(:) = 0.
-        do ks = 1,CS%nsurf-1 ;
+        do ks = 1,CS%nsurf-1
           k = CS%uKoL(I,j,ks)
           dTracer(k) = dTracer(k) + Coef_x(I,j)   * uFlx(I,j,ks)
           k = CS%uKoR(I-1,j,ks)
@@ -498,7 +498,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
                           ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
         enddo
 
-        if(tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
+        if (tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
           do k = 1, GV%ke
             tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
           enddo
@@ -509,11 +509,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
 
     ! Diagnose vertically summed zonal flux, giving zonal tracer transport from ndiff.
     ! Note sign corresponds to downgradient flux convention.
-    if(tracer%id_dfx_2d > 0) then
+    if (tracer%id_dfx_2d > 0) then
       do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
         trans_x_2d(I,j) = 0.
         if (G%mask2dCu(I,j)>0.) then
-          do ks = 1,CS%nsurf-1 ;
+          do ks = 1,CS%nsurf-1
             trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
           enddo
           trans_x_2d(I,j) = trans_x_2d(I,j) * Idt
@@ -524,11 +524,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
 
     ! Diagnose vertically summed merid flux, giving meridional tracer transport from ndiff.
     ! Note sign corresponds to downgradient flux convention.
-    if(tracer%id_dfy_2d > 0) then
+    if (tracer%id_dfy_2d > 0) then
       do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
         trans_y_2d(i,J) = 0.
         if (G%mask2dCv(i,J)>0.) then
-          do ks = 1,CS%nsurf-1 ;
+          do ks = 1,CS%nsurf-1
             trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
           enddo
           trans_y_2d(i,J) = trans_y_2d(i,J) * Idt
@@ -538,12 +538,12 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
     ! post tendency of tracer content
-    if(tracer%id_dfxy_cont > 0) then
+    if (tracer%id_dfxy_cont > 0) then
       call post_data(tracer%id_dfxy_cont, tendency(:,:,:), CS%diag)
     endif
 
     ! post depth summed tendency for tracer content
-    if(tracer%id_dfxy_cont_2d > 0) then
+    if (tracer%id_dfxy_cont_2d > 0) then
       tendency_2d(:,:) = 0.
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         do k = 1, GV%ke
@@ -556,7 +556,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
     ! post tendency of tracer concentration; this step must be
     ! done after posting tracer content tendency, since we alter
     ! the tendency array.
-    if(tracer%id_dfxy_conc > 0) then
+    if (tracer%id_dfxy_conc > 0) then
       do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
         tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
       enddo ; enddo ; enddo
@@ -1045,8 +1045,9 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns, Pres_l, hcol
   bot_connected_l(:) = .false. ; bot_connected_r(:) = .false.
 
   ! Check to make sure that polynomial reconstructions were passed if refine_pos defined)
-  if(CS%refine_position) then
-    if (.not. ( present(ppoly_T_l) .and. present(ppoly_S_l) .and. present(ppoly_T_r) .and. present(ppoly_S_r) )) &
+  if (CS%refine_position) then
+    if (.not. ( present(ppoly_T_l) .and. present(ppoly_S_l) .and. &
+                present(ppoly_T_r) .and. present(ppoly_S_r) ) ) &
         call MOM_error(FATAL, "fine_neutral_surface_positions_discontinuous: refine_pos is requested, but " //&
                               "polynomial coefficients not available for T and S")
   endif
@@ -1447,7 +1448,7 @@ subroutine neutral_surface_T_eval(nk, ns, k_sub, Ks, Ps, T_mean, T_int, deg, iMe
 
   ks_top = k_sub
   ks_bot = k_sub + 1
-  if ( Ks(ks_top) .ne. Ks(ks_bot) ) then
+  if ( Ks(ks_top) /= Ks(ks_bot) ) then
     call MOM_error(FATAL, "Neutral surfaces span more than one layer")
   endif
   kl = Ks(k_sub)
@@ -1849,7 +1850,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 1.0, 0.0, 0.5, 1.0/), & ! pR
                                    (/0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column slightly cooler')
-  Tl = (/18.,14.,10./) ; Tr = (/20.,16.,12./) ;
+  Tl = (/18.,14.,10./) ; Tr = (/20.,16.,12./)
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
@@ -2230,7 +2231,7 @@ logical function test_rnp(expected_pos, test_pos, title)
   if (test_rnp) then
     write(stdunit,'(A, f20.16, " .neq. ", f20.16, " <-- WRONG")') title, expected_pos, test_pos
   else
-    write(stdunit,'(A, f20.16, " .eq.  ", f20.16)') title, expected_pos, test_pos
+    write(stdunit,'(A, f20.16, " ==  ", f20.16)') title, expected_pos, test_pos
   endif
 end function test_rnp
 !> Deallocates neutral_diffusion control structure

@@ -314,7 +314,7 @@ subroutine coupler_type_copy_1d_2d(var_in, var_out, is, ie, js, je,     &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_1d_2d(var_in, var_out, (/ is, is, ie, ie /), (/ js, js, je, je /), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_2d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_1d_2d
@@ -365,7 +365,7 @@ subroutine coupler_type_copy_1d_3d(var_in, var_out, is, ie, js, je, kd, &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_1d_3d(var_in, var_out,  (/ is, is, ie, ie /), (/ js, js, je, je /), (/1, kd/), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_3d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_1d_3d
@@ -408,7 +408,7 @@ subroutine coupler_type_copy_2d_2d(var_in, var_out, is, ie, js, je,     &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_2d_2d(var_in, var_out, (/ is, is, ie, ie /), (/ js, js, je, je /), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_2d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_2d_2d
@@ -459,7 +459,7 @@ subroutine coupler_type_copy_2d_3d(var_in, var_out, is, ie, js, je, kd, &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_2d_3d(var_in, var_out,  (/ is, is, ie, ie /), (/ js, js, je, je /), (/1, kd/), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_3d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_2d_3d
@@ -502,7 +502,7 @@ subroutine coupler_type_copy_3d_2d(var_in, var_out, is, ie, js, je,     &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_3d_2d(var_in, var_out, (/ is, is, ie, ie /), (/ js, js, je, je /), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_2d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_3d_2d
@@ -553,7 +553,7 @@ subroutine coupler_type_copy_3d_3d(var_in, var_out, is, ie, js, je, kd, &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_3d_3d(var_in, var_out,  (/ is, is, ie, ie /), (/ js, js, je, je /), (/1, kd/), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_3d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_3d_3d

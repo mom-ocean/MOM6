@@ -162,10 +162,10 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
         enddo ; enddo ; enddo
       else
         !$OMP parallel do default(shared)
-        do j=js,je ; do i=is,ie ;
+        do j=js,je ; do i=is,ie
           optics%sw_pen_band(1,i,j) = (CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
           optics%sw_pen_band(2,i,j) = (1.-CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
-        enddo ; enddo ;
+        enddo ; enddo
       endif
     else
       do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
@@ -286,7 +286,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                          associated(fluxes%sw_nir_dif))
 
   chl_data(:,:) = 0.0
-  if(present(chl_in)) then
+  if (present(chl_in)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,1) ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_in(i,j,k) < 0.0)) then
@@ -312,7 +312,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   endif
 
   if (CS%id_chl > 0) then
-    if(present(chl_in)) then
+    if (present(chl_in)) then
       call post_data(CS%id_chl, chl_in(:,:,1), CS%diag)
     else
       call post_data(CS%id_chl, chl_data, CS%diag)
@@ -368,7 +368,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         enddo
       enddo ; enddo
     case default
-        call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
+      call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
     end select
 
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,CS,G,chl_in,optics,nbands) &
@@ -609,12 +609,12 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The number of bands of penetrating shortwave radiation.", &
                  default=1)
   if (CS%Opacity_scheme == DOUBLE_EXP ) then
-    if (optics%nbands.ne.2) then
+    if (optics%nbands /= 2) then
       call MOM_error(FATAL, "set_opacity: "// &
          "Cannot use a double_exp opacity scheme with nbands!=2.")
     endif
   elseif (CS%Opacity_scheme == SINGLE_EXP ) then
-    if (optics%nbands.ne.1) then
+    if (optics%nbands /= 1) then
       call MOM_error(FATAL, "set_opacity: "// &
          "Cannot use a single_exp opacity scheme with nbands!=1.")
     endif

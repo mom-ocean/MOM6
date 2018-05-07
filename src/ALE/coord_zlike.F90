@@ -28,8 +28,8 @@ contains
 !> Initialise a zlike_CS with pointers to parameters
 subroutine init_coord_zlike(CS, nk, coordinateResolution)
   type(zlike_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
-  integer,            intent(in) :: nk
-  real, dimension(:), intent(in) :: coordinateResolution
+  integer,            intent(in) :: nk !< Number of levels in the grid
+  real, dimension(:), intent(in) :: coordinateResolution !< Target coordinate resolution, in m
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_zlike: CS already associated!")
   allocate(CS)
@@ -52,7 +52,7 @@ end subroutine end_coord_zlike
 !> Set parameters in the zlike structure
 subroutine set_zlike_params(CS, min_thickness)
   type(zlike_CS), pointer    :: CS !< Coordinate control structure
-  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness
+  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness, in m
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_zlike_params: CS not associated")
 

@@ -577,7 +577,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
   h_neglect = GV%H_subroundoff
 
-  if(.not.CS%Use_MLD_Iteration) MAX_OBL_IT=1
+  if (.not.CS%Use_MLD_Iteration) MAX_OBL_IT=1
   C1_3 = 1.0 / 3.0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   IdtdR0 = 1.0 / (dt__diag * GV%Rho0)
@@ -784,7 +784,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
         sfc_connected(i) = .true.
 
-        if (CS%Mstar_Mode.gt.0) then
+        if (CS%Mstar_Mode > 0) then
         ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
         ! First solve for the TKE to PE length scale
           if (CS%MSTAR_MODE == CS%MLD_o_OBUKHOV) then
@@ -1152,7 +1152,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
             MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
 
-            if (pe_chg_g0 .gt. 0.0) then
+            if (pe_chg_g0 > 0.0) then
               !Negative buoyancy (increases PE)
               N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_NEG
             else
@@ -1252,7 +1252,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! There is not enough energy to support the mixing, so reduce the
               ! diffusivity to what can be supported.
               Kddt_h_max = Kddt_h_g0 ; Kddt_h_min = 0.0
-              TKE_left_max = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0) ;
+              TKE_left_max = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0)
               TKE_left_min = tot_TKE
 
               ! As a starting guess, take the minimum of a false position estimate
@@ -1925,7 +1925,7 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
 
   z0sm = 0.11 * nu / USTair; !Compute z0smooth from ustar guess
   u10 = USTair/sqrt(0.001);  !Guess for u10
-  u10a = 1000;
+  u10a = 1000
 
   CT=0
   do while (abs(u10a/u10-1.)>0.001)
@@ -1988,7 +1988,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
   real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
   real :: pi, u10
   pi = 4.0*atan(1.0)
-  if (ustar .gt. 0.0) then
+  if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
     call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
     ! surface Stokes drift
@@ -2203,7 +2203,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "at the edge of the boundary layer as a fraction of the \n"//&
                  "boundary layer thickness.  The default is 0.1.", &
                  units="nondim", default=0.1)
-  if ( CS%USE_MLD_ITERATION .and. abs(CS%transLay_scale-0.5).ge.0.5) then
+  if ( CS%USE_MLD_ITERATION .and. abs(CS%transLay_scale-0.5) >= 0.5) then
     call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//       &
                  "EPBL_TRANSITION should be greater than 0 and less than 1.")
   endif

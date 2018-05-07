@@ -241,7 +241,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth, &
                    "The (diagnosed) maximum depth of the ocean.", units="m")
   endif
-  if (trim(config) .ne. "DOME") then
+  if (trim(config) /= "DOME") then
     call limit_topography(D, G, PF, max_depth)
   endif
 

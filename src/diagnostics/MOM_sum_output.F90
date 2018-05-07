@@ -136,7 +136,7 @@ type, public :: sum_output_CS ; private
                                 ! Start_time is set in MOM_initialization.F90
   integer, pointer :: ntrunc    ! The number of times the velocity has been
                                 ! truncated since the last call to write_energy.
-  real    :: max_Energy         ! The maximum permitted energy per unit mass;
+  real    :: max_Energy         ! The maximum permitted energy per unit mass
                                 ! If there is more energy than this, the model
                                 ! should stop, in m2 s-2.
   integer :: maxtrunc           ! The number of truncations per energy save
@@ -223,7 +223,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8)
     CS%max_Energy = 10.0 * maxvel**2
-    call log_param (param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
+    call log_param(param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
   endif
 
   call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
@@ -232,7 +232,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
   call get_filename_appendix(filename_appendix)
-  if(len_trim(filename_appendix) > 0) then
+  if (len_trim(filename_appendix) > 0) then
      energyfile = trim(energyfile) //'.'//trim(filename_appendix)
   end if
 
@@ -881,7 +881,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
          write(*,'("      Total ",a,": ",ES24.16,X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
 
-         if(Tr_minmax_got(m)) then
+         if (Tr_minmax_got(m)) then
            write(*,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
                 Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
            write(*,'(64X,"Global Max:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
@@ -1328,7 +1328,7 @@ subroutine read_depth_list(G, CS, filename)
 
   mdl = "MOM_sum_output read_depth_list:"
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
+  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
     call MOM_error(FATAL,mdl//" Difficulties opening "//trim(filename)// &
         " - "//trim(NF90_STRERROR(status)))

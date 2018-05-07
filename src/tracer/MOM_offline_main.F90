@@ -299,7 +299,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       h_pre(i,j,k) = h_new(i,j,k)
     enddo ; enddo ; enddo
 
-    if(CS%debug) then
+    if (CS%debug) then
       call hchksum(h_vol,"h_vol before advect",G%HI)
       call uvchksum("[uv]htr_sub before advect", uhtr_sub, vhtr_sub, G%HI)
       write(debug_msg, '(A,I4.4)') 'Before advect ', iter
@@ -1032,7 +1032,7 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
     if (CS%Kd_max>0.) then
       CS%Kd(i,j,k) = MIN(CS%Kd_max, CS%Kd(i,j,k))
     endif
-  enddo ; enddo ; enddo ;
+  enddo ; enddo ; enddo
 
   do k=1,nz ; do J=js-1,je ; do i=is,ie
     if (CS%G%mask2dCv(i,J)<1.0) then
