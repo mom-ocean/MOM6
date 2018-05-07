@@ -2882,7 +2882,7 @@ subroutine extract_surface_state(CS, sfc_state)
           endif ! numberOfErrors
         endif ! localError
       endif ! mask2dT
-    enddo; enddo
+    enddo ; enddo
     call sum_across_PEs(numberOfErrors)
     if (numberOfErrors>0) then
       write(msg(1:240),'(3(a,i9,x))') 'There were a total of ',numberOfErrors, &

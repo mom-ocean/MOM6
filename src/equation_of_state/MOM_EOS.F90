@@ -2341,7 +2341,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
 !     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),p,G%geoLonT(i,j),G%geoLatT(i,j))
      T(i,j,k) = gsw_ct_from_pt(S(i,j,k),T(i,j,k))
     endif
-  enddo; enddo; enddo
+  enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10
 
 ! Extractor routine for the EOS type if the members need to be accessed outside this module

@@ -140,7 +140,7 @@ subroutine buildGridFromH(nz, h, x)
   x(1) = 0.0
   do k = 1,nz
     x(k+1) = x(k) + h(k)
-  end do
+  enddo
 
 end subroutine buildGridFromH
 
@@ -389,21 +389,21 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
       call PLM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       if ( CS%boundary_extrapolation ) then
         call PLM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect)
-      end if
+      endif
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge )
       call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       if ( CS%boundary_extrapolation ) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
-      end if
+      endif
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
       call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge )
       call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       if ( CS%boundary_extrapolation ) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
-      end if
+      endif
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
       call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge )
@@ -412,7 +412,7 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
       if ( CS%boundary_extrapolation ) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, &
                                             ppoly_r_coefs, h_neglect )
-      end if
+      endif
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
       call edge_values_implicit_h6( n0, h0, u0, ppoly_r_E, h_neglect_edge )
@@ -421,7 +421,7 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
       if ( CS%boundary_extrapolation ) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, &
                                             ppoly_r_coefs, h_neglect )
-      end if
+      endif
       iMethod = INTEGRATION_PQM
     case default
       call MOM_error( FATAL, 'MOM_remapping, build_reconstructions_1d: '//&
@@ -1119,7 +1119,7 @@ subroutine remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
     call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method, &
                                    xL, xR, h1(iTarget), u1(iTarget), jStart, xStart, h_neglect )
 
-  end do ! end iTarget loop on target grid cells
+  enddo ! end iTarget loop on target grid cells
 
 end subroutine remapByProjection
 
@@ -1206,7 +1206,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, dx1, &
       if (present(h1)) h1(iTarget) = hNew
     endif
 
-  end do ! end iTarget loop on target grid cells
+  enddo ! end iTarget loop on target grid cells
 
 end subroutine remapByDeltaZ
 
@@ -1321,7 +1321,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
 
-    end if ! end checking whether source cell is vanished
+    endif ! end checking whether source cell is vanished
 
   ! 2. Cell is not vanished
   else
@@ -1454,8 +1454,8 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
         do k = jL+1,jR-1
           q = q + h0(k) * u0(k)
           hAct = hAct + h0(k)
-        end do
-      end if
+        enddo
+      endif
 
       ! Integrate from left boundary of cell jR up to xR
       xi0 = 0.0
@@ -1494,7 +1494,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
 
-    end if ! end integration for non-vanished cells
+    endif ! end integration for non-vanished cells
 
     ! The cell average is the integrated value divided by the cell width
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
@@ -1507,7 +1507,7 @@ endif
     uAve = q / hC
 #endif
 
-  end if ! end if clause to check if cell is vanished
+  endif ! endif clause to check if cell is vanished
 
 end subroutine integrateReconOnInterval
 

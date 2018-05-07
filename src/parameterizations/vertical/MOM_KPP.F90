@@ -401,7 +401,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                    'Constant value to enhance VT2 in KPP.',  &
                    default=1.0)
     endif
-  end if
+  endif
 
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)

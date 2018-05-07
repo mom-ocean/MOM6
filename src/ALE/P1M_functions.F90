@@ -87,7 +87,7 @@ subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
     ppoly_coef(k,1) = u0_l
     ppoly_coef(k,2) = u0_r - u0_l
 
-  end do ! end loop on interior cells
+  enddo ! end loop on interior cells
 
 end subroutine P1M_interpolation
 
@@ -147,7 +147,7 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
 
   if ( (u1 - u0) * (ppoly_E(2,1) - u0_r) < 0.0 ) then
     slope = 2.0 * ( ppoly_E(2,1) - u0 )
-  end if
+  endif
 
   ! Using the limited slope, the left edge value is reevaluated and
   ! the interpolant coefficients recomputed
@@ -155,7 +155,7 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
     ppoly_E(1,1) = u0 - 0.5 * slope
   else
     ppoly_E(1,1) = u0
-  end if
+  endif
 
   ppoly_coef(1,1) = ppoly_E(1,1)
   ppoly_coef(1,2) = ppoly_E(1,2) - ppoly_E(1,1)
@@ -175,13 +175,13 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
 
   if ( (u1 - u0) * (u0_l - ppoly_E(N-1,2)) < 0.0 ) then
     slope = 2.0 * ( u1 - ppoly_E(N-1,2) )
-  end if
+  endif
 
   if ( h1 /= 0.0 ) then
     ppoly_E(N,2) = u1 + 0.5 * slope
   else
     ppoly_E(N,2) = u1
-  end if
+  endif
 
   ppoly_coef(N,1) = ppoly_E(N,1)
   ppoly_coef(N,2) = ppoly_E(N,2) - ppoly_E(N,1)

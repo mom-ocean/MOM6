@@ -273,11 +273,11 @@ program MOM_main
   else
     calendar = uppercase(calendar)
     if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
-    else if (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
-    else if (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
-    else if (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
-    else if (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
-    else if (calendar(1:1) /= ' ') then
+    elseif (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
+    elseif (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
+    elseif (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
+    elseif (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
+    elseif (calendar(1:1) /= ' ') then
       call MOM_error(FATAL,'MOM_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
       call MOM_error(FATAL,'MOM_driver: No namelist value for calendar')
@@ -641,7 +641,7 @@ program MOM_main
         call get_date(Time, yr, mon, day, hr, mins, sec)
         write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
              'Current model time: year, month, day, hour, minute, second'
-    end if
+    endif
     call close_file(unit)
   endif
 

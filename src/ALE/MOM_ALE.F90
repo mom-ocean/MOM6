@@ -1225,7 +1225,7 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
 
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
     h(i,j,:) = GV%m_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
-  enddo; enddo
+  enddo ; enddo
 
 end subroutine ALE_initThicknessToCoord
 

@@ -233,7 +233,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           z_bot = z_bot + h(i,j,k)*GV%H_to_m
         enddo
       endif
-    enddo; enddo
+    enddo ; enddo
   enddo
 
 end subroutine initialize_dye_tracer
@@ -312,7 +312,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           z_bot = z_bot + h_new(i,j,k)*GV%H_to_m
         enddo
       endif
-    enddo; enddo
+    enddo ; enddo
   enddo
 
 end subroutine dye_tracer_column_physics

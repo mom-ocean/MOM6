@@ -869,7 +869,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     seconds = seconds + 60*minute + 3600*hour
     if (year <= 9999) then
       write(restartname,'("_Y",I4.4,"_D",I3.3,"_S",I5.5)') year, days, seconds
-    else if (year <= 99999) then
+    elseif (year <= 99999) then
       write(restartname,'("_Y",I5.5,"_D",I3.3,"_S",I5.5)') year, days, seconds
     else
       write(restartname,'("_Y",I10.10,"_D",I3.3,"_S",I5.5)') year, days, seconds
@@ -920,8 +920,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
       else
         restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-      end if
-    end if
+      endif
+    endif
 
     restartpath = trim(directory)// trim(restartname)
 
@@ -1453,8 +1453,8 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
            restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
          else
            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-         end if
-        end if
+         endif
+        endif
         filepath = trim(directory) // trim(restartname)
 
         if (num_restart < 10) then

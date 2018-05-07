@@ -198,7 +198,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
     allocate(CS%Ref_h%p(CS%nz_data,CS%num_col))
     do col=1,CS%num_col ; do K=1,CS%nz_data
       CS%Ref_h%p(K,col) = data_h(CS%col_i(col),CS%col_j(col),K)
-    enddo; enddo
+    enddo ; enddo
   endif
 
   total_sponge_cols = CS%num_col
@@ -224,7 +224,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
         Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
         if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
            CS%num_col_u = CS%num_col_u + 1
-     enddo; enddo
+     enddo ; enddo
 
      if (CS%num_col_u > 0) then
 
@@ -247,7 +247,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
         allocate(CS%Ref_hu%p(CS%nz_data,CS%num_col_u))
         do col=1,CS%num_col_u ; do K=1,CS%nz_data
           CS%Ref_hu%p(K,col) = data_hu(CS%col_i_u(col),CS%col_j_u(col),K)
-        enddo; enddo
+        enddo ; enddo
      endif
      total_sponge_cols_u = CS%num_col_u
      call sum_across_PEs(total_sponge_cols_u)
@@ -261,7 +261,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
         Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
         if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
            CS%num_col_v = CS%num_col_v + 1
-     enddo; enddo
+     enddo ; enddo
 
      if (CS%num_col_v > 0) then
 
@@ -400,7 +400,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
         Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
         if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
            CS%num_col_u = CS%num_col_u + 1
-     enddo; enddo
+     enddo ; enddo
 
      if (CS%num_col_u > 0) then
 
@@ -432,7 +432,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
         Iresttime_v(i,J) = 0.5 * (Iresttime(i,j) + Iresttime(i,j+1))
         if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
            CS%num_col_v = CS%num_col_v + 1
-     enddo; enddo
+     enddo ; enddo
 
      if (CS%num_col_v > 0) then
 
@@ -863,7 +863,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
     ! u points
     do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB; do k=1,nz
        hu(I,j,k) = 0.5 * (h(i,j,k) + h(i+1,j,k))
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
 
     if (CS%new_sponges) then
       if (.not. present(Time)) &
@@ -935,7 +935,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
     ! v points
     do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec; do k=1,nz
        hv(i,J,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
 
     do c=1,CS%num_col_v
        i = CS%col_i_v(c) ; j = CS%col_j_v(c)

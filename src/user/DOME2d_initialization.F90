@@ -71,7 +71,7 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
 
     if ( x <= l1 ) then
       D(i,j) = bay_depth * max_depth
-    else if (( x > l1 ) .and. ( x < l2 )) then
+    elseif (( x > l1 ) .and. ( x < l2 )) then
       D(i,j) = bay_depth * max_depth + (1.0-bay_depth) * max_depth * &
                ( x - l1 ) / (l2 - l1)
     else
@@ -453,7 +453,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
           h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
-    enddo;  enddo
+    enddo ; enddo
     ! Store the grid on which the T/S sponge data will reside
     call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
 

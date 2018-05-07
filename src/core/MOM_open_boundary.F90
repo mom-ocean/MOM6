@@ -763,7 +763,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
 
   if (Je_obc>Js_obc) then
     OBC%segment(l_seg)%direction = OBC_DIRECTION_E
-  else if (Je_obc<Js_obc) then
+  elseif (Je_obc<Js_obc) then
     OBC%segment(l_seg)%direction = OBC_DIRECTION_W
     j=js_obc;js_obc=je_obc;je_obc=j
   endif
@@ -867,7 +867,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
 
   if (Ie_obc>Is_obc) then
      OBC%segment(l_seg)%direction = OBC_DIRECTION_S
-  else if (Ie_obc<Is_obc) then
+  elseif (Ie_obc<Is_obc) then
      OBC%segment(l_seg)%direction = OBC_DIRECTION_N
      i=Is_obc;Is_obc=Ie_obc;Ie_obc=i
   endif
@@ -1543,7 +1543,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(I,j,k) = (1 - gamma_2) * u_new(I,j,k) + &
                                  gamma_2 * segment%nudged_normal_vel(I,j,k)
          endif
-       enddo; enddo
+       enddo ; enddo
      endif
 
      if (segment%direction == OBC_DIRECTION_W) then
@@ -1593,7 +1593,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(I,j,k) = (1 - gamma_2) * u_new(I,j,k) + &
                                  gamma_2 * segment%nudged_normal_vel(I,j,k)
          endif
-       enddo; enddo
+       enddo ; enddo
      endif
 
      if (segment%direction == OBC_DIRECTION_N) then
@@ -1644,7 +1644,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = (1 - gamma_2) * v_new(i,J,k) + &
                                  gamma_2 * segment%nudged_normal_vel(i,J,k)
          endif
-       enddo; enddo
+       enddo ; enddo
      endif
 
 
@@ -1695,8 +1695,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = (1 - gamma_2) * v_new(i,J,k) + &
                                  gamma_2 * segment%nudged_normal_vel(i,J,k)
          endif
-       enddo; enddo
-     end if
+       enddo ; enddo
+     endif
   enddo
 
   ! Actually update u_new, v_new
@@ -1728,12 +1728,12 @@ subroutine open_boundary_apply_normal_flow(OBC, G, u, v)
         I=segment%HI%IsdB
         do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
           u(I,j,k) = segment%normal_vel(I,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%is_N_or_S) then
         J=segment%HI%JsdB
         do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
           v(i,J,k) = segment%normal_vel(i,J,k)
-        enddo; enddo
+        enddo ; enddo
       endif
     endif
   enddo
@@ -1761,12 +1761,12 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
       I=segment%HI%IsdB
       do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
         u(I,j,k) = 0.
-      enddo; enddo
+      enddo ; enddo
     elseif (segment%is_N_or_S) then
       J=segment%HI%JsdB
       do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
         v(i,J,k) = 0.
-      enddo; enddo
+      enddo ; enddo
     endif
   enddo
 
@@ -1800,7 +1800,7 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
         enddo
       enddo
     endif
-  else if (segment%is_N_or_S) then
+  elseif (segment%is_N_or_S) then
     if (segment%direction == OBC_DIRECTION_N) then
       J=segment%HI%jsdB
       do k=1,G%ke
@@ -1864,22 +1864,22 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
         I=segment%HI%IsdB
         do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
           tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_W) then
         I=segment%HI%IsdB
         do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
           tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_N) then
         J=segment%HI%JsdB
         do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
           tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_S) then
         J=segment%HI%JsdB
         do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
           tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
-        enddo; enddo
+        enddo ; enddo
       endif
     enddo
   endif
@@ -1892,22 +1892,22 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
 !     I=segment%HI%IsdB
 !     do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
 !       h(i+1,j,k) = h(i,j,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   elseif (segment%direction == OBC_DIRECTION_W) then
 !     I=segment%HI%IsdB
 !     do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
 !       h(i,j,k) = h(i+1,j,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   elseif (segment%direction == OBC_DIRECTION_N) then
 !     J=segment%HI%JsdB
 !     do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
 !       h(i,j+1,k) = h(i,j,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   elseif (segment%direction == OBC_DIRECTION_S) then
 !     J=segment%HI%JsdB
 !     do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
 !       h(i,j,k) = h(i,j+1,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   endif
 ! enddo
 
@@ -2381,13 +2381,13 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        G%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
-                else if (G%mask2dCu(I,j)>0.) then
+                elseif (G%mask2dCu(I,j)>0.) then
                   h_stack(:) = h(i+ishift,j,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        G%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
-                else if (G%mask2dCu(I,j+1)>0.) then
+                elseif (G%mask2dCu(I,j+1)>0.) then
                   h_stack(:) = h(i+ishift,j+1,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
@@ -2462,10 +2462,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             if (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
-            else if (segment%field(m)%name == 'U') then
+            elseif (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
-            else if (segment%field(m)%name == 'DVDX') then
+            elseif (segment%field(m)%name == 'DVDX') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
@@ -2474,10 +2474,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             if (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
-            else if (segment%field(m)%name == 'V') then
+            elseif (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
-            else if (segment%field(m)%name == 'DUDY') then
+            elseif (segment%field(m)%name == 'DUDY') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
@@ -2583,12 +2583,12 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(1)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-          enddo; enddo; enddo
+          enddo ; enddo ; enddo
           if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
             ! if the tracer reservoir has not yet been initialized, then set to external value.
             do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(1)%tres(i,j,k) = segment%tr_Reg%Tr(1)%t(i,j,k)
-            enddo; enddo; enddo
+            enddo ; enddo ; enddo
             segment%tr_Reg%Tr(1)%is_initialized=.true.
           endif
         else
@@ -2598,12 +2598,12 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-          enddo; enddo; enddo
+          enddo ; enddo ; enddo
           if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
             !if the tracer reservoir has not yet been initialized, then set to external value.
             do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
-            enddo; enddo; enddo
+            enddo ; enddo ; enddo
             segment%tr_Reg%Tr(1)%is_initialized=.true.
           endif
         else

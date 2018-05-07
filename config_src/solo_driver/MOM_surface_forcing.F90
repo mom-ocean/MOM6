@@ -599,16 +599,16 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
   time_lev_daily = days - 365*floor(real(days) / 365.0)
 
   if (time_lev_daily < 31) then ; time_lev_monthly = 0
-  else if (time_lev_daily < 59)  then ; time_lev_monthly = 1
-  else if (time_lev_daily < 90)  then ; time_lev_monthly = 2
-  else if (time_lev_daily < 120) then ; time_lev_monthly = 3
-  else if (time_lev_daily < 151) then ; time_lev_monthly = 4
-  else if (time_lev_daily < 181) then ; time_lev_monthly = 5
-  else if (time_lev_daily < 212) then ; time_lev_monthly = 6
-  else if (time_lev_daily < 243) then ; time_lev_monthly = 7
-  else if (time_lev_daily < 273) then ; time_lev_monthly = 8
-  else if (time_lev_daily < 304) then ; time_lev_monthly = 9
-  else if (time_lev_daily < 334) then ; time_lev_monthly = 10
+  elseif (time_lev_daily < 59)  then ; time_lev_monthly = 1
+  elseif (time_lev_daily < 90)  then ; time_lev_monthly = 2
+  elseif (time_lev_daily < 120) then ; time_lev_monthly = 3
+  elseif (time_lev_daily < 151) then ; time_lev_monthly = 4
+  elseif (time_lev_daily < 181) then ; time_lev_monthly = 5
+  elseif (time_lev_daily < 212) then ; time_lev_monthly = 6
+  elseif (time_lev_daily < 243) then ; time_lev_monthly = 7
+  elseif (time_lev_daily < 273) then ; time_lev_monthly = 8
+  elseif (time_lev_daily < 304) then ; time_lev_monthly = 9
+  elseif (time_lev_daily < 334) then ; time_lev_monthly = 10
   else ; time_lev_monthly = 11
   endif
 
@@ -847,16 +847,16 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   time_lev_daily = days - 365*floor(real(days) / 365.0)
 
   if (time_lev_daily < 31) then ; time_lev_monthly = 0
-  else if (time_lev_daily < 59)  then ; time_lev_monthly = 1
-  else if (time_lev_daily < 90)  then ; time_lev_monthly = 2
-  else if (time_lev_daily < 120) then ; time_lev_monthly = 3
-  else if (time_lev_daily < 151) then ; time_lev_monthly = 4
-  else if (time_lev_daily < 181) then ; time_lev_monthly = 5
-  else if (time_lev_daily < 212) then ; time_lev_monthly = 6
-  else if (time_lev_daily < 243) then ; time_lev_monthly = 7
-  else if (time_lev_daily < 273) then ; time_lev_monthly = 8
-  else if (time_lev_daily < 304) then ; time_lev_monthly = 9
-  else if (time_lev_daily < 334) then ; time_lev_monthly = 10
+  elseif (time_lev_daily < 59)  then ; time_lev_monthly = 1
+  elseif (time_lev_daily < 90)  then ; time_lev_monthly = 2
+  elseif (time_lev_daily < 120) then ; time_lev_monthly = 3
+  elseif (time_lev_daily < 151) then ; time_lev_monthly = 4
+  elseif (time_lev_daily < 181) then ; time_lev_monthly = 5
+  elseif (time_lev_daily < 212) then ; time_lev_monthly = 6
+  elseif (time_lev_daily < 243) then ; time_lev_monthly = 7
+  elseif (time_lev_daily < 273) then ; time_lev_monthly = 8
+  elseif (time_lev_daily < 304) then ; time_lev_monthly = 9
+  elseif (time_lev_daily < 334) then ; time_lev_monthly = 10
   else ; time_lev_monthly = 11
   endif
 
@@ -1153,7 +1153,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
                                            ! but evap is normally a positive quantity in the files
      fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
      fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   call data_override('OCN', 'sens', fluxes%sens(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
@@ -1162,7 +1162,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
   do j=js,je ; do i=is,ie
      fluxes%sens(i,j) = -fluxes%sens(i,j)  ! Normal convention is positive into the ocean
                                            ! but sensible is normally a positive quantity in the files
-  enddo; enddo
+  enddo ; enddo
 
   call data_override('OCN', 'sw', fluxes%sw(:,:), day, &
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
