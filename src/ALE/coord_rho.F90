@@ -11,23 +11,22 @@ use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid, DEGREE
 implicit none ; private
 
 !> Control structure containing required parameters for the rho coordinate
-type, public :: rho_CS
-  private
+type, public :: rho_CS ; private
 
   !> Number of layers
   integer :: nk
 
-  !> Minimum thickness allowed for layers
+  !> Minimum thickness allowed for layers, in m
   real :: min_thickness = 0.
 
-  !> Reference pressure for density calculations
+  !> Reference pressure for density calculations, in Pa
   real :: ref_pressure
 
   !> If true, integrate for interface positions from the top downward.
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .false.
 
-  !> Nominal density of interfaces
+  !> Nominal density of interfaces, in kg m-3
   real, allocatable, dimension(:) :: target_density
 
   !> Interpolation control structure
@@ -46,10 +45,10 @@ contains
 !> Initialise a rho_CS with pointers to parameters
 subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   type(rho_CS),         pointer    :: CS !< Unassociated pointer to hold the control structure
-  integer,              intent(in) :: nk
-  real,                 intent(in) :: ref_pressure
-  real, dimension(:),   intent(in) :: target_density
-  type(interp_CS_type), intent(in) :: interp_CS
+  integer,              intent(in) :: nk !< Number of layers in the grid
+  real,                 intent(in) :: ref_pressure !< Nominal density of interfaces in Pa
+  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces in kg m-3
+  type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_rho: CS already associated!")
   allocate(CS)
@@ -61,8 +60,9 @@ subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   CS%interp_CS         = interp_CS
 end subroutine init_coord_rho
 
+!> This subroutine deallocates memory in the control structure for the coord_rho module
 subroutine end_coord_rho(CS)
-  type(rho_CS), pointer :: CS
+  type(rho_CS), pointer :: CS !< Coordinate control structure
 
   ! nothing to do
   if (.not. associated(CS)) return
@@ -70,11 +70,15 @@ subroutine end_coord_rho(CS)
   deallocate(CS)
 end subroutine end_coord_rho
 
+!> This subroutine can be used to set the parameters for the coord_rho module
 subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS)
-  type(rho_CS),                   pointer    :: CS
-  real,                 optional, intent(in) :: min_thickness
-  logical,              optional, intent(in) :: integrate_downward_for_e
-  type(interp_CS_type), optional, intent(in) :: interp_CS
+  type(rho_CS),      pointer    :: CS !< Coordinate control structure
+  real,    optional, intent(in) :: min_thickness !< Minimum allowed thickness, in m
+  logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface
+                                      !! positions from the top downward.  If false, integrate
+                                      !! from the bottom upward, as does the rest of the model.
+
+  type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_rho_params: CS not associated")
 
@@ -342,14 +346,13 @@ subroutine copy_finite_thicknesses(nk, h_in, threshold, nout, h_out, mapping)
 end subroutine copy_finite_thicknesses
 
 !------------------------------------------------------------------------------
-! Inflate vanished layers to finite (nonzero) width
-!------------------------------------------------------------------------------
-subroutine old_inflate_layers_1d( minThickness, N, h )
+!> Inflate vanished layers to finite (nonzero) width
+subroutine old_inflate_layers_1d( min_thickness, nk, h )
 
   ! Argument
-  real,                intent(in) :: minThickness
-  integer,             intent(in) :: N
-  real,                intent(inout) :: h(:)
+  real,               intent(in)    :: min_thickness !< Minimum allowed thickness, in m
+  integer,            intent(in)    :: nk  !< Number of layers in the grid
+  real, dimension(:), intent(inout) :: h   !< Layer thicknesses, in m
 
   ! Local variable
   integer   :: k
@@ -361,28 +364,28 @@ subroutine old_inflate_layers_1d( minThickness, N, h )
 
   ! Count number of nonzero layers
   count_nonzero_layers = 0
-  do k = 1,N
-    if ( h(k) > minThickness ) then
+  do k = 1,nk
+    if ( h(k) > min_thickness ) then
       count_nonzero_layers = count_nonzero_layers + 1
     end if
   end do
 
   ! If all layer thicknesses are greater than the threshold, exit routine
-  if ( count_nonzero_layers == N ) return
+  if ( count_nonzero_layers == nk ) return
 
   ! If all thicknesses are zero, inflate them all and exit
   if ( count_nonzero_layers == 0 ) then
-    do k = 1,N
-      h(k) = minThickness
+    do k = 1,nk
+      h(k) = min_thickness
     end do
     return
   end if
 
   ! Inflate zero layers
   correction = 0.0
-  do k = 1,N
-    if ( h(k) <= minThickness ) then
-      delta = minThickness - h(k)
+  do k = 1,nk
+    if ( h(k) <= min_thickness ) then
+      delta = min_thickness - h(k)
       correction = correction + delta
       h(k) = h(k) + delta
     end if
@@ -391,7 +394,7 @@ subroutine old_inflate_layers_1d( minThickness, N, h )
   ! Modify thicknesses of nonzero layers to ensure volume conservation
   maxThickness = h(1)
   k_found = 1
-  do k = 1,N
+  do k = 1,nk
     if ( h(k) > maxThickness ) then
       maxThickness = h(k)
       k_found = k

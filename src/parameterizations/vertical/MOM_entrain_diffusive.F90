@@ -2089,7 +2089,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
             new_min_bound = .false. ! We have a new maximum bound.
           else ! This case would bracket a minimum.  Wierd.
              ! Unless the derivative indicates that there is a maximum near the
-             ! lower bound, try keeping the end with the larger value of F;
+             ! lower bound, try keeping the end with the larger value of F
              ! in a tie keep the minimum as the answer here will be compared
              ! with the maximum input value later.
              new_min_bound = .true.

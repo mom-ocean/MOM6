@@ -336,7 +336,7 @@ real :: logf_of_s
 ! recommended (xacc of 10**-9 drops precision to 2 significant
 ! figures).
 !
-      if (mask(i,j) .ne. 0.0) then  !{
+      if (mask(i,j) /= 0.0) then  !{
         htotal(i,j) = drtsafe(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw,   &
                                 ks, kf, bt, dic_in(i,j), ft, pt_in(i,j),&
                                 sit_in(i,j), st, ta_in(i,j),            &
@@ -412,7 +412,7 @@ call ta_iter_1(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
                bt, dic, ft, pt, sit, st, ta, x1, fl, df)
 call ta_iter_1(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
                bt, dic, ft, pt, sit, st, ta, x2, fh, df)
-if(fl .lt. 0.0) then
+if (fl < 0.0) then
   xl=x1
   xh=x2
 else
@@ -428,12 +428,12 @@ dx=dxold
 call ta_iter_1(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
                bt, dic, ft, pt, sit, st, ta, drtsafe, f, df)
 do j=1,maxit  !{
-  if (((drtsafe-xh)*df-f)*((drtsafe-xl)*df-f) .ge. 0.0 .or.     &
-      abs(2.0*f) .gt. abs(dxold*df)) then
+  if (((drtsafe-xh)*df-f)*((drtsafe-xl)*df-f) >= 0.0 .or.     &
+      abs(2.0*f) > abs(dxold*df)) then
     dxold=dx
     dx=0.5*(xh-xl)
     drtsafe=xl+dx
-    if (xl .eq. drtsafe) then
+    if (xl == drtsafe) then
 !     write (6,*) 'Exiting drtsafe at A on iteration  ', j, ', ph = ', -log10(drtsafe)
       return
     endif
@@ -442,18 +442,18 @@ do j=1,maxit  !{
     dx=f/df
     temp=drtsafe
     drtsafe=drtsafe-dx
-    if (temp .eq. drtsafe) then
+    if (temp == drtsafe) then
 !     write (6,*) 'Exiting drtsafe at B on iteration  ', j, ', ph = ', -log10(drtsafe)
       return
     endif
   end if
-  if (abs(dx) .lt. xacc) then
+  if (abs(dx) < xacc) then
 !     write (6,*) 'Exiting drtsafe at C on iteration  ', j, ', ph = ', -log10(drtsafe)
     return
   endif
   call ta_iter_1(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
                  bt, dic, ft, pt, sit, st, ta, drtsafe, f, df)
-  if(f .lt. 0.0) then
+  if (f < 0.0) then
     xl=drtsafe
     fl=f
   else

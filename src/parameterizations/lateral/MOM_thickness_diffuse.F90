@@ -338,16 +338,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     ! depth will place a spurious depth dependence to the diagnosed KH_t.
     if (CS%id_KH_t > 0 .or. CS%id_KH_t1 > 0) then
       do k=1,nz
-        ! thicknesses across u and v faces, converted to 0/1 mask;
+        ! thicknesses across u and v faces, converted to 0/1 mask
         ! layer average of the interface diffusivities KH_u and KH_v
         do j=js,je ; do I=is-1,ie
           hu(I,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+h_neglect)
-          if(hu(I,j) /= 0.0) hu(I,j) = 1.0
+          if (hu(I,j) /= 0.0) hu(I,j) = 1.0
           KH_u_lay(I,j) = 0.5*(KH_u(I,j,k)+KH_u(I,j,k+1))
         enddo ; enddo
         do J=js-1,je ; do i=is,ie
           hv(i,J)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+h_neglect)
-          if(hv(i,J) /= 0.0) hv(i,J) = 1.0
+          if (hv(i,J) /= 0.0) hv(i,J) = 1.0
           KH_v_lay(i,J) = 0.5*(KH_v(i,J,k)+KH_v(i,J,k+1))
         enddo ; enddo
         ! diagnose diffusivity at T-point
@@ -357,8 +357,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
                        / (hu(I-1,j)+hu(I,j)+hv(i,J-1)+hv(i,J)+h_neglect)
         enddo ; enddo
       enddo
-      if(CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
-      if(CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
+      if (CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
+      if (CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
     endif
 
   endif
@@ -1830,7 +1830,7 @@ end subroutine thickness_diffuse_init
 !> Deallocate the thickness diffusion control structure
 subroutine thickness_diffuse_end(CS)
   type(thickness_diffuse_CS), pointer :: CS   !< Control structure for thickness diffusion
-  if(associated(CS)) deallocate(CS)
+  if (associated(CS)) deallocate(CS)
 end subroutine thickness_diffuse_end
 
 !> \namespace mom_thickness_diffuse

@@ -22,7 +22,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 !> Variable mixing coefficients
-type, public :: VarMix_CS ;
+type, public :: VarMix_CS
   logical :: use_variable_mixing  !< If true, use the variable mixing.
   logical :: Resoln_scaled_Kh     !< If true, scale away the Laplacian viscosity
                                   !! when the deformation radius is well resolved.
@@ -685,7 +685,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
   enddo ! k
 !$OMP do
-  do j = js,je;
+  do j = js,je
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
     enddo ; enddo
@@ -934,10 +934,10 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "used which introduced potential restart issues.  This flag will be \n"//&
                  "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
-      if (CS%Res_coef_visc .ne. CS%Res_coef_khth) call MOM_error(FATAL, &
+      if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_SCALE_COEF.")
-      if (CS%Res_fn_power_visc .ne. CS%Res_fn_power_khth) call MOM_error(FATAL, &
+      if (CS%Res_fn_power_visc /= CS%Res_fn_power_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif

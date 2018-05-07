@@ -542,14 +542,14 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo;
+    enddo ; enddo ; enddo
     call applyTracerBoundaryFluxesInOut(G, GV, CFC11, dt, fluxes, h_work, &
         evap_CFL_limit, minimum_forcing_depth)
     call tracer_vertdiff(h_work, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
 
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo;
+    enddo ; enddo ; enddo
     call applyTracerBoundaryFluxesInOut(G, GV, CFC12, dt, fluxes, h_work, &
         evap_CFL_limit, minimum_forcing_depth)
     call tracer_vertdiff(h_work, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)

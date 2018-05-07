@@ -278,7 +278,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-  if(associated(G%domain%maskmap)) then
+  if (associated(G%domain%maskmap)) then
      call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
             xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
@@ -477,7 +477,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
 
-  PI = 4.0*atan(1.0) ;
+  PI = 4.0*atan(1.0)
 
   call get_param(param_file, mdl, "AXIS_UNITS", units_temp, &
                  "The units for the Cartesian axes. Valid entries are: \n"//&

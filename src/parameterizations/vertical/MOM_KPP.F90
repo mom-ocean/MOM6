@@ -86,7 +86,7 @@ type, public :: KPP_CS ; private
   character(len=30) :: MatchTechnique  !< Method used in CVMix for setting diffusivity and NLT profile functions
   integer :: NLT_shape                 !< MOM6 over-ride of CVMix NLT shape function
   logical :: applyNonLocalTrans        !< If True, apply non-local transport to heat and scalars
-  logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero;
+  logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero
                                        !! for testing purposes.
   logical :: KPPisAdditive             !< If True, will add KPP diffusivity to initial diffusivity.
                                        !! If False, will replace initial diffusivity wherever KPP diffusivity
@@ -303,7 +303,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  '\t MatchBoth         = match gradient for both diffusivity and NLT\n'//                 &
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
-  if (CS%MatchTechnique.eq.'ParabolicNonLocal') then
+  if (CS%MatchTechnique == 'ParabolicNonLocal') then
      ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
      !  May be used during CVMix initialization.
      Cs_is_one=.true.
@@ -486,7 +486,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%id_EnhVt2 = register_diag_field('ocean_model', 'EnhVt2', diag%axesTL, Time, &
       'Langmuir number enhancement to Vt2 as used by [CVMix] KPP','nondim')
 
-  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0;
+  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0
   if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
   if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -870,7 +870,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       endif
 
       ! apply some constraints on OBLdepth
-      if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
+      if (CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
       OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
       OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
       kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
@@ -945,7 +945,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
        !   endif
 
        !   ! apply some constraints on OBLdepth
-       !   if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
+       !   if (CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
        !   OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
        !   OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
        !   kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
@@ -960,16 +960,16 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
 
       !BGR/ Add option for use of surface buoyancy flux with total sw flux.
-      if (CS%SW_METHOD .eq. SW_METHOD_ALL_SW) then
+      if (CS%SW_METHOD == SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
-      elseif (CS%SW_METHOD .eq. SW_METHOD_MXL_SW) then
+      elseif (CS%SW_METHOD == SW_METHOD_MXL_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
-      elseif (CS%SW_METHOD .eq. SW_METHOD_LV1_SW) then
+      elseif (CS%SW_METHOD == SW_METHOD_LV1_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
 
       ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.
-      if (.not. (CS%MatchTechnique.eq.'MatchBoth')) then
+      if (.not. (CS%MatchTechnique == 'MatchBoth')) then
          Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
          Kviscosity(:)     = 0. ! Viscosity (m2/s)
       else
@@ -1073,7 +1073,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       nonLocalTransScalar(i,j,:) = nonLocalTrans(:,2) ! saln
 
       ! set the KPP diffusivity and viscosity to zero for testing purposes
-      if(CS%KPPzeroDiffusivity) then
+      if (CS%KPPzeroDiffusivity) then
          Kdiffusivity(:,1) = 0.0
          Kdiffusivity(:,2) = 0.0
          Kviscosity(:)     = 0.0

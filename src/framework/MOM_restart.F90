@@ -914,9 +914,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
     !query fms_io if there is a filename_appendix (for ensemble runs)
     call get_filename_appendix(filename_appendix)
-    if(len_trim(filename_appendix) > 0) then
+    if (len_trim(filename_appendix) > 0) then
       length = len_trim(restartname)
-      if(restartname(length-2:length) == '.nc') then
+      if (restartname(length-2:length) == '.nc') then
         restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
       else
         restartname = restartname(1:length)  //'.'//trim(filename_appendix)
@@ -1265,7 +1265,7 @@ subroutine restore_state(filename, directory, day, G, CS)
             endif
           endif
 
-          if(is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
+          if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
              write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
                                           " does not match value ", checksum_file(1), &
                                           " stored in "//trim(unit_path(n)//"." )
@@ -1447,9 +1447,9 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 
        !query fms_io if there is a filename_appendix (for ensemble runs)
        call get_filename_appendix(filename_appendix)
-       if(len_trim(filename_appendix) > 0) then
+       if (len_trim(filename_appendix) > 0) then
          length = len_trim(restartname)
-         if(restartname(length-2:length) == '.nc') then
+         if (restartname(length-2:length) == '.nc') then
            restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
          else
            restartname = restartname(1:length)  //'.'//trim(filename_appendix)

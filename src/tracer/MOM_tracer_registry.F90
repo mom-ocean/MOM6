@@ -186,7 +186,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the
                                                                 !! character string template to use in
                                                                 !! labeling diagnostics
-  type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure;
+  type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure
                                                                 !! this tracer will be registered for
                                                                 !! restarts if this argument is present
   logical,              optional, intent(in)    :: mandatory    !< If true, this tracer must be read

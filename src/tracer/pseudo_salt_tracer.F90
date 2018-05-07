@@ -278,7 +278,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo;
+    enddo ; enddo ; enddo
     call applyTracerBoundaryFluxesInOut(G, GV, CS%ps, dt, fluxes, h_work, &
       evap_CFL_limit, minimum_forcing_depth, out_flux_optional=net_salt)
     call tracer_vertdiff(h_work, ea, eb, dt, CS%ps, G, GV)
@@ -290,7 +290,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     CS%diff(i,j,k) = CS%ps(i,j,k)-tv%S(i,j,k)
   enddo ; enddo ; enddo
 
-  if(debug) then
+  if (debug) then
     call hchksum(tv%S,"salt post pseudo-salt vertdiff", G%HI)
     call hchksum(CS%ps,"pseudo_salt post pseudo-salt vertdiff", G%HI)
   endif
