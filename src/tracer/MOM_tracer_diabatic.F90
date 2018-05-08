@@ -230,14 +230,17 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness in H units
-  real,                                       intent(in   ) :: evap_CFL_limit
-  real,                                       intent(in   ) :: minimum_forcing_depth
+  real,                                       intent(in   ) :: evap_CFL_limit !< Limit on the fraction of the
+                                                                  !! water that can be fluxed out of the top
+                                                                  !! layer in a timestep (nondim)
+  real,                                       intent(in   ) :: minimum_forcing_depth !< The smallest depth over
+                                                                  !! which fluxes can be applied, in m
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that enters with freshwater
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional ! The total time-integrated
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that leaves with freshwater
-  !< Optional flag to determine whether h should be updated
-  logical,                          optional, intent(in) :: update_h_opt
+  logical,                          optional, intent(in) :: update_h_opt  !< Optional flag to determine whether
+                                                                  !! h should be updated
 
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
