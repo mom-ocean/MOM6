@@ -691,15 +691,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
 end subroutine calculate_diagnostic_fields
 
-!> This subroutine finds location of R_in in an increasing ordered
+!> This subroutine finds the location of R_in in an increasing ordered
 !! list, Rlist, returning as k the element such that
 !! Rlist(k) <= R_in < Rlist(k+1), and where wt and wt_p are the linear
 !! weights that should be assigned to elements k and k+1.
 subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
-  real,     intent(in)    :: Rlist(:), R_in
-  integer,  intent(inout) :: k
-  integer,  intent(in)    :: nz
-  real,     intent(out)   :: wt, wt_p
+  real, dimension(:), &
+            intent(in)    :: Rlist !< The list of target densities, in kg m-3
+  real,     intent(in)    :: R_in !< The density being inserted into Rlist, in kg m-3
+  integer,  intent(inout) :: k    !< The value of k such that Rlist(k) <= R_in < Rlist(k+1)
+                                  !! The input value is a first guess
+  integer,  intent(in)    :: nz   !< The number of layers in Rlist
+  real,     intent(out)   :: wt   !< The weight of layer k for interpolation, nondim
+  real,     intent(out)   :: wt_p !< The weight of layer k+1 for interpolation, nondim
 
   ! This subroutine finds location of R_in in an increasing ordered
   ! list, Rlist, returning as k the element such that
@@ -2060,9 +2064,12 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
 
 end subroutine set_dependent_diagnostics
 
+!> Deallocate memory associated with the diagnostics module
 subroutine MOM_diagnostics_end(CS, ADp)
-  type(diagnostics_CS),   pointer       :: CS
-  type(accel_diag_ptrs),  intent(inout) :: ADp
+  type(diagnostics_CS),   pointer       :: CS  !< Control structure returned by a
+                                               !! previous call to diagnostics_init.
+  type(accel_diag_ptrs),  intent(inout) :: ADp !< structure with pointers to
+                                               !! accelerations in momentum equation.
   integer :: m
 
   if (associated(CS%e))          deallocate(CS%e)
