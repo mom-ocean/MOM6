@@ -1406,8 +1406,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(I,j), -vel_report(I,j), forces%taux(I,j)*dt_Rho0, &
-               a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
+               vel_report(I,j), forces%taux(I,j)*dt_Rho0, a=CS%a_u, hv=CS%h_u)
     endif ; enddo ; enddo
   endif
 
@@ -1492,8 +1491,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(i,J), -vel_report(i,J), forces%tauy(i,J)*dt_Rho0, &
-               a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
+               vel_report(i,J), forces%tauy(i,J)*dt_Rho0, a=CS%a_v, hv=CS%h_v)
     endif ; enddo ; enddo
   endif
 
