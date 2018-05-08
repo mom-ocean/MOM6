@@ -174,7 +174,7 @@ subroutine drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppol
   real, dimension(CS%nterm), intent(in)  :: ppoly_T   !< Coefficients of T reconstruction
   real, dimension(CS%nterm), intent(in)  :: ppoly_S   !< Coefficients of S reconstruciton
   real,                   intent(in)  :: x0        !< Nondimensional position to evaluate
-  real,                   intent(out) :: delta_rho
+  real,                   intent(out) :: delta_rho !< The density difference from a reference value
   real,         optional, intent(out) :: P_out         !< Pressure at point x0
   real,         optional, intent(out) :: T_out         !< Temperature at point x0
   real,         optional, intent(out) :: S_out         !< Salinity at point x0

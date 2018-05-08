@@ -1478,7 +1478,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, CS)
 end subroutine tracer_hor_diff_init
 
 subroutine tracer_hor_diff_end(CS)
-  type(tracer_hor_diff_CS), pointer :: CS
+  type(tracer_hor_diff_CS), pointer :: CS !< module control structure
 
   call neutral_diffusion_end(CS%neutral_diffusion_CSp)
   if (associated(CS)) deallocate(CS)
