@@ -433,10 +433,11 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 
 end subroutine reopen_file
 
-
+!> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename, axis_name
-  real, dimension(:), intent(out) :: var
+  character(len=*),   intent(in)  :: filename  !< Name of the file to read
+  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
+  real, dimension(:), intent(out) :: var       !< The axis location data
 
   integer :: i,len,unit, ndim, nvar, natt, ntime
   logical :: axis_found
