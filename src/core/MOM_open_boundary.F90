@@ -2520,30 +2520,36 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                           G%dxCv(i,J))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
             enddo
-          elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. associated(segment%tangential_vel)) then
+          elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
+                  associated(segment%tangential_vel)) then
             I=is_obc
             do J=js_obc,je_obc
               do k=1,G%ke
                 segment%tangential_vel(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
-              if (associated(segment%nudged_tangential_vel)) segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
+              if (associated(segment%nudged_tangential_vel)) &
+                segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
             enddo
-          elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. associated(segment%tangential_vel)) then
+          elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. &
+                  associated(segment%tangential_vel)) then
             J=js_obc
             do I=is_obc,ie_obc
               do k=1,G%ke
                 segment%tangential_vel(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
-              if (associated(segment%nudged_tangential_vel)) segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
+              if (associated(segment%nudged_tangential_vel)) &
+                segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
             enddo
-          elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. associated(segment%tangential_grad)) then
+          elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. &
+                  associated(segment%tangential_grad)) then
             I=is_obc
             do J=js_obc,je_obc
               do k=1,G%ke
                 segment%tangential_grad(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
             enddo
-          elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. associated(segment%tangential_grad)) then
+          elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. &
+                  associated(segment%tangential_grad)) then
             J=js_obc
             do I=is_obc,ie_obc
               do k=1,G%ke
