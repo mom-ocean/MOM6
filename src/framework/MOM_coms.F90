@@ -721,7 +721,7 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
 
 end subroutine EFP_list_sum_across_PEs
 
-!< This subroutine carries out all of the calls required to close out the infrastructure cleanly. 
+!< This subroutine carries out all of the calls required to close out the infrastructure cleanly.
 !! This should only be called in ocean-only runs, as the coupler takes care of this in coupled runs.
 subroutine MOM_infra_end
   ! This subroutine should contain all of the calls that are required
