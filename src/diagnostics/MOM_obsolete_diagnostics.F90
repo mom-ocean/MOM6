@@ -64,9 +64,9 @@ end subroutine register_obsolete_diagnostics
 !> Fakes a register of a diagnostic to find out if an obsolete
 !! parameter appears in the diag_table.
 logical function found_in_diagtable(diag, varName, newVarName)
-  type(diag_ctrl),            intent(in) :: diag
-  character(len=*),            intent(in) :: varName
-  character(len=*), optional, intent(in) :: newVarName
+  type(diag_ctrl),            intent(in) :: diag       !< A structure used to control diagnostics.
+  character(len=*),           intent(in) :: varName    !< The obsolete diagnostic name
+  character(len=*), optional, intent(in) :: newVarName !< The valid name of this diagnostic
   ! Local
   integer :: handle ! Integer handle returned from diag_manager
 
