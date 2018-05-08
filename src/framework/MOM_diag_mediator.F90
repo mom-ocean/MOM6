@@ -2562,7 +2562,7 @@ function i2s(a,n_in)
   if (present(n_in)) n = n_in
 
   i2s = ''
-  do i=1,max(n,3)
+  do i=1,min(n,3)
     write (i2s_temp, '(I4.4)') a(i)
     i2s = trim(i2s) //'_'// trim(i2s_temp)
   enddo
