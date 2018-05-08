@@ -662,12 +662,18 @@ contains
                                       xgmax, ygmax, zgmax , G, CS, names, units)
     use mpp_utilities_mod, only: mpp_array_global_min_max
     integer,                        intent(in)    :: ind_start
-    logical, dimension(:),          intent(out)   :: got_minmax
+    logical, dimension(:),          intent(out)   :: got_minmax !< Indicates whether the global min and
+                                                            !! max are found for each tracer
     real, dimension(:),             intent(out)   :: gmin   !< Global minimum of each tracer, in kg
                                                             !! times concentration units.
     real, dimension(:),             intent(out)   :: gmax   !< Global maximum of each tracer, in kg
                                                             !! times concentration units.
-    real, dimension(:),             intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
+    real, dimension(:),             intent(out)   :: xgmin  !< The x-position of the global minimum
+    real, dimension(:),             intent(out)   :: ygmin  !< The y-position of the global minimum
+    real, dimension(:),             intent(out)   :: zgmin  !< The z-position of the global minimum
+    real, dimension(:),             intent(out)   :: xgmax  !< The x-position of the global maximum
+    real, dimension(:),             intent(out)   :: ygmax  !< The y-position of the global maximum
+    real, dimension(:),             intent(out)   :: zgmax  !< The z-position of the global maximum
     type(ocean_grid_type),          intent(in)    :: G      !< The ocean's grid structure
     type(MOM_generic_tracer_CS),    pointer       :: CS     !< Pointer to the control structure for this module.
     character(len=*), dimension(:), intent(out)   :: names  !< The names of the stocks calculated.
