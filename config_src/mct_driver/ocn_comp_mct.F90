@@ -1622,7 +1622,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
                               glb%ocn_state%dirs%restart_output_dir, .true.)
     ! Once we start using the ice shelf module, the following will be needed
     if (glb%ocn_state%use_ice_shelf) then
-      call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, glb%ocn_state%dirs%restart_output_dir, .true.)
+      call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, &
+                                  glb%ocn_state%dirs%restart_output_dir, .true.)
     endif
 
   endif
@@ -1732,7 +1733,8 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
     !  This assumes that the iceshelf and ocean are on the same grid. I hope this is true.
-    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
+    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg, &
+    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Indicate that there are new unused fluxes.
@@ -1752,7 +1754,8 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
+    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg, &
+    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Accumulate the forcing over time steps
