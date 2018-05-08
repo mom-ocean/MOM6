@@ -28,6 +28,7 @@ implicit none ; private
 #include "MOM_memory.h"
 
 public :: KPP_init
+public :: KPP_compute_BLD
 public :: KPP_calculate
 public :: KPP_end
 public :: KPP_NonLocalTransport_temp
@@ -171,6 +172,10 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'If False, calculates the non-local transport and tendencies but\n'//&
                  'purely for diagnostic purposes.',                                   &
                  default=.not. CS%passiveMode)
+  call get_param(paramFile, mdl, 'APPLY_KPP_OBL_FILTER', CS%applyNonLocalTrans,  &
+                 'If True, applies a 1-1-4-1-1 Laplacian filter one time on HBLT.\n'//  &
+                 'computed via CVMix to reduce any horizontal two-grid-point noise.',   &
+                 default=.false.)
   call get_param(paramFile, mdl, 'RI_CRIT', CS%Ri_crit,                            &
                  'Critical bulk Richardson number used to define depth of the\n'// &
                  'surface Ocean Boundary Layer (OBL).',                            &
@@ -407,7 +412,7 @@ end function KPP_init
 
 
 !> Compute OBL depth
-subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
+subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
 
   ! Arguments
   type(KPP_CS),                           pointer       :: CS             !< Control structure
@@ -718,7 +723,7 @@ subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
     enddo
   enddo
 
-end subroutine KPP_compute_OBL
+end subroutine KPP_compute_BLD
 
 
 !> KPP vertical diffusivity/viscosity and non-local tracer transport
