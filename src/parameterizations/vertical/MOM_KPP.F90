@@ -406,9 +406,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
 end function KPP_init
 
 
-
-!> KPP vertical diffusivity/viscosity and non-local tracer transport
-subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
+!> Compute OBL depth
+subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                          buoyFlux, Kt, Ks, Kv, nonLocalTransHeat,&
                          nonLocalTransScalar)
 
@@ -434,21 +433,19 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
   ! Local variables
-  integer :: i, j, k, km1,kp1                    ! Loop indices
+  integer :: i, j, k, km1                        ! Loop indices
   real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: N2_1d           ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
   real, dimension( G%ke+1 )   :: N_1d            ! Brunt-Vaisala frequency at interfaces (1/s) (floored at 0)
   real, dimension( G%ke )     :: Ws_1d           ! Profile of vertical velocity scale for scalars (m/s)
-  real, dimension( G%ke )     :: Wm_1d           ! Profile of vertical velocity scale for momentum (m/s)
+  !real, dimension( G%ke )     :: Wm_1d           ! Profile of vertical velocity scale for momentum (m/s)
   real, dimension( G%ke )     :: Vt2_1d          ! Unresolved velocity for bulk Ri calculation/diagnostic (m2/s2)
-  real, dimension( G%ke )     :: BulkRi_1d       ! Bulk Richardson number for each layer
   real, dimension( G%ke )     :: deltaRho        ! delta Rho in numerator of Bulk Ri number
   real, dimension( G%ke )     :: deltaU2         ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
-  real, dimension( G%ke+1, 2) :: Kdiffusivity    ! Vertical diffusivity at interfaces (m2/s)
-  real, dimension( G%ke+1 )   :: Kviscosity      ! Vertical viscosity at interfaces (m2/s)
   real, dimension( G%ke+1, 2) :: nonLocalTrans   ! Non-local transport for heat/salt at interfaces (non-dimensional)
   real, dimension( G%ke )     :: surfBuoyFlux2
+  real, dimension( G%ke )     :: BulkRi_1d       ! Bulk Richardson number for each layer
 
   ! for EOS calculation
   real, dimension( 3*G%ke )   :: rho_1D
@@ -457,7 +454,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real, dimension( 3*G%ke )   :: Salt_1D
 
   real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
-  real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, sigma
+  real :: GoRho, pRef, rho1, rhoK, Uk, Vk, sigma
 
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit (m)
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
@@ -471,20 +468,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
   integer :: kk, ksfc, ktmp
 
-#ifdef __DO_SAFETY_CHECKS__
-  if (CS%debug) then
-    call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
-    call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
-    call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
-    call hchksum(u, "KPP in: u",G%HI,haloshift=0)
-    call hchksum(v, "KPP in: v",G%HI,haloshift=0)
-    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
-    call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
-    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
-  endif
-#endif
-
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
   nonLocalTrans(:,:) = 0.0
@@ -492,17 +475,15 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
 !$OMP parallel do default(none) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,       &
-!$OMP                                  buoyFlux, nonLocalTransHeat,                   &
-!$OMP                                  nonLocalTransScalar,Kt,Ks,Kv)                  &
-!$OMP                     firstprivate(nonLocalTrans)                                 &
+!$OMP                                  buoyFlux)                   &
 !$OMP                          private(Coriolis,surfFricVel,SLdepth_0d,hTot,surfTemp, &
 !$OMP                                  surfHtemp,surfSalt,surfHsalt,surfU,            &
 !$OMP                                  surfHu,surfV,surfHv,iFaceHeight,               &
 !$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
-!$OMP                                  rho1,rhoK,rhoKm1,deltaRho,N2_1d,N_1d,delH,     &
-!$OMP                                  surfBuoyFlux,Ws_1d,Vt2_1d,BulkRi_1d,           &
-!$OMP                                  OBLdepth_0d,zBottomMinusOffset,Kdiffusivity,   &
-!$OMP                                  Kviscosity,sigma,kOBL,kk,pres_1D,Temp_1D,      &
+!$OMP                                  rho1,rhoK,deltaRho,N2_1d,N_1d,delH,     &
+!$OMP                                  surfBuoyFlux,Ws_1d,BulkRi_1d,           &
+!$OMP                                  OBLdepth_0d,zBottomMinusOffset,   &
+!$OMP                                  sigma,kOBL,kk,pres_1D,Temp_1D,      &
 !$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc,dh,hcorr)
 
   ! loop over horizontal points on processor
@@ -746,6 +727,79 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 ! smg: remove code above
 ! **********************************************************************
 
+    enddo
+  enddo
+
+end subroutine
+
+!> KPP vertical diffusivity/viscosity and non-local tracer transport
+subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
+                         buoyFlux, Kt, Ks, Kv, nonLocalTransHeat,&
+                         nonLocalTransScalar)
+
+  ! Arguments
+  type(KPP_CS),                           pointer       :: CS             !< Control structure
+  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
+  type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp           !< potential/cons temp (deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt           !< Salinity (ppt)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u              !< Velocity i-component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v              !< Velocity j-component (m/s)
+  type(EOS_type),                         pointer       :: EOS            !< Equation of state
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)    :: uStar          !< Surface friction velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt       !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
+                                                                          !< (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks       !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
+                                                                          !< (out) Vertical diffusivity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv       !< (in)  Vertical viscosity w/o KPP (m2/s)
+                                                                          !< (out) Vertical viscosity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
+
+  ! Local variables
+  integer :: i, j, k, km1,kp1                    ! Loop indices
+  real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
+  real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
+  real, dimension( G%ke+1 )   :: N2_1d           ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
+  real, dimension( G%ke+1 )   :: N_1d            ! Brunt-Vaisala frequency at interfaces (1/s) (floored at 0)
+  real, dimension( G%ke )     :: Ws_1d           ! Profile of vertical velocity scale for scalars (m/s)
+  !real, dimension( G%ke )     :: Wm_1d           ! Profile of vertical velocity scale for momentum (m/s)
+  real, dimension( G%ke )     :: Vt2_1d          ! Unresolved velocity for bulk Ri calculation/diagnostic (m2/s2)
+  real, dimension( G%ke )     :: deltaRho        ! delta Rho in numerator of Bulk Ri number
+  real, dimension( G%ke )     :: deltaU2         ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
+  real, dimension( G%ke+1, 2) :: nonLocalTrans   ! Non-local transport for heat/salt at interfaces (non-dimensional)
+
+  real, dimension( G%ke )     :: BulkRi_1d       ! Bulk Richardson number for each layer
+  real, dimension( G%ke+1, 2) :: Kdiffusivity    ! Vertical diffusivity at interfaces (m2/s)
+  real, dimension( G%ke+1 )   :: Kviscosity      ! Vertical viscosity at interfaces (m2/s)
+
+  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux
+  real :: sigma
+
+  real :: surfTemp  ! Integral and average of temp over the surface layer
+  real :: surfSalt  ! Integral and average of saln over the surface layer
+  real :: surfU        ! Integral and average of u over the surface layer
+  real :: surfV        ! Integral and average of v over the surface layer
+
+#ifdef __DO_SAFETY_CHECKS__
+  if (CS%debug) then
+    call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
+    call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
+    call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
+    call hchksum(u, "KPP in: u",G%HI,haloshift=0)
+    call hchksum(v, "KPP in: v",G%HI,haloshift=0)
+    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
+    call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
+  endif
+#endif
+
+  ! loop over horizontal points on processor
+  do j = G%jsc, G%jec
+    do i = G%isc, G%iec
 
       ! Call CVMix/KPP to obtain OBL diffusivities, viscosities and non-local transports
 
@@ -880,7 +934,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (CS%id_Tsurf  > 0)   CS%Tsurf(i,j)    = surfTemp
       if (CS%id_Ssurf  > 0)   CS%Ssurf(i,j)    = surfSalt
       if (CS%id_Usurf  > 0)   CS%Usurf(i,j)    = surfU
-      if (CS%id_Vsurf  > 0)   CS%Vsurf(i,j)    = surfv
+      if (CS%id_Vsurf  > 0)   CS%Vsurf(i,j)    = surfV
 
 
        ! Update output of routine
