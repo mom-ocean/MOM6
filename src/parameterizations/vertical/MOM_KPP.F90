@@ -407,9 +407,7 @@ end function KPP_init
 
 
 !> Compute OBL depth
-subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
-                         buoyFlux, Kt, Ks, Kv, nonLocalTransHeat,&
-                         nonLocalTransScalar)
+subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
 
   ! Arguments
   type(KPP_CS),                           pointer       :: CS             !< Control structure
@@ -423,14 +421,6 @@ subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   type(EOS_type),                         pointer       :: EOS            !< Equation of state
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)    :: uStar          !< Surface friction velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt       !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
-                                                                          !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks       !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
-                                                                          !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv       !< (in)  Vertical viscosity w/o KPP (m2/s)
-                                                                          !< (out) Vertical viscosity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
   ! Local variables
   integer :: i, j, k, km1                        ! Loop indices
@@ -471,8 +461,6 @@ subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
   nonLocalTrans(:,:) = 0.0
-
-  if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
 !$OMP parallel do default(none) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,       &
 !$OMP                                  buoyFlux)                   &
@@ -730,7 +718,7 @@ subroutine KPP_compute_OBL(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
     enddo
   enddo
 
-end subroutine
+end subroutine KPP_compute_OBL
 
 
 !> KPP vertical diffusivity/viscosity and non-local tracer transport
