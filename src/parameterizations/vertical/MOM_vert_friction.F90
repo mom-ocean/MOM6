@@ -1373,7 +1373,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         do k=1,nz ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
           u(I,j,k) = SIGN(truncvel,u(I,j,k))
           if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        endif ; enddo ;  enddo
+        endif ; enddo ; enddo
       endif ; endif
     enddo ! j-loop
   else  ! Do not report accelerations leading to large velocities.
@@ -1406,9 +1406,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(I,j), -vel_report(I,j), forces%taux(I,j)*dt_Rho0, &
-               a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
-    endif ; enddo; enddo
+               vel_report(I,j), forces%taux(I,j)*dt_Rho0, a=CS%a_u, hv=CS%h_u)
+    endif ; enddo ; enddo
   endif
 
   if (len_trim(CS%v_trunc_file) > 0) then
@@ -1459,7 +1458,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         do k=1,nz ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
           v(i,J,k) = SIGN(truncvel,v(i,J,k))
           if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        endif ; enddo ;  enddo
+        endif ; enddo ; enddo
       endif ; endif
     enddo ! J-loop
   else  ! Do not report accelerations leading to large velocities.
@@ -1492,9 +1491,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(i,J), -vel_report(i,J), forces%tauy(i,J)*dt_Rho0, &
-               a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
-    endif ; enddo; enddo
+               vel_report(i,J), forces%tauy(i,J)*dt_Rho0, a=CS%a_v, hv=CS%h_v)
+    endif ; enddo ; enddo
   endif
 
 end subroutine vertvisc_limit_vel

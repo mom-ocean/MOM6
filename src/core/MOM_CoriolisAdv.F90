@@ -549,7 +549,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           vhm = 10.0*vhc
         elseif (abs(vhc) > c1*abs(vhm)) then
           if (abs(vhc) < c2*abs(vhm)) then ; vhc = (3.0*vhc+(1.0-c2*3.0)*vhm)
-          else if (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
+          elseif (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
           else ; vhc = slope*vhc+(1.0-c3*slope)*vhm
           endif
         endif

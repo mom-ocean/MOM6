@@ -4,7 +4,7 @@ module Neverland_surface_forcing
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ctrl
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -160,13 +160,13 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
         "Temperature and salinity mode not coded!" )
   else
     ! This is the buoyancy only mode.
-    call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%buoy, isd, ied, jsd, jed)
   endif
 
 
   ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
   if (CS%restorebuoy .and. CS%first_call) then
-    call alloc_if_needed(CS%buoy_restore, isd, ied, jsd, jed)
+    call safe_alloc_ptr(CS%buoy_restore, isd, ied, jsd, jed)
     CS%first_call = .false.
     ! Set CS%buoy_restore(i,j) here
   endif
@@ -204,18 +204,6 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   endif                                             ! end RESTOREBUOY
 
 end subroutine Neverland_buoyancy_forcing
-
-!> If ptr is not associated, this routine allocates it with the given size
-!! and zeros out its contents.  This is equivalent to safe_alloc_ptr in
-!! MOM_diag_mediator, but is here so as to be completely transparent.
-subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
-  real, pointer :: ptr(:,:)
-  integer :: isd, ied, jsd, jed
-  if (.not.associated(ptr)) then
-    allocate(ptr(isd:ied,jsd:jed))
-    ptr(:,:) = 0.0
-  endif
-end subroutine alloc_if_needed
 
 !> Initializes the Neverland control structure.
 subroutine Neverland_surface_forcing_init(Time, G, param_file, diag, CS)

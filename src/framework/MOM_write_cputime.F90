@@ -49,8 +49,10 @@ end type write_cputime_CS
 
 contains
 
+!> Evaluate the CPU time returned by SYSTEM_CLOCK at the start of a run
 subroutine write_cputime_start_clock(CS)
-  type(write_cputime_CS), pointer :: CS
+  type(write_cputime_CS), pointer :: CS !< The control structure set up by a previous
+                                        !! call to MOM_write_cputime_init.
 ! Argument:  CS - A pointer that is set to point to the control structure
 !                 for this module
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
@@ -60,11 +62,13 @@ subroutine write_cputime_start_clock(CS)
   CS%prev_cputime = new_cputime
 end subroutine write_cputime_start_clock
 
+!> Initialize the MOM_write_cputime module.
 subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   type(param_file_type),  intent(in) :: param_file !< A structure to parse for run-time parameters
-  character(len=*),       intent(in) :: directory
-  type(time_type),        intent(in) :: Input_start_time
-  type(write_cputime_CS), pointer    :: CS
+  character(len=*),       intent(in) :: directory  !< The directory where the CPU time file goes.
+  type(time_type),        intent(in) :: Input_start_time !< The start model time of the simulation.
+  type(write_cputime_CS), pointer    :: CS         !< A pointer that may be set to point to the
+                                                   !! control structure for this module.
 ! Arguments: param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      directory - The directory where the energy file goes.
@@ -106,11 +110,15 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 
 end subroutine MOM_write_cputime_init
 
+!> This subroutine assesses how much CPU time the model has taken and determines how long the model
+!! should be run before it saves a restart file and stops itself.
 subroutine write_cputime(day, n, nmax, CS)
-  type(time_type),                     intent(inout) :: day
-  integer,                             intent(in)    :: n
-  integer,                             intent(inout) :: nmax
-  type(write_cputime_CS),              pointer       :: CS
+  type(time_type),        intent(inout) :: day !< The current model time.
+  integer,                intent(in)    :: n  !< The time step number of the current execution.
+  integer,                intent(inout) :: nmax !< The number of iterations after which to stop so
+                                              !! that the simulation will not run out of CPU time.
+  type(write_cputime_CS), pointer       :: CS !< The control structure set up by a previous
+                                              !! call to MOM_write_cputime_init.
 !  This subroutine assesses how much CPU time the model has
 ! taken and determines how long the model should be run before it
 ! saves a restart file and stops itself.

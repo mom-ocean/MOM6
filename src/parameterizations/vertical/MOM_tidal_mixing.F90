@@ -273,14 +273,14 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
         " "//trim(int_tide_profile_str)//" unavailable in CVMix. Available "//&
         "profiles in CVMix are "//trim(SIMMONS_PROFILE_STRING)//" and "//&
         trim(SCHMITTNER_PROFILE_STRING)//".")
-    else if (.not.CS%use_CVMix_tidal .and. (CS%int_tide_profile == SIMMONS_04.or. &
+    elseif (.not.CS%use_CVMix_tidal .and. (CS%int_tide_profile == SIMMONS_04.or. &
                                             CS%int_tide_profile == SCHMITTNER)) then
       call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profiles "// &
         trim(SIMMONS_PROFILE_STRING)//" and "//trim(SCHMITTNER_PROFILE_STRING)//&
         " are available only when USE_CVMix_TIDAL is True.")
     endif
 
-  else if (CS%use_CVMix_tidal) then
+  elseif (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Cannot set INT_TIDE_DISSIPATION to False "// &
             "when USE_CVMix_TIDAL is set to True.")
   endif
@@ -294,7 +294,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Lee wave driven dissipation scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
-    end if
+    endif
     call get_param(param_file, mdl, "LEE_WAVE_PROFILE", tmpstr, &
                  "LEE_WAVE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with LEE_WAVE_DISSIPATION. Valid values are:\n"//&
@@ -325,7 +325,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Polzin scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
-    end if
+    endif
     call get_param(param_file, mdl, "NU_POLZIN", CS%Nu_Polzin, &
                  "When the Polzin decay profile is used, this is a \n"//&
                  "non-dimensional constant in the expression for the \n"//&
@@ -407,7 +407,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       if (CS%use_CVMix_tidal) then
           call MOM_error(FATAL, "tidal_mixing_init: Tidal amplitude files are "// &
               "not compatible with CVMix tidal mixing. ")
-      end if
+      endif
       call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
                  "The path to the file containing the spatially varying \n"//&
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
@@ -438,7 +438,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
       CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*GV%Rho0*&
            CS%kappa_itides*CS%h2(i,j)*utide*utide
-    enddo; enddo
+    enddo ; enddo
 
   endif
 

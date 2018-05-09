@@ -777,7 +777,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
 
   if (Je_obc>Js_obc) then
     OBC%segment(l_seg)%direction = OBC_DIRECTION_E
-  else if (Je_obc<Js_obc) then
+  elseif (Je_obc<Js_obc) then
     OBC%segment(l_seg)%direction = OBC_DIRECTION_W
     j=js_obc;js_obc=je_obc;je_obc=j
   endif
@@ -893,7 +893,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
 
   if (Ie_obc>Is_obc) then
      OBC%segment(l_seg)%direction = OBC_DIRECTION_S
-  else if (Ie_obc<Is_obc) then
+  elseif (Ie_obc<Is_obc) then
      OBC%segment(l_seg)%direction = OBC_DIRECTION_N
      i=Is_obc;Is_obc=Ie_obc;Ie_obc=i
   endif
@@ -1584,7 +1584,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(I,j,k) = (1 - gamma_2) * segment%normal_vel(I,j,k) + &
                                  gamma_2 * segment%nudged_normal_vel(I,j,k)
          endif
-       enddo; enddo
+       enddo ; enddo
        if (segment%radiation_tan .or. segment%radiation_grad) then
          I=segment%HI%IsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
@@ -1599,7 +1599,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_vel(I,J,k) = (v_new(I,J,k) + rx_avg*v_new(I-1,J,k)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_tan) then
            do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
@@ -1611,14 +1611,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_vel(I,J,k) = (1 - gamma_2) * segment%tangential_vel(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_vel(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
+           do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_grad(I,J,k) = ((v_new(i,J,k) - v_new(i-1,J,k))*G%IdxBu(I-1,J) + &
                                rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%IdxBu(I-2,J)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_grad) then
            do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
@@ -1630,7 +1630,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_grad(I,J,k) = (1 - gamma_2) * segment%tangential_grad(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_grad(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          deallocate(rx_tangential)
        endif
@@ -1639,7 +1639,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
      if (segment%direction == OBC_DIRECTION_W) then
        I=segment%HI%IsdB
        if (I>G%HI%IecB) cycle
-       do k=1,nz ;  do j=segment%HI%jsd,segment%HI%jed
+       do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
          if (segment%radiation) then
            dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
            dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
@@ -1683,7 +1683,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(I,j,k) = (1 - gamma_2) * segment%normal_vel(I,j,k) + &
                                  gamma_2 * segment%nudged_normal_vel(I,j,k)
          endif
-       enddo; enddo
+       enddo ; enddo
        if (segment%radiation_tan .or. segment%radiation_grad) then
          I=segment%HI%IsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
@@ -1698,7 +1698,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_vel(I,J,k) = (v_new(I+1,J,k) + rx_avg*v_new(I+2,J,k)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_tan) then
            do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
@@ -1710,14 +1710,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_vel(I,J,k) = (1 - gamma_2) * segment%tangential_vel(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_vel(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%radiation_grad) then
            do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_grad(I,J,k) = ((v_new(i+2,J,k) - v_new(i+1,J,k))*G%IdxBu(I+1,J) + &
                                rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%IdxBu(I+2,J)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_grad) then
            do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
@@ -1729,7 +1729,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_grad(I,J,k) = (1 - gamma_2) * segment%tangential_grad(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_grad(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          deallocate(rx_tangential)
        endif
@@ -1783,7 +1783,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = (1 - gamma_2) * segment%normal_vel(i,J,k) + &
                                  gamma_2 * segment%nudged_normal_vel(i,J,k)
          endif
-       enddo; enddo
+       enddo ; enddo
        if (segment%radiation_tan .or. segment%radiation_grad) then
          J=segment%HI%JsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
@@ -1798,7 +1798,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_vel(I,J,k) = (u_new(I,j,k) + rx_avg*u_new(I,j-1,k)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_tan) then
            do k=1,nz ; do I=segment%HI%IsdB,segment%HI%IedB
@@ -1810,14 +1810,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_vel(I,J,k) = (1 - gamma_2) * segment%tangential_vel(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_vel(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%radiation_grad) then
            do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_grad(I,J,k) = ((u_new(I,j,k) - u_new(I-1,j,k))*G%IdyBu(I,J-1) + &
                                rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%IdyBu(I,J-2)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_grad) then
            do k=1,nz ; do I=segment%HI%IsdB,segment%HI%IedB
@@ -1829,7 +1829,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_grad(I,J,k) = (1 - gamma_2) * segment%tangential_grad(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_grad(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          deallocate(rx_tangential)
        endif
@@ -1883,7 +1883,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = (1 - gamma_2) * segment%normal_vel(i,J,k) + &
                                  gamma_2 * segment%nudged_normal_vel(i,J,k)
          endif
-       enddo; enddo
+       enddo ; enddo
        if (segment%radiation_tan .or. segment%radiation_grad) then
          J=segment%HI%JsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
@@ -1898,7 +1898,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_vel(I,J,k) = (u_new(I,j+1,k) + rx_avg*u_new(I,j+2,k)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_tan) then
            do k=1,nz ; do I=segment%HI%IsdB,segment%HI%IedB
@@ -1910,14 +1910,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_vel(I,J,k) = (1 - gamma_2) * segment%tangential_vel(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_vel(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%radiation_grad) then
            do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
              rx_avg = rx_tangential(I,J,k)
              segment%tangential_grad(I,J,k) = ((u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
                                rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%IdyBu(I,J+2)) / (1.0+rx_avg)
-           enddo; enddo
+           enddo ; enddo
          endif
          if (segment%nudged_grad) then
            do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
@@ -1929,7 +1929,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              gamma_2 = dt / (tau + dt)
              segment%tangential_grad(I,J,k) = (1 - gamma_2) * segment%tangential_grad(I,J,k) + &
                                  gamma_2 * segment%nudged_tangential_grad(I,J,k)
-           enddo; enddo
+           enddo ; enddo
          endif
          deallocate(rx_tangential)
        endif
@@ -1965,12 +1965,12 @@ subroutine open_boundary_apply_normal_flow(OBC, G, u, v)
         I=segment%HI%IsdB
         do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
           u(I,j,k) = segment%normal_vel(I,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%is_N_or_S) then
         J=segment%HI%JsdB
         do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
           v(i,J,k) = segment%normal_vel(i,J,k)
-        enddo; enddo
+        enddo ; enddo
       endif
     endif
   enddo
@@ -1998,12 +1998,12 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
       I=segment%HI%IsdB
       do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
         u(I,j,k) = 0.
-      enddo; enddo
+      enddo ; enddo
     elseif (segment%is_N_or_S) then
       J=segment%HI%JsdB
       do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
         v(i,J,k) = 0.
-      enddo; enddo
+      enddo ; enddo
     endif
   enddo
 
@@ -2037,7 +2037,7 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
         enddo
       enddo
     endif
-  else if (segment%is_N_or_S) then
+  elseif (segment%is_N_or_S) then
     if (segment%direction == OBC_DIRECTION_N) then
       J=segment%HI%jsdB
       do k=1,G%ke
@@ -2101,22 +2101,22 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
         I=segment%HI%IsdB
         do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
           tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_W) then
         I=segment%HI%IsdB
         do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
           tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_N) then
         J=segment%HI%JsdB
         do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
           tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
-        enddo; enddo
+        enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_S) then
         J=segment%HI%JsdB
         do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
           tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
-        enddo; enddo
+        enddo ; enddo
       endif
     enddo
   endif
@@ -2129,22 +2129,22 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
 !     I=segment%HI%IsdB
 !     do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
 !       h(i+1,j,k) = h(i,j,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   elseif (segment%direction == OBC_DIRECTION_W) then
 !     I=segment%HI%IsdB
 !     do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
 !       h(i,j,k) = h(i+1,j,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   elseif (segment%direction == OBC_DIRECTION_N) then
 !     J=segment%HI%JsdB
 !     do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
 !       h(i,j+1,k) = h(i,j,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   elseif (segment%direction == OBC_DIRECTION_S) then
 !     J=segment%HI%JsdB
 !     do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
 !       h(i,j,k) = h(i,j+1,k)
-!     enddo; enddo
+!     enddo ; enddo
 !   endif
 ! enddo
 
@@ -2624,13 +2624,13 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        G%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
-                else if (G%mask2dCu(I,j)>0.) then
+                elseif (G%mask2dCu(I,j)>0.) then
                   h_stack(:) = h(i+ishift,j,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        G%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
-                else if (G%mask2dCu(I,j+1)>0.) then
+                elseif (G%mask2dCu(I,j+1)>0.) then
                   h_stack(:) = h(i+ishift,j+1,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
@@ -2705,10 +2705,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             if (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
-            else if (segment%field(m)%name == 'U') then
+            elseif (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
-            else if (segment%field(m)%name == 'DVDX') then
+            elseif (segment%field(m)%name == 'DVDX') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
@@ -2717,10 +2717,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             if (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
-            else if (segment%field(m)%name == 'V') then
+            elseif (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
               allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
-            else if (segment%field(m)%name == 'DUDY') then
+            elseif (segment%field(m)%name == 'DUDY') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
@@ -2763,30 +2763,36 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                           G%dxCv(i,J))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
             enddo
-          elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. associated(segment%tangential_vel)) then
+          elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
+                  associated(segment%tangential_vel)) then
             I=is_obc
             do J=js_obc,je_obc
               do k=1,G%ke
                 segment%tangential_vel(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
-              if (associated(segment%nudged_tangential_vel)) segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
+              if (associated(segment%nudged_tangential_vel)) &
+                segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
             enddo
-          elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. associated(segment%tangential_vel)) then
+          elseif (trim(segment%field(m)%name) == 'U' .and. segment%is_N_or_S .and. &
+                  associated(segment%tangential_vel)) then
             J=js_obc
             do I=is_obc,ie_obc
               do k=1,G%ke
                 segment%tangential_vel(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
-              if (associated(segment%nudged_tangential_vel)) segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
+              if (associated(segment%nudged_tangential_vel)) &
+                segment%nudged_tangential_vel(I,J,:) = segment%tangential_vel(I,J,:)
             enddo
-          elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. associated(segment%tangential_grad)) then
+          elseif (trim(segment%field(m)%name) == 'DVDX' .and. segment%is_E_or_W .and. &
+                  associated(segment%tangential_grad)) then
             I=is_obc
             do J=js_obc,je_obc
               do k=1,G%ke
                 segment%tangential_grad(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
               enddo
             enddo
-          elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. associated(segment%tangential_grad)) then
+          elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. &
+                  associated(segment%tangential_grad)) then
             J=js_obc
             do I=is_obc,ie_obc
               do k=1,G%ke
@@ -2826,12 +2832,12 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(1)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-          enddo; enddo; enddo
+          enddo ; enddo ; enddo
           if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
             ! if the tracer reservoir has not yet been initialized, then set to external value.
             do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(1)%tres(i,j,k) = segment%tr_Reg%Tr(1)%t(i,j,k)
-            enddo; enddo; enddo
+            enddo ; enddo ; enddo
             segment%tr_Reg%Tr(1)%is_initialized=.true.
           endif
         else
@@ -2841,12 +2847,12 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-          enddo; enddo; enddo
+          enddo ; enddo ; enddo
           if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
             !if the tracer reservoir has not yet been initialized, then set to external value.
             do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
-            enddo; enddo; enddo
+            enddo ; enddo ; enddo
             segment%tr_Reg%Tr(1)%is_initialized=.true.
           endif
         else
@@ -3153,8 +3159,10 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
 ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
   integer :: i, j
+  logical :: fatal_error = .False.
   real    :: min_depth
   integer, parameter  :: cin = 3, cout = 4, cland = -1, cedge = -2
+  character(len=256) :: mesg    ! Message for error messages.
   type(OBC_segment_type), pointer :: segment ! pointer to segment type list
   real, allocatable, dimension(:,:) :: color, color2  ! For sorting inside from outside,
                                                       ! two different ways
@@ -3235,10 +3243,16 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
 
   ! Use the color to set outside to min_depth on this process.
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    if (color(i,j) /= color2(i,j)) call MOM_error(FATAL, &
-        "MOM_open_boundary: inconsistent OBC segments.")
+    if (color(i,j) /= color2(i,j)) then
+      fatal_error = .True.
+      write(mesg,'("MOM_open_boundary: problem with OBC segments specification at ",I5,",",I5," during\n", &
+          "the masking of the outside grid points.")') i, j
+      call MOM_error(WARNING,"MOM register_tracer: "//mesg, all_print=.true.)
+    endif
     if (color(i,j) == cout) G%bathyT(i,j) = min_depth
   enddo ; enddo
+  if (fatal_error) call MOM_error(FATAL, &
+      "MOM_open_boundary: inconsistent OBC segments.")
 
   deallocate(color)
   deallocate(color2)

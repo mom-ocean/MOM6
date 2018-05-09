@@ -89,7 +89,7 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
       k0 = 1
       k1 = 1
       k2 = 2
-    else if ( k == N ) then
+    elseif ( k == N ) then
       k0 = N-1
       k1 = N
       k2 = N
@@ -97,7 +97,7 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
       k0 = k-1
       k1 = k
       k2 = k+1
-    end if
+    endif
 
     ! All cells can now be treated equally
     h_l = h(k0)
@@ -119,7 +119,7 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
-    end if
+    endif
 
     ! The limiter must be used in the local coordinate system to each cell.
     ! Hence, we must multiply the slope by h1. The multiplication by 0.5 is
@@ -129,11 +129,11 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
 
     if ( (u_l-u0_l)*(u0_l-u_c) < 0.0 ) then
       u0_l = u_c - sign( min( abs(slope), abs(u0_l-u_c) ), slope )
-    end if
+    endif
 
     if ( (u_r-u0_r)*(u0_r-u_c) < 0.0 ) then
       u0_r = u_c + sign( min( abs(slope), abs(u0_r-u_c) ), slope )
-    end if
+    endif
 
     ! Finally bound by neighboring cell means in case of round off
     u0_l = max( min( u0_l, max(u_l, u_c) ), min(u_l, u_c) )
@@ -143,7 +143,7 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
     edge_val(k,1) = u0_l
     edge_val(k,2) = u0_r
 
-  end do ! loop on interior edges
+  enddo ! loop on interior edges
 
 end subroutine bound_edge_values
 
@@ -178,9 +178,9 @@ subroutine average_discontinuous_edge_values( N, edge_val )
       u0_avg = 0.5 * ( u0_minus + u0_plus )
       edge_val(k,2) = u0_avg
       edge_val(k+1,1) = u0_avg
-    end if
+    endif
 
-  end do ! end loop on interior edges
+  enddo ! end loop on interior edges
 
 end subroutine average_discontinuous_edge_values
 
@@ -224,9 +224,9 @@ subroutine check_discontinuous_edge_values( N, u, edge_val )
       u0_avg = max( min( u0_avg, max(um_minus, um_plus) ), min(um_minus, um_plus) )
       edge_val(k,2) = u0_avg
       edge_val(k+1,1) = u0_avg
-    end if
+    endif
 
-  end do ! end loop on interior edges
+  enddo ! end loop on interior edges
 
 end subroutine check_discontinuous_edge_values
 
@@ -284,7 +284,7 @@ subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
     ! value of left cell
     edge_val(k-1,2) = edge_val(k,1)
 
-  end do ! end loop on interior cells
+  enddo ! end loop on interior cells
 
   ! Boundary edge values are simply equal to the boundary cell averages
   edge_val(1,1) = u(1)
@@ -388,24 +388,24 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
     endif
 #endif
 
-  end do ! end loop on interior cells
+  enddo ! end loop on interior cells
 
   ! Determine first two edge values
   f1 = max( hNeglect, hMinFrac*sum(h(1:4)) )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max(f1, h(i-1))
-  end do
+  enddo
 
   do i = 1,4
 
     do j = 1,4
       A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
-    end do
+    enddo
 
     B(i) = u(i) * max(f1, h(i) )
 
-  end do
+  enddo
 
   call solve_linear_system( A, B, C, 4 )
 
@@ -433,17 +433,17 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max(f1, h(N-5+i))
-  end do
+  enddo
 
   do i = 1,4
 
     do j = 1,4
       A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
-    end do
+    enddo
 
     B(i) = u(N-4+i) * max(f1,  h(N-4+i) )
 
-  end do
+  enddo
 
   call solve_linear_system( A, B, C, 4 )
 
@@ -461,10 +461,10 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
     do i = 1,4
       do j = 1,4
         A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
-      end do
+      enddo
       write(0,*) A(i,:)
       B(i) = u(N-4+i) * ( h(N-4+i) )
-    end do
+    enddo
     write(0,*) 'B=',B
     write(0,*) 'C=',C
     write(0,*) 'h(:N)=',h(N-3:N)
@@ -561,24 +561,24 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
 
     tri_b(i+1) = a * u(i) + b * u(i+1)
 
-  end do ! end loop on cells
+  enddo ! end loop on cells
 
   ! Boundary conditions: left boundary
   h0 = max( hNeglect, hMinFrac*sum(h(1:4)) )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max( h0, h(i-1) )
-  end do
+  enddo
 
   do i = 1,4
 
     do j = 1,4
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(i) * max( h0, h(i) )
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
 
@@ -591,17 +591,17 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max( h0, h(N-5+i) )
-  end do
+  enddo
 
   do i = 1,4
 
     do j = 1,4
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(N-4+i) * max( h0, h(N-4+i) )
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
 
@@ -615,7 +615,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
   do i = 2,N
     edge_val(i,1)   = tri_x(i)
     edge_val(i-1,2) = tri_x(i)
-  end do
+  enddo
   edge_val(1,1) = tri_x(1)
   edge_val(N,2) = tri_x(N+1)
 
@@ -812,7 +812,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
     tri_u(k+1) = beta
     tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
 
-  end do ! end loop on cells
+  enddo ! end loop on cells
 
   ! Use a right-biased stencil for the second row
 
@@ -940,17 +940,17 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   x(1) = 0.0
   do i = 2,7
     x(i) = x(i-1) + max( g, h(i-1) )
-  end do
+  enddo
 
   do i = 1,6
 
     do j = 1,6
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(i) * max( g, h(i) )
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
 
@@ -1085,17 +1085,17 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   x(1) = 0.0
   do i = 2,7
     x(i) = x(i-1) + max( g, h(N-7+i) )
-  end do
+  enddo
 
   do i = 1,6
 
     do j = 1,6
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(N-6+i) * max( g, h(N-6+i) )
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
 
@@ -1110,7 +1110,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   do i = 2,N
     edge_val(i,1)   = tri_x(i)
     edge_val(i-1,2) = tri_x(i)
-  end do
+  enddo
   edge_val(1,1) = tri_x(1)
   edge_val(N,2) = tri_x(N+1)
 

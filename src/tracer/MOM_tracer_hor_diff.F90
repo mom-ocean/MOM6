@@ -723,7 +723,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
         tmp = h_srt(i,k2-1,j) ; h_srt(i,k2-1,j) = h_srt(i,k2,j) ; h_srt(i,k2,j) = tmp
       enddo
     endif ; enddo
-  enddo; enddo
+  enddo ; enddo
 !$OMP do
   do j=js-1,je+1
     max_srt(j) = 0
@@ -1478,7 +1478,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, CS)
 end subroutine tracer_hor_diff_init
 
 subroutine tracer_hor_diff_end(CS)
-  type(tracer_hor_diff_CS), pointer :: CS
+  type(tracer_hor_diff_CS), pointer :: CS !< module control structure
 
   call neutral_diffusion_end(CS%neutral_diffusion_CSp)
   if (associated(CS)) deallocate(CS)
