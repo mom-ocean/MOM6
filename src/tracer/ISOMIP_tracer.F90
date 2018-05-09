@@ -79,8 +79,10 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
                                       restart_CS)
   type(hor_index_type),      intent(in) :: HI    !<A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure.
-  type(param_file_type),      intent(in) :: param_file !<A structure indicating the open file to parse for model parameter values.
-  type(ISOMIP_tracer_CS),       pointer    :: CS !<A pointer that is set to point to the control structure for this module (in/out).
+  type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
+                                                       !! to parse for model parameter values.
+  type(ISOMIP_tracer_CS),     pointer    :: CS !<A pointer that is set to point to the control
+                                                       !! structure for this module (in/out).
   type(tracer_registry_type), pointer    :: tr_Reg !<A pointer to the tracer registry.
   type(MOM_restart_CS),       pointer    :: restart_CS !<A pointer to the restart control structure.
 
@@ -159,14 +161,21 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
   type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
-  logical,                               intent(in) :: restart !< .true. if the fields have already been read from a restart file.
+  logical,                               intent(in) :: restart !< .true. if the fields have already
+                                                       !! been read from a restart file.
   type(time_type), target,               intent(in) :: day !< Time of the start of the run.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness, in m or kg m-2.
   type(diag_ctrl), target,               intent(in) :: diag
-  type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies whether, where, and what open boundary conditions are used. This is not being used for now.
-  type(ISOMIP_tracer_CS),                pointer    :: CS !< The control structure returned by a previous call to ISOMIP_register_tracer.
-  type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure for diagnostics in depth space.
+  type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies
+                                                       !! whether, where, and what open boundary conditions
+                                                       !! are used. This is not being used for now.
+  type(ISOMIP_tracer_CS),                pointer    :: CS !< The control structure returned by a previous call
+                                                       !! to ISOMIP_register_tracer.
+  type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< A pointer to the control structure for
+                                                       !! the sponges, if they are in use.  Otherwise this
+                                                       !! may be unassociated.
+  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
+                                                       !! for diagnostics in depth space.
 
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &
@@ -315,7 +324,7 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
     do m=1,NTR
       do k=1,nz ;do j=js,je ; do i=is,ie
           h_work(i,j,k) = h_old(i,j,k)
-      enddo ; enddo ; enddo;
+      enddo ; enddo ; enddo
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)

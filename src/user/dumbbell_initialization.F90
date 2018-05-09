@@ -95,7 +95,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   real    :: delta_h
   real    :: min_thickness, S_surf, S_range, S_ref, S_light, S_dense
   character(len=20) :: verticalCoordinate
-  logical :: just_read    ! If true, just read parameters but set nothing.  character(len=20) :: verticalCoordinate
+  logical :: just_read    ! If true, just read parameters but set nothing.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -138,7 +138,8 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
       ! Equating: S_surf - S_range * z/max_depth = S_light + (K-3/2)/(nz-1) * (S_dense - S_light)
       ! Equating: - S_range * z/max_depth = S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light)
       ! Equating: z/max_depth = - ( S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light) ) / S_range
-      e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * ( (real(K)-1.5) / real(nz-1) ) ) / S_range
+      e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * &
+                ( (real(K)-1.5) / real(nz-1) ) ) / S_range
       e0(K) = nint(2048.*e0(K))/2048. ! Force round numbers ... the above expression has irrational factors ...
       e0(K) = min(real(1-K)*GV%Angstrom_z, e0(K)) ! Bound by surface
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
@@ -343,7 +344,7 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
              S(i,j,k)=S_ref - 0.5*S_range
            enddo
          endif
-!         if (j.eq.G%jsc) print *,'i,Sponge S= ',i,S(i,1,1)
+!         if (j == G%jsc) print *,'i,Sponge S= ',i,S(i,1,1)
        enddo
 
      enddo

@@ -1617,12 +1617,12 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
 
     do_any_shelf = .false.
     if (associated(forces%frac_shelf_v)) then
-      do I=Is,Ie
+      do i=is,ie
         if (forces%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
-          do_i(I) = .false.
+          do_i(i) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
         else
-          do_i(I) = .true. ; do_any_shelf = .true.
+          do_i(i) = .true. ; do_any_shelf = .true.
         endif
       enddo
     endif
@@ -1791,8 +1791,8 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_CVMix_shear = .false. ;
-  useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false. ;
+  use_kappa_shear = .false. ; use_CVMix_shear = .false.
+  useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false.
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
     use_CVMix_shear = CVMix_shear_is_used(param_file)

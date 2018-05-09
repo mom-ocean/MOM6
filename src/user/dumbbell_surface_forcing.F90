@@ -6,7 +6,7 @@ module dumbbell_surface_forcing
 !*                                                                     *
 !*                                                                     *
 !*  This file contains subroutines for specifying surface dynamic      *
-!*  forcing for the dumbbell case.                                      *
+!*  forcing for the dumbbell case.                                     *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
@@ -230,8 +230,10 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
   ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
 
   do j=js,je ; do i=is,ie
-    fluxes%p_surf(i,j) = CS%forcing_mask(i,j)* CS%slp_amplitude * G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
-    fluxes%p_surf_full(i,j) = CS%forcing_mask(i,j) * CS%slp_amplitude * G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
+    fluxes%p_surf(i,j) = CS%forcing_mask(i,j)* CS%slp_amplitude * &
+                         G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
+    fluxes%p_surf_full(i,j) = CS%forcing_mask(i,j) * CS%slp_amplitude * &
+                         G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
   enddo; enddo
 
 
@@ -244,17 +246,17 @@ subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   ! MOM_diag_mediator, but is here so as to be completely transparent.
   real, pointer :: ptr(:,:)
   integer :: isd, ied, jsd, jed
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(isd:ied,jsd:jed))
     ptr(:,:) = 0.0
   endif
 end subroutine alloc_if_needed
 
 subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),                            intent(in) :: Time
-  type(ocean_grid_type),                      intent(in) :: G    !< The ocean's grid structure
-  type(param_file_type),                      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,                    intent(in) :: diag
+  type(time_type),                   intent(in) :: Time
+  type(ocean_grid_type),             intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),             intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(diag_ctrl), target,           intent(in) :: diag
   type(dumbbell_surface_forcing_CS), pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.

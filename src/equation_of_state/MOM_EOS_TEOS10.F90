@@ -195,7 +195,7 @@ subroutine calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_
   zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
   zt = T !gsw_ct_from_pt(S,T)  !Convert potantial temp to conservative temp
   zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
-  if(S.lt.-1.0e-10) return !Can we assume safely that this is a missing value?
+  if (S < -1.0e-10) return !Can we assume safely that this is a missing value?
   call gsw_rho_first_derivatives(zs, zt, zp, drho_dsa=drho_dS, drho_dct=drho_dT)
 end subroutine calculate_density_derivs_scalar_teos10
 
@@ -236,8 +236,8 @@ subroutine calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start
 end subroutine calculate_specvol_derivs_teos10
 
 !> Calculate the 5 second derivatives of the equation of state for scalar inputs
-subroutine calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
-                                                         drho_dT_dP)
+subroutine calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                         drho_dT_dT, drho_dS_dP, drho_dT_dP)
   real, intent(in)     :: T, S, pressure
   real, intent(out)    :: drho_dS_dS !< Partial derivative of beta with respect to S
   real, intent(out)    :: drho_dS_dT !< Partial derivative of beta with resepct to T
@@ -257,15 +257,15 @@ subroutine calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS
   zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
   zt = T !gsw_ct_from_pt(S,T)  !Convert potantial temp to conservative temp
   zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
-  if(S.lt.-1.0e-10) return !Can we assume safely that this is a missing value?
+  if (S < -1.0e-10) return !Can we assume safely that this is a missing value?
   call gsw_rho_second_derivatives(zs, zt, zp, rho_sa_sa=drho_dS_dS, rho_sa_ct=drho_dS_dT, &
                                      rho_ct_ct=drho_dT_dT, rho_sa_p=drho_dS_dP, rho_ct_p=drho_dT_dP)
 
 end subroutine calculate_density_second_derivs_scalar_teos10
 
 !> Calculate the 5 second derivatives of the equation of state for scalar inputs
-subroutine calculate_density_second_derivs_array_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
-                                                        drho_dT_dP, start, npts)
+subroutine calculate_density_second_derivs_array_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                        drho_dT_dT, drho_dS_dP, drho_dT_dP, start, npts)
   real, dimension(:), intent(in)     :: T, S, pressure
   real, dimension(:), intent(out)    :: drho_dS_dS !< Partial derivative of beta with respect to S
   real, dimension(:), intent(out)    :: drho_dS_dT !< Partial derivative of beta with resepct to T

@@ -78,9 +78,12 @@ type, public :: axes_grp
   type(diag_ctrl), pointer :: diag_cs => null() !< Circular link back to the main diagnostics control structure
                                                 !! (Used to avoid passing said structure into every possible call).
   ! ID's for cell_methods
-  character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group includes x-direction.
-  character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group includes y-direction.
-  character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction.
+  character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group
+                                         !! includes x-direction.
+  character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group
+                                         !! includes y-direction.
+  character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group
+                                         !! includes vertical direction.
   ! For remapping
   integer :: nz = 0 !< Vertical dimension of diagnostic
   integer :: vertical_coordinate_number = 0 !< Index of the corresponding diag_remap_ctrl for this axis group
@@ -90,18 +93,21 @@ type, public :: axes_grp
   logical :: is_u_point = .false. !< If true, indicates that this axes group is for a u-point located field.
   logical :: is_v_point = .false. !< If true, indicates that this axes group is for a v-point located field.
   logical :: is_layer = .false. !< If true, indicates that this axes group is for a layer vertically-located field.
-  logical :: is_interface = .false. !< If true, indicates that this axes group is for an interface vertically-located field.
-  logical :: is_native = .true. !< If true, indicates that this axes group is for a native model grid. False for any other
-                                !! grid. Used for rank>2.
-  logical :: needs_remapping = .false. !< If true, indicates that this axes group is for a intensive layer-located field
-                                       !! that must be remapped to these axes. Used for rank>2.
-  logical :: needs_interpolating = .false. !< If true, indicates that this axes group is for a sampled interface-located field
-                                           !! that must be interpolated to these axes. Used for rank>2.
+  logical :: is_interface = .false. !< If true, indicates that this axes group is for an interface
+                                    !! vertically-located field.
+  logical :: is_native = .true. !< If true, indicates that this axes group is for a native model grid.
+                                !! False for any other grid. Used for rank>2.
+  logical :: needs_remapping = .false. !< If true, indicates that this axes group is for a intensive layer-located
+                                       !! field that must be remapped to these axes. Used for rank>2.
+  logical :: needs_interpolating = .false. !< If true, indicates that this axes group is for a sampled
+                                         !! interface-located field that must be interpolated to
+                                         !! these axes. Used for rank>2.
   ! For horizontally averaged diagnositcs (applies to 2d and 3d fields only)
   type(axes_grp), pointer :: xyave_axes => null() !< The associated 1d axes for horizontall area-averaged diagnostics
   ! ID's for cell_measures
   integer :: id_area = -1 !< The diag_manager id for area to be used for cell_measure of variables with this axes_grp.
-  integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables with this axes_grp.
+  integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables
+                            !! with this axes_grp.
   ! For masking
   real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
   real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
@@ -133,7 +139,8 @@ type, private :: diag_type
   type(axes_grp), pointer :: axes => null()
   type(diag_type), pointer :: next => null() !< Pointer to the next diag.
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
-  logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated). False for intensive (concentrations).
+  logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated).
+                                   !! False for intensive (concentrations).
 end type diag_type
 
 !> The following data type a list of diagnostic fields an their variants,
@@ -235,7 +242,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
-  if(G%symmetric) then
+  if (G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
@@ -347,7 +354,8 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
            is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
            xyave_axes=diag_cs%remap_axesZL(i))
 
-       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBL
+       !! \note Remapping for B points is not yet implemented so needs_remapping is not
+       !! provided for remap_axesBL
       call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%remap_axesBL(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
@@ -584,21 +592,34 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
   type(axes_grp),             intent(out) :: axes    !< The group of 1D axes
   integer,          optional, intent(in)  :: nz      !< Number of layers in this diagnostic grid
   integer,          optional, intent(in)  :: vertical_coordinate_number !< Index number for vertical coordinate
-  character(len=*), optional, intent(in)  :: x_cell_method !< A x-direction cell method used to construct the "cell_methods" attribute in CF convention
-  character(len=*), optional, intent(in)  :: y_cell_method !< A y-direction cell method used to construct the "cell_methods" attribute in CF convention
-  character(len=*), optional, intent(in)  :: v_cell_method !< A vertical direction cell method used to construct the "cell_methods" attribute in CF convention
-  logical,          optional, intent(in)  :: is_h_point !< If true, indicates this axes group for h-point located fields
-  logical,          optional, intent(in)  :: is_q_point !< If true, indicates this axes group for q-point located fields
-  logical,          optional, intent(in)  :: is_u_point !< If true, indicates this axes group for u-point located fields
-  logical,          optional, intent(in)  :: is_v_point !< If true, indicates this axes group for v-point located fields
-  logical,          optional, intent(in)  :: is_layer !< If true, indicates that this axes group is for a layer vertically-located field.
-  logical,          optional, intent(in)  :: is_interface !< If true, indicates that this axes group is for an interface vertically-located field.
-  logical,          optional, intent(in)  :: is_native !< If true, indicates that this axes group is for a native model grid. False for any other grid.
-  logical,          optional, intent(in)  :: needs_remapping !< If true, indicates that this axes group is for a intensive layer-located field
-                                                             !! that must be remapped to these axes. Used for rank>2.
-  logical,          optional, intent(in)  :: needs_interpolating !< If true, indicates that this axes group is for a sampled interface-located field
-                                                                 !! that must be interpolated to these axes. Used for rank>2.
-  type(axes_grp),   optional, target      :: xyave_axes !< The corresponding axes group for horizontally area-average diagnostics
+  character(len=*), optional, intent(in)  :: x_cell_method !< A x-direction cell method used to construct the
+                                                           !! "cell_methods" attribute in CF convention
+  character(len=*), optional, intent(in)  :: y_cell_method !< A y-direction cell method used to construct the
+                                                           !! "cell_methods" attribute in CF convention
+  character(len=*), optional, intent(in)  :: v_cell_method !< A vertical direction cell method used to construct
+                                                        !! the "cell_methods" attribute in CF convention
+  logical,          optional, intent(in)  :: is_h_point !< If true, indicates this axes group for h-point
+                                                        !! located fields
+  logical,          optional, intent(in)  :: is_q_point !< If true, indicates this axes group for q-point
+                                                        !! located fields
+  logical,          optional, intent(in)  :: is_u_point !< If true, indicates this axes group for
+                                                        !! u-point located fields
+  logical,          optional, intent(in)  :: is_v_point !< If true, indicates this axes group for
+                                                        !! v-point located fields
+  logical,          optional, intent(in)  :: is_layer   !< If true, indicates that this axes group is
+                                                        !! for a layer vertically-located field.
+  logical,          optional, intent(in)  :: is_interface !< If true, indicates that this axes group
+                                                        !! is for an interface vertically-located field.
+  logical,          optional, intent(in)  :: is_native  !< If true, indicates that this axes group is
+                                                        !! for a native model grid. False for any other grid.
+  logical,          optional, intent(in)  :: needs_remapping !< If true, indicates that this axes group is
+                                                        !! for a intensive layer-located field that must
+                                                        !! be remapped to these axes. Used for rank>2.
+  logical,          optional, intent(in)  :: needs_interpolating !< If true, indicates that this axes group
+                                                        !! is for a sampled interface-located field that must
+                                                        !! be interpolated to these axes. Used for rank>2.
+  type(axes_grp),   optional, target      :: xyave_axes !< The corresponding axes group for horizontally
+                                                        !! area-average diagnostics
   ! Local variables
   integer :: n
 
@@ -865,7 +886,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
             'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-     !elseif(associated(diag%axes%mask2d)) then
+     !elseif (associated(diag%axes%mask2d)) then
      !  used = send_data(diag%fms_diag_id, locfield, &
      !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
       else
@@ -879,7 +900,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=mask)
-      elseif(associated(diag%axes%mask2d)) then
+      elseif (associated(diag%axes%mask2d)) then
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=diag%axes%mask2d)
@@ -918,7 +939,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
   logical :: staggered_in_x, staggered_in_y
   real, dimension(:,:,:), pointer :: h_diag
 
-  if(present(alt_h)) then
+  if (present(alt_h)) then
     h_diag => alt_h
   else
     h_diag => diag_cs%h
@@ -1074,7 +1095,8 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
     ks = lbound(field,3) ; ke = ubound(field,3)
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), ks:ke ) )
-    ! locfield(:,:,:) = 0.0  ! Zeroing out this array would be a good idea, but it appears not to be necessary.
+    ! locfield(:,:,:) = 0.0  ! Zeroing out this array would be a good idea, but it appears
+                             ! not to be necessary.
     isv_c = isv ; jsv_c = jsv
     if (diag%fms_xyave_diag_id>0) then
       staggered_in_x = diag%axes%is_u_point .or. diag%axes%is_q_point
@@ -1114,7 +1136,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
               'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
           used = send_data(diag%fms_diag_id, locfield, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-       !elseif(associated(diag%axes%mask3d)) then
+       !elseif (associated(diag%axes%mask3d)) then
        !  used = send_data(diag_field_id, locfield, &
        !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask3d)
         else
@@ -1128,7 +1150,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
           used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                            weight=diag_cs%time_int, rmask=mask)
-        elseif(associated(diag%axes%mask3d)) then
+        elseif (associated(diag%axes%mask3d)) then
           call assert(size(locfield) == size(diag%axes%mask3d), &
               'post_data_3d_low: mask3d size mismatch: '//diag%debug_str)
           used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
@@ -1258,39 +1280,50 @@ function get_diag_time_end(diag_cs)
   get_diag_time_end = diag_cs%time_end
 end function get_diag_time_end
 
-!> Returns the "diag_mediator" handle for a group (native, CMOR, z-coord, ...) of diagnostics derived from one field.
+!> Returns the "diag_mediator" handle for a group (native, CMOR, z-coord, ...) of diagnostics
+!! derived from one field.
 integer function register_diag_field(module_name, field_name, axes, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
      cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
      x_cell_method, y_cell_method, v_cell_method, conversion, v_extensive)
-  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
+                                              !! or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
-  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that
+                                             !! indicates axes for this field
   type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
   real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
-  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with
+                                                         !! post_data calls (not used in MOM?)
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
-  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
-  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be
+                                                         !! placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not
+                                                         !! be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
   character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
   character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
   character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
   character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
-  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
-                                                         !! If present, this overrides the default constructed from the default for
+  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to
+                                                         !! have no attribute.  If present, this overrides the
+                                                         !! default constructed from the default for
                                                          !! each individual axis direction.
-  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
-  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
-  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction.
+                                                         !! Use '' have no method.
   real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
-  logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
+  logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically
+                                                         !! integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
@@ -1300,7 +1333,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
   logical :: active
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   diag_cs => axes%diag_cs
   dm_id = -1
@@ -1324,21 +1357,21 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
     ! Register diagnostics remapped to z vertical coordinate
     if (axes%rank == 3) then
       remap_axes => null()
-      if ((axes%id .eq. diag_cs%axesTL%id)) then
+      if ((axes%id == diag_cs%axesTL%id)) then
           remap_axes => diag_cs%remap_axesTL(i)
-      elseif(axes%id .eq. diag_cs%axesBL%id) then
+      elseif (axes%id == diag_cs%axesBL%id) then
           remap_axes => diag_cs%remap_axesBL(i)
-      elseif(axes%id .eq. diag_cs%axesCuL%id ) then
+      elseif (axes%id == diag_cs%axesCuL%id ) then
           remap_axes => diag_cs%remap_axesCuL(i)
-      elseif(axes%id .eq. diag_cs%axesCvL%id) then
+      elseif (axes%id == diag_cs%axesCvL%id) then
           remap_axes => diag_cs%remap_axesCvL(i)
-      elseif(axes%id .eq. diag_cs%axesTi%id) then
+      elseif (axes%id == diag_cs%axesTi%id) then
           remap_axes => diag_cs%remap_axesTi(i)
-      elseif(axes%id .eq. diag_cs%axesBi%id) then
+      elseif (axes%id == diag_cs%axesBi%id) then
           remap_axes => diag_cs%remap_axesBi(i)
-      elseif(axes%id .eq. diag_cs%axesCui%id ) then
+      elseif (axes%id == diag_cs%axesCui%id ) then
           remap_axes => diag_cs%remap_axesCui(i)
-      elseif(axes%id .eq. diag_cs%axesCvi%id) then
+      elseif (axes%id == diag_cs%axesCvi%id) then
           remap_axes => diag_cs%remap_axesCvi(i)
       endif
       ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
@@ -1378,31 +1411,40 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   integer,          intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
-  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes
+                                             !! for this field
   type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
   real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
-  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided
+                                                         !! with post_data calls (not used in MOM?)
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
-  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
-  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be
+                                                         !! placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should
+                                                         !! not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
   character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
   character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
   character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
   character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
-  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
-                                                         !! If present, this overrides the default constructed from the default for
-                                                         !! each individual axis direction.
-  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
-  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
-  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute.
+                                                         !! Use '' to have no attribute. If present, this
+                                                         !! overrides the default constructed from the default
+                                                         !! for each individual axis direction.
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction.
+                                                         !! Use '' have no method.
   real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
-  logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
+  logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically
+                                                         !! integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
@@ -1411,7 +1453,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name, cm_string, msg
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   register_diag_field_expand_cmor = .false.
   diag_cs => axes%diag_cs
@@ -1462,9 +1504,9 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   ! For the CMOR variation of the above diagnostic
   if (present(cmor_field_name)) then
     ! Fallback values for strings set to "NULL"
-    posted_cmor_units = "not provided"           !
-    posted_cmor_standard_name = "not provided"   ! Values might be able to be replaced with a CS%missing field?
-    posted_cmor_long_name = "not provided"       !
+    posted_cmor_units = "not provided"         !
+    posted_cmor_standard_name = "not provided" ! Values might be able to be replaced with a CS%missing field?
+    posted_cmor_long_name = "not provided"     !
 
     ! If attributes are present for MOM variable names, use them first for the register_diag_field
     ! call for CMOR verison of the variable
@@ -1478,9 +1520,9 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
 
     fms_id = register_diag_field_expand_axes(module_name, cmor_field_name, axes, init_time,    &
-               long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
-               missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
-               standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
+               long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                  &
+               missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,               &
+               standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log, &
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
     call attach_cell_methods(fms_id, axes, cm_string, &
                              cell_methods, x_cell_method, y_cell_method, v_cell_method, &
@@ -1496,16 +1538,16 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     if (associated(axes%xyave_axes)) then
       fms_xyave_id = register_diag_field_expand_axes(module_name, trim(cmor_field_name)//'_xyave', &
                axes%xyave_axes, init_time, &
-               long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
-               missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
-               standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
+               long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                  &
+               missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,               &
+               standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log, &
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                                cell_methods, v_cell_method, v_extensive=v_extensive)
       if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
         msg = 'native name is "'//trim(field_name)//'_xyave"'
-        call log_available_diag(fms_xyave_id>0, module_name, trim(cmor_field_name)//'_xyave', cm_string, &
-                                msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
+        call log_available_diag(fms_xyave_id>0, module_name, trim(cmor_field_name)//'_xyave', &
+                                cm_string, msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
                                 posted_cmor_standard_name)
       endif
     endif
@@ -1522,25 +1564,31 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
 
 end function register_diag_field_expand_cmor
 
-!> Returns an FMS id from register_diag_field_fms (the diag_manager routine) after expanding axes (axes-group)
-!! into handles and conditionally adding an FMS area_id for cell_measures.
+!> Returns an FMS id from register_diag_field_fms (the diag_manager routine) after expanding axes
+!! (axes-group) into handles and conditionally adding an FMS area_id for cell_measures.
 integer function register_diag_field_expand_axes(module_name, field_name, axes, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name,  &
      verbose, do_not_log, err_msg, interp_method, tile_count)
-  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
+                                              !! or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
-  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates
+                                             !! axes for this field
   type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
   real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
-  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided
+                                                         !! with post_data calls (not used in MOM?)
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
-  logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
-  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
-  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
+  logical,          optional, intent(in) :: do_not_log !< If true, do not log something
+                                                       !! (not used in MOM?)
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be
+                                                         !! placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should
+                                                         !! not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
   ! Local variables
   integer :: fms_id, area_id, volume_id
@@ -1624,8 +1672,10 @@ subroutine add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name
   integer,                intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
   integer,                intent(in)    :: fms_id !< The FMS diag_manager ID for this diagnostic
   type(diag_type),        pointer       :: this_diag !< This diagnostic
-  type(axes_grp), target, intent(in)    :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
-  character(len=*),       intent(in)    :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  type(axes_grp), target, intent(in)    :: axes !< Container w/ up to 3 integer handles that
+                                                !! indicates axes for this field
+  character(len=*),       intent(in)    :: module_name !< Name of this module, usually
+                                                       !! "ocean_model" or "ice_shelf_model"
   character(len=*),       intent(in)    :: field_name !< Name of diagnostic
   character(len=*),       intent(in)    :: msg !< Message for errors
 
@@ -1645,15 +1695,21 @@ end subroutine add_diag_to_list
 subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
                                x_cell_method, y_cell_method, v_cell_method, v_extensive)
   integer,                    intent(in)  :: id !< Handle to diagnostic
-  type(axes_grp),             intent(in)  :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(axes_grp),             intent(in)  :: axes !< Container w/ up to 3 integer handles that indicates
+                                                  !! axes for this field
   character(len=*),           intent(out) :: ostring !< The cell_methods strings that would appear in the file
-  character(len=*), optional, intent(in)  :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
-                                                         !! If present, this overrides the default constructed from the default for
-                                                         !! each individual axis direction.
-  character(len=*), optional, intent(in)  :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
-  character(len=*), optional, intent(in)  :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
-  character(len=*), optional, intent(in)  :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
-  logical,          optional, intent(in)  :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
+  character(len=*), optional, intent(in)  :: cell_methods !< String to append as cell_methods attribute.
+                                                         !! Use '' to have no attribute. If present, this
+                                                         !! overrides the default constructed from the default
+                                                         !! for each individual axis direction.
+  character(len=*), optional, intent(in)  :: x_cell_method !< Specifies the cell method for the x-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in)  :: y_cell_method !< Specifies the cell method for the y-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in)  :: v_cell_method !< Specifies the cell method for the vertical direction.
+                                                         !! Use '' have no method.
+  logical,          optional, intent(in)  :: v_extensive !< True for vertically extensive fields
+                                                         !! (vertically integrated). Default/absent for intensive.
   ! Local variables
   character(len=9) :: axis_name
   logical :: x_mean, y_mean, x_sum, y_sum
@@ -1792,7 +1848,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
   MOM_missing_value = diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   dm_id = -1
   diag => null()
@@ -1901,7 +1957,7 @@ function register_static_field(module_name, field_name, axes, &
   character(len=9) :: axis_name
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   diag_cs => axes%diag_cs
   dm_id = -1
@@ -2286,16 +2342,13 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
 
 end subroutine diag_mediator_init
 
+!> Set pointers to the default state fields used to remap diagnostics.
 subroutine diag_set_state_ptrs(h, T, S, eqn_of_state, diag_cs)
-
-  real, dimension(:,:,:), target, intent(in) :: h, T, S
-  type(EOS_type),  pointer, intent(in)       :: eqn_of_state !< Equation of state structure
-  type(diag_ctrl), intent(inout) :: diag_cs
-
-  !  (inout) diag_cs - diag mediator control structure
-  !  (in) h - a pointer to model thickness
-  !  (in) T - a pointer to model temperature
-  !  (in) S - a pointer to model salinity
+  real, dimension(:,:,:), target, intent(in   ) :: h !< the model thickness array
+  real, dimension(:,:,:), target, intent(in   ) :: T !< the model temperature array
+  real, dimension(:,:,:), target, intent(in   ) :: S !< the model salinity array
+  type(EOS_type),         target, intent(in   ) :: eqn_of_state !< Equation of state structure
+  type(diag_ctrl),                intent(inout) :: diag_cs !< diag mediator control structure
 
   ! Keep pointers to h, T, S needed for the diagnostic remapping
   diag_cs%h => h
@@ -2467,7 +2520,7 @@ function i2s(a,n_in)
     integer :: i,n
 
     n=size(a)
-    if(present(n_in)) n = n_in
+    if (present(n_in)) n = n_in
 
     i2s = ''
     do i=1,n
@@ -2520,17 +2573,12 @@ subroutine initialize_diag_type(diag)
 
 end subroutine initialize_diag_type
 
-! Make a new diagnostic. Either use memory which is in the array of 'primary'
-! diagnostics, or if that is in use, insert it to the list of secondary diags.
+!> Make a new diagnostic. Either use memory which is in the array of 'primary'
+!! diagnostics, or if that is in use, insert it to the list of secondary diags.
 subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
-  integer, intent(in) :: diag_id
-  type(diag_ctrl), target, intent(inout) :: diag_cs
-  type(diag_type), pointer, intent(out) :: diag
-
-  ! Arguments:
-  !  (in)      diag_id  - new id for the diag.
-  !  (inout)   diag_cs  - structure used to regulate diagnostic output
-  !  (inout)   diag     - structure representing a diagnostic
+  integer,                 intent(in   ) :: diag_id !< id for the diagnostic
+  type(diag_ctrl), target, intent(inout) :: diag_cs !< structure used to regulate diagnostic output
+  type(diag_type),         pointer       :: diag    !< structure representing a diagnostic (inout)
 
   type(diag_type), pointer :: tmp
 

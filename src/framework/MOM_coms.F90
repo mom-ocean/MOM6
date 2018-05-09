@@ -116,20 +116,20 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
     if (over_check) then
       if ((je+1-js)*(ie+1-is) < max_count_prec) then
         do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j), max_mag_term);
+          call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
         enddo ; enddo
         call carry_overflow(ints_sum, prec_error)
       elseif ((ie+1-is) < max_count_prec) then
         do j=js,je
           do i=is,ie
-            call increment_ints_faster(ints_sum, array(i,j), max_mag_term);
+            call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
           enddo
           call carry_overflow(ints_sum, prec_error)
         enddo
       else
         do j=js,je ; do i=is,ie
           call increment_ints(ints_sum, real_to_ints(array(i,j), prec_error), &
-                              prec_error);
+                              prec_error)
         enddo ; enddo
       endif
     else
@@ -172,7 +172,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
   else
     rsum(1) = 0.0
     do j=js,je ; do i=is,ie
-      rsum(1) = rsum(1) + array(i,j);
+      rsum(1) = rsum(1) + array(i,j)
     enddo ; enddo
     call sum_across_PEs(rsum,1)
     sum = rsum(1)
@@ -260,21 +260,21 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
     if (jsz*isz < max_count_prec) then
       do k=1,ke
         do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term)
         enddo ; enddo
         call carry_overflow(ints_sums(:,k), prec_error)
       enddo
     elseif (isz < max_count_prec) then
       do k=1,ke ; do j=js,je
         do i=is,ie
-          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term)
         enddo
         call carry_overflow(ints_sums(:,k), prec_error)
       enddo ; enddo
     else
       do k=1,ke ; do j=js,je ; do i=is,ie
         call increment_ints(ints_sums(:,k), &
-                            real_to_ints(array(i,j,k), prec_error), prec_error);
+                            real_to_ints(array(i,j,k), prec_error), prec_error)
       enddo ; enddo ; enddo
     endif
     if (present(err)) then
@@ -318,21 +318,21 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
     if (jsz*isz < max_count_prec) then
       do k=1,ke
         do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term)
         enddo ; enddo
         call carry_overflow(ints_sum, prec_error)
       enddo
     elseif (isz < max_count_prec) then
       do k=1,ke ; do j=js,je
         do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term)
         enddo
         call carry_overflow(ints_sum, prec_error)
       enddo ; enddo
     else
       do k=1,ke ; do j=js,je ; do i=is,ie
         call increment_ints(ints_sum, real_to_ints(array(i,j,k), prec_error), &
-                            prec_error);
+                            prec_error)
       enddo ; enddo ; enddo
     endif
     if (present(err)) then

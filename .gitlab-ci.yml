@@ -34,10 +34,12 @@ setup:
     - git clone https://github.com/adcroft/MRS.git MRS
     # Update MOM6-examples and submodules
     - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git submodule init && git submodule update)
+    - (cd MOM6-examples/src/MOM6 && git submodule update)
     - test -d MOM6-examples/src/LM3 || make -f MRS/Makefile.clone clone_gfdl -s
     - make -f MRS/Makefile.clone MOM6-examples/.datasets -s
     #- (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
     - env > gitlab_session.log
+    # Cache everything under tests to unpack for each subsequent stage
     - cd ../ ; time tar zcf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz tests
 
 # Compiles
@@ -217,6 +219,16 @@ gnu:restart:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
     - make -f MRS/Makefile.tests gnu_check_restarts
+
+gnu:params:
+  stage: tests
+  tags:
+    - ncrc4
+  script:
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests params_gnu_symmetric
+  allow_failure: true
 
 cleanup:
   stage: cleanup

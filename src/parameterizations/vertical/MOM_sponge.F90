@@ -120,29 +120,23 @@ end type sponge_CS
 
 contains
 
+!> This subroutine determines the number of points which are within
+!! sponges in this computational domain.  Only points that have
+!! positive values of Iresttime and which mask2dT indicates are ocean
+!! points are included in the sponges.  It also stores the target interface
+!! heights.
 subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
                              Iresttime_i_mean, int_height_i_mean)
-  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)),       intent(in) :: Iresttime
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: int_height
-  type(param_file_type),                  intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(sponge_CS),                        pointer    :: CS
+  type(ocean_grid_type),                  intent(in) :: G              !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)),       intent(in) :: Iresttime      !< The inverse of the restoring time, in s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: int_height !< The interface heights to damp back toward, in m.
+  type(param_file_type),                  intent(in) :: param_file     !< A structure to parse for run-time parameters
+  type(sponge_CS),                        pointer    :: CS             !< A pointer that is set to point to the control
+                                                                       !! structure for this module
   real, dimension(SZJ_(G)),     optional, intent(in) :: Iresttime_i_mean
   real, dimension(SZJ_(G),SZK_(G)+1), optional, intent(in) :: int_height_i_mean
 
-!   This subroutine determines the number of points which are within
-! sponges in this computational domain.  Only points that have
-! positive values of Iresttime and which mask2dT indicates are ocean
-! points are included in the sponges.  It also stores the target interface
-! heights.
 
-! Arguments: Iresttime - The inverse of the restoring time, in s-1.
-!  (in)      int_height - The interface heights to damp back toward, in m.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
@@ -226,21 +220,15 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
 
 end subroutine initialize_sponge
 
+!> This subroutine sets up diagnostics for the sponges.  It is separate
+!! from initialize_sponge because it requires fields that are not readily
+!! availble where initialize_sponge is called.
 subroutine init_sponge_diags(Time, G, diag, CS)
-  type(time_type),       target, intent(in)    :: Time
+  type(time_type),       target, intent(in)    :: Time !< The current model time
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(diag_ctrl),       target, intent(inout) :: diag
-  type(sponge_CS),               pointer       :: CS
-
-!   This subroutine sets up diagnostics for the sponges.  It is separate
-! from initialize_sponge because it requires fields that are not readily
-! availble where initialize_sponge is called.
-
-! Arguments:  Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
+  type(diag_ctrl),       target, intent(inout) :: diag !< A structure that is used to regulate diagnostic output
+  type(sponge_CS),               pointer       :: CS   !< A pointer to the control structure for this module that
+                                                       !! is set by a previous call to initialize_sponge.
 
   if (.not.associated(CS)) return
 
@@ -250,25 +238,19 @@ subroutine init_sponge_diags(Time, G, diag, CS)
 
 end subroutine init_sponge_diags
 
+!> This subroutine stores the reference profile for the variable
+!! whose address is given by f_ptr. nlay is the number of layers in
+!! this variable.
 subroutine set_up_sponge_field(sp_val, f_ptr, G, nlay, CS, sp_val_i_mean)
-  type(ocean_grid_type),                            intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in) :: sp_val
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr
-  integer,                                          intent(in) :: nlay
-  type(sponge_CS),                                  pointer    :: CS
-  real, dimension(SZJ_(G),SZK_(G)),       optional, intent(in) :: sp_val_i_mean
-!   This subroutine stores the reference profile for the variable
-! whose address is given by f_ptr. nlay is the number of layers in
-! this variable.
-
-! Arguments: sp_val - The reference profiles of the quantity being
-!                     registered.
-!  (in)      f_ptr - a pointer to the field which will be damped.
-!  (in)      nlay - the number of layers in this quantity.
-!  (in/out)  CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
-!  (in,opt)  sp_val_i_mean - The i-mean reference value for this field with
-!                 i-mean sponges.
+  type(ocean_grid_type),                            intent(in) :: G      !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in) :: sp_val !< The reference profiles of the quantity being
+                                                                         !! registered.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr  !< a pointer to the field which will be damped
+  integer,                                          intent(in) :: nlay   !< the number of layers in this quantity
+  type(sponge_CS),               pointer       :: CS   !< A pointer to the control structure for this module that
+                                                       !! is set by a previous call to initialize_sponge.
+  real, dimension(SZJ_(G),SZK_(G)),       optional, intent(in) :: sp_val_i_mean !< The i-mean reference value for
+                                                                         !! this field with i-mean sponges.
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages

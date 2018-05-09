@@ -160,11 +160,13 @@ type, public :: MOM_control_struct ; private
                     !! with a correction for the inverse barometer (meter)
     eta_av_bc       !< free surface height or column mass time averaged over the last
                     !! baroclinic dynamics time step (m or kg/m2)
-  real, pointer, dimension(:,:) :: &
+  real, dimension(:,:), pointer :: &
     Hml => NULL()   !< active mixed layer depth, in m
   real :: time_in_cycle !< The running time of the current time-stepping cycle
                     !! in calls that step the dynamics, and also the length of
                     !! the time integral of ssh_rint, in s.
+  real :: time_in_thermo_cycle !< The running time of the current time-stepping
+                    !! cycle in calls that step the thermodynamics, in s.
 
   type(ocean_grid_type) :: G  !< structure containing metrics and grid info
   type(verticalGrid_type), pointer :: &
@@ -239,7 +241,7 @@ type, public :: MOM_control_struct ; private
   type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
 
-  real, pointer, dimension(:,:,:) :: &
+  real, dimension(:,:,:), pointer :: &
     h_pre_dyn => NULL(), &      !< The thickness before the transports, in H.
     T_pre_dyn => NULL(), &      !< Temperature before the transports, in degC.
     S_pre_dyn => NULL()         !< Salinity before the transports, in psu.
@@ -247,7 +249,7 @@ type, public :: MOM_control_struct ; private
                                 !! for derived diagnostics (e.g., energy budgets)
   type(cont_diag_ptrs)  :: CDp  !< structure containing pointers to continuity equation
                                 !! terms, for derived diagnostics (e.g., energy budgets)
-  real, pointer, dimension(:,:,:) :: &
+  real, dimension(:,:,:), pointer :: &
     u_prev => NULL(), &         !< previous value of u stored for diagnostics
     v_prev => NULL()            !< previous value of v stored for diagnostics
 
@@ -257,7 +259,7 @@ type, public :: MOM_control_struct ; private
   logical :: p_surf_prev_set    !< If true, p_surf_prev has been properly set from
                                 !! a previous time-step or the ocean restart file.
                                 !! This is only valid when interp_p_surf is true.
-  real, pointer, dimension(:,:) :: &
+  real, dimension(:,:), pointer :: &
     p_surf_prev  => NULL(), &   !< surface pressure (Pa) at end  previous call to step_MOM
     p_surf_begin => NULL(), &   !< surface pressure (Pa) at start of step_MOM_dyn_...
     p_surf_end   => NULL()      !< surface pressure (Pa) at end   of step_MOM_dyn_...
@@ -362,16 +364,18 @@ contains
 !! The action of lateral processes on tracers occur in calls to
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
-subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Waves, &
-                    do_dynamics, do_thermodynamics, start_cycle, end_cycle, cycle_length)
+subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
+                    Waves, do_dynamics, do_thermodynamics, start_cycle, &
+                    end_cycle, cycle_length, reset_therm)
   type(mech_forcing), intent(inout) :: forces        !< A structure with the driving mechanical forces
-  type(forcing),      intent(inout) :: fluxes        !< pointers to forcing fields
+  type(forcing),      intent(inout) :: fluxes        !< A structure with pointers to themodynamic,
+                                                     !! tracer and mass exchange forcing fields
   type(surface),      intent(inout) :: sfc_state     !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_interval !< time interval covered by this run segment, in s.
   type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
-  type(Wave_parameters_CS), pointer, &
-            optional, intent(in)    :: Waves         !< An optional pointer to a wave proptery CS
+  type(Wave_parameters_CS), &
+            optional, pointer       :: Waves         !< An optional pointer to a wave proptery CS
   logical,  optional, intent(in)    :: do_dynamics   !< Present and false, do not do updates due
                                                      !! to the dynamics.
   logical,  optional, intent(in)    :: do_thermodynamics  !< Present and false, do not do updates due
@@ -384,10 +388,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
                                                      !! time-stepping cycle; missing is like true.
   real,     optional, intent(in)    :: cycle_length  !< The amount of time in a coupled time
                                                      !! stepping cycle, in s.
+  logical,  optional, intent(in)    :: reset_therm   !< This indicates whether the running sums of
+                                                     !! thermodynamic quantities should be reset.
+                                                     !! If missing, this is like start_cycle.
 
   ! local
-  type(ocean_grid_type), pointer :: G ! pointer to a structure containing
-                                      ! metrics and related information
+  type(ocean_grid_type), pointer :: G => NULL()  ! pointer to a structure containing
+                                                 ! metrics and related information
   type(verticalGrid_type),  pointer :: GV => NULL()
 
   integer       :: ntstep ! time steps between tracer updates or diabatic forcing
@@ -420,14 +427,17 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
                         ! a stepping cycle (whatever that may mean).
   logical :: cycle_end  ! If true, do calculations and diagnostics that are only done at
                         ! the end of a stepping cycle (whatever that may mean).
+  logical :: therm_reset ! If true, reset running sums of thermodynamic quantities.
   real :: cycle_time    ! The length of the coupled time-stepping cycle, in s.
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
     ssh         ! sea surface height, which may be based on eta_av (meter)
 
-  real, pointer, dimension(:,:,:) :: &
-    u, & ! u : zonal velocity component (m/s)
-    v, & ! v : meridional velocity component (m/s)
-    h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  real, dimension(:,:,:), pointer :: &
+    u => NULL(), & ! u : zonal velocity component (m/s)
+    v => NULL(), & ! v : meridional velocity component (m/s)
+    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  real, dimension(:,:), pointer :: &
+    p_surf => NULL() ! A pointer to the ocean surface pressure, in Pa.
   real :: I_wt_ssh
 
   type(time_type) :: Time_local, end_time_thermo, Time_temp
@@ -448,6 +458,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
   cycle_start = .true. ; if (present(start_cycle)) cycle_start = start_cycle
   cycle_end = .true. ; if (present(end_cycle)) cycle_end = end_cycle
   cycle_time = time_interval ; if (present(cycle_length)) cycle_time = cycle_length
+  therm_reset = cycle_start ; if (present(reset_therm)) therm_reset = reset_therm
 
   call cpu_clock_begin(id_clock_ocean)
   call cpu_clock_begin(id_clock_other)
@@ -461,11 +472,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 
   ! First determine the time step that is consistent with this call and an
   ! integer fraction of time_interval.
-
   if (do_dyn) then
     n_max = 1
     if (time_interval > CS%dt) n_max = ceiling(time_interval/CS%dt - 0.001)
-
     dt = time_interval / real(n_max)
     thermo_does_span_coupling = (CS%thermo_spans_coupling .and. &
                                 (CS%dt_therm > 1.5*cycle_time))
@@ -481,25 +490,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ntstep = MAX(1,MIN(n_max,floor(CS%dt_therm/dt + 0.001)))
       dt_therm = dt*ntstep
     endif
-  else
-    n_max = 1
-    if ((time_interval > CS%dt_therm) .and. (CS%dt_therm > 0.0)) &
-      n_max = ceiling(time_interval/CS%dt_therm - 0.001)
 
-    dt = time_interval / real(n_max)
-    dt_therm = dt ; ntstep = 1
-    thermo_does_span_coupling = .true. ! This is never used in this case?
-  endif
+    if (associated(forces%p_surf)) p_surf => forces%p_surf
+    if (.not.associated(forces%p_surf)) CS%interp_p_surf = .false.
 
-  if (do_dyn) then
-    if (.not.ASSOCIATED(forces%p_surf)) CS%interp_p_surf = .false.
-
-    !---------- Initiate group halo pass
+    !---------- Initiate group halo pass of the forcing fields
     call cpu_clock_begin(id_clock_pass)
     call create_group_pass(pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
-    if (ASSOCIATED(forces%ustar)) &
+    if (associated(forces%ustar)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%ustar, G%Domain)
-    if (ASSOCIATED(forces%p_surf)) &
+    if (associated(forces%p_surf)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%p_surf, G%Domain)
     if (G%nonblocking_updates) then
       call start_group_pass(pass_tau_ustar_psurf, G%Domain)
@@ -507,14 +507,28 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       call do_group_pass(pass_tau_ustar_psurf, G%Domain)
     endif
     call cpu_clock_end(id_clock_pass)
+  else
+    ! This step only updates the thermodynamics so setting timesteps is simpler.
+    n_max = 1
+    if ((time_interval > CS%dt_therm) .and. (CS%dt_therm > 0.0)) &
+      n_max = ceiling(time_interval/CS%dt_therm - 0.001)
+
+    dt = time_interval / real(n_max)
+    dt_therm = dt ; ntstep = 1
+    if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
+
+    if (CS%UseWaves) call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass)
+  endif
+
+  if (therm_reset) then
+    CS%time_in_thermo_cycle = 0.0
+    if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
+    if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
+    if (associated(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
+    if (associated(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
   endif
 
   if (cycle_start) then
-    if (ASSOCIATED(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
-    if (ASSOCIATED(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
-    if (ASSOCIATED(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
-    if (ASSOCIATED(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
-
     CS%time_in_cycle = 0.0
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
@@ -531,8 +545,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       call complete_group_pass(pass_tau_ustar_psurf, G%Domain, clock=id_clock_pass)
 
     if (CS%interp_p_surf) then
-      if (.not.ASSOCIATED(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
-      if (.not.ASSOCIATED(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))
+      if (.not.associated(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
+      if (.not.associated(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))
       if (.not.CS%p_surf_prev_set) then
         do j=jsd,jed ; do i=isd,ied
           CS%p_surf_prev(i,j) = forces%p_surf(i,j)
@@ -542,6 +556,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     else
       CS%p_surf_end  => forces%p_surf
     endif
+
+    if (CS%UseWaves) then
+      ! Update wave information, which is presently kept static over each call to step_mom
+      call enable_averaging(time_interval, Time_start + set_time(int(floor(time_interval+0.5))), CS%diag)
+      call Update_Stokes_Drift(G, GV, Waves, h, forces%ustar)
+      call disable_averaging(CS%diag)
+    endif
+  else ! not do_dyn.
+    if (CS%UseWaves) & ! Diagnostics are not enabled in this call.
+      call Update_Stokes_Drift(G, GV, Waves, h, fluxes%ustar)
   endif
 
   if (CS%debug) then
@@ -560,16 +584,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     CS%Time = Time_start + set_time(int(floor(0.5 + rel_time - 0.5*dt)))
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(rel_time+0.5)))
-
-    !### Update_Stokes_Drift must be behind a do_dyn or a do_thermo test.
-    if (CS%UseWaves) then
-    ! Update wave information, which is presently kept static over each call to step_mom
-      !bgr 3/15/18: Need to enable_averaging here to enable output of Stokes drift from the
-      ! update_stokes_drift routine.  Other options?
-      call enable_averaging(dt, Time_local, CS%diag)
-      call Update_Stokes_Drift(G, GV, Waves, h, forces%ustar)
-      call disable_averaging(CS%diag)
-    endif
 
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
@@ -592,16 +606,20 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
         dtdia = dt*min(ntstep,n_max-(n-1))
       endif
 
-      ! If necessary, temporarily reset CS%Time to the center of the period covered
-      ! by the call to step_MOM_thermo, noting that they begin at the same time.
-      if (dtdia > dt) CS%Time = CS%Time + set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
-
-      ! The end-time of the diagnostic interval needs to be set ahead if there
-      ! are multiple dynamic time steps worth of thermodynamics applied here.
-      end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
+      end_time_thermo = Time_local
+      if (dtdia > dt) then
+        ! If necessary, temporarily reset CS%Time to the center of the period covered
+        ! by the call to step_MOM_thermo, noting that they begin at the same time.
+        CS%Time = CS%Time + set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
+        ! The end-time of the diagnostic interval needs to be set ahead if there
+        ! are multiple dynamic time steps worth of thermodynamics applied here.
+        end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
+      endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, end_time_thermo, .true., WAVES=Waves)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
+                           end_time_thermo, .true., Waves=Waves)
+      CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -612,9 +630,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
-      ! Store pre-dynamics grids for proper diagnostic remapping for transports or advective tendencies
-      ! If there are more dynamics steps per advective steps (i.e DT_THERM /= DT), this needs to be the
-      ! stored at the first call
+      ! Store pre-dynamics grids for proper diagnostic remapping for transports
+      ! or advective tendencies.  If there are more dynamics steps per advective
+      ! steps (i.e DT_THERM /= DT), this needs to be stored at the first call.
       if (CS%ndyn_per_adv == 0 .and. CS%t_dyn_rel_adv == 0.) then
         call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
         CS%ndyn_per_adv = CS%ndyn_per_adv + 1
@@ -658,7 +676,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_therm_here, bbl_time_int, CS, &
-                             Time_local, WAVES=Waves)
+                             Time_local, Waves=Waves)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -693,7 +711,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       if (dtdia > dt) CS%Time = CS%Time - set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_local, .false.,  WAVES=waves)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
+                           Time_local, .false., Waves=Waves)
+      CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
       CS%t_dyn_rel_thermo = 0.0
 
       if (dtdia > dt) & ! Reset CS%Time to its previous value.
@@ -721,9 +741,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
 
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
-      !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
-                          CS%CDp, fluxes, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
+                          CS%CDp, p_surf, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, CS%diagnostics_CSp)
       call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
       call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
@@ -735,6 +754,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
+      !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
         call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, &
                                      G, GV, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
@@ -788,8 +808,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
     call cpu_clock_begin(id_clock_diagnostics)
-    call enable_averaging(CS%time_in_cycle, Time_local, CS%diag)
-    call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_cycle, &
+    call enable_averaging(CS%time_in_thermo_cycle, Time_local, CS%diag)
+    call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_thermo_cycle, &
                                   sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
@@ -813,7 +833,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 end subroutine step_MOM
 
 subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
-                             bbl_time_int, CS, Time_local, WAVES)
+                             bbl_time_int, CS, Time_local, Waves)
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the beginning of this dynamic
@@ -828,19 +848,20 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                   !! bottom boundary layer properties will apply,
                                                   !! in s, or zero not to update the properties.
   type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
-  type(time_type),    intent(in)    :: Time_local !< Starting time of a segment, as a time type
-  type(wave_parameters_CS), pointer, intent(in), optional :: &
-       WAVES                                      !<Container for wave related parameters
+  type(time_type),    intent(in)    :: Time_local !< End time of a segment, as a time type
+  type(wave_parameters_CS), &
+            optional, pointer       :: Waves      !< Container for wave related parameters; the
+                                                  !! fields in Waves are intent in here.
 
   ! local
-  type(ocean_grid_type), pointer :: G ! pointer to a structure containing
-                                      ! metrics and related information
-  type(verticalGrid_type),  pointer :: GV => NULL()
+  type(ocean_grid_type), pointer :: G => NULL() ! pointer to a structure containing
+                                                ! metrics and related information
+  type(verticalGrid_type), pointer :: GV => NULL()
   type(MOM_diag_IDs), pointer :: IDs => NULL() ! A structure with the diagnostic IDs.
-  real, pointer, dimension(:,:,:) :: &
-    u, & ! u : zonal velocity component (m/s)
-    v, & ! v : meridional velocity component (m/s)
-    h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  real, dimension(:,:,:), pointer :: &
+    u => NULL(), & ! u : zonal velocity component (m/s)
+    v => NULL(), & ! v : meridional velocity component (m/s)
+    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
   logical :: calc_dtbt  ! Indicates whether the dynamically adjusted
                         ! barotropic time step needs to be updated.
@@ -861,7 +882,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
 
-    call enable_averaging(dt_thermo,Time_local+set_time(int(floor(dt_thermo-dt+0.5))), CS%diag)
+    call enable_averaging(dt_thermo, Time_local+set_time(int(floor(dt_thermo-dt+0.5))), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
@@ -880,7 +901,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
     call enable_averaging(bbl_time_int, &
-              Time_local+set_time(int(bbl_time_int-dt+0.5)), CS%diag)
+              Time_local + set_time(int(bbl_time_int-dt+0.5)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
     call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, &
@@ -897,7 +918,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     calc_dtbt = .false.
     if (CS%dtbt_reset_period == 0.0) calc_dtbt = .true.
     if (CS%dtbt_reset_period > 0.0) then
-      if (Time_local >= CS%dtbt_reset_time) then
+      if (Time_local >= CS%dtbt_reset_time) then  !### Change >= to > here.
         calc_dtbt = .true.
         CS%dtbt_reset_time = CS%dtbt_reset_time + CS%dtbt_reset_interval
       endif
@@ -1061,7 +1082,8 @@ end subroutine step_MOM_tracer_dyn
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_thermo, update_BBL,waves)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, &
+                           Time_end_thermo, update_BBL, Waves)
   type(MOM_control_struct), intent(inout) :: CS     !< Master MOM control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1076,8 +1098,9 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
-  type(wave_parameters_CS), pointer, optional, intent(in) :: &
-       WAVES !<Container for wave related parameters
+  type(wave_parameters_CS), &
+                  optional, pointer       :: Waves  !< Container for wave related parameters
+                                                    !! the fields in Waves are intent in here.
 
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: showCallTree
@@ -1257,15 +1280,15 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   logical :: skip_diffusion
   integer :: id_eta_diff_end
 
-  integer, pointer :: accumulated_time
+  integer, pointer :: accumulated_time => NULL()
   integer :: i,j,k
   integer :: is, ie, js, je, isd, ied, jsd, jed
 
   ! 3D pointers
-  real, dimension(:,:,:), pointer   :: &
-    uhtr, vhtr, &
-    eatr, ebtr, &
-    h_end
+  real, dimension(:,:,:), pointer :: &
+    uhtr => NULL(), vhtr => NULL(), &
+    eatr => NULL(), ebtr => NULL(), &
+    h_end => NULL()
 
   ! 2D Array for diagnostics
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: eta_pre, eta_end
@@ -1285,7 +1308,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call enable_averaging(time_interval, Time_end, CS%diag)
 
   ! Check to see if this is the first iteration of the offline interval
-  if(accumulated_time==0) then
+  if (accumulated_time==0) then
     first_iter = .true.
   else ! This is probably unnecessary but is used to guard against unwanted behavior
     first_iter = .false.
@@ -1300,17 +1323,17 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
   ! Increment the amount of time elapsed since last read and check if it's time to roll around
   accumulated_time = mod(accumulated_time + int(time_interval), dt_offline)
-  if(accumulated_time==0) then
+  if (accumulated_time==0) then
     last_iter = .true.
   else
     last_iter = .false.
   endif
 
-  if(CS%use_ALE_algorithm) then
+  if (CS%use_ALE_algorithm) then
     ! If this is the first iteration in the offline timestep, then we need to read in fields and
     ! perform the main advection.
     if (first_iter) then
-      if(is_root_pe()) print *, "Reading in new offline fields"
+      if (is_root_pe()) print *, "Reading in new offline fields"
       ! Read in new transport and other fields
       ! call update_transport_from_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
       !     CS%tv%T, CS%tv%S, fluxes, CS%use_ALE_algorithm)
@@ -1330,7 +1353,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
           if (associated(CS%VarMix)) then
-            call pass_var(CS%h,G%Domain)
+            call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, CS%VarMix)
           endif
@@ -1345,7 +1368,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
     endif
 
     ! Last thing that needs to be done is the final ALE remapping
-    if(last_iter) then
+    if (last_iter) then
       if (CS%diabatic_first) then
         call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
             CS%h, uhtr, vhtr, converged=adv_converged)
@@ -1355,7 +1378,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
                 ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
           if (associated(CS%VarMix)) then
-            call pass_var(CS%h,G%Domain)
+            call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, CS%VarMix)
           endif
@@ -1364,7 +1387,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         endif
       endif
 
-      if(is_root_pe()) print *, "Last iteration of offline interval"
+      if (is_root_pe()) print *, "Last iteration of offline interval"
 
       ! Apply freshwater fluxes out of the ocean
       call offline_fw_fluxes_out_ocean(G, GV, CS%offline_CSp, fluxes, CS%h)
@@ -1385,7 +1408,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
     ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in
     ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
     ! exchange with the atmosphere
-    if(time_interval .NE. dt_offline) then
+    if (time_interval /= dt_offline) then
       call MOM_error(FATAL, &
           "For offline tracer mode in a non-ALE configuration, dt_offline must equal time_interval")
     endif
@@ -1411,9 +1434,9 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call extract_surface_state(CS, sfc_state)
 
   call disable_averaging(CS%diag)
-  call pass_var(CS%tv%T,G%Domain)
-  call pass_var(CS%tv%S,G%Domain)
-  call pass_var(CS%h,G%Domain)
+  call pass_var(CS%tv%T, G%Domain)
+  call pass_var(CS%tv%S, G%Domain)
+  call pass_var(CS%h, G%Domain)
 
   fluxes%fluxes_used = .true.
 
@@ -1450,7 +1473,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(hor_index_type)            :: HI  !  A hor_index_type for array extents
   type(verticalGrid_type), pointer :: GV => NULL()
   type(dyn_horgrid_type), pointer :: dG => NULL()
-  type(diag_ctrl),        pointer :: diag
+  type(diag_ctrl),        pointer :: diag => NULL()
 
   character(len=4), parameter :: vers_num = 'v2.0'
 
@@ -1466,7 +1489,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
   real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf
   real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf
-  real, dimension(:,:), pointer :: shelf_area
+  real, dimension(:,:), pointer :: shelf_area => NULL()
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
   ! GMM, the following *is not* used. Should we delete it?
@@ -2003,7 +2026,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ALLOC_(CS%ssh_rint(isd:ied,jsd:jed)) ; CS%ssh_rint(:,:) = 0.0
   ALLOC_(CS%ave_ssh_ibc(isd:ied,jsd:jed)) ; CS%ave_ssh_ibc(:,:) = 0.0
   ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0
-  CS%time_in_cycle = 0.0
+  CS%time_in_cycle = 0.0 ; CS%time_in_thermo_cycle = 0.0
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
@@ -2381,11 +2404,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 end subroutine initialize_MOM
 
 !> This subroutine finishes initializing MOM and writes out the initial conditions.
-subroutine finish_MOM_initialization(Time, dirs, CS, fluxes, restart_CSp)
+subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
   type(MOM_control_struct), pointer       :: CS          !< pointer to MOM control structure
-  type(forcing),            intent(inout) :: fluxes      !< pointers to forcing fields
   type(MOM_restart_CS),     pointer       :: restart_CSp !< pointer to the restart control
                                                          !! structure that will be used for MOM.
   ! Local variables
@@ -2564,8 +2586,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
   integer :: i, j, is, ie, js, je
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
-  if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    calc_rho = ASSOCIATED(tv%eqn_of_state)
+  if (present(p_atm)) then ; if (associated(p_atm)) then
+    calc_rho = associated(tv%eqn_of_state)
     if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
     ! Correct the output sea surface height for the contribution from the
     ! atmospheric pressure
@@ -2589,18 +2611,18 @@ end subroutine adjust_ssh_for_p_atm
 subroutine extract_surface_state(CS, sfc_state)
   type(MOM_control_struct), pointer       :: CS !< Master MOM control structure
   type(surface),            intent(inout) :: sfc_state !< transparent ocean surface state
-                                                !! structure shared with the calling routine;
+                                                !! structure shared with the calling routine
                                                 !! data in this structure is intent out.
 
   ! local
   real :: hu, hv
   type(ocean_grid_type), pointer :: G => NULL() ! pointer to a structure containing
                                       ! metrics and related information
-  type(verticalGrid_type),  pointer :: GV => NULL()
-  real, pointer, dimension(:,:,:) :: &
-    u, & ! u : zonal velocity component (m/s)
-    v, & ! v : meridional velocity component (m/s)
-    h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  type(verticalGrid_type), pointer :: GV => NULL()
+  real, dimension(:,:,:), pointer :: &
+    u => NULL(), & ! u : zonal velocity component (m/s)
+    v => NULL(), & ! v : meridional velocity component (m/s)
+    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
   real :: depth(SZI_(CS%G))           ! distance from the surface (meter)
   real :: depth_ml                    ! depth over which to average to
                                       ! determine mixed layer properties (meter)

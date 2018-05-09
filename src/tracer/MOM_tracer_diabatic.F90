@@ -24,19 +24,24 @@ contains
 
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate, convert_flux_in)
-  type(ocean_grid_type),                     intent(in)    :: G             !< ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: ea            !< amount of fluid entrained from the layer above (units of h_work)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb            !< amount of fluid entrained from the layer below (units of h_work)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr            !< tracer concentration (in concentration units CU)
-  real,                                      intent(in)    :: dt            !< amount of time covered by this call (seconds)
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux      !< surface flux of the tracer (in CU * kg m-2 s-1)
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux      !< The (negative upward) bottom flux of the tracer,
-                                                                            !! in units of (CU * kg m-2 s-1)
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
-  real,                             optional,intent(in)    :: sink_rate     !< rate at which the tracer sinks, in m s-1
-  logical,                          optional,intent(in)  :: convert_flux_in    !< True if the specified sfc_flux needs to be integrated in time
+  type(ocean_grid_type),                     intent(in)    :: G      !< ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old  !< layer thickness before entrainment (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: ea     !< amount of fluid entrained from the layer
+                                                                     !! above (units of h_work)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb     !< amount of fluid entrained from the layer
+                                                                     !! below (units of h_work)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration (in concentration units CU)
+  real,                                      intent(in)    :: dt     !< amount of time covered by this call (seconds)
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units
+                                                                     !! of (CU * kg m-2 s-1)
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
+                                                                     !! tracer, in units of (CU * kg m-2 s-1)
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
+                                                                     !! (units of CU kg m-2; formerly CU m)
+  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks, in m s-1
+  logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
+                                                                     !! to be integrated in time
 
   real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -82,7 +87,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 !$OMP do
   do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
   if (present(sfc_flux)) then
-    if(convert_flux) then
+    if (convert_flux) then
 !$OMP do
       do j = js, je; do i = is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
@@ -95,7 +100,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     endif
   endif
   if (present(btm_flux)) then
-    if(convert_flux) then
+    if (convert_flux) then
 !$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
@@ -227,10 +232,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness in H units
   real,                                       intent(in   ) :: evap_CFL_limit
   real,                                       intent(in   ) :: minimum_forcing_depth
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional ! The total time-integrated amount of tracer!
-                                                                             ! that enters with freshwater
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional ! The total time-integrated amount of tracer!
-                                                                              ! that leaves with freshwater
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional !< The total time-integrated
+                                                                  !! amount of tracer that enters with freshwater
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional ! The total time-integrated
+                                                                  !! amount of tracer that leaves with freshwater
   !< Optional flag to determine whether h should be updated
   logical,                          optional, intent(in) :: update_h_opt
 
@@ -245,13 +250,13 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     netMassIn,    &  ! mass entering ocean surface (H units) over a time step
     netMassOut       ! mass leaving ocean surface (H units) over a time step
 
-  real, dimension(SZI_(G), SZK_(G))                     :: h2d, Tr2d
-  real, dimension(SZI_(G),SZJ_(G))                      :: in_flux  ! The total time-integrated amount of tracer!
-                                                                       ! that enters with freshwater
-  real, dimension(SZI_(G),SZJ_(G))                      :: out_flux ! The total time-integrated amount of tracer!
-                                                                        ! that leaves with freshwater
-  real, dimension(SZI_(G))                              :: in_flux_1d, out_flux_1d
-  real                                                  :: hGrounding(maxGroundings)
+  real, dimension(SZI_(G), SZK_(G)) :: h2d, Tr2d
+  real, dimension(SZI_(G),SZJ_(G))  :: in_flux  ! The total time-integrated amount of tracer!
+                                                   ! that enters with freshwater
+  real, dimension(SZI_(G),SZJ_(G))  :: out_flux ! The total time-integrated amount of tracer!
+                                                    ! that leaves with freshwater
+  real, dimension(SZI_(G))          :: in_flux_1d, out_flux_1d
+  real                              :: hGrounding(maxGroundings)
   real    :: Tr_in
   logical :: update_h
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
@@ -260,15 +265,15 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! If no freshwater fluxes, nothing needs to be done in this routine
-  if ( (.not. ASSOCIATED(fluxes%netMassIn)) .or. (.not. ASSOCIATED(fluxes%netMassOut)) ) return
+  if ( (.not. associated(fluxes%netMassIn)) .or. (.not. associated(fluxes%netMassOut)) ) return
 
   in_flux(:,:) = 0.0 ; out_flux(:,:) = 0.0
-  if(present(in_flux_optional)) then
+  if (present(in_flux_optional)) then
     do j=js,je ; do i=is,ie
       in_flux(i,j) = in_flux_optional(i,j)
     enddo; enddo
   endif
-  if(present(out_flux_optional)) then
+  if (present(out_flux_optional)) then
     do j=js,je ; do i=is,ie
       out_flux(i,j) = out_flux_optional(i,j)
     enddo ; enddo
