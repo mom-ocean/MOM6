@@ -113,12 +113,14 @@ contains
 ! heights.
 subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_data)
 
-  type(ocean_grid_type),                intent(in) :: G !< The ocean's grid structure (in).
-  integer,                              intent(in) :: nz_data !< The total number of sponge input layers  (in).
-  real, dimension(SZI_(G),SZJ_(G)),     intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
-  type(param_file_type),                intent(in) :: param_file !< A structure indicating the open file to parse for model parameter values (in).
-  type(ALE_sponge_CS),                  pointer    :: CS !< A pointer that is set to point to the control structure for this module (in/out).
-  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge input layers.  (in).
+  type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure (in).
+  integer,                          intent(in) :: nz_data !< The total number of sponge input layers  (in).
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
+  type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file
+                                                             !! to parse for model parameter values (in).
+  type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
+                                                     !! structure for this module (in/out).
+  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge input layers.
 
 
 ! This include declares and sets the variable "version".
@@ -298,10 +300,12 @@ end subroutine initialize_ALE_sponge_fixed
 ! heights.
 subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 
-  type(ocean_grid_type),                intent(in) :: G !< The ocean's grid structure (in).
-  real, dimension(SZI_(G),SZJ_(G)),     intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
-  type(param_file_type),                intent(in) :: param_file !< A structure indicating the open file to parse for model parameter values (in).
-  type(ALE_sponge_CS),                  pointer    :: CS !< A pointer that is set to point to the control structure for this module (in/out).
+  type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
+  type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file to parse
+                                                             !! for model parameter values (in).
+  type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
+                                                     !! structure for this module (in/out).
 
 
 
@@ -472,10 +476,12 @@ end subroutine init_ALE_sponge_diags
 !> This subroutine stores the reference profile at h points for the variable
 ! whose address is given by f_ptr.
 subroutine set_up_ALE_sponge_field_fixed(sp_val, G, f_ptr, CS)
-  type(ocean_grid_type),                   intent(in) :: G !< Grid structure (in).
-  type(ALE_sponge_CS),                     pointer  :: CS !< Sponge structure (in/out).
-  real, dimension(SZI_(G),SZJ_(G),CS%nz_data), intent(in) :: sp_val !< Field to be used in the sponge, it has arbritary number of layers (in).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
+  type(ocean_grid_type), intent(in) :: G  !< Grid structure
+  type(ALE_sponge_CS),   pointer    :: CS !< Sponge structure (in/out).
+  real, dimension(SZI_(G),SZJ_(G),CS%nz_data), &
+                         intent(in) :: sp_val !< Field to be used in the sponge, it has arbritary number of layers.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 target, intent(in) :: f_ptr !< Pointer to the field to be damped
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages
@@ -507,12 +513,13 @@ end subroutine set_up_ALE_sponge_field_fixed
 !> This subroutine stores the reference profile at h points for the variable
 ! whose address is given by filename and fieldname.
 subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, CS)
-  character(len=*), intent(in) :: filename
-  character(len=*),  intent(in) :: fieldname
-  type(time_type),    intent(in) :: Time
-  type(ocean_grid_type),                   intent(in) :: G !< Grid structure (in).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
-  type(ALE_sponge_CS),                     pointer  :: CS !< Sponge structure (in/out).
+  character(len=*),      intent(in) :: filename
+  character(len=*),      intent(in) :: fieldname
+  type(time_type),       intent(in) :: Time
+  type(ocean_grid_type), intent(in) :: G !< Grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
+  type(ALE_sponge_CS),   pointer    :: CS !< Sponge structure (in/out).
 
   real, allocatable, dimension(:,:,:) :: sp_val !< Field to be used in the sponge
   real, allocatable, dimension(:,:,:) :: mask_z !< Field mask for the sponge data
@@ -602,7 +609,8 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
       if (hsrc(k)>0.) nPoints = nPoints + 1
       zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
     enddo
-    hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(CS%col_i(col),CS%col_j(col)) ) ! In case data is deeper than model
+    ! In case data is deeper than model
+    hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(CS%col_i(col),CS%col_j(col)) )
     CS%Ref_val(CS%fldno)%h(1:nz_data,col) = 0.
     CS%Ref_val(CS%fldno)%p(1:nz_data,col) = -1.e24
     CS%Ref_val(CS%fldno)%h(1:nz_data,col) = hsrc(1:nz_data)
@@ -620,12 +628,14 @@ end subroutine set_up_ALE_sponge_field_varying
 !> This subroutine stores the reference profile at uand v points for the variable
 ! whose address is given by u_ptr and v_ptr.
 subroutine set_up_ALE_sponge_vel_field_fixed(u_val, v_val, G, u_ptr, v_ptr, CS)
-  type(ocean_grid_type),                   intent(in) :: G !< Grid structure (in).
-  type(ALE_sponge_CS),                     pointer  :: CS !< Sponge structure (in/out).
-  real, dimension(SZIB_(G),SZJ_(G),CS%nz_data), intent(in) :: u_val !< u field to be used in the sponge, it has arbritary number of layers (in).
-  real, dimension(SZI_(G),SZJB_(G),CS%nz_data), intent(in) :: v_val !< u field to be used in the sponge, it has arbritary number of layers (in).
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped (in).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(in) :: v_ptr !< v pointer to the field to be damped (in).
+  type(ocean_grid_type), intent(in) :: G  !< Grid structure (in).
+  type(ALE_sponge_CS),   pointer    :: CS !< Sponge structure (in/out).
+  real, dimension(SZIB_(G),SZJ_(G),CS%nz_data), &
+                         intent(in) :: u_val !< u field to be used in the sponge, it has arbritary number of layers.
+  real, dimension(SZI_(G),SZJB_(G),CS%nz_data), &
+                         intent(in) :: v_val !< v field to be used in the sponge, it has arbritary number of layers.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(in) :: v_ptr !< v pointer to the field to be damped
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages
@@ -751,23 +761,26 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
 
 end subroutine set_up_ALE_sponge_vel_field_varying
 
-!> This subroutine applies damping to the layers thicknesses, temp, salt and a variety of tracers for every column where there is damping.
+!> This subroutine applies damping to the layers thicknesses, temp, salt and a variety of tracers
+!! for every column where there is damping.
 subroutine apply_ALE_sponge(h, dt, G, CS, Time)
-  type(ocean_grid_type),                    intent(inout) :: G !< The ocean's grid structure (in).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness, in m (in)
-  real,                                     intent(in)    :: dt !< The amount of time covered by this call, in s (in).
-  type(ALE_sponge_CS),                      pointer       :: CS !<A pointer to the control structure for this module that is set by a previous call to initialize_sponge (in).
-  type(time_type), pointer, optional,       intent(in)    :: Time
+  type(ocean_grid_type),     intent(inout) :: G  !< The ocean's grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(inout) :: h  !< Layer thickness, in m (in)
+  real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
+  type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
+                                                 !! that is set by a previous call to initialize_sponge (in).
+  type(time_type), optional, intent(in)    :: Time !< The current model date
 
-  real :: damp                                               !< The timestep times the local damping  coefficient.  ND.
-  real :: I1pdamp                                            !< I1pdamp is 1/(1 + damp).  Nondimensional.
-  real :: Idt                                                !< 1.0/dt, in s-1.
-  real, allocatable, dimension(:) :: tmp_val2                             !< data values on the original grid
-  real, dimension(SZK_(G)) :: tmp_val1                       ! data values remapped to model grid
-  real :: hu(SZIB_(G), SZJ_(G), SZK_(G))                     !> A temporary array for h at u pts
-  real :: hv(SZI_(G), SZJB_(G), SZK_(G))                     !> A temporary array for h at v pts
-  real, allocatable, dimension(:,:,:) :: sp_val              !> A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: mask_z              !> A temporary array for field mask at h pts
+  real :: damp                                  ! The timestep times the local damping coefficient.  ND.
+  real :: I1pdamp                               ! I1pdamp is 1/(1 + damp).  Nondimensional.
+  real :: Idt                                   ! 1.0/dt, in s-1.
+  real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
+  real, dimension(SZK_(G)) :: tmp_val1          ! data values remapped to model grid
+  real :: hu(SZIB_(G), SZJ_(G), SZK_(G))        ! A temporary array for h at u pts
+  real :: hv(SZI_(G), SZJB_(G), SZK_(G))        ! A temporary array for h at v pts
+  real, allocatable, dimension(:,:,:) :: sp_val ! A temporary array for fields
+  real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
   real, allocatable, dimension(:), target :: z_in, z_edges_in
   real :: missing_value
@@ -790,8 +803,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
       mask_z(:,:,:)=0.0
 
       call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in,&
-                                     missing_value,.true.,&
-                                     .false.,.false.)
+                                     missing_value,.true., .false.,.false.)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)
@@ -802,9 +814,10 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
         CS%Ref_val(m)%p(1:nz_data,c) = sp_val(i,j,1:nz_data)
         do k=2,nz_data
 !          if (mask_z(i,j,k)==0.) &
-           if (CS%Ref_val(m)%h(k,c) <= 0.001) &  ! some confusion here about why the masks are not correct returning from horiz_interp
-                                                 ! reverting to using a minimum thickness criteria
-            CS%Ref_val(m)%p(k,c)=CS%Ref_val(m)%p(k-1,c)
+          if (CS%Ref_val(m)%h(k,c) <= 0.001) &
+            ! some confusion here about why the masks are not correct returning from horiz_interp
+            ! reverting to using a minimum thickness criteria
+            CS%Ref_val(m)%p(k,c) = CS%Ref_val(m)%p(k-1,c)
         enddo
       enddo
 
@@ -814,9 +827,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
     nz_data = CS%nz_data
   endif
 
-
   allocate(tmp_val2(nz_data))
-
 
   do m=1,CS%fldno
     do c=1,CS%num_col
@@ -897,7 +908,6 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
       enddo
 
       deallocate (sp_val, mask_z)
-
 
     else
       nz_data = CS%nz_data

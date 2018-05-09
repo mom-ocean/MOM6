@@ -73,23 +73,23 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
 
   !  The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
-    PI = 4.0*atan(1.0)
-    forces%taux(:,:) = 0.0
-    tau_max = 0.2
-    off = 0.02
+  PI = 4.0*atan(1.0)
+  forces%taux(:,:) = 0.0
+  tau_max = 0.2
+  off = 0.02
   do j=js,je ; do I=is-1,Ieq
-!    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
-     y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
-!    forces%taux(I,j) =  G%mask2dCu(I,j) * 0.0
+!    x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
+    y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
+!    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0
 
-    if (y.le.0.29) then
-       forces%taux(I,j) = forces%taux(I,j) +  tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
+    if (y <= 0.29) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
     endif
-    if (y.gt.0.29 .and. y.le.(0.8-off)) then
-       forces%taux(I,j) = forces%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
+    if ((y > 0.29) .and. (y <= (0.8-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
     endif
-    if (y.gt.(0.8-off) .and. y.le.(1-off) ) then
-       forces%taux(I,j) = forces%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
+    if ((y > (0.8-off)) .and. (y <= (1-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
     endif
   enddo ; enddo
 
@@ -211,7 +211,7 @@ end subroutine Neverland_buoyancy_forcing
 subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   real, pointer :: ptr(:,:)
   integer :: isd, ied, jsd, jed
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(isd:ied,jsd:jed))
     ptr(:,:) = 0.0
   endif

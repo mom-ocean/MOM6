@@ -178,7 +178,7 @@ contains
 
     !Get the tracer list
     call generic_tracer_get_list(CS%g_tracer_list)
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     ! For each tracer name get its T_prog index and get its fields
 
@@ -205,7 +205,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo
@@ -235,11 +235,11 @@ contains
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
                                                                  !! where, and what open boundary conditions are used.
     type(MOM_generic_tracer_CS),           pointer    :: CS      !< Pointer to the control structure for this module.
-    type(sponge_CS),                       pointer    :: sponge_CSp     !< Pointer to the control structure for the sponges.
+    type(sponge_CS),                       pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
     type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< Pointer  to the control structure for the
-                                                                        !! ALE sponges.
-    type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp  !< A pointer to the control structure for diagnostics
-                                                                        !! in depth space.
+                                                                 !! ALE sponges.
+    type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp  !< A pointer to the control structure
+                                                                 !! for diagnostics in depth space.
 
     character(len=fm_string_len), parameter :: sub_name = 'initialize_MOM_generic_tracer'
     logical :: OK
@@ -260,13 +260,13 @@ contains
 
     CS%diag=>diag
     !Get the tracer list
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
 
     do
-      if(INDEX(CS%IC_file, '_NULL_') .ne. 0) then
+      if (INDEX(CS%IC_file, '_NULL_') /= 0) then
          call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&
                               "Bypassing the MOM initialization of ALL generic tracers!")
@@ -279,7 +279,7 @@ contains
       if (.not.restart .or. (CS%tracers_may_reinit .and. &
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
-       if(g_tracer%requires_src_info ) then
+       if (g_tracer%requires_src_info ) then
          call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                              "initializing generic tracer "//trim(g_tracer_name)//&
                              " using MOM_initialize_tracer_from_Z ")
@@ -293,22 +293,25 @@ contains
 
          !Check/apply the bounds for each g_tracer
          do k=1,nk ; do j=jsc,jec ; do i=isc,iec
-            if(tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
-              if(tr_ptr(i,j,k) .lt. g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
+            if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
+              if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
               !Jasmin does not want to apply the maximum for now
-              !if(tr_ptr(i,j,k) .gt. g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
+              !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
             endif
          enddo; enddo ; enddo
 
          !jgj: Reset CASED to 0 below K=1
-         if(trim(g_tracer_name) .eq. 'cased') then
+         if (trim(g_tracer_name) == 'cased') then
             do k=2,nk ; do j=jsc,jec ; do i=isc,iec
-               if(tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
+               if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
                  tr_ptr(i,j,k) = 0.0
                endif
             enddo; enddo ; enddo
          endif
-
+       elseif(.not. g_tracer%requires_restart) then
+         !Do nothing for this tracer, it is initialized by the tracer package
+          call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
+                            "skip initialization of generic tracer "//trim(g_tracer_name))
        else !Do it old way if the tracer is not registered to start from a specific source file.
             !This path should be deprecated if all generic tracers are required to start from specified sources.
         if (len_trim(CS%IC_file) > 0) then
@@ -335,7 +338,8 @@ contains
           endif
         else
           call MOM_error(FATAL,"initialize_MOM_generic_tracer: "//&
-                  "check Generic Tracer IC filename "//trim(CS%IC_file)//".")
+                  "check Generic Tracer IC filename "//trim(CS%IC_file)//&
+                  " for tracer "//trim(g_tracer_name))
         endif
 
        endif
@@ -343,7 +347,7 @@ contains
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
-      if(.NOT. associated(g_tracer_next)) exit
+      if (.NOT. associated(g_tracer_next)) exit
       g_tracer=>g_tracer_next
     enddo
     !! end section to re-initialize generic tracers
@@ -355,7 +359,7 @@ contains
     grid_tmask(:,:,:) = 0.0
     grid_kmt(:,:) = 0
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
-       if (G%mask2dT(i,j) .gt. 0) then
+       if (G%mask2dT(i,j) > 0) then
           grid_tmask(i,j,:) = 1.0
           grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
        endif
@@ -376,7 +380,7 @@ contains
 
     ! Register Z diagnostic output.
     !Get the tracer list
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
@@ -393,7 +397,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo
@@ -401,16 +405,16 @@ contains
     !For each special diagnostics name get its  fields
     !Get the diag list
     call generic_tracer_get_diag_list(CS%g_diag_list)
-    if(associated(CS%g_diag_list)) then
+    if (associated(CS%g_diag_list)) then
        g_diag=>CS%g_diag_list
        do
-          if(g_diag%Z_diag .ne. 0) &
+          if (g_diag%Z_diag /= 0) &
                call register_Z_tracer(g_diag%field_ptr, trim(g_diag%name),g_diag%longname , g_diag%units, &
                day, G, diag_to_Z_CSp)
 
           !traverse the linked list till hit NULL
           g_diag=>g_diag%next
-          if(.NOT. associated(g_diag)) exit
+          if (.NOT. associated(g_diag)) exit
 
        enddo
     endif
@@ -433,14 +437,14 @@ contains
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
                                                                 !! in m or kg !m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
                                                                 !! in m or kg !m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
                                               !! fluid entrained from the layer !above during this
                                               !! call will be added, in m or kg !m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
                                               !! fluid entrained from the layer !below during this
                                               !! call will be added, in m or kg !m-2.
     type(forcing),                         intent(in) :: fluxes
@@ -450,9 +454,9 @@ contains
     type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
     type(optics_type),                     intent(in) :: optics
     real,                        optional,intent(in)  :: evap_CFL_limit !< Limits how much water can be fluxed out of
-                                                                        !! the top layer Stored previously in diabatic CS.
+                                                              !! the top layer Stored previously in diabatic CS.
     real,                        optional,intent(in)  :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                                                        !!  can be applied Stored previously in diabatic CS.
+                                                              !!  can be applied Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
     !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
@@ -473,7 +477,7 @@ contains
     isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
 
     !Get the tracer list
-    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
+    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
          trim(sub_name)//": No tracer in the list.")
 
 #ifdef _USE_MOM6_DIAG
@@ -493,7 +497,7 @@ contains
     !
     g_tracer=>CS%g_tracer_list
     do
-       if(_ALLOCATED(g_tracer%trunoff)) then
+       if (_allocated(g_tracer%trunoff)) then
           call g_tracer_get_alias(g_tracer,g_tracer_name)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'stf',   stf_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
@@ -505,7 +509,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo
@@ -546,14 +550,14 @@ contains
         if (g_tracer_is_prog(g_tracer)) then
           do k=1,nk ;do j=jsc,jec ; do i=isc,iec
             h_work(i,j,k) = h_old(i,j,k)
-          enddo ; enddo ; enddo;
+          enddo ; enddo ; enddo
           call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, fluxes, h_work, &
               evap_CFL_limit, minimum_forcing_depth)
         endif
 
          !traverse the linked list till hit NULL
          call g_tracer_get_next(g_tracer, g_tracer_next)
-        if(.NOT. associated(g_tracer_next)) exit
+        if (.NOT. associated(g_tracer_next)) exit
         g_tracer=>g_tracer_next
       enddo
     endif
@@ -564,14 +568,17 @@ contains
     ! Use a tridiagonal solver to determine the concentrations after the
     ! surface source is applied and diapycnal advection and diffusion occurs.
     if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-      call generic_tracer_vertdiff_G(h_work, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+      ! Last arg is tau which is always 1 for MOM6
+      call generic_tracer_vertdiff_G(h_work, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1)
     else
-      call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+      ! Last arg is tau which is always 1 for MOM6
+      call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1)
     endif
 
     ! Update bottom fields after vertical processes
 
-    call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag)) !Second arg is tau which is always 1 for MOM
+    ! Second arg is tau which is always 1 for MOM6
+    call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all generic tracers and their fluxes
     call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
@@ -620,7 +627,7 @@ contains
       return
     endif ; endif
 
-    if(.NOT. associated(CS%g_tracer_list)) return ! No stocks.
+    if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
     m=1 ; g_tracer=>CS%g_tracer_list
     do
@@ -639,7 +646,7 @@ contains
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
-      if(.NOT. associated(g_tracer_next)) exit
+      if (.NOT. associated(g_tracer_next)) exit
       g_tracer=>g_tracer_next
       m = m+1
     enddo
@@ -651,21 +658,22 @@ contains
   !> This subroutine find the global min and max of either of all
   !! available tracer concentrations, or of a tracer that is being
   !! requested specifically, returning the number of tracers it has gone through.
-  function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, xgmin, ygmin, zgmin, xgmax, ygmax, zgmax , G, CS, names, units)
+  function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, xgmin, ygmin, zgmin, &
+                                      xgmax, ygmax, zgmax , G, CS, names, units)
     use mpp_utilities_mod, only: mpp_array_global_min_max
-    integer,                            intent(in)    :: ind_start
-    logical, dimension(:),              intent(out)   :: got_minmax
-    real, dimension(:),                 intent(out)   :: gmin   !< Global minimum of each tracer, in kg
-                                                                !! times concentration units.
-    real, dimension(:),                 intent(out)   :: gmax   !< Global maximum of each tracer, in kg
-                                                                !! times concentration units.
-    real, dimension(:),                 intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
-    type(ocean_grid_type),              intent(in)    :: G      !< The ocean's grid structure
-    type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
-    character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
-    character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.
-    integer                                           :: MOM_generic_tracer_min_max !< Return value, the
-                                                                !! number of tracers done here.
+    integer,                        intent(in)    :: ind_start
+    logical, dimension(:),          intent(out)   :: got_minmax
+    real, dimension(:),             intent(out)   :: gmin   !< Global minimum of each tracer, in kg
+                                                            !! times concentration units.
+    real, dimension(:),             intent(out)   :: gmax   !< Global maximum of each tracer, in kg
+                                                            !! times concentration units.
+    real, dimension(:),             intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
+    type(ocean_grid_type),          intent(in)    :: G      !< The ocean's grid structure
+    type(MOM_generic_tracer_CS),    pointer       :: CS     !< Pointer to the control structure for this module.
+    character(len=*), dimension(:), intent(out)   :: names  !< The names of the stocks calculated.
+    character(len=*), dimension(:), intent(out)   :: units  !< The units of the stocks calculated.
+    integer                                       :: MOM_generic_tracer_min_max !< Return value, the
+                                                            !! number of tracers done here.
 
 ! Local variables
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
@@ -684,7 +692,7 @@ contains
     MOM_generic_tracer_min_max = 0
     if (.not.associated(CS)) return
 
-    if(.NOT. associated(CS%g_tracer_list)) return ! No stocks.
+    if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask)
@@ -709,14 +717,15 @@ contains
 
 
       call mpp_array_global_min_max(tr_ptr, grid_tmask,isd,jsd,isc,iec,jsc,jec,nk , gmin(m), gmax(m), &
-                                    G%geoLonT,G%geoLatT,geo_z,xgmin(m), ygmin(m), zgmin(m), xgmax(m), ygmax(m), zgmax(m))
+                                    G%geoLonT,G%geoLatT,geo_z,xgmin(m), ygmin(m), zgmin(m), &
+                                    xgmax(m), ygmax(m), zgmax(m))
 
       got_minmax(m) = .true.
 
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
-      if(.NOT. associated(g_tracer_next)) exit
+      if (.NOT. associated(g_tracer_next)) exit
       g_tracer=>g_tracer_next
       m = m+1
     enddo
@@ -763,7 +772,7 @@ contains
          tau=1,sosga=sosga,model_time=get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all tracers in this module
-!    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+!    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
 !         "No tracer in the list.")
 !    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
     !Niki: The problem with calling diagnostic outputs here is that this subroutine is called every dt_cpld
@@ -775,7 +784,7 @@ contains
 
 !ALL PE subroutine on Ocean!  Due to otpm design the fluxes should be initialized like this on ALL PE's!
   subroutine MOM_generic_flux_init(verbosity)
-    integer, intent(in), optional :: verbosity  !< A 0-9 integer indicating a level of verbosity.
+    integer, optional, intent(in) :: verbosity  !< A 0-9 integer indicating a level of verbosity.
 
     integer :: ind
     character(len=fm_string_len)   :: g_tracer_name,longname, package,units,old_package,file_in,file_out
@@ -789,7 +798,7 @@ contains
     endif
 
     call generic_tracer_get_list(g_tracer_list)
-    if(.NOT. associated(g_tracer_list)) then
+    if (.NOT. associated(g_tracer_list)) then
        call mpp_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
        return
     endif
@@ -801,7 +810,7 @@ contains
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
-       if(.NOT. associated(g_tracer_next)) exit
+       if (.NOT. associated(g_tracer_next)) exit
        g_tracer=>g_tracer_next
 
     enddo

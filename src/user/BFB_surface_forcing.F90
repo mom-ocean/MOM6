@@ -225,7 +225,7 @@ subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   ! MOM_diag_mediator, but is here so as to be completely transparent.
   real, pointer :: ptr(:,:)
   integer :: isd, ied, jsd, jed
-  if (.not.ASSOCIATED(ptr)) then
+  if (.not.associated(ptr)) then
     allocate(ptr(isd:ied,jsd:jed))
     ptr(:,:) = 0.0
   endif

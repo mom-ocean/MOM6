@@ -47,21 +47,29 @@ contains
 !! monotonic, conservative, weakly diffusive scheme.
 subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
       h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out, h_out)
-  type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg)
-  type(ocean_OBC_type),                      pointer       :: OBC   !< specifies whether, where, and what OBCs are used
-  real,                                      intent(in)    :: dt    !< time increment (seconds)
-  type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module
-  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_prev_opt !< layer thickness before advection (m or kg m-2)
-  integer,                                   optional      :: max_iter_in
-  logical,                                   optional      :: x_first_in
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face (m3 or kg)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_out !< layer thickness before advection (m or kg m-2)
+  type(ocean_grid_type),   intent(inout) :: G     !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg)
+  type(ocean_OBC_type),    pointer       :: OBC   !< specifies whether, where, and what OBCs are used
+  real,                    intent(in)    :: dt    !< time increment (seconds)
+  type(tracer_advect_CS),  pointer       :: CS    !< control structure for module
+  type(tracer_registry_type), pointer    :: Reg   !< pointer to tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                 optional, intent(in)    :: h_prev_opt !< layer thickness before advection (m or kg m-2)
+  integer,       optional, intent(in)    :: max_iter_in !< The maximum number of iterations
+  logical,       optional, intent(in)    :: x_first_in !< If present, indicate whether to update
+                                                  !! first in the x- or y-direction.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                 optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                 optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face (m3 or kg)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                 optional, intent(out)    :: h_out !< layer thickness before advection (m or kg m-2)
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -113,8 +121,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
-  if(present(max_iter_in)) max_iter = max_iter_in
-  if(present(x_first_in))  x_first = x_first_in
+  if (present(max_iter_in)) max_iter = max_iter_in
+  if (present(x_first_in))  x_first = x_first_in
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, hprev, G%Domain)
@@ -154,7 +162,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
         enddo ; enddo
     else
       do i=is,ie ; do j=js,je
-        hprev(i,j,k) = h_prev_opt(i,j,k);
+        hprev(i,j,k) = h_prev_opt(i,j,k)
       enddo ; enddo
     endif
   enddo
@@ -301,9 +309,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
   enddo ! Iterations loop
 
-  if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
-  if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
-  if(present(h_out)) h_out(:,:,:) = hprev(:,:,:)
+  if (present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
+  if (present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
+  if (present(h_out)) h_out(:,:,:) = hprev(:,:,:)
 
   call cpu_clock_end(id_clock_advect)
 
@@ -558,7 +566,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                      dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
                      u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
-!                if (j.eq.10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k.eq.1) &
+!                if (j == 10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k == 1) &
 !                  print *,'tres=',segment%tr_Reg%Tr(m)%tres(I,j,k),&
 !                segment%tr_Reg%Tr(m)%t(I,j,k), fac1
               endif

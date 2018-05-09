@@ -439,7 +439,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
 
       if (CS%id_rv > 0) RV(I,J,k) = relative_vorticity
       if (CS%id_PV > 0) PV(I,J,k) = q(I,J)
-      if (ASSOCIATED(AD%rv_x_v) .or. ASSOCIATED(AD%rv_x_u)) &
+      if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) &
         q2(I,J) = relative_vorticity * Ih
     enddo ; enddo
 
@@ -670,7 +670,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ! Term - d(KE)/dx.
     do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
-      if (ASSOCIATED(AD%gradKEu)) AD%gradKEu(I,j,k) = -KEx(I,j)
+      if (associated(AD%gradKEu)) AD%gradKEu(I,j,k) = -KEx(I,j)
     enddo ; enddo
 
 
@@ -776,13 +776,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ! Term - d(KE)/dy.
     do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
-      if (ASSOCIATED(AD%gradKEv)) AD%gradKEv(i,J,k) = -KEy(i,J)
+      if (associated(AD%gradKEv)) AD%gradKEv(i,J,k) = -KEy(i,J)
     enddo ; enddo
 
-    if (ASSOCIATED(AD%rv_x_u) .or. ASSOCIATED(AD%rv_x_v)) then
+    if (associated(AD%rv_x_u) .or. associated(AD%rv_x_v)) then
       ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
-        if (ASSOCIATED(AD%rv_x_u)) then
+        if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = - 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
@@ -790,7 +790,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           enddo ; enddo
         endif
 
-        if (ASSOCIATED(AD%rv_x_v)) then
+        if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = 0.25 * &
               (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
@@ -798,7 +798,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           enddo ; enddo
         endif
       else
-        if (ASSOCIATED(AD%rv_x_u)) then
+        if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
               ((q2(I,J) + q2(I-1,J) + q2(I-1,J-1)) * uh(I-1,j,k) + &
@@ -808,7 +808,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           enddo ; enddo
         endif
 
-        if (ASSOCIATED(AD%rv_x_v)) then
+        if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
               ((q2(I+1,J) + q2(I,J) + q2(I,J-1)) * vh(i+1,J,k) + &
@@ -860,7 +860,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
 
 
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
-  if (CS%KE_Scheme.eq.KE_ARAKAWA) then
+  if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
@@ -871,7 +871,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
                    +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
                 )*0.25*G%IareaT(i,j)
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_SIMPLE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme which does not take into account any geometric factors
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -881,7 +881,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

@@ -279,7 +279,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
 
-  if (OBC%number_of_segments .ne. 1) then
+  if (OBC%number_of_segments /= 1) then
     print *, 'Error in DOME OBC segment setup'
     return   !!! Need a better error message here
   endif

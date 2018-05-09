@@ -110,7 +110,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
   select case ( coordinateMode(verticalCoordinate) )
 
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
-      if (delta_S_strat.ne.0.) then
+      if (delta_S_strat /= 0.) then
         adjustment_delta = adjustment_deltaS / delta_S_strat * G%max_depth
         do k=1,nz+1
           e0(k) = adjustment_delta-(G%max_depth+2*adjustment_delta) * (real(k-1) / real(nz))
@@ -128,7 +128,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
       end do
       target_values = target_values - 1000.
       do j=js,je ; do i=is,ie
-        if (front_wave_length.ne.0.) then
+        if (front_wave_length /= 0.) then
           y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
           yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / adjustment_width
           yy = min(1.0, yy); yy = max(-1.0, yy)
@@ -142,7 +142,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
         x = x * acos( 0. )
         delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
         do k=2,nz
-          if (dSdz.ne.0.) then
+          if (dSdz /= 0.) then
             eta1D(k) = ( target_values(k) - ( S_ref + delta_S ) ) / dSdz
           else
             eta1D(k) = e0(k) - (0.5*adjustment_delta) * sin( x )
@@ -258,7 +258,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_fi
         do k=nz,1,-1
           eta1d(k) = eta1d(k+1) + h(i,j,k)*GV%H_to_m
         enddo
-        if (front_wave_length.ne.0.) then
+        if (front_wave_length /= 0.) then
           y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
           yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / front_wave_length
           yy = min(1.0, yy); yy = max(-1.0, yy)

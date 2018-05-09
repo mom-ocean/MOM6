@@ -218,7 +218,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
       enddo
     enddo ; enddo
 
-  case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )                       ! Initial thicknesses for z coordinates
+  case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
@@ -552,7 +552,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
          enddo
        enddo ; enddo
 
-     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )                       ! Initial thicknesses for z coordinates
+     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
        do j=js,je ; do i=is,ie
          eta1D(nz+1) = -1.0*G%bathyT(i,j)
          do k=nz,1,-1

@@ -31,7 +31,7 @@ module user_shelf_init
 !*  subroutine.                                                        *
 !*                                                                     *
 !*    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
-!*  in MOM_surface_forcing.F90.                                       *
+!*  in MOM_surface_forcing.F90.                                        *
 !*                                                                     *
 !*    These variables are all set in the set of subroutines (in this   *
 !*  file) USER_initialize_bottom_depth, USER_initialize_thickness,     *
@@ -190,17 +190,17 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   c1 = 0.0 ; if (CS%shelf_slope_scale > 0.0) c1 = 1.0 / CS%shelf_slope_scale
 
 
-  do j=G%jsd,G%jed ;
+  do j=G%jsd,G%jed
 
-   if (((j+G%jdg_offset) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-       ((j+G%jdg_offset) .ge. G%domain%njhalo+1)) then
+   if (((j+G%jdg_offset) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+       ((j+G%jdg_offset) >= G%domain%njhalo+1)) then
 
     do i=G%isc,G%iec
 
 !    if (((i+G%idg_offset) <= G%domain%niglobal+G%domain%nihalo) .AND. &
 !           ((i+G%idg_offset) >= G%domain%nihalo+1)) then
 
-    if ((j.ge.G%jsc) .and. (j.le.G%jec)) then
+    if ((j >= G%jsc) .and. (j <= G%jec)) then
 
       if (new_sim) then ; if (G%geoLonCu(i-1,j) >= edge_pos) then
         ! Everything past the edge is open ocean.
@@ -232,7 +232,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
     endif ; endif ; endif
 
-    if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
+    if ((i+G%idg_offset) == G%domain%nihalo+1) then
       hmask(i-1,j) = 3.0
     endif
 

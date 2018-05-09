@@ -67,12 +67,12 @@ contains
 
 !> Read in runtime options and add boundary impulse tracer to tracer registry
 function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),                       intent(in   ) :: HI
-  type(verticalGrid_type),                    intent(in   ) :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),                      intent(in   ) :: param_file !< A structure to parse for run-time parameters
-  type(boundary_impulse_tracer_CS), pointer,  intent(inout)    :: CS
-  type(tracer_registry_type),       pointer,  intent(inout) :: tr_Reg
-  type(MOM_restart_CS),             pointer,  intent(inout) :: restart_CS
+  type(hor_index_type),             intent(in   ) :: HI
+  type(verticalGrid_type),          intent(in   ) :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),            intent(in   ) :: param_file !< A structure to parse for run-time parameters
+  type(boundary_impulse_tracer_CS), pointer       :: CS
+  type(tracer_registry_type),       pointer       :: tr_Reg
+  type(MOM_restart_CS),             pointer       :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: HI - A horizontal index type structure.
@@ -170,7 +170,8 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
   type(boundary_impulse_tracer_CS), pointer,intent(inout) :: CS
   type(sponge_CS), pointer,                 intent(inout) :: sponge_CSp
   type(diag_to_Z_CS), pointer,              intent(inout) :: diag_to_Z_CSp
-  type(thermo_var_ptrs),                    intent(in   ) :: tv   !< A structure pointing to various thermodynamic variables
+  type(thermo_var_ptrs),                    intent(in   ) :: tv   !< A structure pointing to various
+                                                                  !! thermodynamic variables
 !   This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -227,16 +228,17 @@ end subroutine initialize_boundary_impulse_tracer
 ! Apply source or sink at boundary and do vertical diffusion
 subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, debug, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                      intent(in   ) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                    intent(in   ) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in   ) :: h_old, h_new, ea, eb
-  type(forcing),                              intent(in   ) :: fluxes
-  real,                                       intent(in   ) :: dt   !< The amount of time covered by this call, in s
-  type(boundary_impulse_tracer_CS), pointer,  intent(inout) :: CS
-  type(thermo_var_ptrs),                      intent(in   ) :: tv   !< A structure pointing to various thermodynamic variables
-  logical,                                    intent(in   ) :: debug
-  real,                             optional, intent(in   ) :: evap_CFL_limit
-  real,                             optional, intent(in   ) :: minimum_forcing_depth
+  type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in   ) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in   ) :: h_old, h_new, ea, eb
+  type(forcing),                            intent(in   ) :: fluxes
+  real,                                     intent(in   ) :: dt   !< The amount of time covered by this call, in s
+  type(boundary_impulse_tracer_CS),         pointer       :: CS
+  type(thermo_var_ptrs),                    intent(in   ) :: tv   !< A structure pointing to various
+                                                                  !! thermodynamic variables
+  logical,                                  intent(in   ) :: debug
+  real,                           optional, intent(in   ) :: evap_CFL_limit
+  real,                           optional, intent(in   ) :: minimum_forcing_depth
 
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -282,7 +284,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo;
+    enddo ; enddo ; enddo
     call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,1), dt, fluxes, h_work, &
       evap_CFL_limit, minimum_forcing_depth)
     call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
@@ -292,7 +294,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 
   ! Set surface conditions
   do m=1,1
-    if(CS%remaining_source_time>0.0) then
+    if (CS%remaining_source_time>0.0) then
       do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo

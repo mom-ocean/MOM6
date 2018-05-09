@@ -103,7 +103,7 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
                  "should have a separate boundary segment.", default=0,   &
                  do_not_log=.true.)
 
-  if (OBC%number_of_segments .lt. ntr) then
+  if (OBC%number_of_segments < ntr) then
     call MOM_error(WARNING, "Error in dyed_obc segment setup")
     return   !!! Need a better error message here
   endif

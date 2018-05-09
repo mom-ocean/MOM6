@@ -328,8 +328,10 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   else ! dRhoPos - dRhoNeg < 0
     interpolate_for_nondim_position = 0.5
   endif
-  if ( interpolate_for_nondim_position < 0. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint < Pneg'
-  if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
+  if ( interpolate_for_nondim_position < 0. ) &
+    stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint < Pneg'
+  if ( interpolate_for_nondim_position > 1. ) &
+    stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
 
 !> Use root-finding methods to find where dRho = 0, based on the equation of state and the polynomial
@@ -339,8 +341,8 @@ end function interpolate_for_nondim_position
 !! to see if it it diverges outside the interval. In that case (or in the case that second derivatives are not
 !! available), Brent's method is used following the implementation found at
 !! https://people.sc.fsu.edu/~jburkardt/f_src/brent/brent.f90
-real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, drho_top, &
-                                     drho_bot, min_bound)
+real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, &
+                                     ppoly_T, ppoly_S, drho_top, drho_bot, min_bound)
   type(ndiff_aux_CS_type),  intent(in) :: CS        !< Control structure with parameters for this module
   real,                     intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
   real,                     intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
@@ -463,7 +465,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
 
       ! For the logic to find neutral surfaces to work properly, the function needs to converge to zero
       !  or a small negative value
-      if( (fb <= 0.) .and. (fb >= -CS%drho_tol) ) then
+      if ((fb <= 0.) .and. (fb >= -CS%drho_tol)) then
         refine_nondim_position = b
         exit
       endif
