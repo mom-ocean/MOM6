@@ -691,9 +691,10 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
 
 end subroutine define_axes_group
 
+!> Set up the array extents for doing diagnostics
 subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  type(diag_ctrl),  intent(inout) :: diag_cs
+  type(diag_ctrl),  intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
 
 ! Arguments:
 !  (inout)    G   - ocean grid structure
@@ -706,11 +707,13 @@ subroutine set_diag_mediator_grid(G, diag_cs)
 
 end subroutine set_diag_mediator_grid
 
+!> Make a real scalar diagnostic available for averaging or output
 subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
-  integer,           intent(in) :: diag_field_id
-  real,              intent(in) :: field
-  type(diag_ctrl), target, intent(in) :: diag_cs
-  logical, optional, intent(in) :: is_static
+  integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
+                                                 !! previous call to register_diag_field.
+  real,              intent(in) :: field         !< real value being offered for output or averaging
+  type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
 ! Arguments:
 !  (in) diag_field_id  - the id for an output variable returned by a
@@ -743,16 +746,18 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
   if (id_clock_diag_mediator>0) call cpu_clock_end(id_clock_diag_mediator)
 end subroutine post_data_0d
 
+!> Make a real 1-d array diagnostic available for averaging or output
 subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
-  integer,           intent(in) :: diag_field_id
-  real,              intent(in) :: field(:)
-  type(diag_ctrl), target, intent(in) :: diag_cs
-  logical, optional, intent(in) :: is_static
+  integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
+                                                 !! previous call to register_diag_field.
+  real,              intent(in) :: field(:)      !< 1-d array being offered for output or averaging
+  type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
 ! Arguments:
 !  (in) diag_field_id - id for an output variable returned by a
 !                       previous call to register_diag_field.
-!  (in)         field - 3-d array being offered for output or averaging
+!  (in)         field - 1-d array being offered for output or averaging
 !  (inout)    diag_cs - structure used to regulate diagnostic output
 !  (in)        static - If true, this is a static field that is always offered.
 
@@ -780,12 +785,14 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   if (id_clock_diag_mediator>0) call cpu_clock_end(id_clock_diag_mediator)
 end subroutine post_data_1d_k
 
+!> Make a real 2-d array diagnostic available for averaging or output
 subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
-  integer,           intent(in) :: diag_field_id
-  real,              intent(in) :: field(:,:)
-  type(diag_ctrl), target, intent(in) :: diag_cs
-  logical, optional, intent(in) :: is_static
-  real,    optional, intent(in) :: mask(:,:)
+  integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
+                                                 !! previous call to register_diag_field.
+  real,              intent(in) :: field(:,:)    !< 2-d array being offered for output or averaging
+  type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
+  real,    optional, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
 
 ! Arguments:
 !  (in) diag_field_id  - id for an output variable returned by a
@@ -811,12 +818,14 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
   if (id_clock_diag_mediator>0) call cpu_clock_end(id_clock_diag_mediator)
 end subroutine post_data_2d
 
+!> Make a real 2-d array diagnostic available for averaging or output
+!! using a diag_type instead of an integer id.
 subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
-  type(diag_type),   intent(in) :: diag
-  real,    target,   intent(in) :: field(:,:)
-  type(diag_ctrl), intent(in) :: diag_cs
-  logical, optional, intent(in) :: is_static
-  real,    optional, intent(in) :: mask(:,:)
+  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
+  real,    target,   intent(in) :: field(:,:) !< 2-d array being offered for output or averaging
+  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
+  real,    optional, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
 
 ! Arguments:
 !  (in) diag          - structure representing the diagnostic to post
@@ -916,14 +925,18 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
 end subroutine post_data_2d_low
 
+!> Make a real 3-d array diagnostic available for averaging or output.
 subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
-  integer,           intent(in) :: diag_field_id
-  real,              intent(in) :: field(:,:,:)
-  type(diag_ctrl), target, intent(in) :: diag_cs
-  logical, optional, intent(in) :: is_static
-  real,    optional, intent(in) :: mask(:,:,:)
-  real, target, optional, intent(in) :: alt_h(:,:,:)
+  integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
+                                                 !! previous call to register_diag_field.
+  real,              intent(in) :: field(:,:,:)  !< 3-d array being offered for output or averaging
+  type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
+  real,    optional, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
+  real, dimension(:,:,:), &
+         target, optional, intent(in) :: alt_h  !< An alternate thickness to use for vertically
+                                                !! remapping this diagnostic, in H.
 
 ! Arguments:
 !  (in) diag_field_id - id for an output variable returned by a
@@ -1039,12 +1052,14 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
 end subroutine post_data_3d
 
+!> Make a real 3-d array diagnostic available for averaging or output
+!! using a diag_type instead of an integer id.
 subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
-  type(diag_type),   intent(in) :: diag
-  real,    target,   intent(in) :: field(:,:,:)
-  type(diag_ctrl),   intent(in) :: diag_cs
-  logical, optional, intent(in) :: is_static
-  real,    optional, intent(in) :: mask(:,:,:)
+  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
+  real,    target,   intent(in) :: field(:,:,:) !< 3-d array being offered for output or averaging
+  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
+  real,    optional, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
 
 ! Arguments:
 !  (in) diag          - the diagnostic to post.
@@ -1217,10 +1232,12 @@ subroutine post_xy_average(diag_cs, diag, field)
                    weight=diag_cs%time_int)
 end subroutine post_xy_average
 
+!> This subroutine enables the accumulation of time averages over the specified time interval.
 subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
-  real, intent(in) :: time_int_in
-  type(time_type), intent(in) :: time_end_in
-  type(diag_ctrl), intent(inout) :: diag_cs
+  real,            intent(in)    :: time_int_in !< The time interval in s over which any
+                                                !!  values that are offered are valid.
+  type(time_type), intent(in)    :: time_end_in !< The end time of the valid interval
+  type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
 
 ! This subroutine enables the accumulation of time averages over the
 ! specified time interval.
@@ -1228,7 +1245,7 @@ subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
 ! Arguments:
 !  (in)      time_int_in - time interval in s over which any
 !                          values that are offered are valid.
-!  (in)      time_end_in - end time in s of the valid interval
+!  (in)      time_end_in - end time  of the valid interval
 !  (inout)   diag        - structure used to regulate diagnostic output
 
 !  if (num_file==0) return
@@ -1237,9 +1254,9 @@ subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
   diag_cs%ave_enabled = .true.
 end subroutine enable_averaging
 
-! Call this subroutine to avoid averaging any offered fields.
+!> Call this subroutine to avoid averaging any offered fields.
 subroutine disable_averaging(diag_cs)
-  type(diag_ctrl), intent(inout) :: diag_cs
+  type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
 
 ! Argument:
 ! diag - structure used to regulate diagnostic output
@@ -1249,12 +1266,12 @@ subroutine disable_averaging(diag_cs)
 
 end subroutine disable_averaging
 
-! Call this subroutine to determine whether the averaging is
-! currently enabled.  .true. is returned if it is.
+!> Call this subroutine to determine whether the averaging is
+!! currently enabled.  .true. is returned if it is.
 function query_averaging_enabled(diag_cs, time_int, time_end)
-  type(diag_ctrl),           intent(in) :: diag_cs
-  real,            optional, intent(out) :: time_int
-  type(time_type), optional, intent(out) :: time_end
+  type(diag_ctrl),           intent(in)  :: diag_CS  !< Structure used to regulate diagnostic output
+  real,            optional, intent(out) :: time_int !< Current setting of diag%time_int, in s
+  type(time_type), optional, intent(out) :: time_end !< Current setting of diag%time_end
   logical :: query_averaging_enabled
 
 ! Arguments:
@@ -1267,15 +1284,13 @@ function query_averaging_enabled(diag_cs, time_int, time_end)
   query_averaging_enabled = diag_cs%ave_enabled
 end function query_averaging_enabled
 
+!> This function returns the valid end time for use with diagnostics that are
+!! handled outside of the MOM6 diagnostics infrastructure.
 function get_diag_time_end(diag_cs)
-  type(diag_ctrl), intent(in)  :: diag_cs
+  type(diag_ctrl), intent(in)  :: diag_CS !< Structure used to regulate diagnostic output
   type(time_type) :: get_diag_time_end
-
-! Argument:
-! (in) diag - structure used to regulate diagnostic output
-
-!   This function returns the valid end time for diagnostics that are handled
-! outside of the MOM6 infrastructure, such as via the generic tracer code.
+  !   This function returns the valid end time for diagnostics that are handled
+  ! outside of the MOM6 infrastructure, such as via the generic tracer code.
 
   get_diag_time_end = diag_cs%time_end
 end function get_diag_time_end
@@ -1326,7 +1341,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
                                                          !! integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag_cs
+  type(diag_ctrl), pointer :: diag_cs => NULL()
   type(axes_grp), pointer :: remap_axes => null()
   integer :: dm_id, i
   character(len=256) :: new_module_name
@@ -1447,7 +1462,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                                                          !! integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag_cs
+  type(diag_ctrl), pointer :: diag_cs => null()
   type(diag_type), pointer :: this_diag => null()
   integer :: fms_id, fms_xyave_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name, cm_string, msg
@@ -1812,16 +1827,25 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
      do_not_log, err_msg, interp_method, cmor_field_name, &
      cmor_long_name, cmor_units, cmor_standard_name)
   integer :: register_scalar_field
-  character(len=*), intent(in) :: module_name, field_name
-  type(time_type),  intent(in) :: init_time
-  type(diag_ctrl),  intent(inout) :: diag_cs
-  character(len=*), optional, intent(in) :: long_name, units, standard_name
-  real,             optional, intent(in) :: missing_value, range(2)
-  logical,          optional, intent(in) :: do_not_log
-  character(len=*), optional, intent(out):: err_msg
-  character(len=*), optional, intent(in) :: interp_method
-  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
-  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
+                                              !! or "ice_shelf_model"
+  character(len=*), intent(in) :: field_name !< Name of the diagnostic field
+  type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
+  type(diag_ctrl),  intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
+  character(len=*), optional, intent(in) :: long_name !< Long name of a field.
+  character(len=*), optional, intent(in) :: units !< Units of a field.
+  character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+  logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be
+                                                         !! placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not
+                                                         !! be interpolated as a scalar
+  character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
+  character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
+  character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
+  character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
 
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments:
@@ -1918,15 +1942,26 @@ function register_static_field(module_name, field_name, axes, &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
      x_cell_method, y_cell_method, area_cell_method)
   integer :: register_static_field
-  character(len=*), intent(in) :: module_name, field_name
-  type(axes_grp),   target,   intent(in) :: axes
-  character(len=*), optional, intent(in) :: long_name, units, standard_name
-  real,             optional, intent(in) :: missing_value, range(2)
-  logical,          optional, intent(in) :: mask_variant, do_not_log
-  character(len=*), optional, intent(in) :: interp_method
-  integer,          optional, intent(in) :: tile_count
-  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
-  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
+                                              !! or "ice_shelf_model"
+  character(len=*), intent(in) :: field_name !< Name of the diagnostic field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that
+                                             !! indicates axes for this field
+  character(len=*), optional, intent(in) :: long_name !< Long name of a field.
+  character(len=*), optional, intent(in) :: units !< Units of a field.
+  character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with
+                                                         !! post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not
+                                                         !! be interpolated as a scalar
+  integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
+  character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
+  character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
+  character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
+  character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
   integer,          optional, intent(in) :: area !< fms_id for area_t
   character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
@@ -1950,7 +1985,7 @@ function register_static_field(module_name, field_name, axes, &
   !  (in,opt)  tile_count     - no clue
 
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag_cs
+  type(diag_ctrl), pointer :: diag_cs => null()
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   integer :: dm_id, fms_id, cmor_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
@@ -2046,9 +2081,11 @@ function register_static_field(module_name, field_name, axes, &
 
 end function register_static_field
 
+!> Describe an option setting in the diagnostic files.
 subroutine describe_option(opt_name, value, diag_CS)
-  character(len=*), intent(in) :: opt_name, value
-  type(diag_ctrl), intent(in) :: diag_CS
+  character(len=*), intent(in) :: opt_name !< The name of the option
+  character(len=*), intent(in) :: value   !< A character string with the setting of the option.
+  type(diag_ctrl),  intent(in) :: diag_CS !< Structure used to regulate diagnostic output
 
   character(len=240) :: mesg
   integer :: len_ind
@@ -2161,13 +2198,13 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   end select
 
   ocean_register_diag = register_diag_field("ocean_model", trim(var_name), &
-          axes, day, trim(longname), trim(units),  missing_value = -1.0e+34)
+          axes, day, trim(longname), trim(units), missing_value=-1.0e+34)
 
 end function ocean_register_diag
 
 subroutine diag_mediator_infrastructure_init(err_msg)
   ! This subroutine initializes the FMS diag_manager.
-  character(len=*), optional, intent(out)   :: err_msg
+  character(len=*), optional, intent(out)   :: err_msg !< An error message
 
   call diag_manager_init(err_msg=err_msg)
 end subroutine diag_mediator_infrastructure_init
@@ -2455,7 +2492,7 @@ subroutine diag_masks_set(G, nz, diag_cs)
 end subroutine diag_masks_set
 
 subroutine diag_mediator_close_registration(diag_CS)
-  type(diag_ctrl), intent(inout) :: diag_CS
+  type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
 
   integer :: i
 
@@ -2470,8 +2507,8 @@ subroutine diag_mediator_close_registration(diag_CS)
 end subroutine diag_mediator_close_registration
 
 subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
-  type(time_type),   intent(in)  :: time
-  type(diag_ctrl), intent(inout) :: diag_cs
+  type(time_type),   intent(in)  :: time !< The current model time
+  type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in)  :: end_diag_manager !< If true, call diag_manager_end()
 
   ! Local variables
@@ -2510,24 +2547,26 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
 
 end subroutine diag_mediator_end
 
+!> Convert the first n elements (up to 3) of an integer array to an underscore delimited string.
 function i2s(a,n_in)
-!   "Convert the first n elements of an integer array to a string."
-    integer, dimension(:), intent(in) :: a
-    integer, optional    , intent(in) :: n_in
-    character(len=15) :: i2s
+  ! "Convert the first n elements of an integer array to a string."
+  ! Perhaps this belongs elsewhere in the MOM6 code?
+  integer, dimension(:), intent(in) :: a    !< The array of integers to translate
+  integer, optional    , intent(in) :: n_in !< The number of elements to translate, by default all
+  character(len=15) :: i2s !< The returned string
 
-    character(len=15) :: i2s_temp
-    integer :: i,n
+  character(len=15) :: i2s_temp
+  integer :: i,n
 
-    n=size(a)
-    if (present(n_in)) n = n_in
+  n=size(a)
+  if (present(n_in)) n = n_in
 
-    i2s = ''
-    do i=1,n
-       write (i2s_temp, '(I4.4)') a(i)
-       i2s = trim(i2s) //'_'// trim(i2s_temp)
-    enddo
-    i2s = adjustl(i2s)
+  i2s = ''
+  do i=1,min(n,3)
+    write (i2s_temp, '(I4.4)') a(i)
+    i2s = trim(i2s) //'_'// trim(i2s_temp)
+  enddo
+  i2s = adjustl(i2s)
 end function i2s
 
 !> Returns a new diagnostic id, it may be necessary to expand the diagnostics array.

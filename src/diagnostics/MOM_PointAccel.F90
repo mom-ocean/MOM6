@@ -78,11 +78,9 @@ contains
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of zonal velocities over the
 !! previous timestep.  This subroutine is called from vertvisc.
-subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
-                         maxvel, minvel, str, a, hv)
+subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: I   !< The zonal index of the column to be documented.
-  integer,                     intent(in) :: j   !< The meridional index of the column to be
-                                                 !! documented.
+  integer,                     intent(in) :: j   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -96,38 +94,18 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
   real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: maxvel, minvel
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report, in m s-1.
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step, in m2 s-1.
-  real, dimension(SZIB_(G),SZK_(G)),         &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from
-                                                 !! vertvisc, m.
-  real, dimension(SZIB_(G),SZK_(G)),         &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, m.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
 
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of zonal velocities over the
 ! previous timestep.  This subroutine is called from vertvisc.
-
-! Arguments: I - The zonal index of the column to be documented.
-!  (in)      j - The meridional index of the column to be documented.
-!  (in)      um - The new zonal velocity, in m s-1.
-!  (in)      hin - The layer thickness, in m.
-!  (in)      ADp - A structure pointing to the various accelerations in
-!                  the momentum equations.
-!  (in)      CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      dt - The model's dynamics time step.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PointAccel_init.
-!  (in)      str - The surface wind stress integrated over a time
-!                  step, in m2 s-1.
-!  (in)      a - The layer coupling coefficients from vertvisc, m.
-!  (in)      hv - The layer thicknesses at velocity grid points, from
-!                 vertvisc, in m.
 
   real    :: f_eff, CFL
   real    :: Angstrom
@@ -167,14 +145,14 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
 
   ! Determine which layers to write out accelerations for.
     do k=1,nz
-      if (((max(CS%u_av(I,j,k),um(I,j,k)) >= maxvel) .or. &
-           (min(CS%u_av(I,j,k),um(I,j,k)) <= minvel)) .and. &
+      if (((max(CS%u_av(I,j,k),um(I,j,k)) >= vel_rpt) .or. &
+           (min(CS%u_av(I,j,k),um(I,j,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
-      if (((max(CS%u_av(I,j,k), um(I,j,k)) >= maxvel) .or. &
-           (min(CS%u_av(I,j,k), um(I,j,k)) <= minvel)) .and. &
+      if (((max(CS%u_av(I,j,k), um(I,j,k)) >= vel_rpt) .or. &
+           (min(CS%u_av(I,j,k), um(I,j,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
@@ -254,11 +232,11 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k); enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(I,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(I,j,k); enddo
     endif
     write(file,'(/,"Stress:  ",ES10.3)') str
 
@@ -432,11 +410,9 @@ end subroutine write_u_accel
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of meridional velocities over
 !! the previous timestep.  This subroutine is called from vertvisc.
-subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
-                         maxvel, minvel, str, a, hv)
+subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: i   !< The zonal index of the column to be documented.
-  integer,                     intent(in) :: J   !< The meridional index of the column to be
-                                                 !! documented.
+  integer,                     intent(in) :: J   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -450,13 +426,12 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
   real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: maxvel, minvel
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report, in m s-1.
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step, in m2 s-1.
-  real, dimension(SZI_(G),SZK_(G)),          &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from
-                                                 !! vertvisc, m.
-  real, dimension(SZI_(G),SZK_(G)),          &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, m.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
 
@@ -520,14 +495,14 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     prev_avail = (associated(CS%u_prev) .and. associated(CS%v_prev))
 
     do k=1,nz
-      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
-           (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
+      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= vel_rpt) .or. &
+           (min(CS%v_av(i,J,k), vm(i,J,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
-      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
-           (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
+      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= vel_rpt) .or. &
+           (min(CS%v_av(i,J,k), vm(i,J,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
@@ -612,11 +587,11 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k); enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(i,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(i,J,k); enddo
     endif
     write(file,'(/,"Stress:  ",ES10.3)') str
 

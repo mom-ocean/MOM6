@@ -165,7 +165,8 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                                        !! been read from a restart file.
   type(time_type), target,               intent(in) :: day !< Time of the start of the run.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness, in m or kg m-2.
-  type(diag_ctrl), target,               intent(in) :: diag
+  type(diag_ctrl),               target, intent(in) :: diag !< A structure that is used to regulate
+                                                       !! diagnostic output.
   type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies
                                                        !! whether, where, and what open boundary conditions
                                                        !! are used. This is not being used for now.
@@ -263,14 +264,29 @@ end subroutine initialize_ISOMIP_tracer
 ! This is a simple example of a set of advected passive tracers.
 subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                         intent(in) :: fluxes
-  real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(ISOMIP_tracer_CS),                pointer    :: CS
-  real,                        optional,intent(in)  :: evap_CFL_limit
-  real,                        optional,intent(in)  :: minimum_forcing_depth
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: ea   !< an array to which the amount of fluid entrained
+                                              !! from the layer above during this call will be
+                                              !! added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: eb   !< an array to which the amount of fluid entrained
+                                              !! from the layer below during this call will be
+                                              !! added, in m or kg m-2.
+  type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
+                                              !! and tracer forcing fields.  Unused fields have NULL ptrs.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  type(ISOMIP_tracer_CS),  pointer    :: CS !< The control structure returned by a previous
+                                              !! call to ISOMIP_register_tracer.
+  real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
+                                              !! be fluxed out of the top layer in a timestep (nondim)
+  real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
+                                              !! fluxes can be applied, in m
 
 ! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
 !  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
@@ -371,7 +387,8 @@ subroutine ISOMIP_tracer_surface_state(state, h, G, CS)
 end subroutine ISOMIP_tracer_surface_state
 
 subroutine ISOMIP_tracer_end(CS)
-  type(ISOMIP_tracer_CS), pointer :: CS
+  type(ISOMIP_tracer_CS), pointer :: CS !< The control structure returned by a previous
+                                        !! call to ISOMIP_register_tracer.
   integer :: m
 
   if (associated(CS)) then

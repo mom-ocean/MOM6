@@ -665,7 +665,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
 
     if (marginal) then ; h_u(I,j,k) = h_marg
     else ; h_u(I,j,k) = h_avg ; endif
-  enddo; enddo ; enddo
+  enddo ; enddo ; enddo
   if (present(visc_rem_u)) then
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
@@ -1948,7 +1948,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
         slp(i,j) = sign(1.,slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
                 ! * (G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j))
       endif
-    enddo; enddo
+    enddo ; enddo
 
     if (local_open_BC) then
       do n=1, OBC%number_of_segments
@@ -1975,7 +1975,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
       ! Left/right values following Eq. B2 in Lin 1994, MWR (132)
       h_L(i,j) = 0.5*( h_im1 + h_in(i,j) ) + oneSixth*( slp(i-1,j) - slp(i,j) )
       h_R(i,j) = 0.5*( h_ip1 + h_in(i,j) ) + oneSixth*( slp(i,j) - slp(i+1,j) )
-    enddo; enddo
+    enddo ; enddo
   endif
 
   if (local_open_BC) then

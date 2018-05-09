@@ -56,7 +56,7 @@ subroutine PCM_reconstruction( N, u, ppoly_E, ppoly_coef )
   ! The edge values are equal to the cell average
   do k = 1,N
     ppoly_E(k,:) = u(k)
-  end do
+  enddo
 
 end subroutine PCM_reconstruction
 

@@ -386,7 +386,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = gsw_pt_from_ct(tv%S(i,j,k),tv%T(i,j,k))
-      enddo; enddo ; enddo
+      enddo ; enddo ; enddo
       if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
     endif
@@ -403,7 +403,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
-      enddo; enddo ; enddo
+      enddo ; enddo ; enddo
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
       if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
     endif
@@ -691,15 +691,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
 end subroutine calculate_diagnostic_fields
 
-!> This subroutine finds location of R_in in an increasing ordered
+!> This subroutine finds the location of R_in in an increasing ordered
 !! list, Rlist, returning as k the element such that
 !! Rlist(k) <= R_in < Rlist(k+1), and where wt and wt_p are the linear
 !! weights that should be assigned to elements k and k+1.
 subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
-  real,     intent(in)    :: Rlist(:), R_in
-  integer,  intent(inout) :: k
-  integer,  intent(in)    :: nz
-  real,     intent(out)   :: wt, wt_p
+  real, dimension(:), &
+            intent(in)    :: Rlist !< The list of target densities, in kg m-3
+  real,     intent(in)    :: R_in !< The density being inserted into Rlist, in kg m-3
+  integer,  intent(inout) :: k    !< The value of k such that Rlist(k) <= R_in < Rlist(k+1)
+                                  !! The input value is a first guess
+  integer,  intent(in)    :: nz   !< The number of layers in Rlist
+  real,     intent(out)   :: wt   !< The weight of layer k for interpolation, nondim
+  real,     intent(out)   :: wt_p !< The weight of layer k+1 for interpolation, nondim
 
   ! This subroutine finds location of R_in in an increasing ordered
   ! list, Rlist, returning as k the element such that
@@ -718,19 +722,19 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
       if ((k_lower == 1) .or. (R_in >= Rlist(k_lower))) exit
       k_upper = k_lower
       inc = inc*2
-    end do
+    enddo
   else
     do
       k_upper = min(k_upper+inc, nz)
       if ((k_upper == nz) .or. (R_in < Rlist(k_upper))) exit
       k_lower = k_upper
       inc = inc*2
-    end do
+    enddo
   endif
 
   if ((k_lower == 1) .and. (R_in <= Rlist(k_lower))) then
     k = 1 ; wt = 1.0 ; wt_p = 0.0
-  else if ((k_upper == nz) .and. (R_in >= Rlist(k_upper))) then
+  elseif ((k_upper == nz) .and. (R_in >= Rlist(k_upper))) then
     k = nz-1 ; wt = 0.0 ; wt_p = 1.0
   else
     do
@@ -741,7 +745,7 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
       else
         k_lower = k_new
       endif
-    end do
+    enddo
 
 !   Uncomment this as a code check
 !    if ((R_in < Rlist(k_lower)) .or. (R_in >= Rlist(k_upper)) .or. (k_upper-k_lower /= 1)) &
@@ -2060,9 +2064,12 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
 
 end subroutine set_dependent_diagnostics
 
+!> Deallocate memory associated with the diagnostics module
 subroutine MOM_diagnostics_end(CS, ADp)
-  type(diagnostics_CS),   pointer       :: CS
-  type(accel_diag_ptrs),  intent(inout) :: ADp
+  type(diagnostics_CS),   pointer       :: CS  !< Control structure returned by a
+                                               !! previous call to diagnostics_init.
+  type(accel_diag_ptrs),  intent(inout) :: ADp !< structure with pointers to
+                                               !! accelerations in momentum equation.
   integer :: m
 
   if (associated(CS%e))          deallocate(CS%e)

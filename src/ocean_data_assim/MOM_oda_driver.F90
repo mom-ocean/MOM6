@@ -308,15 +308,15 @@ contains
      do i=1, CS%ni; do j=1, CS%nj
        if ( global2D(i,j) > 1 ) then
          T_grid%mask(i,j,k) = 1.0
-       end if
-     end do; end do
+       endif
+     enddo ; enddo
      if (k == 1) then
        T_grid%z(:,:,k) = global2D/2
      else
        T_grid%z(:,:,k) = T_grid%z(:,:,k-1) + (global2D + global2D_old)/2
-     end if
+     endif
      global2D_old = global2D
-   end do
+   enddo
 
    call ocean_da_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
 
@@ -363,7 +363,7 @@ contains
            CS%nk, CS%h(i,j,:), T(i,j,:))
       call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%S(i,j,:), &
            CS%nk, CS%h(i,j,:), S(i,j,:))
-    enddo; enddo
+    enddo ; enddo
 
     do m=1,CS%ensemble_size
       call mpp_redistribute(CS%domains(m)%mpp_domain, T,&
@@ -449,7 +449,7 @@ contains
            used=send_data(CS%Ocean_posterior%id_s(m), CS%Ocean_posterior%S(isc:iec,jsc:jec,:,m), CS%Time)
          endif
        endif
-     end do
+     enddo
 
      tv => CS%tv
      h => CS%h
@@ -479,7 +479,7 @@ contains
        !! switch back to ensemble member pelist
        call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
 
-     end if
+     endif
 
      return
   end subroutine oda

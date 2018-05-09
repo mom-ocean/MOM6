@@ -1710,7 +1710,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
     ColHt_chg = ColHt_core * y1
     if (ColHt_chg < 0.0) PE_chg = PE_chg - pres * ColHt_chg
     if (present(ColHt_cor)) ColHt_cor = -pres * min(ColHt_chg, 0.0)
-  else if (present(ColHt_cor)) then
+  elseif (present(ColHt_cor)) then
     y1 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
     ColHt_cor = -pres * min(ColHt_core * y1, 0.0)
   endif

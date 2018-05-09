@@ -295,7 +295,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                      chl_in(i,j,k), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
           call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
       endif
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
   else
     ! Only the 2-d surface chlorophyll can be read in from a file.  The
     ! same value is assumed for all layers.
