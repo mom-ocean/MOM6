@@ -330,7 +330,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         if (OBC%freeslip_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
           dvdx(I,J) = 0.
         enddo ; endif
-        if (OBC%specified_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+        if (OBC%computed_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
           if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
             dvdx(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%dyCv(i,J)
           else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
@@ -549,7 +549,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           vhm = 10.0*vhc
         elseif (abs(vhc) > c1*abs(vhm)) then
           if (abs(vhc) < c2*abs(vhm)) then ; vhc = (3.0*vhc+(1.0-c2*3.0)*vhm)
-          else if (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
+          elseif (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
           else ; vhc = slope*vhc+(1.0-c3*slope)*vhm
           endif
         endif

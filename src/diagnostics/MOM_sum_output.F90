@@ -234,7 +234,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   call get_filename_appendix(filename_appendix)
   if (len_trim(filename_appendix) > 0) then
      energyfile = trim(energyfile) //'.'//trim(filename_appendix)
-  end if
+  endif
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mdl, "output_path/ENERGYFILE", CS%energyfile)
@@ -606,11 +606,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
         else
           if ((CS%timeunit >= 0.99) .and. (CS%timeunit < 1.01)) then
             time_units = "           [seconds]     "
-          else if ((CS%timeunit >= 3599.0) .and. (CS%timeunit < 3601.0)) then
+          elseif ((CS%timeunit >= 3599.0) .and. (CS%timeunit < 3601.0)) then
             time_units = "            [hours]      "
-          else if ((CS%timeunit >= 86399.0) .and. (CS%timeunit < 86401.0)) then
+          elseif ((CS%timeunit >= 86399.0) .and. (CS%timeunit < 86401.0)) then
             time_units = "             [days]      "
-          else if ((CS%timeunit >= 3.0e7) .and. (CS%timeunit < 3.2e7)) then
+          elseif ((CS%timeunit >= 3.0e7) .and. (CS%timeunit < 3.2e7)) then
             time_units = "            [years]      "
           else
             write(time_units,'(9x,"[",es8.2," s]    ")') CS%timeunit
@@ -1076,7 +1076,8 @@ end subroutine accumulate_net_input
 !! or it might be created anew.  (For now only new creation occurs.
 subroutine depth_list_setup(G, CS)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  type(Sum_output_CS),   pointer    :: CS
+  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
+                                           !! previous call to MOM_sum_output_init.
 !  This subroutine sets up an ordered list of depths, along with the
 ! cross sectional areas at each depth and the volume of fluid deeper
 ! than each depth.  This might be read from a previously created file
@@ -1232,10 +1233,11 @@ end subroutine create_depth_list
 
 !> This subroutine writes out the depth list to the specified file.
 subroutine write_depth_list(G, CS, filename, list_size)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
-  type(Sum_output_CS),   pointer    :: CS
-  character(len=*),      intent(in) :: filename
-  integer,               intent(in) :: list_size
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure.
+  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
+                                           !! previous call to MOM_sum_output_init.
+  character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
+  integer,               intent(in) :: list_size !< The size of the depth list.
 
 ! This subroutine writes out the depth list to the specified file.
 
@@ -1314,9 +1316,10 @@ end subroutine write_depth_list
 !> This subroutine reads in the depth list to the specified file
 !! and allocates and sets up CS%DL and CS%list_size .
 subroutine read_depth_list(G, CS, filename)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  type(Sum_output_CS),   pointer    :: CS
-  character(len=*),      intent(in) :: filename
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
+  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
+                                           !! previous call to MOM_sum_output_init.
+  character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
 
 ! This subroutine reads in the depth list to the specified file
 ! and allocates and sets up CS%DL and CS%list_size .

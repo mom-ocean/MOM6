@@ -198,7 +198,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect)
   slope = 2.0 * ( u1 - u0 )
   if ( abs(u1_r) > abs(slope) ) then
     u1_r = slope
-  end if
+  endif
 
   ! The right edge value in the boundary cell is taken to be the left
   ! edge value in the neighboring cell
@@ -215,11 +215,11 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect)
 
   if ( exp1 > exp2 ) then
     u0_l = 3.0 * u0 - 2.0 * u0_r
-  end if
+  endif
 
   if ( exp1 < -exp2 ) then
     u0_r = 3.0 * u0 - 2.0 * u0_l
-  end if
+  endif
 
   ppoly_E(i0,1) = u0_l
   ppoly_E(i0,2) = u0_r
@@ -251,7 +251,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect)
   slope = 2.0 * ( u1 - u0 )
   if ( abs(u1_l) > abs(slope) ) then
     u1_l = slope
-  end if
+  endif
 
   ! The left edge value in the boundary cell is taken to be the right
   ! edge value in the neighboring cell
@@ -268,11 +268,11 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect)
 
   if ( exp1 > exp2 ) then
     u0_l = 3.0 * u1 - 2.0 * u0_r
-  end if
+  endif
 
   if ( exp1 < -exp2 ) then
     u0_r = 3.0 * u1 - 2.0 * u0_l
-  end if
+  endif
 
   ppoly_E(i1,1) = u0_l
   ppoly_E(i1,2) = u0_r

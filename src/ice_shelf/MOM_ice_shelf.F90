@@ -1089,7 +1089,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
        if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
          sponge_area = sponge_area + G%areaT(i,j)
        endif
-    enddo;  enddo
+    enddo ; enddo
 
     ! take into account changes in mass (or thickness) when imposing ice shelf mass
     if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement .and. &
@@ -1125,7 +1125,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
                 shelf_mass1 = shelf_mass1 + (CS%mass_shelf(i,j) * CS%area_shelf_h(i,j))
 
              endif
-          enddo;  enddo
+          enddo ; enddo
           call mpp_sum(shelf_mass0); call mpp_sum(shelf_mass1)
           delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
 !          delta_mass_shelf = (shelf_mass1 - shelf_mass0)* &
@@ -1152,7 +1152,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
           fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! W /m^2
           fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! kg (salt)/(m^2 s)
        endif
-    enddo;  enddo
+    enddo ; enddo
 
     if (CS%DEBUG) then
      if (is_root_pe()) write(*,*)'Mean melt flux (kg/(m^2 s)),dt',mean_melt_flux,CS%time_step
@@ -1679,12 +1679,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
     endif
 
-    !  else if (CS%shelf_mass_is_dynamic) then
+    !  elseif (CS%shelf_mass_is_dynamic) then
     !    call initialize_ice_shelf_boundary ( CS%u_face_mask_boundary, CS%v_face_mask_boundary, &
     !                                         CS%u_flux_boundary_values, CS%v_flux_boundary_values, &
     !                                         CS%u_boundary_values, CS%v_boundary_values, CS%h_boundary_values, &
 !                                         CS%hmask, G, param_file)
-  end if
+  endif
 
   if (CS%shelf_mass_is_dynamic .and. .not. CS%override_shelf_movement) then
     ! the only reason to initialize boundary conds is if the shelf is dynamic
@@ -1694,7 +1694,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     !MJH                                     CS%u_boundary_values, CS%v_boundary_values, CS%h_boundary_values, &
     !MJH                                     CS%hmask, G, param_file)
 
-  end if
+  endif
 
   if (new_sim .and. (.not. (CS%override_shelf_movement .and. CS%mass_from_file))) then
 
@@ -5856,14 +5856,14 @@ if (M > 1300) THEN
    WRITE(fin) 'SECOND DIMENSION TOO LARGE'
    CLOSE(fin)
    RETURN
-END IF
+ENDIF
 
 DO i=1,M
   WRITE(ln,'(E17.9)') A(i,1)
   DO j=2,N
     WRITE(sing,'(E17.9)') A(i,j)
     ln = TRIM(ln) // ' ' // TRIM(sing)
-  END DO
+  ENDDO
 
 
   if (i == 1) THEN
@@ -5889,14 +5889,14 @@ DO i=1,M
 
    FMT1 = TRIM(FMT1) // ')'
 
-  END IF
+  ENDIF
 
   WRITE(UNIT=fin,IOSTAT=iock,FMT=TRIM(FMT1)) TRIM(ln)
 
   if (iock /= 0) THEN
-     PRINT*,iock
-  END IF
-END DO
+     PRINT *,iock
+  ENDIF
+ENDDO
 
 CLOSE(FIN)
 

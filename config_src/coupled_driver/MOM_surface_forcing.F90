@@ -305,7 +305,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
       fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
-    enddo; enddo
+    enddo ; enddo
 
     if (restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
 
@@ -353,7 +353,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
       do j=js,je ; do i=is,ie
         if (sfc_state%SST(i,j) <= -0.0539*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
-      enddo; enddo
+      enddo ; enddo
     endif
     if (CS%salt_restore_as_sflux) then
       do j=js,je ; do i=is,ie
@@ -361,7 +361,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
-      enddo; enddo
+      enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
           call adjust_area_mean_to_zero(fluxes%salt_flux, G, fluxes%saltFluxGlobalScl)
@@ -382,7 +382,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
                       (CS%Rho0*CS%Flux_const) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
-      enddo; enddo
+      enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
           call adjust_area_mean_to_zero(fluxes%vprec, G, fluxes%vPrecGlobalScl)
@@ -392,7 +392,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
           fluxes%vPrecGlobalAdj = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
           do j=js,je ; do i=is,ie
             fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - fluxes%vPrecGlobalAdj ) * G%mask2dT(i,j)
-          enddo; enddo
+          enddo ; enddo
         endif
       endif
     endif
@@ -536,12 +536,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
       call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
       do j=js,je ; do i=is,ie
         fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)/G%areaT(i,j)) * G%mask2dT(i,j)
-      enddo; enddo
+      enddo ; enddo
     else
       fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
       do j=js,je ; do i=is,ie
         fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - fluxes%netFWGlobalAdj ) * G%mask2dT(i,j)
-      enddo; enddo
+      enddo ; enddo
     endif
 
   endif

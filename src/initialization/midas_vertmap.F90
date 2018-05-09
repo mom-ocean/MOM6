@@ -408,7 +408,7 @@ lo_=1;hi_=size(a,2);num_x=size(x,1);bi_r=-1;nprofs=size(a,1)
 
 if (PRESENT(lo)) then
   where (lo>0) lo_=lo
-end if
+endif
 if (PRESENT(hi)) then
   where (hi>0) hi_=hi
 endif
@@ -950,7 +950,7 @@ do n=1,niter
 
   zi(:,:)=mp(1:ni,1:nj)
   mp = fill_boundaries(zi,cyclic_x,tripolar_n)
-end do
+enddo
 
 return
 

@@ -243,7 +243,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
            * (12. - r/CS%r_max)/2.
   else
      U10 = 0.
-  end if
+  endif
   Adir = atan2(CS%YY,xx)
 
   !/ BR

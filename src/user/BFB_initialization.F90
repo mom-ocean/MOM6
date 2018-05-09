@@ -75,10 +75,10 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
       g_prime(k) = (Rlay(k) - Rlay(k-1))*GV%g_earth/GV%rho0
     else
       g_prime(k) = GV%g_earth
-    end if
+    endif
     !Rlay(:) = 0.0
     !g_prime(:) = 0.0
-  end do
+  enddo
 
   if (first_call) call write_BFB_log(param_file)
 
