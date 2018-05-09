@@ -1709,18 +1709,18 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
 ! S(:,:,1) = S_top
 ! do k = 2,G%ke
 !   S(:,:,k) = S(:,:,k-1) + delta_S
-! end do
+! enddo
   do k = 1,G%ke
     S(:,:,k) = S_top - S_range*((real(k)-0.5)/real(G%ke))
     T(:,:,k) = T_top - T_range*((real(k)-0.5)/real(G%ke))
-  end do
+  enddo
 
 ! ! Prescribe temperature
 ! delta_T = T_range / ( G%ke - 1.0 )
 ! T(:,:,1) = T_top
 ! do k = 2,G%ke
 !   T(:,:,k) = T(:,:,k-1) + delta_T
-! end do
+! enddo
 ! delta = 1
 ! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0
 
@@ -1848,7 +1848,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 ! apply the sponges, along with the interface heights.               !
     call initialize_sponge(Idamp, eta, G, param_file, CSp)
     deallocate(eta)
-  else if (.not. new_sponges) then ! ALE mode
+  elseif (.not. new_sponges) then ! ALE mode
 
     call field_size(filename,eta_var,siz,no_domain=.true.)
     if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
@@ -1872,7 +1872,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     enddo ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
       h(i,j,k) = eta(i,j,k)-eta(i,j,k+1)
-    enddo ; enddo; enddo
+    enddo ; enddo ; enddo
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
     deallocate(eta)
     deallocate(h)
@@ -1910,7 +1910,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
     call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
-  else if (use_temperature) then
+  elseif (use_temperature) then
     call set_up_ALE_sponge_field(filename, potemp_var, Time, G, tv%T, ALE_CSp)
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, tv%S, ALE_CSp)
   endif

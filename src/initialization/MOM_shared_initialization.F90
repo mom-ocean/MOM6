@@ -1187,9 +1187,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
                    file_threading, dG=G)
 
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo; enddo
+  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
   call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
-  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo; enddo
+  do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
   call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
   call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
   call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
@@ -1210,7 +1210,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dyCv(i,J) ; enddo ; enddo
   call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dxT(i,j); enddo; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dxT(i,j); enddo ; enddo
   call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
   do j=js,je ; do i=is,ie ; out_h(i,j) = G%dyT(i,j) ; enddo ; enddo
   call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)

@@ -177,7 +177,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
       h(i,j,:) = delta_h
-    end do ; end do
+    enddo ; enddo
 
 end select
 

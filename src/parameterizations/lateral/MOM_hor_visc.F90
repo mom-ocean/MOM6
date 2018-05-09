@@ -433,7 +433,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     else
       do j=js-2,je+2 ; do I=Isq-1,Ieq+1
         h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
-      enddo; enddo
+      enddo ; enddo
       do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo

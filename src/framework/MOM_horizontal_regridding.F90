@@ -225,7 +225,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
               endif
            enddo
         enddo
-     else if (nfill == nfill_prev) then
+     elseif (nfill == nfill_prev) then
         print *,&
              'Unable to fill missing points using either data at the same vertical level from a connected basin'//&
              'or using a point from a previous vertical level.  Make sure that the original data has some valid'//&
@@ -236,7 +236,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
      nfill = sum(fill_pts(is:ie,js:je))
      call sum_across_PEs(nfill)
 
-  end do
+  enddo
 
   if (do_smooth) then
      do k=1,npass
@@ -1010,7 +1010,7 @@ do n=1,niter
 
   zi(:,:)=mp(1:ni,1:nj)
   mp = fill_boundaries(zi,cyclic_x,tripolar_n)
-end do
+enddo
 
 
 

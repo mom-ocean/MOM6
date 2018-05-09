@@ -123,14 +123,14 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
     xTmp(1) = 0.0
     do k = 1,count_nonzero_layers
       xTmp(k+1) = xTmp(k) + h_nv(k)
-    end do
+    enddo
 
     ! Compute densities on source column
     p(:) = CS%ref_pressure
     call calculate_density(T, S, p, densities, 1, nz, eqn_of_state)
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
-    end do
+    enddo
 
     ! Based on source column density profile, interpolate to generate a new grid
     call build_and_interpolate_grid(CS%interp_CS, densities, count_nonzero_layers, &
@@ -141,10 +141,10 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
     call old_inflate_layers_1d(CS%min_thickness, CS%nk, h_new)
 
     ! Comment: The following adjustment of h_new, and re-calculation of h_new via x1 needs to be removed
-    x1(1) = 0.0 ; do k = 1,CS%nk ; x1(k+1) = x1(k) + h_new(k) ; end do
+    x1(1) = 0.0 ; do k = 1,CS%nk ; x1(k+1) = x1(k) + h_new(k) ; enddo
     do k = 1,CS%nk
       h_new(k) = x1(k+1) - x1(k)
-    end do
+    enddo
 
   else ! count_nonzero_layers <= 1
     if (nz == CS%nk) then
@@ -231,12 +231,12 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     if ( count_nonzero_layers <= 1 ) then
       h1(:) = h0(:)
       exit  ! stop iterations here
-    end if
+    endif
 
     xTmp(1) = 0.0
     do k = 1,count_nonzero_layers
       xTmp(k+1) = xTmp(k) + hTmp(k)
-    end do
+    enddo
 
     ! Compute densities within current water column
     call calculate_density( T_tmp, S_tmp, p, densities,&
@@ -244,7 +244,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
 
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
-    end do
+    enddo
 
     ! One regridding iteration
     ! Based on global density profile, interpolate to generate a new grid
@@ -252,12 +252,12 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
          hTmp, xTmp, CS%target_density, nz, h1, x1, h_neglect, h_neglect_edge)
 
     call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
-    x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
+    x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; enddo
 
     ! Remap T and S from previous grid to new grid
     do k = 1,nz
       h1(k) = x1(k+1) - x1(k)
-    end do
+    enddo
 
     call remapping_core_h(remapCS, nz, h0, S, nz, h1, Tmp, h_neglect, h_neglect_edge)
     S_tmp(:) = Tmp(:)
@@ -273,7 +273,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
       x0(k) = x0(k-1) + h0(k-1)
       x1(k) = x1(k-1) + h1(k-1)
       deviation = deviation + (x0(k)-x1(k))**2
-    end do
+    enddo
     deviation = sqrt( deviation / (nz-1) )
 
     m = m + 1
@@ -281,7 +281,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     ! Copy final grid onto start grid for next iteration
     h0(:) = h1(:)
 
-  end do ! end regridding iterations
+  enddo ! end regridding iterations
 
   if (CS%integrate_downward_for_e) then
     zInterface(1) = 0.
@@ -330,12 +330,12 @@ subroutine copy_finite_thicknesses(nk, h_in, threshold, nout, h_out, mapping)
       if (h_out(nout) > thickest_h_out) then
         thickest_h_out = h_out(nout)
         k_thickest = nout
-      end if
+      endif
     else
       ! Add up mass in vanished layers
       thickness_in_vanished = thickness_in_vanished + h_in(k)
-    end if
-  end do
+    endif
+  enddo
 
   ! No finite layers
   if (nout <= 1) return
@@ -367,8 +367,8 @@ subroutine old_inflate_layers_1d( min_thickness, nk, h )
   do k = 1,nk
     if ( h(k) > min_thickness ) then
       count_nonzero_layers = count_nonzero_layers + 1
-    end if
-  end do
+    endif
+  enddo
 
   ! If all layer thicknesses are greater than the threshold, exit routine
   if ( count_nonzero_layers == nk ) return
@@ -377,9 +377,9 @@ subroutine old_inflate_layers_1d( min_thickness, nk, h )
   if ( count_nonzero_layers == 0 ) then
     do k = 1,nk
       h(k) = min_thickness
-    end do
+    enddo
     return
-  end if
+  endif
 
   ! Inflate zero layers
   correction = 0.0
@@ -388,8 +388,8 @@ subroutine old_inflate_layers_1d( min_thickness, nk, h )
       delta = min_thickness - h(k)
       correction = correction + delta
       h(k) = h(k) + delta
-    end if
-  end do
+    endif
+  enddo
 
   ! Modify thicknesses of nonzero layers to ensure volume conservation
   maxThickness = h(1)
@@ -398,8 +398,8 @@ subroutine old_inflate_layers_1d( min_thickness, nk, h )
     if ( h(k) > maxThickness ) then
       maxThickness = h(k)
       k_found = k
-    end if
-  end do
+    endif
+  enddo
 
   h(k_found) = h(k_found) - correction
 

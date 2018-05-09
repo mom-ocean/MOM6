@@ -736,7 +736,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
           F(i,k) = MIN(F(i,k), ds_dsp1(i,k)*( ((F(i,k-1) + &
               dsp1_ds(i,k-1)*F(i,k-1)) - F(i,k-2)) + (h(i,j,k-1) - Angstrom)))
           F(i,k) = MAX(F(i,k),MIN(minF(i,k),0.0))
-        else if (k == kb(i)+1) then
+        elseif (k == kb(i)+1) then
           F(i,k) = MIN(F(i,k), ds_dsp1(i,k)*( ((F(i,k-1) + eakb(i)) - &
               eb_kmb(i)) + (h(i,j,k-1) - Angstrom)))
           F(i,k) = MAX(F(i,k),MIN(minF(i,k),0.0))
@@ -791,7 +791,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 
               ea(i,j,k) = ea(i,j,k) - dsp1_ds(i,k)*F_cor
               eb(i,j,k) = eb(i,j,k) + F_cor
-            else if ((k==kb(i)) .and. (F(i,k) > 0.0)) then
+            elseif ((k==kb(i)) .and. (F(i,k) > 0.0)) then
               !   Rho_cor is the density anomaly that needs to be corrected,
               ! taking into account that the true potential density of the
               ! deepest buffer layer is not exactly what is returned as dS_kb.
@@ -817,7 +817,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 
               ea(i,j,k) = ea(i,j,k) + ea_cor
               eb(i,j,k) = eb(i,j,k) - (dS_kb(i) * I_dSkbp1(i)) * ea_cor
-            else if (k < kb(i)) then
+            elseif (k < kb(i)) then
               ! Repetative, unless ea(kb) has been corrected.
               ea(i,j,k) = ea(i,j,k+1)
             endif
@@ -1007,7 +1007,7 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
         ! elsewhere, so F should always be nonnegative.
         ea(i,j,k) = dsp1_ds(i,k)*F(i,k)
         eb(i,j,k) = F(i,k)
-      else if (k == kb(i)) then
+      elseif (k == kb(i)) then
         ea(i,j,k) = eakb(i)
         eb(i,j,k) = F(i,k)
       elseif (k == kb(i)-1) then

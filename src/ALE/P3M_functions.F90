@@ -144,7 +144,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
     else
       h_l = h(k-1)
       u_l = u(k-1)
-    end if
+    endif
 
     if ( k == N ) then
       h_r = h(k)
@@ -152,7 +152,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
     else
       h_r = h(k+1)
       u_r = u(k+1)
-    end if
+    endif
 
     ! Compute limited slope
     sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
@@ -163,28 +163,28 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
-    end if
+    endif
 
     ! If the slopes are close to zero in machine precision and in absolute
     ! value, we set the slope to zero. This prevents asymmetric representation
     ! near extrema.  These expressions are both nondimensional.
     if ( abs(u1_l*h_c) < eps ) then
       u1_l = 0.0
-    end if
+    endif
 
     if ( abs(u1_r*h_c) < eps ) then
       u1_r = 0.0
-    end if
+    endif
 
     ! The edge slopes are limited from above by the respective
     ! one-sided slopes
     if ( abs(u1_l) > abs(sigma_l) ) then
       u1_l = sigma_l
-    end if
+    endif
 
     if ( abs(u1_r) > abs(sigma_r) ) then
       u1_r = sigma_r
-    end if
+    endif
 
     ! Build cubic interpolant (compute the coefficients)
     call build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
@@ -197,7 +197,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
     ! cubic coefficients
     if ( monotonic == 0 ) then
       call monotonize_cubic( h_c, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r )
-    end if
+    endif
 
     ! Store edge slopes
     ppoly_S(k,1) = u1_l
@@ -206,7 +206,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
     ! Recompute coefficients of cubic
     call build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
 
-  end do ! loop on cells
+  enddo ! loop on cells
 
 end subroutine P3M_limiter
 
@@ -278,7 +278,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   slope = 2.0 * ( u1 - u0 ) / ( h0 + hNeglect )
   if ( abs(u1_r) > abs(slope) ) then
     u1_r = slope
-  end if
+  endif
 
   ! The right edge value in the boundary cell is taken to be the left
   ! edge value in the neighboring cell
@@ -297,7 +297,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
     u0_l = u0_r
     u1_l = 0.0
     u1_r = 0.0
-  end if
+  endif
 
   ! Store edge values and slope, build cubic and check monotonicity
   ppoly_E(i0,1) = u0_l
@@ -317,7 +317,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
     ppoly_S(i0,2) = u1_r
     call build_cubic_interpolant( h, i0, ppoly_E, ppoly_S, ppoly_coef )
 
-  end if
+  endif
 
   ! ----- Right boundary -----
   i0 = N-1
@@ -338,7 +338,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   slope = 2.0 * ( u1 - u0 ) / ( h1 + hNeglect )
   if ( abs(u1_l) > abs(slope) ) then
     u1_l = slope
-  end if
+  endif
 
   ! The left edge value in the boundary cell is taken to be the right
   ! edge value in the neighboring cell
@@ -357,7 +357,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
     u0_r = u0_l
     u1_l = 0.0
     u1_r = 0.0
-  end if
+  endif
 
   ! Store edge values and slope, build cubic and check monotonicity
   ppoly_E(i1,1) = u0_l
@@ -376,7 +376,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
     ppoly_S(i1,2) = u1_r
     call build_cubic_interpolant( h, i1, ppoly_E, ppoly_S, ppoly_coef )
 
-  end if
+  endif
 
 end subroutine P3M_boundary_extrapolation
 
@@ -474,10 +474,10 @@ integer function is_cubic_monotonic( ppoly_coef, k )
     if ( abs(c) > 1e-15 ) then
       xi_0 = 0.5 * ( -b - sqrt( rho ) ) / c
       xi_1 = 0.5 * ( -b + sqrt( rho ) ) / c
-    else if ( abs(b) > 1e-15 ) then
+    elseif ( abs(b) > 1e-15 ) then
       xi_0 = - a / b
       xi_1 = - a / b
-    end if
+    endif
 
     ! If one of the roots of the first derivative lies in (0,1),
     ! the cubic is not monotonic.
@@ -486,11 +486,11 @@ integer function is_cubic_monotonic( ppoly_coef, k )
       monotonic = 0
     else
       monotonic = 1
-    end if
+    endif
 
   else ! there are no real roots --> cubic is monotonic
     monotonic = 1
-  end if
+  endif
 
   ! Set the return value
   is_cubic_monotonic = monotonic
@@ -560,11 +560,11 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   ! set them to zero
   if ( u1_l*slope <= 0.0 ) then
     u1_l = 0.0
-  end if
+  endif
 
   if ( u1_r*slope <= 0.0 ) then
     u1_r = 0.0
-  end if
+  endif
 
   ! Compute the location of the inflexion point, which is the root
   ! of the second derivative
@@ -582,8 +582,8 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
     ! If the inflexion point lies in [0,1], change boolean value
     if ( (xi_ip >= 0.0) .AND. (xi_ip <= 1.0) ) then
       found_ip = 1
-    end if
-  end if
+    endif
+  endif
 
   ! When there is an inflexion point within [0,1], check the slope
   ! to see if it is consistent with the limited PLM slope. If not,
@@ -599,9 +599,9 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
         inflexion_l = 1
       else
         inflexion_r = 1
-      end if
-    end if
-  end if ! found_ip
+      endif
+    endif
+  endif ! found_ip
 
   ! At this point, if the cubic is not monotonic, we know where the
   ! inflexion point should lie. When the cubic is monotonic, both
@@ -618,12 +618,12 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
       u1_l = 0.0
       u1_r = 3.0 * (u0_r - u0_l) / h
 
-    else if (u1_l_tmp*slope < 0.0) then
+    elseif (u1_l_tmp*slope < 0.0) then
 
       u1_r = u1_r_tmp
       u1_l = 1.5*(u0_r - u0_l)/h - 0.5*u1_r
 
-    else if (u1_r_tmp*slope < 0.0) then
+    elseif (u1_r_tmp*slope < 0.0) then
 
       u1_l = u1_l_tmp
       u1_r = 3.0*(u0_r - u0_l)/h - 2.0*u1_l
@@ -633,9 +633,9 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
       u1_l = u1_l_tmp
       u1_r = u1_r_tmp
 
-    end if
+    endif
 
-  end if ! end treating case with inflexion point on the left
+  endif ! end treating case with inflexion point on the left
 
   ! Move inflexion point on the right
   if ( inflexion_r == 1 ) then
@@ -648,12 +648,12 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
       u1_l = 3.0 * (u0_r - u0_l) / h
       u1_r = 0.0
 
-    else if (u1_l_tmp*slope < 0.0) then
+    elseif (u1_l_tmp*slope < 0.0) then
 
       u1_r = u1_r_tmp
       u1_l = 3.0*(u0_r - u0_l)/h - 2.0*u1_r
 
-    else if (u1_r_tmp*slope < 0.0) then
+    elseif (u1_r_tmp*slope < 0.0) then
 
       u1_l = u1_l_tmp
       u1_r = 1.5*(u0_r - u0_l)/h - 0.5*u1_l
@@ -663,17 +663,17 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
       u1_l = u1_l_tmp
       u1_r = u1_r_tmp
 
-    end if
+    endif
 
-  end if ! end treating case with inflexion point on the right
+  endif ! end treating case with inflexion point on the right
 
   if ( abs(u1_l*h) < eps ) then
     u1_l = 0.0
-  end if
+  endif
 
   if ( abs(u1_r*h) < eps ) then
     u1_r = 0.0
-  end if
+  endif
 
 end subroutine monotonize_cubic
 
