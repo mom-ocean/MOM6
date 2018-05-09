@@ -252,7 +252,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       else
         h2d(i,k) = GV%H_subroundoff
       endif
-    enddo; enddo
+    enddo ; enddo
 
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
     ! does not deplete a cell
@@ -320,7 +320,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       else
         h2d(j,k) = GV%H_subroundoff
       endif
-    enddo; enddo
+    enddo ; enddo
 
     ! Distribute flux evenly throughout a column
     do j=js-1,je

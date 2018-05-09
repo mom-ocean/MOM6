@@ -284,7 +284,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   do j=jsd,jed ; do i=isd,ied ; test(i,j,1) = 1.0 ; test(i,j,2) = 0.0 ; enddo ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     call create_group_pass(pass_En, CS%En(:,:,:,fr,m), G%domain)
-  enddo; enddo
+  enddo ; enddo
   call create_group_pass(pass_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
   call start_group_pass(pass_test, G%domain)
 
@@ -920,7 +920,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
         call MOM_error(WARNING, "refract: CFL exceeds 1.", .true.)
         if (CFL_ang(i,j,A) > 0.0) then ; CFL_ang(i,j,A) = 1.0 ; else ; CFL_ang(i,j,A) = -1.0 ; endif
       endif
-    enddo; enddo
+    enddo ; enddo
 
     ! Advect in angular space
     if (.not.use_PPMang) then
@@ -931,7 +931,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
         else
           Flux_E(i,A) = CFL_ang(i,j,A) * En2d(i,A+1)
         endif
-      enddo; enddo
+      enddo ; enddo
     else
       ! Use PPM
       do i=is,ie
@@ -1109,7 +1109,7 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
       ! Apply the propagation WITH CORNER ADVECTION/FINITE VOLUME APPROACH.
       LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie
       call propagate_corner_spread(En(:,:,a), a, NAngle, speed, dt, G, CS, LB)
-    end do ! a-loop
+    enddo ! a-loop
   else
     ! IMPLEMENT PPM ADVECTION IN HORIZONTAL-----------------------
     ! These could be in the control structure, as they do not vary.
@@ -1436,7 +1436,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
     enddo ! m-loop
     ! update energy in cell
     En(i,j) = sum(E_new)/Nsubrays
-  enddo; enddo
+  enddo ; enddo
 end subroutine propagate_corner_spread
 
 ! #@# This subroutine needs a doxygen description
@@ -2069,7 +2069,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
         slp(i,j) = sign(1.,slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
                 ! * (G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j))
       endif
-    enddo; enddo
+    enddo ; enddo
 
     do j=jsl,jel ; do i=isl,iel
       ! Neighboring values should take into account any boundaries.  The 3
@@ -2081,7 +2081,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
       ! Left/right values following Eq. B2 in Lin 1994, MWR (132)
       h_l(i,j) = 0.5*( h_im1 + h_in(i,j) ) + oneSixth*( slp(i-1,j) - slp(i,j) )
       h_r(i,j) = 0.5*( h_ip1 + h_in(i,j) ) + oneSixth*( slp(i,j) - slp(i+1,j) )
-    enddo; enddo
+    enddo ; enddo
   endif
 
   call PPM_limit_pos(h_in, h_l, h_r, 0.0, G, isl, iel, jsl, jel)
@@ -2502,7 +2502,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
     ! will be multiplied by N and En to get into [W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * h2(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   ! Read in prescribed coast/ridge/shelf angles from file
   call get_param(param_file, mdl, "REFL_ANGLE_FILE", refl_angle_file, &
@@ -2556,7 +2556,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   do i=isd,ied; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
-  enddo; enddo
+  enddo ; enddo
 
   ! Read in prescribed land mask from file (if overwriting -BDM).
   ! This should be done in MOM_initialize_topography subroutine

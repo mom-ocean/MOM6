@@ -209,7 +209,7 @@ end subroutine diag_remap_get_axes_info
 !! Configuration is complete when diag_remap_configure_axes() has been
 !! successfully called.
 function diag_remap_axes_configured(remap_cs)
-  type(diag_remap_ctrl), intent(in) :: remap_cs
+  type(diag_remap_ctrl), intent(in) :: remap_cs !< Diagnostic coordinate control structure
   logical :: diag_remap_axes_configured
 
   diag_remap_axes_configured = remap_cs%configured

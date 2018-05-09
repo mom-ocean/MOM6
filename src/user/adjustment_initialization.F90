@@ -125,7 +125,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
       target_values(nz+1) = GV%Rlay(nz)+0.5*(GV%Rlay(nz)-GV%Rlay(nz-1))
       do k = 2,nz
         target_values(k) = target_values(k-1) + ( GV%Rlay(nz) - GV%Rlay(1) ) / (nz-1)
-      end do
+      enddo
       target_values = target_values - 1000.
       do j=js,je ; do i=is,ie
         if (front_wave_length /= 0.) then
@@ -287,7 +287,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_fi
    !    x = abs(S(1,1,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
    !    x = 1.-min(1., x)
    !    T(:,:,k) = x
-      end do
+      enddo
 
     case default
       call MOM_error(FATAL,"adjustment_initialize_temperature_salinity: "// &

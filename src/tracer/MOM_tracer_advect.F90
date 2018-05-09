@@ -324,16 +324,26 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev !< cell volume at the end of previous
+                                                                  !! tracer change, in H m2 (m3 or kg)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr !< accumulated volume/mass flux through
-                                                                  !!the zonal face (m3 or kg)
-   real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect
-  type(ocean_OBC_type),                      pointer       :: OBC
-  logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u
-  real,                                      intent(in)    :: Idt
-  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
-  logical,                                   intent(in)    :: usePPM, useHuynh
+                                                                  !! the zonal face, in H m2 (m3 or kg)
+   real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect !< A tiny zonal mass flux that can
+                                                                  !! be neglected, in H m2 (m3 or kg)
+  type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
+  logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u !< If true, there is more advection to be
+                                                                  !! done in this u-row
+  real,                                      intent(in)    :: Idt !< The inverse of dt, in s-1
+  integer,                                   intent(in)    :: ntr !< The number of tracers
+  integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
+  integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
+  integer,                                   intent(in)    :: js  !< The starting tracer j-index to work on
+  integer,                                   intent(in)    :: je  !< The ending tracer j-index to work on
+  integer,                                   intent(in)    :: k   !< The k-level to work on
+  logical,                                   intent(in)    :: usePPM !< If true, use PPM instead of PLM
+  logical,                                   intent(in)    :: useHuynh !< If true, use the Huynh scheme
+                                                                     !! for PPM interface values
 
   real, dimension(SZI_(G),ntr) :: &
     slope_x             ! The concentration slope per grid point in units of
@@ -645,16 +655,26 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev !< cell volume at the end of previous
+                                                                  !! tracer change, in H m2 (m3 or kg)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr !< accumulated volume/mass flux through
-                                                                  !! the meridional face (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect
-  type(ocean_OBC_type),                      pointer       :: OBC
-  logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v
-  real,                                      intent(in)    :: Idt
-  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
-  logical,                                   intent(in)    :: usePPM, useHuynh
+                                                                  !! the meridional face, in H m2 (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect !< A tiny meridional mass flux that can
+                                                                  !! be neglected, in H m2 (m3 or kg)
+  type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
+  logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v !< If true, there is more advection to be
+                                                                  !! done in this v-row
+  real,                                      intent(in)    :: Idt !< The inverse of dt, in s-1
+  integer,                                   intent(in)    :: ntr !< The number of tracers
+  integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
+  integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
+  integer,                                   intent(in)    :: js  !< The starting tracer j-index to work on
+  integer,                                   intent(in)    :: je  !< The ending tracer j-index to work on
+  integer,                                   intent(in)    :: k   !< The k-level to work on
+  logical,                                   intent(in)    :: usePPM !< If true, use PPM instead of PLM
+  logical,                                   intent(in)    :: useHuynh !< If true, use the Huynh scheme
+                                                                     !! for PPM interface values
 
   real, dimension(SZI_(G),ntr,SZJ_(G)) :: &
     slope_y                     ! The concentration slope per grid point in units of
@@ -1029,7 +1049,7 @@ end subroutine tracer_advect_init
 
 !> Close the tracer advection module
 subroutine tracer_advect_end(CS)
-  type(tracer_advect_CS), pointer :: CS
+  type(tracer_advect_CS), pointer :: CS  !< module control structure
 
   if (associated(CS)) deallocate(CS)
 

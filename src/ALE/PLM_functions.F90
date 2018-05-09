@@ -102,7 +102,7 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
       ! Extrema in the mean values require a PCM reconstruction avoid generating
       ! larger extreme values.
       slope = 0.0
-    end if
+    endif
 
     ! This block tests to see if roundoff causes edge values to be out of bounds
     u_min = min( u_l, u_c, u_r )
@@ -130,7 +130,7 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
     ppoly_E(k,1) = u_c - 0.5 * slope
     ppoly_E(k,2) = u_c + 0.5 * slope
 
-  end do ! end loop on interior cells
+  enddo ! end loop on interior cells
 
   ! Boundary cells use PCM. Extrapolation is handled in a later routine.
   slp(1) = 0.

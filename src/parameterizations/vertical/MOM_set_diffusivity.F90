@@ -391,7 +391,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
           visc%Kd_extra_T(i,j,k) = 0.0
           visc%Kd_extra_S(i,j,k) = 0.0
         endif
-      enddo; enddo
+      enddo ; enddo
       if (associated(dd%KT_extra)) then ; do K=1,nz+1 ; do i=is,ie
         dd%KT_extra(i,j,K) = KT_extra(i,K)
       enddo ; enddo ; endif

@@ -233,7 +233,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           z_bot = z_bot + h(i,j,k)*GV%H_to_m
         enddo
       endif
-    enddo; enddo
+    enddo ; enddo
   enddo
 
 end subroutine initialize_dye_tracer
@@ -245,25 +245,29 @@ end subroutine initialize_dye_tracer
 !!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old !< Layer thickness before entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_new !< Layer thickness after entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: ea    !< an array to which the amount of
-                                              !! fluid entrained from the layer above during this
-                                              !! call will be added, in m or kg m-2.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: eb    !< an array to which the amount of
-                                              !! fluid entrained from the layer below during this
-                                              !! call will be added, in m or kg m-2.
-  type(forcing),                      intent(in) :: fluxes !< A structure containing pointers to
-                                              !! any possible forcing fields.  Unused fields have NULL ptrs.
-  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  type(dye_tracer_CS),                pointer    :: CS   !< The control structure returned by a previous
-                                                         !! call to register_dye_tracer.
-  real,                     optional,intent(in)  :: evap_CFL_limit
-  real,                     optional,intent(in)  :: minimum_forcing_depth
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: ea   !< an array to which the amount of fluid entrained
+                                              !! from the layer above during this call will be
+                                              !! added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: eb   !< an array to which the amount of fluid entrained
+                                              !! from the layer below during this call will be
+                                              !! added, in m or kg m-2.
+  type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
+                                              !! and tracer forcing fields.  Unused fields have NULL ptrs.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  type(dye_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous
+                                              !! call to register_dye_tracer.
+  real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
+                                              !! be fluxed out of the top layer in a timestep (nondim)
+  real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
+                                              !! fluxes can be applied, in m
 
 ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -312,7 +316,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           z_bot = z_bot + h_new(i,j,k)*GV%H_to_m
         enddo
       endif
-    enddo; enddo
+    enddo ; enddo
   enddo
 
 end subroutine dye_tracer_column_physics
@@ -399,7 +403,8 @@ end subroutine dye_tracer_surface_state
 
 !> Clean up any allocated memory after the run.
 subroutine regional_dyes_end(CS)
-  type(dye_tracer_CS), pointer :: CS
+  type(dye_tracer_CS), pointer :: CS !< The control structure returned by a previous
+                                     !! call to register_dye_tracer.
   integer :: m
 
   if (associated(CS)) then

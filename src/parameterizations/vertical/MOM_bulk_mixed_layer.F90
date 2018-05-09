@@ -1343,7 +1343,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
               h_prev = h_ent ; h_ent = h_prev+dh_Newt
               if (h_ent > h_max) then
                 h_ent = 0.5*(h_prev+h_max)
-              else if (h_ent < h_min) then
+              elseif (h_ent < h_min) then
                 h_ent = 0.5*(h_prev+h_min)
               endif
 

@@ -9,23 +9,25 @@ module MOM_intrinsic_functions
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-  implicit none
-  private
+implicit none ; private
 
-  public :: invcosh
+public :: invcosh
 
-  contains
+contains
 
-  function invcosh(x)
-    real, intent(in) :: x
-    real :: invcosh
+!> Evaluate the inverse cosh, either using a math library or an
+!! equivalent expression
+function invcosh(x)
+  real, intent(in) :: x !< The argument of the inverse of cosh.  NaNs will
+                        !! occur if x<1, but there is no error checking
+  real :: invcosh
 
 #ifdef __INTEL_COMPILER
-    invcosh=acosh(x)
+  invcosh = acosh(x)
 #else
-    invcosh=log(x+sqrt(x*x-1))
+  invcosh = log(x+sqrt(x*x-1))
 #endif
 
-  end function invcosh
+end function invcosh
 
 end module MOM_intrinsic_functions

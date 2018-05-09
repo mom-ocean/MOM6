@@ -116,23 +116,23 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
 
     tri_b(i+1) = a * u(i) + b * u(i+1)
 
-  end do ! end loop on cells
+  enddo ! end loop on cells
 
   ! Boundary conditions: left boundary
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + h(i-1)
-  end do
+  enddo
 
   do i = 1,4
 
     do j = 1,4
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(i) * ( h(i) )
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
 
@@ -148,17 +148,17 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + h(N-5+i)
-  end do
+  enddo
 
   do i = 1,4
 
     do j = 1,4
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(N-4+i) * ( h(N-4+i) )
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
 
@@ -176,7 +176,7 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
   do i = 2,N
     edge_slopes(i,1)   = tri_x(i)
     edge_slopes(i-1,2) = tri_x(i)
-  end do
+  enddo
   edge_slopes(1,1) = tri_x(1)
   edge_slopes(N,2) = tri_x(N+1)
 
@@ -364,7 +364,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
     tri_u(k+1) = beta
     tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
 
-  end do ! end loop on cells
+  enddo ! end loop on cells
 
   ! Use a right-biased stencil for the second row
 
@@ -481,17 +481,17 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
   x(1) = 0.0
   do i = 2,7
     x(i) = x(i-1) + h(i-1)
-  end do
+  enddo
 
   do i = 1,6
 
     do j = 1,6
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(i) * h(i)
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
 
@@ -621,17 +621,17 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
   x(1) = 0.0
   do i = 2,7
     x(i) = x(i-1) + h(N-7+i)
-  end do
+  enddo
 
   do i = 1,6
 
     do j = 1,6
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
-    end do
+    enddo
 
     Bsys(i) = u(N-6+i) * h(N-6+i)
 
-  end do
+  enddo
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
 
@@ -652,7 +652,7 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect )
   do i = 2,N
     edge_slopes(i,1)   = tri_x(i)
     edge_slopes(i-1,2) = tri_x(i)
-  end do
+  enddo
   edge_slopes(1,1) = tri_x(1)
   edge_slopes(N,2) = tri_x(N+1)
 

@@ -598,7 +598,7 @@ end subroutine wave_structure
 !>    This subroutine solves a tri-diagonal system Ax=y using either the standard
 !! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
 !! "Hallberg substitution" (TDMA_H).
-subroutine tridiag_solver(a,b,c,h,y,method,x)
+subroutine tridiag_solver(a, b, c, h, y, method, x)
   real, dimension(:), intent(in)  :: a !< lower diagonal with first entry equal to zero.
   real, dimension(:), intent(in)  :: b !< middle diagonal.
   real, dimension(:), intent(in)  :: c !< upper diagonal with last entry equal to zero.
@@ -610,7 +610,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
            !! where a(k)=[-alpha(k-1/2)], b(k)=[alpha(k-1/2)+alpha(k+1/2) + h(k)],
            !! and c(k)=[-alpha(k+1/2)]. Only used with TDMA_H method.
   real, dimension(:), intent(in)  :: y !< vector of known values on right hand side.
-  character(len=*),   intent(in)  :: method
+  character(len=*),   intent(in)  :: method !< A string describing the algorithm to use
   real, dimension(:), intent(out) :: x !< vector of unknown values to solve for.
 
 !    This subroutine solves a tri-diagonal system Ax=y using either the standard

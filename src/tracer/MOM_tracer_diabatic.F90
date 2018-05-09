@@ -85,18 +85,18 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 !$OMP                               h_old,convert_flux,h_neglect,eb,tr) &
 !$OMP                       private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
 !$OMP do
-  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
+  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
   if (present(sfc_flux)) then
     if (convert_flux) then
 !$OMP do
       do j = js, je; do i = is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
-      enddo; enddo
+      enddo ; enddo
     else
 !$OMP do
       do j = js, je; do i = is,ie
         sfc_src(i,j) = sfc_flux(i,j)
-      enddo; enddo
+      enddo ; enddo
     endif
   endif
   if (present(btm_flux)) then
@@ -104,12 +104,12 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 !$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
-      enddo; enddo
+      enddo ; enddo
     else
 !$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = btm_flux(i,j)
-      enddo; enddo
+      enddo ; enddo
     endif
   endif
 
@@ -230,14 +230,17 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness in H units
-  real,                                       intent(in   ) :: evap_CFL_limit
-  real,                                       intent(in   ) :: minimum_forcing_depth
+  real,                                       intent(in   ) :: evap_CFL_limit !< Limit on the fraction of the
+                                                                  !! water that can be fluxed out of the top
+                                                                  !! layer in a timestep (nondim)
+  real,                                       intent(in   ) :: minimum_forcing_depth !< The smallest depth over
+                                                                  !! which fluxes can be applied, in m
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that enters with freshwater
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional ! The total time-integrated
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that leaves with freshwater
-  !< Optional flag to determine whether h should be updated
-  logical,                          optional, intent(in) :: update_h_opt
+  logical,                          optional, intent(in) :: update_h_opt  !< Optional flag to determine whether
+                                                                  !! h should be updated
 
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
@@ -271,7 +274,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   if (present(in_flux_optional)) then
     do j=js,je ; do i=is,ie
       in_flux(i,j) = in_flux_optional(i,j)
-    enddo; enddo
+    enddo ; enddo
   endif
   if (present(out_flux_optional)) then
     do j=js,je ; do i=is,ie

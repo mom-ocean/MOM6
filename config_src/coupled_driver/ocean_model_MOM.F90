@@ -1079,9 +1079,9 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
   case('mask')
      array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
-!     do j=g_jsc,g_jec; do i=g_isc,g_iec
+!     do j=g_jsc,g_jec ; do i=g_isc,g_iec
 !        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
-!     enddo; enddo
+!     enddo ; enddo
   case('t_surf')
      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_pme')
