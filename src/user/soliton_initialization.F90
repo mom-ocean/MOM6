@@ -55,7 +55,7 @@ subroutine soliton_initialize_thickness(h, G, GV)
       val4 = val2*((2.0*val3/(1.0+(val3*val3)))**2)
       h(i,j,k) = GV%m_to_H * (0.25*val4 * (6.0*y*y+3.0) * exp(-0.5*y*y))
     enddo
-  end do ; end do
+  enddo ; enddo
 
 end subroutine soliton_initialize_thickness
 

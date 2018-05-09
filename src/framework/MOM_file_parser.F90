@@ -618,7 +618,8 @@ end subroutine read_param_int
 
 !> This subroutine reads the values of an array of integer model parameters from a parameter file.
 subroutine read_param_int_array(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS      !< The control structure for this parameter, which is also a structure to parse for run-time parameters
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
   character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
   integer, dimension(:),  intent(inout) :: value   !< The value of the parameter that may be
                                          !! read from the parameter file
@@ -1349,7 +1350,8 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
                                          !! present, this paramter is not written to a doc file
   character(len=*), optional, intent(in) :: units   !< The units of this parameter
   integer,          optional, intent(in) :: default !< The default value of the parameter
-  logical,          optional, intent(in) :: layoutParam !< If present and true, this paramter is logged in the layout parameter file
+  logical,          optional, intent(in) :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this paramter is
                                          !! logged in the debugging parameter file
 ! This subroutine writes the value of an integer parameter to a log file,
@@ -1682,7 +1684,8 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in)    :: modulename !< The name of the calling module
   character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
-  integer, dimension(:),      intent(inout) :: value   !< The value of the parameter that may be reset from the parameter file
+  integer, dimension(:),      intent(inout) :: value   !< The value of the parameter that may be reset
+                                         !! from the parameter file
   character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
                                          !! present, this paramter is not written to a doc file
   character(len=*), optional, intent(in)    :: units   !< The units of this parameter

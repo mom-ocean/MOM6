@@ -70,16 +70,27 @@ implicit none ; private
 public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 
 type, public :: GPS ; private
-  real :: len_lon
-  real :: len_lat
-  real :: west_lon
-  real :: south_lat
-  real :: Rad_Earth
-  real :: Lat_enhance_factor
-  real :: Lat_eq_enhance
-  logical :: isotropic
-  logical :: equator_reference
-  integer :: niglobal, njglobal         ! Duplicates of niglobal and njglobal from MOM_dom
+  real :: len_lon  !< The longitudinal or x-direction length of the domain.
+  real :: len_lat  !< The latitudinal or y-direction length of the domain.
+  real :: west_lon !< The western longitude of the domain or the equivalent
+                   !! starting value for the x-axis.
+  real :: south_lat  !< The southern latitude of the domain or the equivalent
+                   !! starting value for the y-axis.
+  real :: Rad_Earth !< The radius of the Earth, in m.
+  real :: Lat_enhance_factor  !< The amount by which the meridional resolution
+                   !! is enhanced within LAT_EQ_ENHANCE of the equator.
+  real :: Lat_eq_enhance !< The latitude range to the north and south of the equator
+                   !! over which the resolution is enhanced, in degrees.
+  logical :: isotropic !< If true, an isotropic grid on a sphere (also known as a Mercator grid)
+                   !! is used. With an isotropic grid, the meridional extent of the domain
+                   !! (LENLAT), the zonal extent (LENLON), and the number of grid points in each
+                   !! direction are _not_ independent. In MOM the meridional extent is determined
+                   !! to fit the zonal extent and the number of grid points, while grid is
+                   !! perfectly isotropic.
+  logical :: equator_reference !< If true, the grid is defined to have the equator at the
+                   !!  nearest q- or h- grid point to (-LOWLAT*NJGLOBAL/LENLAT).
+  integer :: niglobal !< The number of i-points in the global grid computational domain
+  integer :: njglobal !< The number of j-points in the global grid computational domain
 end type GPS
 
 contains
@@ -538,7 +549,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   if (units_temp(1:1) == 'k') then ! Axes are measured in km.
     dx_everywhere = 1000.0 * G%len_lon / (REAL(niglobal))
     dy_everywhere = 1000.0 * G%len_lat / (REAL(njglobal))
-  else if (units_temp(1:1) == 'm') then ! Axes are measured in m.
+  elseif (units_temp(1:1) == 'm') then ! Axes are measured in m.
     dx_everywhere = G%len_lon / (REAL(niglobal))
     dy_everywhere = G%len_lat / (REAL(njglobal))
   else ! Axes are measured in degrees of latitude and longitude.
@@ -679,7 +690,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !   G%dxBu(I,J) = G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
     G%dyBu(I,J) = G%Rad_Earth * dLat*PI_180
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = grid_LonT(i)
@@ -690,7 +701,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     G%dxCv(i,J) = G%Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
 !   G%dxCv(i,J) = G%Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
     G%dyCv(i,J) = G%Rad_Earth * dLat*PI_180
-  enddo; enddo
+  enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
     G%geoLonCu(I,j) = grid_lonB(I)
@@ -701,7 +712,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     G%dxCu(I,j) = G%Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
 !   G%dxCu(I,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
     G%dyCu(I,j) = G%Rad_Earth * dLat*PI_180
-  enddo; enddo
+  enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_LonT(i)
@@ -717,7 +728,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
 !   G%areaT(i,j) = Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
     G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   call callTree_leave("set_grid_metrics_spherical()")
 end subroutine set_grid_metrics_spherical
@@ -966,9 +977,11 @@ subroutine set_grid_metrics_mercator(G, param_file)
 end subroutine set_grid_metrics_mercator
 
 
+!> This function returns the grid spacing in the logical x direction.
 function ds_di(x, y, GP)
-  real, intent(in) :: x, y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: ds_di
 ! This function returns the grid spacing in the logical x direction.
 ! Arguments: x - The latitude in question.
@@ -979,9 +992,11 @@ function ds_di(x, y, GP)
 !                           dy_di(x,y,GP)*dy_di(x,y,GP))
 end function ds_di
 
+!> This function returns the grid spacing in the logical y direction.
 function ds_dj(x, y, GP)
-  real, intent(in) :: x, y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: ds_dj
 ! This function returns the grid spacing in the logical y direction.
 ! Arguments: x - The latitude in question.
@@ -993,13 +1008,18 @@ function ds_dj(x, y, GP)
 end function ds_dj
 
 
+!> This function returns the contribution from the line integral along one of the four sides of a
+!! cell face to the area of a cell, assuming that the sides follow a linear path in latitude and
+!! longitude (i.e., on a Mercator grid).
 function  dL(x1, x2, y1, y2)
-  real, intent(in) :: x1, x2, y1, y2
+  real, intent(in) :: x1 !< Segment starting longitude, in degrees E.
+  real, intent(in) :: x2 !< Segment ending longitude, in degrees E.
+  real, intent(in) :: y1 !< Segment ending latitude, in degrees N.
+  real, intent(in) :: y2 !< Segment ending latitude, in degrees N.
   real :: dL
-!  This subroutine calculates the contribution from the line integral
-! along one of the four sides of a cell face to the area of a cell,
-! assuming that the sides follow a linear path in latitude and long-
-! itude (i.e., on a Mercator grid).
+!  This subroutine calculates the contribution from the line integral along one
+! of the four sides of a cell face to the area of a cell, assuming that the
+! sides follow a linear path in latitude and longitude (i.e., on a Mercator grid).
 ! Argumnts: x1 - Segment starting longitude.
 !  (in)     x2 - Segment ending longitude.
 !  (in)     y1 - Segment ending latitude.
@@ -1017,17 +1037,25 @@ function  dL(x1, x2, y1, y2)
 
 end function  dL
 
+!> This subroutine finds and returns the value of y at which the monotonically increasing
+!! function fn takes the value fnval, also returning in ittmax the number of iterations of
+!! Newton's method that were used to polish the root.
 function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
-  real :: find_root
-  real, external :: fn, dy_df
-  type(GPS), intent(in) :: GP
-  real, intent(in) :: fnval, y1, ymin, ymax
-  integer, intent(out) :: ittmax
-  real :: y, y_next
+  real :: find_root !< The value of y where fn(y) = fnval that will be returned
+  real,      external    :: fn    !< The external function whose root is being sought
+  real,      external    :: dy_df !< The inverse of the derivative of that function
+  type(GPS), intent(in)  :: GP  !< A structure of grid parameters
+  real,      intent(in)  :: fnval !< The value of fn being sought
+  real,      intent(in)  :: y1    !< A first guess for y
+  real,      intent(in)  :: ymin  !< The minimum permitted value of y
+  real,      intent(in)  :: ymax  !< The maximum permitted value of y
+  integer,   intent(out) :: ittmax !< The number of iterations used to polish the root
+
 ! This subroutine finds and returns the value of y at which the
 ! monotonically increasing function fn takes the value fnval, also returning
 ! in ittmax the number of iterations of Newton's method that were
 ! used to polish the root.
+  real :: y, y_next
   real :: ybot, ytop, fnbot, fntop
   integer :: itt
   character(len=256) :: warnmesg
@@ -1126,21 +1154,24 @@ function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
   find_root = y
 end function find_root
 
+!> This function calculates and returns the value of dx/di, where x is the
+!! longitude in Radians, and i is the integral north-south grid index.
 function dx_di(x, GP)
-  real, intent(in) :: x
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: dx_di
 ! This subroutine calculates and returns the value of dx/di, where
-! x is the longitude in Radians, and i is the integral north-south
-! grid index.
+! x is the longitude in Radians, and i is the integral north-south grid index.
 
   dx_di = (GP%len_lon * 4.0*atan(1.0)) / (180.0 * GP%niglobal)
 
 end function dx_di
 
+!> This function calculates and returns the integral of the inverse
+!! of dx/di to the point x, in radians.
 function Int_di_dx(x, GP)
-  real, intent(in) :: x
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: Int_di_dx
 ! This subroutine calculates and returns the integral of the inverse
 ! of dx/di to the point x, in radians.
@@ -1149,9 +1180,11 @@ function Int_di_dx(x, GP)
 
 end function Int_di_dx
 
+!> This subroutine calculates and returns the value of dy/dj, where y is the
+!! latitude in Radians, and j is the integral north-south grid index.
 function dy_dj(y, GP)
-  real, intent(in) :: y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: dy_dj
 ! This subroutine calculates and returns the value of dy/dj, where
 ! y is the latitude in Radians, and j is the integral north-south
@@ -1178,9 +1211,11 @@ function dy_dj(y, GP)
 
 end function dy_dj
 
+!> This subroutine calculates and returns the integral of the inverse
+!! of dy/dj to the point y, in radians.
 function Int_dj_dy(y, GP)
-  real, intent(in) :: y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: Int_dj_dy
 ! This subroutine calculates and returns the integral of the inverse
 ! of dy/dj to the point y, in radians.
@@ -1207,7 +1242,7 @@ function Int_dj_dy(y, GP)
 
     if (y >= y_eq_enhance) then
       r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
-    else if (y <= -y_eq_enhance) then
+    elseif (y <= -y_eq_enhance) then
       r = r - I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
     else
       r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0) * &
@@ -1220,8 +1255,6 @@ function Int_dj_dy(y, GP)
 
   Int_dj_dy = r
 end function Int_dj_dy
-
-! ------------------------------------------------------------------------------
 
 ! ------------------------------------------------------------------------------
 

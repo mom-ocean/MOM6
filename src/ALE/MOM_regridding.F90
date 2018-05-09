@@ -1147,7 +1147,7 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
       totalThickness = 0.0
       do k = 1,nz
         totalThickness = totalThickness + h(i,j,k)
-      end do
+      enddo
 
       zOld(nz+1) = - nominalDepth
       do k = nz,1,-1
@@ -1190,8 +1190,8 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
 
       call adjust_interface_motion( CS, nz, h(i,j,:), dzInterface(i,j,:) )
 
-    end do
-  end do
+    enddo
+  enddo
 
 end subroutine build_zstar_grid
 
@@ -1236,7 +1236,7 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
       totalThickness = 0.0
       do k = 1,nz
         totalThickness = totalThickness + h(i,j,k)
-      end do
+      enddo
 
       call build_sigma_column(CS%sigma_CS, nominalDepth, totalThickness, zNew)
 
@@ -1244,7 +1244,7 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
       zOld(nz+1) =  -nominalDepth
       do k = nz,1,-1
         zOld(k) = zOld(k+1) + h(i, j, k)
-      end do
+      enddo
 
       call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
 
@@ -1267,8 +1267,8 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
       dzInterface(i,j,CS%nk+1) = 0.
 #endif
 
-    end do
-  end do
+    enddo
+  enddo
 
 end subroutine build_sigma_grid
 
@@ -1393,8 +1393,8 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       endif
 #endif
 
-    end do  ! end loop on i
-  end do  ! end loop on j
+    enddo  ! end loop on i
+  enddo  ! end loop on j
 
 end subroutine build_rho_grid
 
@@ -1466,7 +1466,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
     else ! on land
       dzInterface(i,j,:) = 0.
     endif ! mask2dT
-  enddo; enddo ! i,j
+  enddo ; enddo ! i,j
 
   call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
@@ -1597,7 +1597,7 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
     else ! on land
       dzInterface(i,j,:) = 0.
     endif ! mask2dT
-  enddo; enddo ! i,j
+  enddo ; enddo ! i,j
 
 end subroutine build_grid_SLight
 
@@ -1704,7 +1704,7 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
       total_height = 0.0
       do k = 1,nz
         total_height = total_height + h(i,j,k)
-      end do
+      enddo
 
       eta = total_height - local_depth
 
@@ -1715,7 +1715,7 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
       z_inter(1) = eta
       do k = 1,nz
         z_inter(k+1) = z_inter(k) - delta_h
-      end do
+      enddo
 
       ! Refine grid in the middle
       do k = 1,nz+1
@@ -1725,15 +1725,15 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
 
         if ( x <= x1 ) then
           t = y1*x/x1
-        else if ( (x > x1 ) .and. ( x < x2 )) then
+        elseif ( (x > x1 ) .and. ( x < x2 )) then
           t = y1 + (y2-y1) * (x-x1) / (x2-x1)
         else
           t = y2 + (1.0-y2) * (x-x2) / (1.0-x2)
-        end if
+        endif
 
         z_inter(k) = -t * max_depth + eta
 
-      end do
+      enddo
 
       ! Modify interface heights to account for topography
       z_inter(nz+1) = - local_depth
@@ -1742,8 +1742,8 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
       do k = nz,1,-1
         if ( z_inter(k) < (z_inter(k+1) + min_thickness) ) then
           z_inter(k) = z_inter(k+1) + min_thickness
-        end if
-      end do
+        endif
+      enddo
 
       ! Chnage in interface position
       x = 0. ! Left boundary at x=0
@@ -1751,11 +1751,11 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
       do k = 2,nz
         x = x + h(i,j,k)
         dzInterface(i,j,k) = z_inter(k) - x
-      end do
+      enddo
       dzInterface(i,j,nz+1) = 0.
 
-    end do
-  end do
+    enddo
+  enddo
 
 stop 'OOOOOOPS' ! For some reason the gnu compiler will not let me delete this
                 ! routine????
@@ -1792,17 +1792,17 @@ subroutine inflate_vanished_layers_old( CS, G, GV, h )
       ! Build grid for current column
       do k = 1,GV%ke
         hTmp(k) = h(i,j,k)
-      end do
+      enddo
 
       call old_inflate_layers_1d( CS%min_thickness, GV%ke, hTmp )
 
       ! Save modified grid
       do k = 1,GV%ke
         h(i,j,k) = hTmp(k)
-      end do
+      enddo
 
-    end do
-  end do
+    enddo
+  enddo
 
 end subroutine inflate_vanished_layers_old
 
@@ -1859,7 +1859,7 @@ subroutine convective_adjustment(G, GV, h, tv)
           call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), p_col(k+1), &
                                   densities(k+1), tv%eqn_of_state )
           stratified = .false.
-        end if
+        endif
       enddo  ! k
 
       if ( stratified ) exit
@@ -1962,7 +1962,7 @@ subroutine set_target_densities_from_GV( GV, CS )
   CS%target_density(nz+1) = GV%Rlay(nz)+0.5*(GV%Rlay(nz)-GV%Rlay(nz-1))
   do k = 2,nz
     CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
-  end do
+  enddo
   CS%target_density_set = .true.
 
 end subroutine set_target_densities_from_GV
@@ -2080,7 +2080,7 @@ function getCoordinateInterfaces( CS )
     ! The following line has an "abs()" to allow ferret users to reference
     ! data by index. It is a temporary work around...  :(  -AJA
     getCoordinateInterfaces(:) = abs( getCoordinateInterfaces(:) )
-  end if
+  endif
 
 end function getCoordinateInterfaces
 

@@ -198,7 +198,7 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
     do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,j)))
       subchk = subchk + bc
-    enddo; enddo
+    enddo ; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
@@ -385,7 +385,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     do J=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(I,J)))
       subchk = subchk + bc
-    enddo; enddo
+    enddo ; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
@@ -573,7 +573,7 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     do j=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(I,j)))
       subchk = subchk + bc
-    enddo; enddo
+    enddo ; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
@@ -718,7 +718,7 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     do J=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,J)))
       subchk = subchk + bc
-    enddo; enddo
+    enddo ; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk

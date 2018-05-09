@@ -298,7 +298,7 @@ contains
               !Jasmin does not want to apply the maximum for now
               !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
             endif
-         enddo; enddo ; enddo
+         enddo ; enddo ; enddo
 
          !jgj: Reset CASED to 0 below K=1
          if (trim(g_tracer_name) == 'cased') then
@@ -306,7 +306,7 @@ contains
                if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
                  tr_ptr(i,j,k) = 0.0
                endif
-            enddo; enddo ; enddo
+            enddo ; enddo ; enddo
          endif
        elseif(.not. g_tracer%requires_restart) then
          !Do nothing for this tracer, it is initialized by the tracer package
@@ -521,12 +521,12 @@ contains
     rho_dzt(:,:,:) = GV%H_to_kg_m2 * GV%Angstrom
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
       rho_dzt(i,j,k) = GV%H_to_kg_m2 * h_old(i,j,k)
-    enddo; enddo ; enddo !}
+    enddo ; enddo ; enddo !}
 
     dzt(:,:,:) = 1.0
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
       dzt(i,j,k) = GV%H_to_m * h_old(i,j,k)
-    enddo; enddo ; enddo !}
+    enddo ; enddo ; enddo !}
 
     do j=jsc,jec ; do i=isc,iec
        surface_field(i,j) = tv%S(i,j,1)
@@ -662,12 +662,18 @@ contains
                                       xgmax, ygmax, zgmax , G, CS, names, units)
     use mpp_utilities_mod, only: mpp_array_global_min_max
     integer,                        intent(in)    :: ind_start
-    logical, dimension(:),          intent(out)   :: got_minmax
+    logical, dimension(:),          intent(out)   :: got_minmax !< Indicates whether the global min and
+                                                            !! max are found for each tracer
     real, dimension(:),             intent(out)   :: gmin   !< Global minimum of each tracer, in kg
                                                             !! times concentration units.
     real, dimension(:),             intent(out)   :: gmax   !< Global maximum of each tracer, in kg
                                                             !! times concentration units.
-    real, dimension(:),             intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
+    real, dimension(:),             intent(out)   :: xgmin  !< The x-position of the global minimum
+    real, dimension(:),             intent(out)   :: ygmin  !< The y-position of the global minimum
+    real, dimension(:),             intent(out)   :: zgmin  !< The z-position of the global minimum
+    real, dimension(:),             intent(out)   :: xgmax  !< The x-position of the global maximum
+    real, dimension(:),             intent(out)   :: ygmax  !< The y-position of the global maximum
+    real, dimension(:),             intent(out)   :: zgmax  !< The z-position of the global maximum
     type(ocean_grid_type),          intent(in)    :: G      !< The ocean's grid structure
     type(MOM_generic_tracer_CS),    pointer       :: CS     !< Pointer to the control structure for this module.
     character(len=*), dimension(:), intent(out)   :: names  !< The names of the stocks calculated.

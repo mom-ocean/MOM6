@@ -394,14 +394,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
     hEff_sum(:,:) = 0.
     do k = 1,CS%nsurf-1 ; do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
       hEff_sum(i,j) = hEff_sum(i,j) + CS%uhEff(i,j,k)
-    enddo ; enddo; enddo
+    enddo ; enddo ; enddo
     call post_data(CS%id_uhEff_2d, hEff_sum, CS%diag)
   endif
   if (CS%id_vhEff_2d>0) then
     hEff_sum(:,:) = 0.
     do k = 1,CS%nsurf-1 ; do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
       hEff_sum(i,j) = hEff_sum(i,j) + CS%vhEff(i,j,k)
-    enddo ; enddo; enddo
+    enddo ; enddo ; enddo
     call post_data(CS%id_vhEff_2d, hEff_sum, CS%diag)
   endif
 
@@ -1319,7 +1319,8 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   real,                         intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions
                                              !! in the same units as h0.
-  type(remapping_CS), optional, intent(in)    :: remap_CS
+  type(remapping_CS), optional, intent(in)    :: remap_CS !< Remapping control structure used
+                                             !! to create sublayers
   real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                              !! for the purpose of edge value calculations
                                              !! in the same units as h0.
@@ -1503,7 +1504,7 @@ end subroutine ppm_left_right_edge_values
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutral_diffusion_unit_tests(verbose)
-  logical, intent(in) :: verbose
+  logical, intent(in) :: verbose !< If true, write results to stdout
 
   neutral_diffusion_unit_tests = .false. .or. &
     ndiff_unit_tests_continuous(verbose) .or. ndiff_unit_tests_discontinuous(verbose)
@@ -1513,7 +1514,7 @@ end function neutral_diffusion_unit_tests
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function ndiff_unit_tests_continuous(verbose)
-  logical, intent(in) :: verbose !< It true, write results to stdout
+  logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   integer, parameter         :: nk = 4
   real, dimension(nk+1)      :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
@@ -1790,9 +1791,9 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   integer, dimension(ns)      :: KoL, KoR
   real, dimension(ns)         :: PoL, PoR
   real, dimension(ns-1)       :: hEff, Flx
-  type(neutral_diffusion_CS)  :: CS
-  type(EOS_type),     pointer :: EOS       ! Structure for linear equation of state
-  type(remapping_CS), pointer :: remap_CS  ! Remapping control structure (PLM)
+  type(neutral_diffusion_CS)  :: CS        !< Neutral diffusion control structure
+  type(EOS_type),     pointer :: EOS       !< Structure for linear equation of state
+  type(remapping_CS), pointer :: remap_CS  !< Remapping control structure (PLM)
   real, dimension(nk,2)       :: poly_T_l, poly_T_r, poly_S,  poly_slope    ! Linear reconstruction for T
   real, dimension(nk,2)       :: dRdT, dRdS
   logical, dimension(nk)      :: stable_l, stable_r
@@ -2222,9 +2223,9 @@ end function compare_nsp_row
 
 !> Compares output position from refine_nondim_position with an expected value
 logical function test_rnp(expected_pos, test_pos, title)
-  real,             intent(in) :: expected_pos
-  real,             intent(in) :: test_pos
-  character(len=*), intent(in) :: title
+  real,             intent(in) :: expected_pos !< The expected position
+  real,             intent(in) :: test_pos !< The position returned by the code
+  character(len=*), intent(in) :: title    !< A label for this test
   ! Local variables
   integer :: stdunit = 6 ! Output to standard error
   test_rnp = expected_pos /= test_pos
@@ -2236,7 +2237,7 @@ logical function test_rnp(expected_pos, test_pos, title)
 end function test_rnp
 !> Deallocates neutral_diffusion control structure
 subroutine neutral_diffusion_end(CS)
-  type(neutral_diffusion_CS), pointer :: CS
+  type(neutral_diffusion_CS), pointer :: CS  !< Neutral diffusion control structure
 
   if (associated(CS)) deallocate(CS)
 
