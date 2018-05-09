@@ -451,19 +451,23 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "at the boundaries to values from the interior when the flow \n"//&
                  "is entering the domain.", units="m", default=0.0)
 
+    else
+      Lscale_in = 0.
+      Lscale_out = 0.
     endif
     if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
-  endif
 
-  ! All tracers are using the same restoring length scale for now, but we may want to make this
-  ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
-  ! by data while others are well constrained - MJH.
-  do l = 1, OBC%number_of_segments
-    OBC%segment(l)%Tr_InvLscale3_in=0.0
-    if (Lscale_in>0.) OBC%segment(l)%Tr_InvLscale3_in =  1.0/(Lscale_in*Lscale_in*Lscale_in)
-    OBC%segment(l)%Tr_InvLscale3_out=0.0
-    if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale3_out =  1.0/(Lscale_out*Lscale_out*Lscale_out)
-  enddo
+    ! All tracers are using the same restoring length scale for now, but we may want to make this
+    ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
+    ! by data while others are well constrained - MJH.
+    do l = 1, OBC%number_of_segments
+      OBC%segment(l)%Tr_InvLscale3_in=0.0
+      if (Lscale_in>0.) OBC%segment(l)%Tr_InvLscale3_in =  1.0/(Lscale_in*Lscale_in*Lscale_in)
+      OBC%segment(l)%Tr_InvLscale3_out=0.0
+      if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale3_out =  1.0/(Lscale_out*Lscale_out*Lscale_out)
+    enddo
+
+  endif ! OBC%number_of_segments > 0
 
     ! Safety check
   if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
