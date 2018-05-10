@@ -431,7 +431,7 @@ subroutine open_boundary_config(G, param_file, OBC)
     !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
     call initialize_segment_data(G, OBC, param_file)
 
-    if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
+    if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
       call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
                    "The maximum magnitude of the baroclinic radiation \n"//&
                    "velocity (or speed of characteristics).  This is only \n"//&
@@ -451,6 +451,11 @@ subroutine open_boundary_config(G, param_file, OBC)
                    "Valid values range from 0 to 1. This is only used if \n"//&
                    "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.2)
+    endif
+
+    Lscale_in = 0.
+    Lscale_out = 0.
+    if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT ", Lscale_out, &
                  "An effective length scale for restoring the tracer concentration \n"//&
                  "at the boundaries to externally imposed values when the flow \n"//&
@@ -460,11 +465,8 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "An effective length scale for restoring the tracer concentration \n"//&
                  "at the boundaries to values from the interior when the flow \n"//&
                  "is entering the domain.", units="m", default=0.0)
-
-    else
-      Lscale_in = 0.
-      Lscale_out = 0.
     endif
+
     if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
 
     ! All tracers are using the same restoring length scale for now, but we may want to make this
@@ -763,7 +765,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
   integer :: j, a_loop
-  character(len=32) :: action_str(5)
+  character(len=32) :: action_str(8)
   character(len=128) :: segment_param_str
   real, allocatable, dimension(:)  :: tnudge
   ! This returns the global indices for the segment
@@ -784,7 +786,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
 
   OBC%segment(l_seg)%on_pe = .false.
 
-  do a_loop = 1,5 ! up to 5 options available
+  do a_loop = 1,8 ! up to 8 options available
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
@@ -878,7 +880,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
   integer :: i, a_loop
-  character(len=32) :: action_str(5)
+  character(len=32) :: action_str(8)
   character(len=128) :: segment_param_str
   real, allocatable, dimension(:)  :: tnudge
 
@@ -900,7 +902,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
 
   OBC%segment(l_seg)%on_pe = .false.
 
-  do a_loop = 1,5
+  do a_loop = 1,8
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
@@ -1484,6 +1486,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   real, parameter :: eps = 1.0e-20
   type(OBC_segment_type), pointer :: segment
   integer :: i, j, k, is, ie, js, je, nz, n
+  integer :: is_obc, ie_obc, js_obc, je_obc
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
@@ -1614,8 +1618,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
+           Js_obc = max(segment%HI%JsdB,G%jsd+1)
+           Je_obc = min(segment%HI%JedB,G%jed-1)
+           do k=1,nz ; do J=Js_obc,Je_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCu(I-1,j) > 0.0 .and. G%mask2dCu(I-1,j+1) > 0.0) then
+!              rx_avg = 0.5*(u_new(I-1,j,k) + u_new(I-1,j+1,k))*dt*G%IdxBu(I-1,J)
+!            elseif (G%mask2dCu(I-1,j) > 0.0) then
+!              rx_avg = u_new(I-1,j,k)*dt*G%IdxBu(I-1,J)
+!            elseif (G%mask2dCu(I-1,j+1) > 0.0) then
+!              rx_avg = u_new(I-1,j+1,k)*dt*G%IdxBu(I-1,J)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((v_new(i,J,k) - v_new(i-1,J,k))*G%IdxBu(I-1,J) + &
                                rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%IdxBu(I-2,J)) / (1.0+rx_avg)
            enddo ; enddo
@@ -1713,8 +1728,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
+           Js_obc = max(segment%HI%JsdB,G%jsd+1)
+           Je_obc = min(segment%HI%JedB,G%jed-1)
+           do k=1,nz ;  do J=Js_obc,Je_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCu(I+1,j) > 0.0 .and. G%mask2dCu(I+1,j+1) > 0.0) then
+!              rx_avg = 0.5*(u_new(I+1,j,k) + u_new(I+1,j+1,k))*dt*G%IdxBu(I+1,J)
+!            elseif (G%mask2dCu(I+1,j) > 0.0) then
+!              rx_avg = u_new(I+1,j,k)*dt*G%IdxBu(I+1,J)
+!            elseif (G%mask2dCu(I+1,j+1) > 0.0) then
+!              rx_avg = u_new(I+1,j+1,k)*dt*G%IdxBu(I+1,J)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((v_new(i+2,J,k) - v_new(i+1,J,k))*G%IdxBu(I+1,J) + &
                                rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%IdxBu(I+2,J)) / (1.0+rx_avg)
            enddo ; enddo
@@ -1813,8 +1839,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
+           Is_obc = max(segment%HI%IsdB,G%isd+1)
+           Ie_obc = min(segment%HI%IedB,G%ied-1)
+           do k=1,nz ;  do I=Is_obc,Ie_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCv(i,J-1) > 0.0 .and. G%mask2dCv(i+1,J-1) > 0.0) then
+!              rx_avg = 0.5*(v_new(i,J-1,k) + v_new(i+1,J-1,k)*dt*G%IdyBu(I,J-1))
+!            elseif (G%mask2dCv(i,J-1) > 0.0) then
+!              rx_avg = v_new(i,J-1,k)*dt*G%IdyBu(I,J-1)
+!            elseif (G%mask2dCv(i+1,J-1) > 0.0) then
+!              rx_avg = v_new(i+1,J-1,k)*dt*G%IdyBu(I,J-1)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((u_new(I,j,k) - u_new(I-1,j,k))*G%IdyBu(I,J-1) + &
                                rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%IdyBu(I,J-2)) / (1.0+rx_avg)
            enddo ; enddo
@@ -1913,8 +1950,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
+           Is_obc = max(segment%HI%IsdB,G%isd+1)
+           Ie_obc = min(segment%HI%IedB,G%ied-1)
+           do k=1,nz ;  do I=Is_obc,Ie_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCv(i,J+1) > 0.0 .and. G%mask2dCv(i+1,J+1) > 0.0) then
+!              rx_avg = 0.5*(v_new(i,J+1,k) + v_new(i+1,J+1,k))*dt*G%IdyBu(I,J+1)
+!            elseif (G%mask2dCv(i,J+1) > 0.0) then
+!              rx_avg = v_new(i,J+1,k)*dt*G%IdyBu(I,J+1)
+!            elseif (G%mask2dCv(i+1,J+1) > 0.0) then
+!              rx_avg = v_new(i+1,J+1,k)*dt*G%IdyBu(I,J+1)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
                                rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%IdyBu(I,J+2)) / (1.0+rx_avg)
            enddo ; enddo
