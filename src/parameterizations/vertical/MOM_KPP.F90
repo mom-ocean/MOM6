@@ -70,6 +70,7 @@ type, public :: KPP_CS ; private
   character(len=30) :: MatchTechnique  !< Method used in CVMix for setting diffusivity and NLT profile functions
   integer :: NLT_shape                 !< MOM6 over-ride of CVMix NLT shape function
   logical :: applyNonLocalTrans        !< If True, apply non-local transport to heat and scalars
+  logical :: smoothBLD                 !< If True, apply a 1-1-4-1-1 Laplacian filter one time on HBLT.
   logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero; for testing purposes.
   logical :: KPPisAdditive             !< If True, will add KPP diffusivity to initial diffusivity.
                                        !! If False, will replace initial diffusivity wherever KPP diffusivity is non-zero.
@@ -172,7 +173,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'If False, calculates the non-local transport and tendencies but\n'//&
                  'purely for diagnostic purposes.',                                   &
                  default=.not. CS%passiveMode)
-  call get_param(paramFile, mdl, 'APPLY_KPP_OBL_FILTER', CS%applyNonLocalTrans,  &
+  call get_param(paramFile, mdl, 'SMOOTH_BLD', CS%smoothBLD,  &
                  'If True, applies a 1-1-4-1-1 Laplacian filter one time on HBLT.\n'//  &
                  'computed via CVMix to reduce any horizontal two-grid-point noise.',   &
                  default=.false.)
