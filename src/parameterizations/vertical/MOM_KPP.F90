@@ -780,10 +780,9 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real, dimension( 3*G%ke )   :: Temp_1D
   real, dimension( 3*G%ke )   :: Salt_1D
 
-  real ::  surfFricVel, surfBuoyFlux, Coriolis
+  real ::  surfFricVel, surfBuoyFlux
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, sigma
 
-  real :: zBottomMinusOffset   ! Height of bottom plus a little bit (m)
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
   real :: hTot                 ! Running sum of thickness used in the surface layer average (m)
   real :: delH                 ! Thickness of a layer (m)
@@ -819,13 +818,13 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 !$OMP                                  buoyFlux, nonLocalTransHeat,                   &
 !$OMP                                  nonLocalTransScalar,Kt,Ks,Kv)                  &
 !$OMP                     firstprivate(nonLocalTrans)                                 &
-!$OMP                          private(Coriolis,surfFricVel,SLdepth_0d,hTot,surfTemp, &
+!$OMP                          private(surfFricVel,SLdepth_0d,hTot,surfTemp, &
 !$OMP                                  surfHtemp,surfSalt,surfHsalt,surfU,            &
 !$OMP                                  surfHu,surfV,surfHv,iFaceHeight,               &
 !$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
 !$OMP                                  rho1,rhoK,rhoKm1,deltaRho,N2_1d,N_1d,delH,     &
 !$OMP                                  surfBuoyFlux,Ws_1d,Vt2_1d,BulkRi_1d,           &
-!$OMP                                  zBottomMinusOffset,Kdiffusivity,   &
+!$OMP                                  Kdiffusivity,   &
 !$OMP                                  Kviscosity,sigma,kk,pres_1D,Temp_1D,      &
 !$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc,dh,hcorr)
 
@@ -837,8 +836,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (G%mask2dT(i,j)==0.) cycle
 
       ! things independent of position within the column
-      Coriolis = 0.25*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) &
-                       +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
 
       ! Bullk Richardson number computed for each cell in a column,
