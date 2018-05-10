@@ -1186,7 +1186,6 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_ssh_ga, ssh_ga, diag)
   endif
 
-  I_time_int = 1.0 / dt_int
   if (IDs%id_ssh > 0) &
     call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
 
@@ -1220,36 +1219,40 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_volo, volo, diag)
   endif
 
-  ! post time-averaged rate of frazil formation
-  if (associated(tv%frazil) .and. (IDs%id_fraz > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%frazil(i,j) * I_time_int
-    enddo ; enddo
-    call post_data(IDs%id_fraz, work_2d, diag, mask=G%mask2dT)
-  endif
+  if (dt_int > 0) then
+    I_time_int = 1.0 / dt_int
 
-  ! post time-averaged salt deficit
-  if (associated(tv%salt_deficit) .and. (IDs%id_salt_deficit > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%salt_deficit(i,j) * I_time_int
-    enddo ; enddo
-    call post_data(IDs%id_salt_deficit, work_2d, diag, mask=G%mask2dT)
-  endif
+    ! post time-averaged rate of frazil formation
+    if (associated(tv%frazil) .and. (IDs%id_fraz > 0)) then
+      do j=js,je ; do i=is,ie
+        work_2d(i,j) = tv%frazil(i,j) * I_time_int
+      enddo ; enddo
+      call post_data(IDs%id_fraz, work_2d, diag, mask=G%mask2dT)
+    endif
 
-  ! post temperature of P-E+R
-  if (associated(tv%TempxPmE) .and. (IDs%id_Heat_PmE > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%TempxPmE(i,j) * (tv%C_p * I_time_int)
-    enddo ; enddo
-    call post_data(IDs%id_Heat_PmE, work_2d, diag, mask=G%mask2dT)
-  endif
+    ! post time-averaged salt deficit
+    if (associated(tv%salt_deficit) .and. (IDs%id_salt_deficit > 0)) then
+      do j=js,je ; do i=is,ie
+        work_2d(i,j) = tv%salt_deficit(i,j) * I_time_int
+      enddo ; enddo
+      call post_data(IDs%id_salt_deficit, work_2d, diag, mask=G%mask2dT)
+    endif
 
-  ! post geothermal heating or internal heat source/sinks
-  if (associated(tv%internal_heat) .and. (IDs%id_intern_heat > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%internal_heat(i,j) * (tv%C_p * I_time_int)
-    enddo ; enddo
-    call post_data(IDs%id_intern_heat, work_2d, diag, mask=G%mask2dT)
+    ! post temperature of P-E+R
+    if (associated(tv%TempxPmE) .and. (IDs%id_Heat_PmE > 0)) then
+      do j=js,je ; do i=is,ie
+        work_2d(i,j) = tv%TempxPmE(i,j) * (tv%C_p * I_time_int)
+      enddo ; enddo
+      call post_data(IDs%id_Heat_PmE, work_2d, diag, mask=G%mask2dT)
+    endif
+
+    ! post geothermal heating or internal heat source/sinks
+    if (associated(tv%internal_heat) .and. (IDs%id_intern_heat > 0)) then
+      do j=js,je ; do i=is,ie
+        work_2d(i,j) = tv%internal_heat(i,j) * (tv%C_p * I_time_int)
+      enddo ; enddo
+      call post_data(IDs%id_intern_heat, work_2d, diag, mask=G%mask2dT)
+    endif
   endif
 
   if (tv%T_is_conT) then
