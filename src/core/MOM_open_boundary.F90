@@ -2440,28 +2440,30 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       do j=segment%HI%jsd,segment%HI%jed
         segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
  !       if (GV%Boussinesq) then
-        segment%Htot(I,j) = G%bathyT(i+ishift,j)*GV%m_to_H! + eta(i+ishift,j)
+ !         segment%Htot(I,j) = G%bathyT(i+ishift,j)*GV%m_to_H! + eta(i+ishift,j)
  !       else
  !         segment%Htot(I,j) =  eta(i+ishift,j)
  !       endif
+        segment%Htot(I,j)=0.0       
         do k=1,G%ke
-          segment%h(I,j,k) = h(i+ishift,j,k)
-        enddo
+           segment%h(I,j,k) = h(i+ishift,j,k)
+           segment%Htot(I,j)=segment%Htot(I,j)+segment%h(I,j,k)
+       enddo
       enddo
-
-
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
         segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
 !       if (GV%Boussinesq) then
-        segment%Htot(i,J) = G%bathyT(i,j+jshift)*GV%m_to_H! + eta(i,j+jshift)
-!          else
-!            segment%Htot(i,J) = eta(i,j+jshift)
-!          endif
+!         segment%Htot(i,J) = G%bathyT(i,j+jshift)*GV%m_to_H! + eta(i,j+jshift)
+!       else
+!         segment%Htot(i,J) = eta(i,j+jshift)
+!       endif
+        segment%Htot(i,J)=0.0               
         do k=1,G%ke
-          segment%h(i,J,k) = h(i,j+jshift,k)
+           segment%h(i,J,k) = h(i,j+jshift,k)
+           segment%Htot(i,J)=segment%Htot(i,J)+segment%h(i,J,k)
 !           segment%e(i,J,k) = e(i,j+jshift,k)
         enddo
       enddo
