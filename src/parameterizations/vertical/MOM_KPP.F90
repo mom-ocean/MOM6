@@ -106,6 +106,7 @@ type, public :: KPP_CS ; private
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
+  real, allocatable, dimension(:,:)   :: kOBL      !< Level (+fraction) of OBL extent
   real, allocatable, dimension(:,:,:) :: dRho      !< Bulk difference in density (kg/m3)
   real, allocatable, dimension(:,:,:) :: Uz2       !< Square of bulk difference in resolved velocity (m2/s2)
   real, allocatable, dimension(:,:,:) :: BulkRi    !< Bulk Richardson number for each layer (dimensionless)
@@ -376,8 +377,11 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   CS%id_Vsurf = register_diag_field('ocean_model', 'KPP_Vsurf', diag%axesCv1, Time, &
       'j-component flow of surface layer (10% of OBL depth) as passed to [CVMix] KPP', 'm/s')
 
-  if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
-  if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
+  allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
+  CS%OBLdepth(:,:) = 0.
+  allocate( CS%kOBL( SZI_(G), SZJ_(G) ) )
+  CS%kOBL(:,:) = 0.
+
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
   if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
   if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -449,7 +453,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
   real, dimension( 3*G%ke )   :: Temp_1D
   real, dimension( 3*G%ke )   :: Salt_1D
 
-  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
+  real :: surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, Uk, Vk, sigma
 
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit (m)
@@ -476,8 +480,8 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
 !$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
 !$OMP                                  rho1,rhoK,deltaRho,N2_1d,N_1d,delH,     &
 !$OMP                                  surfBuoyFlux,Ws_1d,BulkRi_1d,           &
-!$OMP                                  OBLdepth_0d,zBottomMinusOffset,   &
-!$OMP                                  sigma,kOBL,kk,pres_1D,Temp_1D,      &
+!$OMP                                  zBottomMinusOffset,   &
+!$OMP                                  sigma,kk,pres_1D,Temp_1D,      &
 !$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc,dh,hcorr)
 
   ! loop over horizontal points on processor
@@ -624,8 +628,8 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
       call CVMix_kpp_compute_OBL_depth( &
         BulkRi_1d,              & ! (in) Bulk Richardson number
         iFaceHeight,            & ! (in) Height of interfaces (m)
-        OBLdepth_0d,            & ! (out) OBL depth (m)
-        kOBL,                   & ! (out) level (+fraction) of OBL extent
+        CS%OBLdepth(i,j),       & ! (out) OBL depth (m)
+        CS%kOBL(i,j),           & ! (out) level (+fraction) of OBL extent
         zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
         surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
         surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
@@ -636,14 +640,14 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
       ! because KPP was unable to handle vanishingly small layers near the bottom.
       if (CS%deepOBLoffset>0.) then
         zBottomMinusOffset = iFaceHeight(G%ke+1) + min(CS%deepOBLoffset,-0.1*iFaceHeight(G%ke+1))
-        OBLdepth_0d = min( OBLdepth_0d, -zBottomMinusOffset )
+        CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -zBottomMinusOffset )
       endif
 
       ! apply some constraints on OBLdepth
-      if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
-      OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
-      OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
-      kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+      if(CS%fixedOBLdepth)  CS%OBLdepth(i,j) = CS%fixedOBLdepth_value
+      CS%OBLdepth(i,j) = max( CS%OBLdepth(i,j), -iFaceHeight(2) )      ! no shallower than top layer
+      CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(G%ke+1) ) ! no deeper than bottom
+      CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
 
 !*************************************************************************
 ! smg: remove code below
@@ -652,7 +656,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
 ! Code should be removed after further testing.
       if (CS%correctSurfLayerAvg) then
 
-        SLdepth_0d = CS%surf_layer_ext * OBLdepth_0d
+        SLdepth_0d = CS%surf_layer_ext * CS%OBLdepth(i,j)
         hTot      = h(i,j,1)
         surfTemp  = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
         surfSalt  = Salt(i,j,1) ; surfHsalt = surfSalt * hTot
@@ -696,8 +700,8 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
         call CVMix_kpp_compute_OBL_depth( &
           BulkRi_1d,              & ! (in) Bulk Richardson number
           iFaceHeight,            & ! (in) Height of interfaces (m)
-          OBLdepth_0d,            & ! (out) OBL depth (m)
-          kOBL,                   & ! (out) level (+fraction) of OBL extent
+          CS%OBLdepth(i,j),       & ! (out) OBL depth (m)
+          CS%kOBL(i,j),           & ! (out) level (+fraction) of OBL extent
           zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
           surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
           surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
@@ -706,15 +710,15 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
 
         if (CS%deepOBLoffset>0.) then
           zBottomMinusOffset = iFaceHeight(G%ke+1) + min(CS%deepOBLoffset,-0.1*iFaceHeight(G%ke+1))
-          OBLdepth_0d = min( OBLdepth_0d, -zBottomMinusOffset )
-          kOBL = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+          CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -zBottomMinusOffset )
+          CS%kOBL(i,j) = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
         endif
 
         ! apply some constraints on OBLdepth
-        if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
-        OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
-        OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
-        kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+        if(CS%fixedOBLdepth)  CS%OBLdepth(i,j) = CS%fixedOBLdepth_value
+        CS%OBLdepth(i,j) = max( CS%OBLdepth(i,j), -iFaceHeight(2) )      ! no shallower than top layer
+        CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(G%ke+1) ) ! no deep than bottom
+        CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
 
       endif   ! endif for "correction" step
 
@@ -776,7 +780,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real, dimension( 3*G%ke )   :: Temp_1D
   real, dimension( 3*G%ke )   :: Salt_1D
 
-  real :: kOBL, OBLdepth_0d, surfFricVel, surfBuoyFlux, Coriolis
+  real ::  surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, rhoKm1, Uk, Vk, sigma
 
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit (m)
@@ -821,8 +825,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 !$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
 !$OMP                                  rho1,rhoK,rhoKm1,deltaRho,N2_1d,N_1d,delH,     &
 !$OMP                                  surfBuoyFlux,Ws_1d,Vt2_1d,BulkRi_1d,           &
-!$OMP                                  OBLdepth_0d,zBottomMinusOffset,Kdiffusivity,   &
-!$OMP                                  Kviscosity,sigma,kOBL,kk,pres_1D,Temp_1D,      &
+!$OMP                                  zBottomMinusOffset,Kdiffusivity,   &
+!$OMP                                  Kviscosity,sigma,kk,pres_1D,Temp_1D,      &
 !$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc,dh,hcorr)
 
   ! loop over horizontal points on processor
@@ -966,106 +970,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
                                      ! h to Monin-Obukov (default is false, ie. not used)
 
-      call CVMix_kpp_compute_OBL_depth( &
-        BulkRi_1d,              & ! (in) Bulk Richardson number
-        iFaceHeight,            & ! (in) Height of interfaces (m)
-        OBLdepth_0d,            & ! (out) OBL depth (m)
-        kOBL,                   & ! (out) level (+fraction) of OBL extent
-        zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-        surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-        surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-        Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
-        CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-
-      ! A hack to avoid KPP reaching the bottom. It was needed during development
-      ! because KPP was unable to handle vanishingly small layers near the bottom.
-      if (CS%deepOBLoffset>0.) then
-        zBottomMinusOffset = iFaceHeight(G%ke+1) + min(CS%deepOBLoffset,-0.1*iFaceHeight(G%ke+1))
-        OBLdepth_0d = min( OBLdepth_0d, -zBottomMinusOffset )
-      endif
-
-      ! apply some constraints on OBLdepth
-      if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
-      OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
-      OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
-      kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
-
-!*************************************************************************
-! smg: remove code below
-
-! Following "correction" step has been found to be unnecessary.
-! Code should be removed after further testing.
-      if (CS%correctSurfLayerAvg) then
-
-        SLdepth_0d = CS%surf_layer_ext * OBLdepth_0d
-        hTot      = h(i,j,1)
-        surfTemp  = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
-        surfSalt  = Salt(i,j,1) ; surfHsalt = surfSalt * hTot
-        surfU     = 0.5*(u(i,j,1)+u(i-1,j,1)) ; surfHu = surfU * hTot
-        surfV     = 0.5*(v(i,j,1)+v(i,j-1,1)) ; surfHv = surfV * hTot
-        pRef      = 0.0
-
-        do k = 2, G%ke
-
-          ! Recalculate differences with surface layer
-          Uk = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
-          Vk = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
-          deltaU2(k) = Uk**2 + Vk**2
-          pRef = pRef + GV%H_to_Pa * h(i,j,k)
-          call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
-          call calculate_density(Temp(i,j,k), Salt(i,j,k), pRef, rhoK, EOS)
-          deltaRho(k) = rhoK - rho1
-
-          ! Surface layer averaging (needed for next k+1 iteration of this loop)
-          if (hTot < SLdepth_0d) then
-            delH = min( max(0., SLdepth_0d - hTot), h(i,j,k)*GV%H_to_m )
-            hTot = hTot + delH
-            surfHtemp = surfHtemp + Temp(i,j,k) * delH ; surfTemp = surfHtemp / hTot
-            surfHsalt = surfHsalt + Salt(i,j,k) * delH ; surfSalt = surfHsalt / hTot
-            surfHu = surfHu + 0.5*(u(i,j,k)+u(i-1,j,k)) * delH ; surfU = surfHu / hTot
-            surfHv = surfHv + 0.5*(v(i,j,k)+v(i,j-1,k)) * delH ; surfV = surfHv / hTot
-          endif
-
-        enddo
-
-        BulkRi_1d = CVMix_kpp_compute_bulk_Richardson( &
-                    cellHeight(1:G%ke),                & ! Depth of cell center (m)
-                    GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
-                    deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
-                    ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
-                    N_iface=N_1d )                       ! Buoyancy frequency (1/s)
-
-        surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
-                                       ! h to Monin-Obukov (default is false, ie. not used)
-
-        call CVMix_kpp_compute_OBL_depth( &
-          BulkRi_1d,              & ! (in) Bulk Richardson number
-          iFaceHeight,            & ! (in) Height of interfaces (m)
-          OBLdepth_0d,            & ! (out) OBL depth (m)
-          kOBL,                   & ! (out) level (+fraction) of OBL extent
-          zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-          surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-          surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-          Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
-          CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-
-        if (CS%deepOBLoffset>0.) then
-          zBottomMinusOffset = iFaceHeight(G%ke+1) + min(CS%deepOBLoffset,-0.1*iFaceHeight(G%ke+1))
-          OBLdepth_0d = min( OBLdepth_0d, -zBottomMinusOffset )
-          kOBL = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
-        endif
-
-        ! apply some constraints on OBLdepth
-        if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
-        OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
-        OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
-        kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
-
-      endif   ! endif for "correction" step
-
-! smg: remove code above
-! **********************************************************************
-
 
       ! Call CVMix/KPP to obtain OBL diffusivities, viscosities and non-local transports
 
@@ -1076,7 +980,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (CS%SW_METHOD .eq. SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
       elseif (CS%SW_METHOD .eq. SW_METHOD_MXL_SW) then
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1) ! We know the actual buoyancy flux into the OBL
       elseif (CS%SW_METHOD .eq. SW_METHOD_LV1_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
@@ -1099,8 +1003,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                             Kviscosity,        & ! (in) Original viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (in) Original heat diffusivity (m2/s)
                             Kdiffusivity(:,2), & ! (in) Original salt diffusivity (m2/s)
-                            OBLdepth_0d,       & ! (in) OBL depth (m)
-                            kOBL,              & ! (in) level (+fraction) of OBL extent
+                            CS%OBLdepth(i,j),  & ! (in) OBL depth (m)
+                            CS%kOBL(i,j),      & ! (in) level (+fraction) of OBL extent
                             nonLocalTrans(:,1),& ! (out) Non-local heat transport (non-dimensional)
                             nonLocalTrans(:,2),& ! (out) Non-local salt transport (non-dimensional)
                             surfFricVel,       & ! (in) Turbulent friction velocity at surface (m/s)
@@ -1122,26 +1026,26 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (surfBuoyFlux < 0.0) then
         if (CS%NLT_shape == NLT_SHAPE_CUBIC) then
           do k = 2, G%ke
-            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
             nonLocalTrans(k,1) = (1.0 - sigma)**2 * (1.0 + 2.0*sigma) !*
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_PARABOLIC) then
           do k = 2, G%ke
-            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
             nonLocalTrans(k,1) = (1.0 - sigma)**2 !*CS%CS2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_LINEAR) then
           do k = 2, G%ke
-            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
             nonLocalTrans(k,1) = (1.0 - sigma)!*CS%CS2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_CUBIC_LMD) then
           ! Sanity check (should agree with CVMix result using simple matching)
           do k = 2, G%ke
-            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
             nonLocalTrans(k,1) = CS%CS2 * sigma*(1.0 -sigma)**2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
@@ -1163,8 +1067,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth
       if (CS%id_Ws > 0) then
           call CVMix_kpp_compute_turbulent_scales( &
-            -CellHeight/OBLdepth_0d,               & ! (in)  Normalized boundary layer coordinate
-            OBLdepth_0d,                           & ! (in)  OBL depth (m)
+            -CellHeight/CS%OBLdepth(i,j),          & ! (in)  Normalized boundary layer coordinate
+            CS%OBLdepth(i,j),                      & ! (in)  OBL depth (m)
             surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface (m2/s3)
             surfFricVel,                           & ! (in)  Turbulent friction velocity at surface (m/s)
             w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile (m/s)
@@ -1184,13 +1088,12 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       endif
 
       ! Copy 1d data into 3d diagnostic arrays
-      if (CS%id_OBLdepth > 0) CS%OBLdepth(i,j) = OBLdepth_0d
       if (CS%id_BulkDrho > 0) CS%dRho(i,j,:)   = deltaRho(:)
       if (CS%id_BulkUz2 > 0)  CS%Uz2(i,j,:)    = deltaU2(:)
       if (CS%id_BulkRi > 0)   CS%BulkRi(i,j,:) = BulkRi_1d(:)
       if (CS%id_sigma > 0) then
         CS%sigma(i,j,:)  = 0.
-        if (OBLdepth_0d>0.)   CS%sigma(i,j,:)  = -iFaceHeight/OBLdepth_0d
+        if (CS%OBLdepth(i,j)>0.)   CS%sigma(i,j,:)  = -iFaceHeight/CS%OBLdepth(i,j)
       endif
       if (CS%id_N      > 0)   CS%N(i,j,:)      = N_1d(:)
       if (CS%id_N2     > 0)   CS%N2(i,j,:)     = N2_1d(:)
