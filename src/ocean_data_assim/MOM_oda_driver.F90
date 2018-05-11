@@ -66,8 +66,7 @@ module MOM_oda_driver_mod
   use MOM_regridding, only : regridding_CS, initialize_regridding
   use MOM_regridding, only : regridding_main, set_regrid_params
 
-  implicit none
-  private
+  implicit none ; private
 
   public :: init_oda, oda_end, set_prior_tracer, get_posterior_tracer
   public :: set_analysis_time, oda, save_obs_diff, apply_oda_tracer_increments
