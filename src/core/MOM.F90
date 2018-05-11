@@ -56,8 +56,8 @@ use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_C
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
-use MOM_diagnostics,           only : register_surface_diags, post_surface_diagnostics
-use MOM_diagnostics,           only : write_static_fields
+use MOM_diagnostics,           only : register_surface_diags, write_static_fields
+use MOM_diagnostics,           only : post_surface_dyn_diags, post_surface_thermo_diags
 use MOM_diagnostics,           only : diagnostics_CS, surface_diag_IDs, transport_diag_IDs
 use MOM_diag_to_Z,             only : calculate_Z_diag_fields, register_Z_tracer
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, MOM_diag_to_Z_end, diag_to_Z_CS
@@ -808,9 +808,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
     call cpu_clock_begin(id_clock_diagnostics)
-    call enable_averaging(CS%time_in_thermo_cycle, Time_local, CS%diag)
-    call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_thermo_cycle, &
-                                  sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
+    if (CS%time_in_cycle > 0.0) then
+      call enable_averaging(CS%time_in_cycle, Time_local, CS%diag)
+      call post_surface_dyn_diags(CS%sfc_IDs, G, CS%diag, sfc_state, ssh)
+    endif
+    if (CS%time_in_thermo_cycle > 0.0) then
+      call enable_averaging(CS%time_in_thermo_cycle, Time_local, CS%diag)
+      call post_surface_thermo_diags(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_thermo_cycle, &
+                                    sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
+    endif
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
   endif
