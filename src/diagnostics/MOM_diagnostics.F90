@@ -56,9 +56,9 @@ implicit none ; private
 
 public calculate_diagnostic_fields, register_time_deriv, write_static_fields
 public find_eta
-public MOM_diagnostics_init, MOM_diagnostics_end
-public register_surface_diags, post_surface_diagnostics
+public register_surface_diags, post_surface_dyn_diags, post_surface_thermo_diags
 public register_transport_diags, post_transport_diagnostics
+public MOM_diagnostics_init, MOM_diagnostics_end
 
 type, public :: diagnostics_CS ; private
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
@@ -1153,9 +1153,46 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
+!> This routine posts diagnostics of various dynamic ocean surface quantities,
+!! including velocities, speed and sea surface height, at the time the ocean
+!! state is reported back to the caller
+subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
+  type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
+  type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
+  type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
+  type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: ssh !< Time mean surface height without corrections for
+                                              !! ice displacement (m)
+
+  real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
+  integer :: i, j, is, ie, js, je
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (IDs%id_ssh > 0) &
+    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
+
+  if (IDs%id_ssu > 0) &
+    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
+
+  if (IDs%id_ssv > 0) &
+    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
+
+  if (IDs%id_speed > 0) then
+    do j=js,je ; do i=is,ie
+      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
+                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
+    enddo ; enddo
+    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
+  endif
+
+end subroutine post_surface_dyn_diags
+
+
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
-subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
+subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
                                     ssh, ssh_ibc)
   type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
@@ -1186,10 +1223,6 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_ssh_ga, ssh_ga, diag)
   endif
 
-  I_time_int = 1.0 / dt_int
-  if (IDs%id_ssh > 0) &
-    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
-
   ! post the dynamic sea level, zos, and zossq.
   ! zos is ave_ssh with sea ice inverse barometer removed,
   ! and with zero global area mean.
@@ -1219,6 +1252,9 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     volo = global_area_integral(work_2d, G)
     call post_data(IDs%id_volo, volo, diag)
   endif
+
+  ! Use Adcroft's rule of reciprocals; it does the right thing here.
+  I_time_int = 0.0 ; if (dt_int > 0.0) I_time_int = 1.0 / dt_int
 
   ! post time-averaged rate of frazil formation
   if (associated(tv%frazil) .and. (IDs%id_fraz > 0)) then
@@ -1293,22 +1329,10 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_sss_sq, work_2d, diag, mask=G%mask2dT)
   endif
 
-  if (IDs%id_ssu > 0) &
-    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
-  if (IDs%id_ssv > 0) &
-    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
-
-  if (IDs%id_speed > 0) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
-                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
-    enddo ; enddo
-    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
-  endif
-
   call coupler_type_send_data(sfc_state%tr_fields, get_diag_time_end(diag))
 
-end subroutine post_surface_diagnostics
+end subroutine post_surface_thermo_diags
+
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
