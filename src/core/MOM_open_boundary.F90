@@ -2451,6 +2451,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   real, dimension(:,:,:), allocatable :: tmp_buffer
   real, dimension(:), allocatable :: h_stack
   integer :: is_obc2, js_obc2
+  real :: net_H_src, net_H_int, scl_fac
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2683,8 +2684,11 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                 ! Pretty sure we need to check for source/target grid consistency here
                 segment%field(m)%buffer_dst(I,j,:)=0.0  ! initialize remap destination buffer
                 if (G%mask2dCu(I,j)>0.) then
+                  net_H_src = sum( segment%field(m)%dz_src(I,j,:) )
+                  net_H_int = sum( h(i+ishift,j,:) )
+                  scl_fac = net_H_int / net_H_src
                   call remapping_core_h(OBC%remap_CS, &
-                       segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
+                       segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,j,:), &
                        G%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:))
                 endif
@@ -2726,6 +2730,9 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
               ! Pretty sure we need to check for source/target grid consistency here
                 segment%field(m)%buffer_dst(i,J,:)=0.0  ! initialize remap destination buffer
                 if (G%mask2dCv(i,J)>0.) then
+                  net_H_src = sum( segment%field(m)%dz_src(i,J,:) )
+                  net_H_int = sum( h(i,j+jshift,:) )
+                  scl_fac = net_H_int / net_H_src
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(i,J,:), &
                        segment%field(m)%buffer_src(i,J,:), &
