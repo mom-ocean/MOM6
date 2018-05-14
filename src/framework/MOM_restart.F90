@@ -107,6 +107,7 @@ type, public :: MOM_restart_CS ; private
                                     ! otherwise they are combined internally.
   logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
                                     ! and large-file-support is enabled.
+                                    ! default is .true.
   logical :: new_run                ! If true, the input filenames and restart file
                                     ! existence will result in a new run that is not
                                     ! initializedfrom restart files.
@@ -880,7 +881,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   ! With parallel read & write, it is possible to disable the following...
 
 ! jgj: this was set to 4294967292, changed to 4294967295 (see mpp_parameter.F90)
-  if (CS%large_file_support) max_file_size = 4294967295_8
+!> @note jml: increased to 100 Gb. Compiling with large file support (-Duse_LARGEFILE)
+!! sets the output file format to netCDF + 64-bit offset, which supports unlimited file size.
+!! Note that each fixed-size variable and the data for one record's worth of each
+!! record variable are still limited in size to a little less that 4 Gb.
+  if (CS%large_file_support) max_file_size = 100000000000_8
 
   num_files = 0
   next_var = 0
