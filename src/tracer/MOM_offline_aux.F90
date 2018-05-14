@@ -22,7 +22,7 @@ use MOM_shortwave_abs,    only : optics_type
 use MOM_diag_mediator,    only : post_data
 use MOM_forcing_type,     only : forcing
 
-implicit none
+implicit none ; private
 
 public update_offline_from_files
 public update_offline_from_arrays
