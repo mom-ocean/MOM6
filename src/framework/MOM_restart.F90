@@ -883,7 +883,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 ! jgj: this was set to 4294967292, changed to 4294967295 (see mpp_parameter.F90)
 !> @note jml: increased to 100 Gb. Compiling with large file support (-Duse_LARGEFILE)
 !! sets the output file format to netCDF + 64-bit offset, which supports unlimited file size.
-!! Note that each fixed-size variable and the data for one record's worth of each 
+!! Note that each fixed-size variable and the data for one record's worth of each
 !! record variable are still limited in size to a little less that 4 Gb.
   if (CS%large_file_support) max_file_size = 100000000000_8
 
