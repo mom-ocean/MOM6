@@ -9,9 +9,9 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
+use MOM_io, only : file_exists
+use MOM_io, only : MOM_read_data
+use MOM_io, only : slasher
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -218,7 +218,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
       enddo
     enddo ; enddo
 
-  case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )                       ! Initial thicknesses for z coordinates
+  case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
@@ -238,7 +238,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
       h(i,j,:) = GV%m_to_H * delta_h
-    end do ; end do
+    enddo ; enddo
 
   case default
       call MOM_error(FATAL,"isomip_initialize: "// &
@@ -552,7 +552,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
          enddo
        enddo ; enddo
 
-     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )                       ! Initial thicknesses for z coordinates
+     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
        do j=js,je ; do i=is,ie
          eta1D(nz+1) = -1.0*G%bathyT(i,j)
          do k=nz,1,-1
@@ -570,7 +570,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
        do j=js,je ; do i=is,ie
          delta_h = G%bathyT(i,j) / dfloat(nz)
          h(i,j,:) = delta_h
-       end do ; end do
+       enddo ; enddo
 
       case default
          call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &

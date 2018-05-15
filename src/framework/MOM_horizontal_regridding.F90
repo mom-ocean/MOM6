@@ -91,6 +91,11 @@ subroutine myStats(array, missing, is, ie, js, je, k, mesg)
   endif
 end subroutine myStats
 
+
+!> Use ICE-9 algorithm to populate points (fill=1) with
+!! valid data (good=1). If no information is available,
+!! Then use a previous guess (prev). Optionally (smooth)
+!! blend the filled points to achieve a more desirable result.
 subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug,debug)
   !
   !# Use ICE-9 algorithm to populate points (fill=1) with
@@ -105,19 +110,29 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !
   use MOM_coms, only : sum_across_PEs
 
-  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: good !< Valid data mask for incoming array
-                                                          !! (1==good data; 0==missing data).
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: fill !< Same shape array of points which need
-                                                          !! filling (1==please fill;0==leave
-                                                          !! it alone).
-  real, dimension(SZI_(G),SZJ_(G)), optional, &
-                                    intent(in)    :: prev !< First guess where isolated holes exist.
-  logical, intent(in),              optional      :: smooth
-  integer, intent(in),              optional      :: num_pass
-  real,                 intent(in), optional      :: relc,crit
-  logical,              intent(in), optional      :: keep_bug, debug
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(inout) :: aout !< The array with missing values to fill
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in)    :: good !< Valid data mask for incoming array
+                                               !! (1==good data; 0==missing data).
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in)    :: fill !< Same shape array of points which need
+                                               !! filling (1==please fill;0==leave
+                                               !! it alone).
+  real, dimension(SZI_(G),SZJ_(G)), &
+               optional, intent(in)    :: prev !< First guess where isolated holes exist.
+  logical,     optional, intent(in)    :: smooth !< If present and true, apply a number of
+                                               !! Laplacian smoothing passes to the interpolated data
+  integer,     optional, intent(in)    :: num_pass !< The maximum number of smoothing passes
+                                               !! to apply.
+  real,        optional, intent(in)    :: relc !< A nondimensional relaxation coefficient for
+                                               !! the smoothing passes.
+  real,        optional, intent(in)    :: crit !< A minimal value for changes in the array
+                                               !! at which point the smoothing is stopped.
+  logical,     optional, intent(in)    :: keep_bug !< Use an algorithm with a bug that dates
+                                               !! to the "sienna" code release.
+  logical,     optional, intent(in)    :: debug !< If true, write verbose debugging messages.
 
 
   real, dimension(SZI_(G),SZJ_(G)) :: b,r
@@ -132,14 +147,14 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   real, parameter :: relc_default = 0.25, crit_default = 1.e-3
 
   integer :: npass
-  integer :: is, ie, js, je, nz
+  integer :: is, ie, js, je
   real    :: relax_coeff, acrit, ares
   logical :: debug_it
 
   debug_it=.false.
   if (PRESENT(debug)) debug_it=debug
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   npass = num_pass_default
   if (PRESENT(num_pass)) npass = num_pass
@@ -176,15 +191,15 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
      do j=js,je
         i_loop: do i=is,ie
 
-           if (good_(i,j) .eq. 1.0 .or. fill(i,j) .eq. 0.) cycle i_loop
+           if (good_(i,j) == 1.0 .or. fill(i,j) == 0.) cycle i_loop
 
            ge=good_(i+1,j);gw=good_(i-1,j)
            gn=good_(i,j+1);gs=good_(i,j-1)
            east=0.0;west=0.0;north=0.0;south=0.0
-           if (ge.eq.1.0) east=aout(i+1,j)*ge
-           if (gw.eq.1.0) west=aout(i-1,j)*gw
-           if (gn.eq.1.0) north=aout(i,j+1)*gn
-           if (gs.eq.1.0) south=aout(i,j-1)*gs
+           if (ge == 1.0) east=aout(i+1,j)*ge
+           if (gw == 1.0) west=aout(i-1,j)*gw
+           if (gn == 1.0) north=aout(i,j+1)*gn
+           if (gs == 1.0) south=aout(i,j-1)*gs
 
            ngood = ge+gw+gn+gs
            if (ngood > 0.) then
@@ -204,13 +219,13 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
      if (nfill == nfill_prev .and. PRESENT(prev)) then
         do j=js,je
            do i=is,ie
-              if (fill_pts(i,j).eq.1.0) then
+              if (fill_pts(i,j) == 1.0) then
                  aout(i,j)=prev(i,j)
                  fill_pts(i,j)=0.0
               endif
            enddo
         enddo
-     else if (nfill .eq. nfill_prev) then
+     elseif (nfill == nfill_prev) then
         print *,&
              'Unable to fill missing points using either data at the same vertical level from a connected basin'//&
              'or using a point from a previous vertical level.  Make sure that the original data has some valid'//&
@@ -221,17 +236,20 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
      nfill = sum(fill_pts(is:ie,js:je))
      call sum_across_PEs(nfill)
 
-  end do
+  enddo
 
   if (do_smooth) then
      do k=1,npass
         call pass_var(aout,G%Domain)
         do j=js,je
            do i=is,ie
-              if (fill(i,j) .eq. 1) then
-                 east=max(good(i+1,j),fill(i+1,j));west=max(good(i-1,j),fill(i-1,j))
-                 north=max(good(i,j+1),fill(i,j+1));south=max(good(i,j-1),fill(i,j-1))
-                 r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1)+west*aout(i-1,j)+east*aout(i+1,j) - (south+north+west+east)*aout(i,j))
+              if (fill(i,j) == 1) then
+                 east=max(good(i+1,j),fill(i+1,j)) ; west=max(good(i-1,j),fill(i-1,j))
+                 north=max(good(i,j+1),fill(i,j+1)) ; south=max(good(i,j-1),fill(i,j-1))
+                 !### Appropriate parentheses should be added here, but they will change answers.
+                 r(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
+                                       west*aout(i-1,j)+east*aout(i+1,j) - &
+                                      (south+north+west+east)*aout(i,j))
               else
                  r(i,j) = 0.
               endif
@@ -246,7 +264,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
 
   do j=js,je
      do i=is,ie
-        if (good_(i,j).eq.0.0 .and. fill_pts(i,j) .eq. 1.0) then
+        if (good_(i,j) == 0.0 .and. fill_pts(i,j) == 1.0) then
            print *,'in fill_miss, fill, good,i,j= ',fill_pts(i,j),good_(i,j),i,j
            call MOM_error(FATAL,"MOM_initialize: "// &
                 "fill is true and good is false after fill_miss, how did this happen? ")
@@ -273,9 +291,11 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
                                                      !! local model grid and native vertical levels.
   real, allocatable,     dimension(:)  :: z_in       !< Cell grid values for input data.
   real, allocatable,     dimension(:)  :: z_edges_in !< Cell grid edge values for input data.
-  real,                  intent(out)   :: missing_value
-  logical,               intent(in)    :: reentrant_x, tripolar_n
-  logical, intent(in),   optional      :: homogenize
+  real,                  intent(out)   :: missing_value !< The missing value in the returned array.
+  logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
+  logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
+  logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
+                                                     !! to produce perfectly "flat" initial conditions
 
   real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
                                                      !! native horizontal grid and extended grid
@@ -298,7 +318,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
-  integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
@@ -309,16 +328,16 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
 
-  if (ALLOCATED(tr_z)) deallocate(tr_z)
-  if (ALLOCATED(mask_z)) deallocate(mask_z)
-  if (ALLOCATED(z_edges_in)) deallocate(z_edges_in)
+  if (allocated(tr_z)) deallocate(tr_z)
+  if (allocated(mask_z)) deallocate(mask_z)
+  if (allocated(z_edges_in)) deallocate(z_edges_in)
 
   PI_180=atan(1.0)/45.
 
@@ -329,40 +348,40 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
 
   rcode = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
+  if (rcode /= 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
                            " in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, varnam, varid)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(varnam)//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(varnam)//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
 
   rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
-  if (rcode .ne. 0) call MOM_error(FATAL,'error inquiring dimensions hinterp_extrap')
+  if (rcode /= 0) call MOM_error(FATAL,'error inquiring dimensions hinterp_extrap')
   if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(varnam)//" in file "// &
               trim(filename)//" has too few dimensions.")
 
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(2), dim_name(2), len=jd)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(2), dim_id(2))
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(2))//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(2))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(3), dim_name(3), len=kd)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(3), dim_id(3))
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
 
 
   missing_value=0.0
   rcode = NF90_GET_ATT(ncid, varid, "_FillValue", missing_value)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error finding missing value for "//&
+  if (rcode /= 0) call MOM_error(FATAL,"error finding missing value for "//&
        trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
 
   if (allocated(lon_in)) deallocate(lon_in)
@@ -378,15 +397,15 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   start = 1; count = 1; count(1) = id
   rcode = NF90_GET_VAR(ncid, dim_id(1), lon_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
                 trim(varnam)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
   start = 1; count = 1; count(1) = jd
   rcode = NF90_GET_VAR(ncid, dim_id(2), lat_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
                 trim(varnam)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
   start = 1; count = 1; count(1) = kd
   rcode = NF90_GET_VAR(ncid, dim_id(3), z_in, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
                 trim(varnam//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
 
   call cpu_clock_end(id_clock_read)
@@ -451,14 +470,14 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     if (is_root_pe()) then
       start = 1; start(3) = k; count = 1; count(1) = id; count(2) = jd
       rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-      if (rcode .ne. 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+      if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
            "error reading level "//trim(laynum)//" of variable "//&
            trim(varnam)//" in file "// trim(filename))
 
       if (add_np) then
          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
          do i=1,id
-            if (abs(tr_in(i,jd)-missing_value) .gt. abs(roundoff*missing_value)) then
+            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
                pole = pole+last_row(i)
                npole = npole+1.0
             endif
@@ -478,13 +497,13 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
     call mpp_sync()
     call mpp_broadcast(tr_inp,id*jdp,root_PE())
-    call mpp_sync_self ()
+    call mpp_sync_self()
 
     mask_in=0.0
 
     do j=1,jdp
       do i=1,id
-         if (abs(tr_inp(i,j)-missing_value) .gt. abs(roundoff*missing_value)) then
+         if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
            mask_in(i,j)=1.0
             tr_inp(i,j) = tr_inp(i,j) * conversion
          else
@@ -513,7 +532,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     mask_out=1.0
     do j=js,je
       do i=is,ie
-        if (abs(tr_out(i,j)-missing_value) .lt. abs(roundoff*missing_value)) mask_out(i,j)=0.
+        if (abs(tr_out(i,j)-missing_value) < abs(roundoff*missing_value)) mask_out(i,j)=0.
       enddo
     enddo
 
@@ -522,14 +541,14 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     nPoints = 0 ; varAvg = 0.
     do j=js,je
       do i=is,ie
-        if (mask_out(i,j) .lt. 1.0) then
+        if (mask_out(i,j) < 1.0) then
           tr_out(i,j)=missing_value
         else
           good(i,j)=1.0
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
+        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) < 1.0) fill(i,j)=1.0
       enddo
     enddo
     call pass_var(fill,G%Domain)
@@ -588,9 +607,11 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
                                                      !! local model grid and native vertical levels.
   real, allocatable,     dimension(:)  :: z_in       !< Cell grid values for input data.
   real, allocatable,     dimension(:)  :: z_edges_in !< Cell grid edge values for input data.
-  real,                  intent(out)   :: missing_value
-  logical,               intent(in)    :: reentrant_x, tripolar_n
-  logical, intent(in),   optional      :: homogenize
+  real,                  intent(out)   :: missing_value !< The missing value in the returned array.
+  logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
+  logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
+  logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
+                                                     !! to produce perfectly "flat" initial conditions
 
   real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
                                                      !! native horizontal grid and extended grid
@@ -616,7 +637,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
-  integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   integer, dimension(4) :: fld_sz
   character(len=12)  :: dim_name(4)
@@ -628,7 +648,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
@@ -730,7 +750,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       if (add_np) then
          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
          do i=1,id
-            if (abs(tr_in(i,jd)-missing_value) .gt. abs(roundoff*missing_value)) then
+            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
                pole = pole+last_row(i)
                npole = npole+1.0
             endif
@@ -750,13 +770,13 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     call mpp_sync()
     call mpp_broadcast(tr_inp,id*jdp,root_PE())
-    call mpp_sync_self ()
+    call mpp_sync_self()
 
     mask_in=0.0
 
     do j=1,jdp
       do i=1,id
-         if (abs(tr_inp(i,j)-missing_value) .gt. abs(roundoff*missing_value)) then
+         if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
            mask_in(i,j)=1.0
            tr_inp(i,j) = tr_inp(i,j) * conversion
          else
@@ -785,7 +805,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     mask_out=1.0
     do j=js,je
       do i=is,ie
-        if (abs(tr_out(i,j)-missing_value) .lt. abs(roundoff*missing_value)) mask_out(i,j)=0.
+        if (abs(tr_out(i,j)-missing_value) < abs(roundoff*missing_value)) mask_out(i,j)=0.
       enddo
     enddo
 
@@ -794,14 +814,14 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     nPoints = 0 ; varAvg = 0.
     do j=js,je
       do i=is,ie
-        if (mask_out(i,j) .lt. 1.0) then
+        if (mask_out(i,j) < 1.0) then
           tr_out(i,j)=missing_value
         else
           good(i,j)=1.0
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) .lt. 1.0) fill(i,j)=1.0
+        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) < 1.0) fill(i,j)=1.0
       enddo
     enddo
     call pass_var(fill,G%Domain)
@@ -962,7 +982,7 @@ nm=fill_boundaries(bad,cyclic_x,tripolar_n)
 
 do j=1,nj
   do i=1,ni
-    if (fill(i,j) .eq. 1) then
+    if (fill(i,j) == 1) then
       B(i,j,1)=1-nm(i+1,j);B(i,j,2)=1-nm(i-1,j)
       B(i,j,3)=1-nm(i,j+1);B(i,j,4)=1-nm(i,j-1)
     endif
@@ -972,7 +992,7 @@ enddo
 do n=1,niter
   do j=1,nj
     do i=1,ni
-      if (fill(i,j) .eq. 1) then
+      if (fill(i,j) == 1) then
         bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
         Isum = 1.0/bsum
         res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&
@@ -990,7 +1010,7 @@ do n=1,niter
 
   zi(:,:)=mp(1:ni,1:nj)
   mp = fill_boundaries(zi,cyclic_x,tripolar_n)
-end do
+enddo
 
 
 

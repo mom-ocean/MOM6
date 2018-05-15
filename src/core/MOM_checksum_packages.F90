@@ -49,8 +49,9 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmet
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in) :: vh   !< Volume flux through meridional
                                               !! faces = v*h*dx, in m3 s-1.
-  integer, optional,       intent(in) :: haloshift
-  logical, optional,       intent(in) :: symmetric
+  integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
+  logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
+                                                   !! computationoal domain.
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.
@@ -87,8 +88,9 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift, symmetric)
                            intent(in) :: v    !< Meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2).
-  integer, optional,       intent(in) :: haloshift
-  logical, optional,       intent(in) :: symmetric
+  integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
+  logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
+                                                   !! computationoal domain.
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.
@@ -118,7 +120,7 @@ subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
   type(thermo_var_ptrs),    intent(in) :: tv   !< A structure pointing to various
                                                !! thermodynamic variables.
   type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure.
-  integer, optional,        intent(in) :: haloshift
+  integer,        optional, intent(in) :: haloshift !< The width of halos to check (default 0).
 !   This subroutine writes out chksums for the model's thermodynamic state
 ! variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
@@ -141,11 +143,12 @@ end subroutine MOM_thermo_chksum
 subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
   character(len=*),      intent(in) :: mesg !< A message that appears on the chksum lines.
   type(surface),         intent(inout) :: sfc !< transparent ocean surface state
-                                              !! structure shared with the calling routine;
+                                              !! structure shared with the calling routine
                                               !! data in this structure is intent out.
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
-  integer, optional,     intent(in) :: haloshift
-  logical, optional,     intent(in) :: symmetric
+  integer,     optional, intent(in) :: haloshift !< The width of halos to check (default 0).
+  logical,     optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
+                                                 !! computationoal domain.
 !   This subroutine writes out chksums for the model's thermodynamic state
 ! variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
@@ -197,14 +200,15 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                   optional, intent(in) :: pbce !< The baroclinic pressure anomaly in each layer
                                                !! due to free surface height anomalies, in
-                                               !! m2 s-2 H-1.                                                                         !! NULL.
+                                               !! m2 s-2 H-1.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                   optional, intent(in) :: u_accel_bt !< The zonal acceleration from terms in the
                                                      !! barotropic solver,in m s-2.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                   optional, intent(in) :: v_accel_bt !< The meridional acceleration from terms in
                                                      !! the barotropic solver,in m s-2.
-  logical, optional,        intent(in) :: symmetric
+  logical,        optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
+                                                    !! computationoal domain.
 
 !   This subroutine writes out chksums for the model's accelerations.
 ! Arguments: mesg - A message that appears on the chksum lines.
@@ -262,11 +266,9 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
                            intent(in) :: Temp !< Temperature in degree C.
   real, pointer, dimension(:,:,:),           &
                            intent(in) :: Salt !< Salinity, in ppt.
-
-  logical, optional,       intent(in) :: allowChange !< do not flag an error
-                                                                       !! if the statistics change.
-  logical, optional,                         &
-                           intent(in) :: permitDiminishing !< do not flag error
+  logical,       optional, intent(in) :: allowChange !< do not flag an error
+                                                     !! if the statistics change.
+  logical,       optional, intent(in) :: permitDiminishing !< do not flag error
                                                            !!if the extrema are diminishing.
 !   This subroutine monitors statistics for the model's state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.

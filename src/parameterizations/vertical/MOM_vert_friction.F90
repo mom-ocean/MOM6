@@ -20,7 +20,7 @@ use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state
 use MOM_verticalGrid, only : verticalGrid_type
-
+use MOM_wave_interface, only : wave_parameters_CS
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -119,6 +119,7 @@ type, public :: vertvisc_CS ; private
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
+  logical :: StokesMixing
 end type vertvisc_CS
 
 contains
@@ -138,7 +139,7 @@ contains
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
 subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
-                    taux_bot, tauy_bot)
+                    taux_bot, tauy_bot, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   real, intent(inout), &
@@ -155,12 +156,14 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                                                    !! equations for diagnostics
   type(cont_diag_ptrs),  intent(inout)   :: CDp    !< Continuity equation terms
   type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
-  !> Zonal bottom stress from ocean to rock in Pa
-  real, optional, intent(out), dimension(SZIB_(G),SZJ_(G)) :: taux_bot
-  !> Meridional bottom stress from ocean to rock in Pa
-  real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                   optional, intent(out) :: taux_bot !< Zonal bottom stress from ocean to rock in Pa
+  real, dimension(SZI_(G),SZJB_(G)), &
+                   optional, intent(out) :: tauy_bot !< Meridional bottom stress from ocean to rock in Pa
+  type(wave_parameters_CS), &
+                   optional, pointer     :: Waves !< Container for wave/Stokes information
 
-  ! Fields from fluxes used in this subroutine:
+  ! Fields from forces used in this subroutine:
   !   taux: Zonal wind stress in Pa.
   !   tauy: Meridional wind stress in Pa.
 
@@ -195,6 +198,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                            ! units of m2 s-1.
 
   logical :: do_i(SZIB_(G))
+  logical :: DoStokesMixing
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec
@@ -213,20 +217,34 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   h_neglect = GV%H_subroundoff
   Idt = 1.0 / dt
 
+  !Check if Stokes mixing allowed if requested (present and associated)
+  if (CS%StokesMixing) then
+    DoStokesMixing=(present(Waves) .and. associated(Waves))
+    if (.not.DoStokesMixing) then
+      call MOM_error(FATAL,"Stokes Mixing called without allocated"//&
+                    "Waves Control Structure")
+    endif
+  else
+    DoStokesMixing=.false.
+  endif
+
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
-!$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,forces,h, &
-!$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
-!$OMP                                  Idt,taux_bot,Rho0)                      &
-!$OMP                     firstprivate(Ray)                                    &
-!$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
-!$OMP                                     b_denom_1,b1,d1,c1)
+
+  ! When mixing down Eulerian current + Stokes drift add before calling solver
+  if (DoStokesMixing) then ; do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    if (G%mask2dCu(I,j) > 0) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
+  enddo ; enddo ; enddo ; endif
+
+  !$OMP parallel do default(shared) firstprivate(Ray) &
+  !$OMP                 private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+  !$OMP                         b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
-    if (ASSOCIATED(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
+    if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = u(I,j,k)
     enddo ; enddo ; endif
 
@@ -297,11 +315,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       u(I,j,k) = u(I,j,k) + c1(I,k+1) * u(I,j,k+1)
     endif ; enddo ; enddo ! i and k loops
 
-    if (ASSOCIATED(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
+    if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = (u(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
     enddo ; enddo ; endif
 
-    if (ASSOCIATED(visc%taux_shelf)) then ; do I=Isq,Ieq
+    if (associated(visc%taux_shelf)) then ; do I=Isq,Ieq
       visc%taux_shelf(I,j) = -Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
     enddo ; endif
 
@@ -315,17 +333,25 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     endif
   enddo ! end u-component j loop
 
+  ! When mixing down Eulerian current + Stokes drift subtract after calling solver
+  if (DoStokesMixing) then ; do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+    if (G%mask2dCu(I,j) > 0) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
+  enddo ; enddo ; enddo ; endif
+
   ! Now work on the meridional velocity component.
-!$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,forces,h, &
-!$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,Rho0,    &
-!$OMP                                  tauy_bot,is,ie)                         &
-!$OMP                     firstprivate(Ray)                                    &
-!$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
-!$OMP                                  b_denom_1,b1,d1,c1)
+  ! When mixing down Eulerian current + Stokes drift add before calling solver
+  if (DoStokesMixing) then ; do k=1,nz ; do j=Jsq,Jeq ; do I=Is,Ie
+    if (G%mask2dCv(I,j) > 0) &
+      v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
+  enddo ; enddo ; enddo ; endif
+
+  !$OMP parallel do default(shared) firstprivate(Ray) &
+  !$OMP               private(do_i,surface_stress,zDS,stress,h_a,hfr, &
+  !$OMP                       b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
-    if (ASSOCIATED(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
+    if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = v(i,J,k)
     enddo ; enddo ; endif
 
@@ -370,11 +396,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       v(i,J,k) = v(i,J,k) + c1(i,k+1) * v(i,J,k+1)
     endif ; enddo ; enddo ! i and k loops
 
-    if (ASSOCIATED(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
+    if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = (v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
     enddo ; enddo ; endif
 
-    if (ASSOCIATED(visc%tauy_shelf)) then ; do i=is,ie
+    if (associated(visc%tauy_shelf)) then ; do i=is,ie
       visc%tauy_shelf(i,J) = -Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
     enddo ; endif
 
@@ -387,6 +413,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       enddo ; enddo ; endif
     endif
   enddo ! end of v-component J loop
+
+  ! When mixing down Eulerian current + Stokes drift subtract after calling solver
+  if (DoStokesMixing) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=Is,Ie
+    if (G%mask2dCv(i,J) > 0) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
+  enddo ; enddo ; enddo ; endif
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 
@@ -1342,7 +1373,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         do k=1,nz ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
           u(I,j,k) = SIGN(truncvel,u(I,j,k))
           if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        endif ; enddo ;  enddo
+        endif ; enddo ; enddo
       endif ; endif
     enddo ! j-loop
   else  ! Do not report accelerations leading to large velocities.
@@ -1375,9 +1406,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(I,j), -vel_report(I,j), forces%taux(I,j)*dt_Rho0, &
-               a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
-    endif ; enddo; enddo
+               vel_report(I,j), forces%taux(I,j)*dt_Rho0, a=CS%a_u, hv=CS%h_u)
+    endif ; enddo ; enddo
   endif
 
   if (len_trim(CS%v_trunc_file) > 0) then
@@ -1428,7 +1458,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         do k=1,nz ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
           v(i,J,k) = SIGN(truncvel,v(i,J,k))
           if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        endif ; enddo ;  enddo
+        endif ; enddo ; enddo
       endif ; endif
     enddo ! J-loop
   else  ! Do not report accelerations leading to large velocities.
@@ -1461,9 +1491,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(i,J), -vel_report(i,J), forces%tauy(i,J)*dt_Rho0, &
-               a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
-    endif ; enddo; enddo
+               vel_report(i,J), forces%tauy(i,J)*dt_Rho0, a=CS%a_v, hv=CS%h_v)
+    endif ; enddo ; enddo
   endif
 
 end subroutine vertvisc_limit_vel
@@ -1532,12 +1561,12 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The absolute path to a file into which the accelerations \n"//&
                  "leading to zonal velocity truncations are written.  \n"//&
                  "Undefine this for efficiency if this diagnostic is not \n"//&
-                 "needed.", default=" ")
+                 "needed.", default=" ", debuggingParam=.true.)
   call get_param(param_file, mdl, "V_TRUNC_FILE", CS%v_trunc_file, &
                  "The absolute path to a file into which the accelerations \n"//&
                  "leading to meridional velocity truncations are written. \n"//&
                  "Undefine this for efficiency if this diagnostic is not \n"//&
-                 "needed.", default=" ")
+                 "needed.", default=" ", debuggingParam=.true.)
   call get_param(param_file, mdl, "HARMONIC_VISC", CS%harmonic_visc, &
                  "If true, use the harmonic mean thicknesses for \n"//&
                  "calculating the vertical viscosity.", default=.false.)
@@ -1612,6 +1641,25 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The start value of the truncation CFL number used when\n"//&
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)
+  call get_param(param_file, mdl, "STOKES_MIXING_COMBINED", CS%StokesMixing, &
+                 "Flag to use Stokes drift Mixing via the Lagrangian \n"//&
+                 " current (Eulerian plus Stokes drift). \n"//&
+                 " Still needs work and testing, so not recommended for use.",&
+                 Default=.false.)
+  !BGR 04/04/2018{
+  ! StokesMixing is required for MOM6 for some Langmuir mixing parameterization.
+  !   The code used here has not been developed for vanishing layers or in
+  !   conjunction with any bottom friction.  Therefore, the following line is
+  !   added so this functionality cannot be used without user intervention in
+  !   the code.  This will prevent general use of this functionality until proper
+  !   care is given to the previously mentioned issues.  Comment out the following
+  !   MOM_error to use, but do so at your own risk and with these points in mind.
+  !}
+  if (CS%StokesMixing) then
+    call MOM_error(FATAL, "Stokes mixing requires user interfention in the code.\n"//&
+                          "  Model now exiting.  See MOM_vert_friction.F90 for  \n"//&
+                          "  details (search 'BGR 04/04/2018' to locate comment).")
+  endif
   call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
                  "A negligibly small velocity magnitude below which velocity \n"//&
                  "components are set to 0.  A reasonable value might be \n"//&

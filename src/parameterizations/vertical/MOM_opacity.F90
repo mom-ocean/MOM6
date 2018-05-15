@@ -78,8 +78,6 @@ type, public :: opacity_CS ; private
                              ! The default is 10 m-1 - a value for muddy water.
   integer :: sbc_chl         ! An integer handle used in time interpolation of
                              ! chlorophyll read from a file.
-  character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
-                             ! when var_pen_sw is defined and reading from file.
   logical ::  chl_from_file  !   If true, chl_a is read from a file.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
@@ -102,14 +100,15 @@ character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP"
 contains
 
 subroutine set_opacity(optics, fluxes, G, GV, CS)
-  type(optics_type),         intent(inout) :: optics
-  type(forcing),             intent(in)    :: fluxes !< A structure containing pointers to any
-                                                     !! possible forcing fields. Unused fields
-                                                     !! have NULL ptrs.
-  type(ocean_grid_type),     intent(in)    :: G      !< The ocean's grid structure.
-  type(verticalGrid_type),   intent(in)    :: GV     !< The ocean's vertical grid structure.
-  type(opacity_CS),          pointer       :: CS     !< The control structure earlier set up by
-                                                     !! opacity_init.
+  type(optics_type),       intent(inout) :: optics !< An optics structure that has values
+                                                   !! set based on the opacities.
+  type(forcing),           intent(in)    :: fluxes !< A structure containing pointers to any
+                                                   !! possible forcing fields. Unused fields
+                                                   !! have NULL ptrs.
+  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by
+                                                   !! opacity_init.
 
 ! Arguments: (inout) opacity - The inverse of the vertical absorption decay
 !                     scale for penetrating shortwave radiation, in m-1.
@@ -149,47 +148,45 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     ! Make sure there is no division by 0.
     inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
                                  GV%H_to_m*GV%H_subroundoff)
-!$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands,GV)
     if ( CS%Opacity_scheme == DOUBLE_EXP ) then
-!$OMP do
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
              0.1*GV%Angstrom_z,GV%H_to_m*GV%H_subroundoff)
       enddo ; enddo ; enddo
       if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
-!$OMP do
+        !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie ; do n=1,optics%nbands
           optics%sw_pen_band(n,i,j) = 0.0
         enddo ; enddo ; enddo
       else
-!$OMP do
-        do j=js,je ; do i=is,ie ;
+        !$OMP parallel do default(shared)
+        do j=js,je ; do i=is,ie
           optics%sw_pen_band(1,i,j) = (CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
           optics%sw_pen_band(2,i,j) = (1.-CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
-        enddo ; enddo ;
+        enddo ; enddo
       endif
     else
       do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
         optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
       enddo ; enddo ; enddo ; enddo
       if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
-!$OMP do
+        !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie ; do n=1,optics%nbands
           optics%sw_pen_band(n,i,j) = 0.0
         enddo ; enddo ; enddo
       else
-!$OMP do
+        !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie ; do n=1,optics%nbands
           optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * fluxes%sw(i,j)
         enddo ; enddo ; enddo
       endif
     endif
-!$OMP end parallel
   endif
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_sw_pen > 0) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
+      !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         Pen_SW_tot(i,j) = 0.0
         do n=1,optics%nbands
@@ -200,7 +197,7 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     endif
     if (CS%id_sw_vis_pen > 0) then
       if (CS%opacity_scheme == MANIZZA_05) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
+        !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
           Pen_SW_tot(i,j) = 0.0
           do n=1,min(optics%nbands,2)
@@ -208,7 +205,7 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
           enddo
         enddo ; enddo
       else
-!$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
+        !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
           Pen_SW_tot(i,j) = 0.0
           do n=1,optics%nbands
@@ -219,7 +216,7 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
       call post_data(CS%id_sw_vis_pen, Pen_SW_tot, CS%diag)
     endif
     do n=1,optics%nbands ; if (CS%id_opacity(n) > 0) then
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,tmp,optics,n)
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp(i,j,k) = optics%opacity_band(n,i,j,k)
       enddo ; enddo ; enddo
@@ -231,21 +228,16 @@ end subroutine set_opacity
 
 
 subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
-  type(optics_type),              intent(inout)  :: optics
-  type(forcing),                  intent(in)     :: fluxes !< A structure containing pointers to any
-                                                           !! possible forcing fields. Unused fields
-                                                           !! have NULL ptrs.
-  type(ocean_grid_type),          intent(in)     :: G      !< The ocean's grid structure.
-  type(opacity_CS),               pointer        :: CS     !< The control structure.
+  type(optics_type),     intent(inout)  :: optics !< An optics structure that has values
+                                                  !! set based on the opacities.
+  type(forcing),         intent(in)     :: fluxes !< A structure containing pointers to any
+                                                  !! possible forcing fields. Unused fields
+                                                  !! have NULL ptrs.
+  type(ocean_grid_type), intent(in)     :: G      !< The ocean's grid structure.
+  type(opacity_CS),      pointer        :: CS     !< The control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                      intent(in), optional       :: chl_in !< A 3-d field of chlorophyll A,
-                                                           !! in mg m-3.
-! Arguments: fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (out)     opacity - The inverse of the vertical absorption decay
-!                           scale for penetrating shortwave radiation, in m-1.
-!  (in)      G - The ocean's grid structure.
-!  (in)      chl_in - A 3-d field of chlorophyll A, in mg m-3.
+               optional, intent(in)     :: chl_in !< A 3-d field of chlorophyll A,
+                                                  !! in mg m-3.
 
   real :: chl_data(SZI_(G),SZJ_(G)) ! The chlorophyll A concentrations in
                                     ! a layer, in mg/m^3.
@@ -294,7 +286,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                          associated(fluxes%sw_nir_dif))
 
   chl_data(:,:) = 0.0
-  if(present(chl_in)) then
+  if (present(chl_in)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,1) ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_in(i,j,k) < 0.0)) then
@@ -303,7 +295,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                      chl_in(i,j,k), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
           call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
       endif
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
   else
     ! Only the 2-d surface chlorophyll can be read in from a file.  The
     ! same value is assumed for all layers.
@@ -320,7 +312,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   endif
 
   if (CS%id_chl > 0) then
-    if(present(chl_in)) then
+    if (present(chl_in)) then
       call post_data(CS%id_chl, chl_in(:,:,1), CS%diag)
     else
       call post_data(CS%id_chl, chl_data, CS%diag)
@@ -376,7 +368,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         enddo
       enddo ; enddo
     case default
-        call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
+      call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
     end select
 
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,CS,G,chl_in,optics,nbands) &
@@ -478,7 +470,8 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                   target, intent(in)     :: tracer_flow
   type(opacity_CS),        pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module.
-  type(optics_type),       pointer       :: optics
+  type(optics_type),       pointer       :: optics !< An optics structure that has parameters
+                                                 !! set and arrays allocated here.
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -497,6 +490,9 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   character(len=200) :: longname
   character(len=40)  :: scheme_string
   logical :: use_scheme
+  character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
+                                 ! when var_pen_sw is defined and reading from file.
+  character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
@@ -511,7 +507,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   CS%tracer_flow_CSp => tracer_flow
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call log_version(param_file, mdl, version, '')
 
 ! parameters for CHL_A routines
   call get_param(param_file, mdl, "VAR_PEN_SW", CS%var_pen_sw, &
@@ -519,7 +515,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "OPACITY_SCHEME to determine the e-folding depth of \n"//&
                  "incoming short wave radiation.", default=.false.)
 
-  CS%opacity_scheme = NO_SCHEME ; scheme_string = ""
+  CS%opacity_scheme = NO_SCHEME ; scheme_string = ''
   if (CS%var_pen_sw) then
     call get_param(param_file, mdl, "OPACITY_SCHEME", tmpstr, &
                  "This character string specifies how chlorophyll \n"//&
@@ -553,14 +549,15 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       call time_interp_external_init()
 
       call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
-      call get_param(param_file, mdl, "CHL_FILE", CS%chl_file, &
+      call get_param(param_file, mdl, "CHL_FILE", chl_file, &
                  "CHL_FILE is the file containing chl_a concentrations in \n"//&
                  "the variable CHL_A. It is used when VAR_PEN_SW and \n"//&
                  "CHL_FROM_FILE are true.", fail_if_missing=.true.)
-
-      filename = trim(slasher(inputdir))//trim(CS%chl_file)
+      filename = trim(slasher(inputdir))//trim(chl_file)
       call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", filename)
-      CS%sbc_chl = init_external_field(filename,'CHL_A',domain=G%Domain%mpp_domain)
+      call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
+                 "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
+      CS%sbc_chl = init_external_field(filename,trim(chl_varname),domain=G%Domain%mpp_domain)
     endif
 
     call get_param(param_file, mdl, "BLUE_FRAC_SW", CS%blue_frac, &
@@ -612,19 +609,19 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The number of bands of penetrating shortwave radiation.", &
                  default=1)
   if (CS%Opacity_scheme == DOUBLE_EXP ) then
-    if (optics%nbands.ne.2) then
+    if (optics%nbands /= 2) then
       call MOM_error(FATAL, "set_opacity: "// &
          "Cannot use a double_exp opacity scheme with nbands!=2.")
     endif
   elseif (CS%Opacity_scheme == SINGLE_EXP ) then
-    if (optics%nbands.ne.1) then
+    if (optics%nbands /= 1) then
       call MOM_error(FATAL, "set_opacity: "// &
          "Cannot use a single_exp opacity scheme with nbands!=1.")
     endif
   endif
-  if (.not.ASSOCIATED(optics%min_wavelength_band)) &
+  if (.not.associated(optics%min_wavelength_band)) &
     allocate(optics%min_wavelength_band(optics%nbands))
-  if (.not.ASSOCIATED(optics%max_wavelength_band)) &
+  if (.not.associated(optics%max_wavelength_band)) &
     allocate(optics%max_wavelength_band(optics%nbands))
 
   if (CS%opacity_scheme == MANIZZA_05) then
@@ -646,9 +643,9 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The value to use for opacity over land. The default is \n"//&
                  "10 m-1 - a value for muddy water.", units="m-1", default=10.0)
 
-  if (.not.ASSOCIATED(optics%opacity_band)) &
+  if (.not.associated(optics%opacity_band)) &
     allocate(optics%opacity_band(optics%nbands,isd:ied,jsd:jed,nz))
-  if (.not.ASSOCIATED(optics%sw_pen_band)) &
+  if (.not.associated(optics%sw_pen_band)) &
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
   allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
 
@@ -672,15 +669,15 @@ end subroutine opacity_init
 
 
 subroutine opacity_end(CS, optics)
-  type(opacity_CS),  pointer           :: CS
-  type(optics_type), pointer, optional :: optics
+  type(opacity_CS),  pointer           :: CS !< An opacity control structure that should be deallocated.
+  type(optics_type), optional, pointer :: optics !< An optics type structure that should be deallocated.
 
   if (associated(CS%id_opacity)) deallocate(CS%id_opacity)
   if (associated(CS)) deallocate(CS)
 
   if (present(optics)) then ; if (associated(optics)) then
-    if (ASSOCIATED(optics%opacity_band)) deallocate(optics%opacity_band)
-    if (ASSOCIATED(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
+    if (associated(optics%opacity_band)) deallocate(optics%opacity_band)
+    if (associated(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
   endif ; endif
 
 end subroutine opacity_end
