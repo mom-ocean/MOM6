@@ -802,7 +802,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
                                               exp_hab_zetar           = exp_hab_zetar,  &
                                               zw                      = iFaceHeight,    &
                                               CVmix_tidal_params_user = CS%CVMix_tidal_params)
-                  !TODO: in above call, there is no need to pass efficiency, since it gets 
+                  !TODO: in above call, there is no need to pass efficiency, since it gets
                   ! passed via CVMix_init_tidal and stored in CVMix_tidal_params. Change
                   ! CVMix API to prevent this redundancy.
 
