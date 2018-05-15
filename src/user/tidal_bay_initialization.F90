@@ -81,7 +81,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  PI = 4.0*atan(1.0) ;
+  PI = 4.0*atan(1.0)
 
   if (.not.associated(OBC)) return
 

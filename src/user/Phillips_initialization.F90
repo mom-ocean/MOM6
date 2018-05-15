@@ -7,9 +7,6 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
@@ -313,14 +310,14 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
        D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2
        if (G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
           D(i,j)=D(i,j)*(1-sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2)
-       end if
-     else if (G%geoLonT(i,j)>x3 .and. G%geoLonT(i,j)<x4 .and. &
+       endif
+     elseif (G%geoLonT(i,j)>x3 .and. G%geoLonT(i,j)<x4 .and. &
               G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
        D(i,j) = 2.0/3.0*Htop*sin(PI*(G%geoLonT(i,j)-x3)/(x4-x3))**2 &
                     *sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2
-     end if
+     endif
      D(i,j)=max_depth-D(i,j)
-  enddo; enddo
+  enddo ; enddo
 
 end subroutine Phillips_initialize_topography
 

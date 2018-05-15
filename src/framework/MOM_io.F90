@@ -216,7 +216,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
-  end do
+  enddo
 
   if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
     if (.not.domain_set) call MOM_error(FATAL, "create_file: "//&
@@ -227,8 +227,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
     "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
 
-! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense, domain, data, min)
-! Otherwise if optional arguments are added to mpp_write_meta the compiler may (and in case of GNU is) get confused and crash.
+! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense,
+! domain, data, min). Otherwise if optional arguments are added to mpp_write_meta the compiler may
+! (and in case of GNU does) get confused and crash.
   if (use_lath) &
     call mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
                    cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
@@ -259,13 +260,13 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     ! Set appropriate units, depending on the value.
     if (timeunit < 0.0) then
       time_units = "days" ! The default value.
-    else if ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+    elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
       time_units = "seconds"
-    else if ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+    elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
       time_units = "hours"
-    else if ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+    elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
       time_units = "days"
-    else if ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+    elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
       time_units = "years"
     else
       write(time_units,'(es8.2," s")') timeunit
@@ -322,7 +323,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     end select
     pack = 1
 
-    if(present(checksums)) then
+    if (present(checksums)) then
        call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack, checksum=checksums(k,:))
     else
@@ -425,17 +426,18 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 !      call mpp_get_field_atts(fields(i),name)
 !      !if (trim(name) /= trim(vars%name) then
 !      !write (mesg,'("Reopening file ",a," variable ",a," is called ",a,".")',&
-!      !    filename,vars%name,name);
+!      !    filename,vars%name,name)
 !      !call MOM_error(NOTE,"MOM_io: "//mesg)
 !    enddo
   endif
 
 end subroutine reopen_file
 
-
+!> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename, axis_name
-  real, dimension(:), intent(out) :: var
+  character(len=*),   intent(in)  :: filename  !< Name of the file to read
+  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
+  real, dimension(:), intent(out) :: var       !< The axis location data
 
   integer :: i,len,unit, ndim, nvar, natt, ntime
   logical :: axis_found
@@ -635,19 +637,19 @@ end function var_desc
 !! All arguments are optional, except the vardesc type to be modified.
 subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                  cmor_field_name, cmor_units, cmor_longname, conversion, caller)
-  type(vardesc),              intent(inout) :: vd                 !< vardesc type that is modified
-  character(len=*), optional, intent(in)    :: name               !< name of variable
-  character(len=*), optional, intent(in)    :: units              !< units of variable
-  character(len=*), optional, intent(in)    :: longname           !< long name of variable
-  character(len=*), optional, intent(in)    :: hor_grid           !< horizonal staggering of variable
-  character(len=*), optional, intent(in)    :: z_grid             !< vertical staggering of variable
-  character(len=*), optional, intent(in)    :: t_grid             !< time description: s, p, or 1
-  character(len=*), optional, intent(in)    :: cmor_field_name    !< CMOR name
-  character(len=*), optional, intent(in)    :: cmor_units         !< CMOR physical dimensions of variable
-  character(len=*), optional, intent(in)    :: cmor_longname      !< CMOR long name
-  real            , optional, intent(in)    :: conversion         !< for unit conversions, such as needed to
-                                                                  !! convert from intensive to extensive
-  character(len=*), optional, intent(in)    :: caller             !< calling routine?
+  type(vardesc),              intent(inout) :: vd              !< vardesc type that is modified
+  character(len=*), optional, intent(in)    :: name            !< name of variable
+  character(len=*), optional, intent(in)    :: units           !< units of variable
+  character(len=*), optional, intent(in)    :: longname        !< long name of variable
+  character(len=*), optional, intent(in)    :: hor_grid        !< horizonal staggering of variable
+  character(len=*), optional, intent(in)    :: z_grid          !< vertical staggering of variable
+  character(len=*), optional, intent(in)    :: t_grid          !< time description: s, p, or 1
+  character(len=*), optional, intent(in)    :: cmor_field_name !< CMOR name
+  character(len=*), optional, intent(in)    :: cmor_units      !< CMOR physical dimensions of variable
+  character(len=*), optional, intent(in)    :: cmor_longname   !< CMOR long name
+  real            , optional, intent(in)    :: conversion      !< for unit conversions, such as needed
+                                                               !! to convert from intensive to extensive
+  character(len=*), optional, intent(in)    :: caller          !< calling routine?
 
   character(len=120) :: cllr
   cllr = "mod_vardesc"

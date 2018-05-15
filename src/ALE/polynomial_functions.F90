@@ -21,82 +21,75 @@ public :: evaluation_polynomial, integration_polynomial, first_derivative_polyno
 contains
 
 ! -----------------------------------------------------------------------------
-! Pointwise evaluation of a polynomial
-! -----------------------------------------------------------------------------
-real function evaluation_polynomial( coefficients, nb_coefficients, x )
+!> Pointwise evaluation of a polynomial at x
+real function evaluation_polynomial( coeff, ncoef, x )
+  real, dimension(:), intent(in) :: coeff !< The coefficients of the polynomial
+  integer,            intent(in) :: ncoef !< The number of polynomial coefficients
+  real,               intent(in) :: x     !< The position at which to evaluate the polynomial
 ! -----------------------------------------------------------------------------
 ! The polynomial is defined by the coefficients contained in the
 ! array of the same name, as follows: C(1) + C(2)x + C(3)x^2 + C(4)x^3 + ...
-! where C refers to the array 'coefficients'.
-! The number of coefficients is given by nb_coefficients and x
+! where C refers to the array 'coeff'.
+! The number of coefficients is given by ncoef and x
 ! is the coordinate where the polynomial is to be evaluated.
 !
 ! The function returns the value of the polynomial at x.
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  real, dimension(:), intent(in)        :: coefficients
-  integer, intent(in)                   :: nb_coefficients
-  real, intent(in)                      :: x
 
   ! Local variables
-  integer                               :: k
-  real                                  :: f    ! value of polynomial at x
+  integer :: k
+  real    :: f    ! value of polynomial at x
 
   f = 0.0
-  do k = 1,nb_coefficients
-    f = f + coefficients(k) * ( x**(k-1) )
-  end do
+  do k = 1,ncoef
+    f = f + coeff(k) * ( x**(k-1) )
+  enddo
 
   evaluation_polynomial = f
 
 end function evaluation_polynomial
 
-!> Calculates the first derivative of a polynomial with coefficients as above
-!! evaluated at a point x
-real function first_derivative_polynomial( coefficients, nb_coefficients, x )
+!> Calculates the first derivative of a polynomial evaluated at a point x
+real function first_derivative_polynomial( coeff, ncoef, x )
+  real, dimension(:), intent(in) :: coeff !< The coefficients of the polynomial
+  integer,            intent(in) :: ncoef !< The number of polynomial coefficients
+  real, intent(in)               :: x     !< The position at which to evaluate the derivative
 ! -----------------------------------------------------------------------------
 ! The polynomial is defined by the coefficients contained in the
 ! array of the same name, as follows: C(1) + C(2)x + C(3)x^2 + C(4)x^3 + ...
-! where C refers to the array 'coefficients'.
-! The number of coefficients is given by nb_coefficients and x
+! where C refers to the array 'coeff'.
+! The number of coefficients is given by ncoef and x
 ! is the coordinate where the polynomial's derivative is to be evaluated.
 !
-! The function returns the value of the polynomial at x.
+! The function returns the first derivative of the polynomial at x.
 ! -----------------------------------------------------------------------------
-
-  ! Arguments
-  real, dimension(:), intent(in)        :: coefficients
-  integer, intent(in)                   :: nb_coefficients
-  real, intent(in)                      :: x
 
   ! Local variables
   integer                               :: k
   real                                  :: f    ! value of polynomial at x
 
   f = 0.0
-  do k = 2,nb_coefficients
-    f = f + REAL(k-1)*coefficients(k) * ( x**(k-2) )
-  end do
+  do k = 2,ncoef
+    f = f + REAL(k-1)*coeff(k) * ( x**(k-2) )
+  enddo
 
   first_derivative_polynomial = f
 
 end function first_derivative_polynomial
 
 ! -----------------------------------------------------------------------------
-! Exact integration of polynomial of degree n
+!> Exact integration of polynomial of degree npoly
+real function integration_polynomial( xi0, xi1, Coeff, npoly )
+  real,               intent(in) :: xi0   !< The lower bound of the integral
+  real,               intent(in) :: xi1   !< The lower bound of the integral
+  real, dimension(:), intent(in) :: Coeff !< The coefficients of the polynomial
+  integer,            intent(in) :: npoly !< The degree of the polynomial
 ! -----------------------------------------------------------------------------
-real function integration_polynomial( xi0, xi1, C, n )
+! Exact integration of a polynomial of degree npoly over the interval [xi0,xi1].
+! The array of coefficients (Coeff) must be of size npoly+1.
 ! -----------------------------------------------------------------------------
-! Exact integration of a polynomial of degree n over the interval [xi0,xi1].
-! The array of coefficients (C) must be of size n+1, where n is the degree of
-! the polynomial to integrate.
-! -----------------------------------------------------------------------------
-
-  ! Arguments
-  real, intent(in)                  :: xi0, xi1
-  real, dimension(:), intent(in)    :: C
-  integer, intent(in)               :: n
 
   ! Local variables
   integer                           :: k
@@ -104,28 +97,28 @@ real function integration_polynomial( xi0, xi1, C, n )
 
   integral = 0.0
 
-  do k = 1,(n+1)
-    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
-  end do
+  do k = 1,npoly+1
+    integral = integral + Coeff(k) * (xi1**k - xi0**k) / real(k)
+  enddo
 !
 !One non-answer-changing way of unrolling the above is:
 !  k=1
-!  integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
-!  if (n>=1) then
+!  integral = integral + Coeff(k) * (xi1**k - xi0**k) / real(k)
+!  if (npoly>=1) then
 !    k=2
-!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!    integral = integral + Coeff(k) * (xi1**k - xi0**k) / real(k)
 !  endif
-!  if (n>=2) then
+!  if (npoly>=2) then
 !    k=3
-!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!    integral = integral + Coeff(k) * (xi1**k - xi0**k) / real(k)
 !  endif
-!  if (n>=3) then
+!  if (npoly>=3) then
 !    k=4
-!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!    integral = integral + Coeff(k) * (xi1**k - xi0**k) / real(k)
 !  endif
-!  if (n>=4) then
+!  if (npoly>=4) then
 !    k=5
-!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!    integral = integral + Coeff(k) * (xi1**k - xi0**k) / real(k)
 !  endif
 !
   integration_polynomial = integral

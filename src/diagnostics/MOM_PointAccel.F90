@@ -78,11 +78,9 @@ contains
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of zonal velocities over the
 !! previous timestep.  This subroutine is called from vertvisc.
-subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
-                         maxvel, minvel, str, a, hv)
+subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: I   !< The zonal index of the column to be documented.
-  integer,                     intent(in) :: j   !< The meridional index of the column to be
-                                                 !! documented.
+  integer,                     intent(in) :: j   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -96,38 +94,18 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
   real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: maxvel, minvel
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report, in m s-1.
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step, in m2 s-1.
-  real, dimension(SZIB_(G),SZK_(G)),         &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from
-                                                 !! vertvisc, m.
-  real, dimension(SZIB_(G),SZK_(G)),         &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, m.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
 
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of zonal velocities over the
 ! previous timestep.  This subroutine is called from vertvisc.
-
-! Arguments: I - The zonal index of the column to be documented.
-!  (in)      j - The meridional index of the column to be documented.
-!  (in)      um - The new zonal velocity, in m s-1.
-!  (in)      hin - The layer thickness, in m.
-!  (in)      ADp - A structure pointing to the various accelerations in
-!                  the momentum equations.
-!  (in)      CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      dt - The model's dynamics time step.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PointAccel_init.
-!  (in)      str - The surface wind stress integrated over a time
-!                  step, in m2 s-1.
-!  (in)      a - The layer coupling coefficients from vertvisc, m.
-!  (in)      hv - The layer thicknesses at velocity grid points, from
-!                 vertvisc, in m.
 
   real    :: f_eff, CFL
   real    :: Angstrom
@@ -167,14 +145,14 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
 
   ! Determine which layers to write out accelerations for.
     do k=1,nz
-      if (((max(CS%u_av(I,j,k),um(I,j,k)) >= maxvel) .or. &
-           (min(CS%u_av(I,j,k),um(I,j,k)) <= minvel)) .and. &
+      if (((max(CS%u_av(I,j,k),um(I,j,k)) >= vel_rpt) .or. &
+           (min(CS%u_av(I,j,k),um(I,j,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
-      if (((max(CS%u_av(I,j,k), um(I,j,k)) >= maxvel) .or. &
-           (min(CS%u_av(I,j,k), um(I,j,k)) <= minvel)) .and. &
+      if (((max(CS%u_av(I,j,k), um(I,j,k)) >= vel_rpt) .or. &
+           (min(CS%u_av(I,j,k), um(I,j,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
@@ -229,17 +207,17 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
     write(file,'(/,"diffu: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%diffu(I,j,k)); enddo
 
-    if (ASSOCIATED(ADp%gradKEu)) then
+    if (associated(ADp%gradKEu)) then
       write(file,'(/,"KEu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*ADp%gradKEu(I,j,k)); enddo
     endif
-    if (ASSOCIATED(ADp%rv_x_v)) then
+    if (associated(ADp%rv_x_v)) then
       write(file,'(/,"Coru:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
           dt*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k)); enddo
     endif
-    if (ASSOCIATED(ADp%du_dt_visc)) then
+    if (associated(ADp%du_dt_visc)) then
       write(file,'(/,"ubv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
           (um(I,j,k)-dt*ADp%du_dt_visc(I,j,k)); enddo
@@ -247,22 +225,22 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*ADp%du_dt_visc(I,j,k)); enddo
     endif
-    if (ASSOCIATED(ADp%du_other)) then
+    if (associated(ADp%du_other)) then
       write(file,'(/,"du_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (ADp%du_other(I,j,k)); enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k); enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(I,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(I,j,k); enddo
     endif
     write(file,'(/,"Stress:  ",ES10.3)') str
 
-    if (ASSOCIATED(CS%u_accel_bt)) then
+    if (associated(CS%u_accel_bt)) then
       write(file,'("dubt:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*CS%u_accel_bt(I,j,k)) ; enddo
@@ -294,13 +272,13 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K) ; enddo
-    if (ASSOCIATED(CS%T)) then
+    if (associated(CS%T)) then
       write(file,'(/,"T-:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j,k); enddo
       write(file,'(/,"T+:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i+1,j,k); enddo
     endif
-    if (ASSOCIATED(CS%S)) then
+    if (associated(CS%S)) then
       write(file,'(/,"S-:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j,k); enddo
       write(file,'(/,"S+:    ",$)')
@@ -395,27 +373,27 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                       (dt*ADp%diffu(I,j,k)*Inorm(k)); enddo
 
-      if (ASSOCIATED(ADp%gradKEu)) then
+      if (associated(ADp%gradKEu)) then
         write(file,'(/,"KEu:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                         (dt*ADp%gradKEu(I,j,k)*Inorm(k)); enddo
       endif
-      if (ASSOCIATED(ADp%rv_x_v)) then
+      if (associated(ADp%rv_x_v)) then
         write(file,'(/,"Coru:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             dt*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k))*Inorm(k); enddo
       endif
-      if (ASSOCIATED(ADp%du_dt_visc)) then
+      if (associated(ADp%du_dt_visc)) then
         write(file,'(/,"duv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             (dt*ADp%du_dt_visc(I,j,k))*Inorm(k); enddo
       endif
-      if (ASSOCIATED(ADp%du_other)) then
+      if (associated(ADp%du_other)) then
         write(file,'(/,"du_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             (ADp%du_other(I,j,k))*Inorm(k); enddo
       endif
-      if (ASSOCIATED(CS%u_accel_bt)) then
+      if (associated(CS%u_accel_bt)) then
         write(file,'(/,"dubt:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                         (dt*CS%u_accel_bt(I,j,k)*Inorm(k)) ; enddo
@@ -432,11 +410,9 @@ end subroutine write_u_accel
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of meridional velocities over
 !! the previous timestep.  This subroutine is called from vertvisc.
-subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
-                         maxvel, minvel, str, a, hv)
+subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: i   !< The zonal index of the column to be documented.
-  integer,                     intent(in) :: J   !< The meridional index of the column to be
-                                                 !! documented.
+  integer,                     intent(in) :: J   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -450,13 +426,12 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
   real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: maxvel, minvel
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report, in m s-1.
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step, in m2 s-1.
-  real, dimension(SZI_(G),SZK_(G)),          &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from
-                                                 !! vertvisc, m.
-  real, dimension(SZI_(G),SZK_(G)),          &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, m.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
 
@@ -520,14 +495,14 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     prev_avail = (associated(CS%u_prev) .and. associated(CS%v_prev))
 
     do k=1,nz
-      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
-           (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
+      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= vel_rpt) .or. &
+           (min(CS%v_av(i,J,k), vm(i,J,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
-      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
-           (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
+      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= vel_rpt) .or. &
+           (min(CS%v_av(i,J,k), vm(i,J,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
@@ -586,17 +561,17 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     write(file,'(/,"diffv: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%diffv(i,J,k)); enddo
 
-    if (ASSOCIATED(ADp%gradKEv)) then
+    if (associated(ADp%gradKEv)) then
       write(file,'(/,"KEv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*ADp%gradKEv(i,J,k)); enddo
     endif
-    if (ASSOCIATED(ADp%rv_x_u)) then
+    if (associated(ADp%rv_x_u)) then
       write(file,'(/,"Corv:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                  dt*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k)); enddo
     endif
-    if (ASSOCIATED(ADp%dv_dt_visc)) then
+    if (associated(ADp%dv_dt_visc)) then
       write(file,'(/,"vbv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
           (vm(i,J,k)-dt*ADp%dv_dt_visc(i,J,k)); enddo
@@ -605,22 +580,22 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*ADp%dv_dt_visc(i,J,k)); enddo
     endif
-    if (ASSOCIATED(ADp%dv_other)) then
+    if (associated(ADp%dv_other)) then
       write(file,'(/,"dv_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (ADp%dv_other(i,J,k)); enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k); enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(i,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(i,J,k); enddo
     endif
     write(file,'(/,"Stress:  ",ES10.3)') str
 
-    if (ASSOCIATED(CS%v_accel_bt)) then
+    if (associated(CS%v_accel_bt)) then
       write(file,'("dvbt:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                                       (dt*CS%v_accel_bt(i,J,k)) ; enddo
@@ -651,13 +626,13 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
-    if (ASSOCIATED(CS%T)) then
+    if (associated(CS%T)) then
       write(file,'(/,"T-:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j,k); enddo
       write(file,'(/,"T+:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j+1,k); enddo
     endif
-    if (ASSOCIATED(CS%S)) then
+    if (associated(CS%S)) then
       write(file,'(/,"S-:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j,k); enddo
       write(file,'(/,"S+:    ",$)')
@@ -748,27 +723,27 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                       (dt*ADp%diffv(i,J,k)*Inorm(k)); enddo
 
-      if (ASSOCIATED(ADp%gradKEu)) then
+      if (associated(ADp%gradKEu)) then
         write(file,'(/,"KEv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                       (dt*ADp%gradKEv(i,J,k)*Inorm(k)); enddo
       endif
-      if (ASSOCIATED(ADp%rv_x_u)) then
+      if (associated(ADp%rv_x_u)) then
         write(file,'(/,"Corv:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             dt*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k))*Inorm(k); enddo
       endif
-      if (ASSOCIATED(ADp%dv_dt_visc)) then
+      if (associated(ADp%dv_dt_visc)) then
         write(file,'(/,"dvv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             (dt*ADp%dv_dt_visc(i,J,k)*Inorm(k)); enddo
       endif
-      if (ASSOCIATED(ADp%dv_other)) then
+      if (associated(ADp%dv_other)) then
         write(file,'(/,"dv_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
             (ADp%dv_other(i,J,k)*Inorm(k)); enddo
       endif
-      if (ASSOCIATED(CS%v_accel_bt)) then
+      if (associated(CS%v_accel_bt)) then
         write(file,'(/,"dvbt:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                         (dt*CS%v_accel_bt(i,J,k)*Inorm(k)) ; enddo
@@ -830,15 +805,15 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
                  "The absolute path to the file where the accelerations \n"//&
                  "leading to zonal velocity truncations are written. \n"//&
                  "Leave this empty for efficiency if this diagnostic is \n"//&
-                 "not needed.", default="")
+                 "not needed.", default="", debuggingParam=.true.)
   call get_param(param_file, mdl, "V_TRUNC_FILE", CS%v_trunc_file, &
                  "The absolute path to the file where the accelerations \n"//&
                  "leading to meridional velocity truncations are written. \n"//&
                  "Leave this empty for efficiency if this diagnostic is \n"//&
-                 "not needed.", default="")
+                 "not needed.", default="", debuggingParam=.true.)
   call get_param(param_file, mdl, "MAX_TRUNC_FILE_SIZE_PER_PE", CS%max_writes, &
                  "The maximum number of colums of truncations that any PE \n"//&
-                 "will write out during a run.", default=50)
+                 "will write out during a run.", default=50, debuggingParam=.true.)
 
   if (len_trim(dirs%output_directory) > 0) then
     if (len_trim(CS%u_trunc_file) > 0) &
