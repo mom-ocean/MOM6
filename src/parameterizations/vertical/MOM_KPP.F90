@@ -688,6 +688,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         surfHu   =0.0
         surfHv   =0.0
         surfHuS  =0.0
+        surfHuS  =0.0
+        surfHvS  =0.0
         surfHvS  =0.0
         hTot     =0.0
         do ktmp = 1,ksfc
@@ -918,7 +920,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
             Kdiffusivity(k,2) = Kdiffusivity(k,2) * LangEnhK
             Kviscosity(k)     = Kviscosity(k)   * LangEnhK
           elseif (CS%LT_K_SHAPE == LT_K_SCALED) then
-            sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
+            sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
             SigmaRatio = sigma * (1. - sigma)**2. / 0.148148037
             if (CS%id_EnhK > 0) CS%EnhK(i,j,k) = (1.0 + (LangEnhK - 1.)*sigmaRatio)
             Kdiffusivity(k,1) = Kdiffusivity(k,1) * ( 1. + &
@@ -1087,19 +1089,20 @@ end subroutine KPP_calculate
 
 
 !> Compute OBL depth
-subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
+subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Waves)
 
   ! Arguments
-  type(KPP_CS),                           pointer       :: CS             !< Control structure
-  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
-  type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp           !< potential/cons temp (deg C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt           !< Salinity (ppt)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u              !< Velocity i-component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v              !< Velocity j-component (m/s)
-  type(EOS_type),                         pointer       :: EOS            !< Equation of state
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)    :: uStar          !< Surface friction velocity (m/s)
+  type(KPP_CS),                               pointer       :: CS    !< Control structure
+  type(ocean_grid_type),                      intent(in)    :: G     !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
+  type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp  !< potential/cons temp (deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity (ppt)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component (m/s)
+  type(EOS_type),                             pointer       :: EOS   !< Equation of state
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
 
   ! Local variables
@@ -1124,7 +1127,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
   real, dimension( 3*G%ke )   :: Salt_1D
 
   real :: surfFricVel, surfBuoyFlux, Coriolis
-  real :: GoRho, pRef, rho1, rhoK, Uk, Vk, sigma
+  real :: GoRho, pRef, rho1, rhoK, Uk, Vk, sigma, sigmaRatio
 
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit (m)
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
@@ -1138,21 +1141,24 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
   real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
   integer :: kk, ksfc, ktmp
 
+  ! For Langmuir Calculations
+  real :: LangEnhW     ! Langmuir enhancement for turbulent velocity scale
+  real, dimension(G%ke) :: LangEnhVt2   ! Langmuir enhancement for unresolved shear
+  real, dimension(G%ke) :: U_H, V_H
+  real :: MLD_GUESS, LA
+  real :: LangEnhK     ! Langmuir enhancement for mixing coefficient
+  real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
+  real :: VarUp, VarDn, M, VarLo, VarAvg
+  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
+  integer :: B
+  real :: WST
+
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
   nonLocalTrans(:,:) = 0.0
 
-!$OMP parallel do default(none) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,       &
-!$OMP                                  buoyFlux)                   &
-!$OMP                          private(Coriolis,surfFricVel,SLdepth_0d,hTot,surfTemp, &
-!$OMP                                  surfHtemp,surfSalt,surfHsalt,surfU,            &
-!$OMP                                  surfHu,surfV,surfHv,iFaceHeight,               &
-!$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
-!$OMP                                  rho1,rhoK,deltaRho,N2_1d,N_1d,delH,     &
-!$OMP                                  surfBuoyFlux,Ws_1d,BulkRi_1d,           &
-!$OMP                                  zBottomMinusOffset,   &
-!$OMP                                  sigma,kk,pres_1D,Temp_1D,      &
-!$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc,dh,hcorr)
+!$OMP parallel do default(private) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho, &
+!$OMP                                  Waves,buoyFlux)                             &
 
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
@@ -1160,6 +1166,11 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
 
       ! skip calling KPP for land points
       if (G%mask2dT(i,j)==0.) cycle
+
+      do k=1,G%ke
+        U_H(k) = 0.5 * (U(i,j,k)+U(i-1,j,k))
+        V_H(k) = 0.5 * (V(i,j,k)+V(i,j-1,k))
+      enddo
 
       ! things independent of position within the column
       Coriolis = 0.25*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) &
@@ -1201,6 +1212,8 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
         surfHsalt=0.0
         surfHu   =0.0
         surfHv   =0.0
+        surfHuS  =0.0
+        surfHvS  =0.0
         hTot     =0.0
         do ktmp = 1,ksfc
 
@@ -1215,18 +1228,33 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
           surfHsalt = surfHsalt + Salt(i,j,ktmp) * delH
           surfHu    = surfHu + 0.5*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
           surfHv    = surfHv + 0.5*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
+          if (CS%Stokes_Mixing) then
+            surfHus = surfHus + 0.5*(WAVES%US_x(i,j,ktmp)+WAVES%US_x(i-1,j,ktmp)) * delH
+            surfHvs = surfHvs + 0.5*(WAVES%US_y(i,j,ktmp)+WAVES%US_y(i,j-1,ktmp)) * delH
+          endif
 
         enddo
         surfTemp = surfHtemp / hTot
         surfSalt = surfHsalt / hTot
         surfU    = surfHu    / hTot
         surfV    = surfHv    / hTot
+        surfUs   = surfHus   / hTot
+        surfVs   = surfHvs   / hTot
 
         ! vertical shear between present layer and
         ! surface layer averaged surfU,surfV.
         ! C-grid average to get Uk and Vk on T-points.
         Uk         = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
         Vk         = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
+
+        if (CS%Stokes_Mixing) then
+          ! If momentum is mixed down the Stokes drift gradient, then
+          !  the Stokes drift must be included in the bulk Richardson number
+          !  calculation.
+          Uk =  Uk + (0.5*(Waves%Us_x(i,j,k)+Waves%US_x(i-1,j,k)) -surfUs )
+          Vk =  Vk + (0.5*(Waves%Us_y(i,j,k)+Waves%Us_y(i,j-1,k)) -surfVs )
+        endif
+
         deltaU2(k) = Uk**2 + Vk**2
 
         ! pressure, temp, and saln for EOS
@@ -1253,6 +1281,19 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
         surfBuoyFlux2(k) = buoyFlux(i,j,1) - buoyFlux(i,j,k+1)
 
       enddo ! k-loop finishes
+
+      if (CS%LT_K_ENHANCEMENT .or. CS%LT_VT2_ENHANCEMENT) then
+        if (.not.(present(WAVES).and.associated(WAVES))) then
+          call MOM_error(FATAL,"Trying to use input WAVES information in KPP\n"//&
+               "without activating USEWAVES")
+        endif
+        !For now get Langmuir number based on prev. MLD (otherwise must compute 3d LA)
+        MLD_GUESS = max( 1., abs(CS%OBLdepthprev(i,j) ) )
+        call get_Langmuir_Number( LA, G, GV, MLD_guess, surfFricVel, I, J, &
+             H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
+        WAVES%LangNum(i,j)=LA
+      endif
+
 
       ! compute in-situ density
       call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, 1, 3*G%ke, EOS)
@@ -1283,11 +1324,56 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux)
         w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile (m/s)
         CVMix_kpp_params_user=CS%KPP_params )
 
+      !Compute CVMix VT2
+      Vt2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
+                 zt_cntr=cellHeight(1:G%ke),         & ! Depth of cell center (m)
+                 ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers (m/s)
+                 N_iface=N_1d,                       & ! Buoyancy frequency at interface (1/s)
+                 CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+
+      !Modify CVMix VT2
+      IF (CS%LT_VT2_ENHANCEMENT) then
+        IF (CS%LT_VT2_METHOD==LT_VT2_MODE_CONSTANT) then
+          do k=1,G%ke
+            LangEnhVT2(k) = CS%KPP_VT2_ENH_FAC
+          enddo
+        elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_VR12) then
+          do k=1,G%ke
+             LangEnhVT2(k) = min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
+                  (5.4*WAVES%LangNum(i,j))**(-4)))
+          enddo
+        elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_RW16) then
+          do k=1,G%ke
+            LangEnhVT2(k) = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+          enddo
+        elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_LF17) then
+          CS%CS=cvmix_get_kpp_real('c_s',CS%KPP_params)
+          do k=1,G%ke
+            WST = (max(0.,-buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
+            LangEnhVT2(k) = sqrt((0.15*WST**3. + 0.17*surfFricVel**3.* &
+                 (1.+0.49*WAVES%LangNum(i,j)**(-2.)))  / &
+                 (0.2*ws_1d(k)**3/(CS%cs*CS%surf_layer_ext*CS%vonKarman**4.)))
+          enddo
+        else
+           !This shouldn't be reached.
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in Vt2")
+           LangEnhVT2(:) = 1.0
+        endif
+      else
+        LangEnhVT2(:) = 1.0
+      endif
+
+      do k=1,G%ke
+        Vt2_1d(k)=Vt2_1d(k)*LangEnhVT2(k)
+        if (CS%id_EnhVt2 > 0) CS%EnhVt2(i,j,k)=LangEnhVT2(k)
+      enddo
+
       ! Calculate Bulk Richardson number from eq (21) of LMD94
-      BulkRi_1d = CVMix_kpp_compute_bulk_Richardson( &
-                  cellHeight(1:G%ke),                & ! Depth of cell center (m)
-                  GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
-                  deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
+      BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
+                  zt_cntr = cellHeight(1:G%ke),      & ! Depth of cell center (m)
+                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) (1/s)
+                  delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference (m2/s2)
+                  Vt_sqr_cntr=Vt2_1d,                &
                   ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
                   N_iface=N_1d)                        ! Buoyancy frequency (1/s)
 
