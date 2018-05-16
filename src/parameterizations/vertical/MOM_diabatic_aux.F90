@@ -239,25 +239,17 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
 
 end subroutine make_frazil
 
+!> Applies double diffusion to T & S, assuming no diapycal mass
+!! fluxes, using a simple triadiagonal solver.
 subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  type(vertvisc_type),                   intent(in)    :: visc
-  real,                                  intent(in)    :: dt
-
-! This subroutine applies double diffusion to T & S, assuming no diapycal mass
-! fluxes, using a simple triadiagonal solver.
-
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      visc - A structure containing vertical viscosities, bottom boundary
-!                   layer properies, and related fields.
-!  (in)      dt - Time increment, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
+  type(thermo_var_ptrs),                 intent(inout) :: tv   !< pointers to any available modynamic fields.
+                                                               !! Absent fields have NULL ptrs.
+  type(vertvisc_type),                   intent(in)    :: visc !< structure containing vertical viscosities,
+                                                               !! layer properies, and related fields.
+  real,                                  intent(in)    :: dt   !< Time increment, in s.
 
   real, dimension(SZI_(G)) :: &
     b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S, in H.
