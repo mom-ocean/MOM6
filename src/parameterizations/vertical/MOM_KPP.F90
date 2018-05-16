@@ -14,6 +14,7 @@ use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type, isPointInCell
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number
+use MOM_domains,        only : pass_var
 
 use CVMix_kpp, only : CVMix_init_kpp, CVMix_put_kpp, CVMix_get_kpp_real
 use CVMix_kpp, only : CVMix_coeffs_kpp
@@ -1503,12 +1504,18 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h              !< Layer/level thicknesses (units of H)
 
   ! local
-  real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
+  real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_original ! Original OBL depths computed by CVMix
+  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m) (negative in ocean)
+  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m) (negative in ocean)
+  real :: wc, ww, we, wn, ws ! averaging weights for smoothing
+  real :: dh                 ! The local thickness used for calculating interface positions (m)
+  real :: hcorr              ! A cumulative correction arising from inflation of vanished layers (m)
   integer :: i, j, k
-  real :: wc, ww, we, wn, ws   ! averaging weights for smoothing
-  real :: dh    ! The local thickness used for calculating interface positions (m)
-  real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
+
+  ! Update halos
+  call pass_var(CS%OBLdepth, G%Domain)
+
+  OBLdepth_original = CS%OBLdepth
 
   ! apply smoothing on OBL depth
   do j = G%jsc, G%jec
@@ -1524,11 +1531,11 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
       wn = 0.125 * G%mask2dT(i,j+1)
       wc = 1.0 - (ww+we+wn+ws)
 
-      CS%OBLdepth(i,j) =  wc * CS%OBLdepth(i,j)   &
-                        + ww * CS%OBLdepth(i-1,j) &
-                        + we * CS%OBLdepth(i+1,j) &
-                        + ws * CS%OBLdepth(i,j-1) &
-                        + wn * CS%OBLdepth(i,j+1)
+      CS%OBLdepth(i,j) =  wc * OBLdepth_original(i,j)   &
+                        + ww * OBLdepth_original(i-1,j) &
+                        + we * OBLdepth_original(i+1,j) &
+                        + ws * OBLdepth_original(i,j-1) &
+                        + wn * OBLdepth_original(i,j+1)
     enddo
   enddo
 
