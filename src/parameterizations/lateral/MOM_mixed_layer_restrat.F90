@@ -93,7 +93,8 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment (sec)
-  real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by PBL scheme (H units)
+  real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by the
+                                                                     !! PBL scheme (H units)
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
 
@@ -119,7 +120,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment (sec)
-  real, dimension(:,:),                      pointer       :: MLD_in !< Mixed layer depth provided by PBL scheme, in m (not H)
+  real, dimension(:,:),                      pointer       :: MLD_in !< Mixed layer depth provided by the
+                                                                     !! PBL scheme, in m (not H)
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
   ! Local variables
@@ -215,7 +217,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       enddo ! k-loop
       do i = is-1, ie+1
         MLD_fast(i,j) = CS%MLE_MLD_stretch * MLD_fast(i,j)
-        if ((MLD_fast(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD_fast(i,j) = dK(i) ! Assume mixing to the bottom
+        if ((MLD_fast(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) &
+          MLD_fast(i,j) = dK(i) ! Assume mixing to the bottom
       enddo
     enddo ! j-loop
   elseif (CS%MLE_use_PBL_MLD) then
@@ -974,7 +977,8 @@ end subroutine mixedlayer_restrat_register_restarts
 !! For use in coarse-resolution models, an upscaling of the buoyancy gradients and adaption for the equator
 !! leads to the following parameterization (eq. 6 of Fox-Kemper et al., 2011):
 !! \f[
-!!    {\bf \Psi} = C_e \Gamma_\Delta \frac{\Delta s}{l_f} \frac{ H^2 \nabla \bar{b} \times \hat{\bf z} }{ \sqrt{ f^2 + \tau^{-2}} } \mu(z)
+!!    {\bf \Psi} = C_e \Gamma_\Delta \frac{\Delta s}{l_f} \frac{ H^2 \nabla \bar{b} \times \hat{\bf z} }
+!!                 { \sqrt{ f^2 + \tau^{-2}} } \mu(z)
 !! \f]
 !! where \f$ \Delta s \f$ is the minimum of grid-scale and deformation radius,
 !! \f$ l_f \f$ is the width of the mixed-layer fronts, and \f$ \Gamma_\Delta=1 \f$.
@@ -1023,9 +1027,9 @@ end subroutine mixedlayer_restrat_register_restarts
 !! J. Phys. Oceangraphy, 38 (6), p1166-1179.
 !! https://doi.org/10.1175/2007JPO3788.1
 !!
-!! B. Fox-Kemper, G. Danabasoglu, R. Ferrari, S.M. Griffies, R.W. Hallberg, M.M. Holland, M.E. Maltrud, S. Peacock, and B.L. Samuels, 2011:
-!! Parameterization of mixed layer eddies. III: Implementation and impact in global ocean climate simulations.
-!! Ocean Modell., 39(1), p61-78.
+!! B. Fox-Kemper, G. Danabasoglu, R. Ferrari, S.M. Griffies, R.W. Hallberg, M.M. Holland, M.E. Maltrud,
+!! S. Peacock, and B.L. Samuels, 2011: Parameterization of mixed layer eddies. III: Implementation and impact
+!! in global ocean climate simulations. Ocean Modell., 39(1), p61-78.
 !! https://doi.org/10.1016/j.ocemod.2010.09.002
 !!
 !! | Symbol                       | Module parameter      |

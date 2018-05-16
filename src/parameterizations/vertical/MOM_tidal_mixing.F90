@@ -301,7 +301,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       end select
     endif
 
-  else if (CS%use_CVMix_tidal) then
+  elseif (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Cannot set INT_TIDE_DISSIPATION to False "// &
             "when USE_CVMix_TIDAL is set to True.")
   endif
@@ -315,7 +315,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Lee wave driven dissipation scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
-    end if
+    endif
     call get_param(param_file, mdl, "LEE_WAVE_PROFILE", tmpstr, &
                  "LEE_WAVE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with LEE_WAVE_DISSIPATION. Valid values are:\n"//&
@@ -346,7 +346,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Polzin scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
-    end if
+    endif
     call get_param(param_file, mdl, "NU_POLZIN", CS%Nu_Polzin, &
                  "When the Polzin decay profile is used, this is a \n"//&
                  "non-dimensional constant in the expression for the \n"//&
@@ -428,7 +428,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       if (CS%use_CVMix_tidal) then
           call MOM_error(FATAL, "tidal_mixing_init: Tidal amplitude files are "// &
               "not compatible with CVMix tidal mixing. ")
-      end if
+      endif
       call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
                  "The path to the file containing the spatially varying \n"//&
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
@@ -459,7 +459,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
       CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*GV%Rho0*&
            CS%kappa_itides*CS%h2(i,j)*utide*utide
-    enddo; enddo
+    enddo ; enddo
 
   endif
 
@@ -588,8 +588,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
            'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'm')
 
-      CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
-           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'm')
+      CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model', &
+           'Polzin_decay_scale_scaled',diag%axesT1,Time, &
+           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, '// &
+           'scaled by N2_bot/N2_meanz', 'm')
 
       CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
            'Bottom Buoyancy frequency squared', 's-2')
@@ -690,7 +692,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
   integer :: i, k, is, ie
   real :: dh, hcorr, Simmons_coeff
-  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3] ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
+  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3]
+                                     ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
   real :: h_neglect, h_neglect_edge
   type(tidal_mixing_diags), pointer :: dd
 
@@ -1173,7 +1176,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
-    enddo ; enddo ;
+    enddo ; enddo
   endif ! Simmons
 
   ! Polzin:
@@ -1259,7 +1262,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
-    enddo ; enddo;
+    enddo ; enddo
   endif ! Polzin
 
 end subroutine add_int_tide_diffusivity
@@ -1591,6 +1594,5 @@ subroutine tidal_mixing_end(CS)
   deallocate(CS)
 
 end subroutine tidal_mixing_end
-
 
 end module MOM_tidal_mixing

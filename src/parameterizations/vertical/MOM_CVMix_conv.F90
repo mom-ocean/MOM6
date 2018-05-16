@@ -172,7 +172,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
 
   if (.not. associated(hbl)) then
-    allocate(hbl(SZI_(G), SZJ_(G)));
+    allocate(hbl(SZI_(G), SZJ_(G)))
     hbl(:,:) = 0.0
   endif
 

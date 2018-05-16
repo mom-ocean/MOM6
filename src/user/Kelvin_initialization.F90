@@ -206,11 +206,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
     if (segment%direction == OBC_DIRECTION_N) cycle
 
     ! This should be somewhere else...
-    segment%Tnudge_in = 1.0/(0.3*86400)
+    segment%Velocity_nudging_timescale_in = 1.0/(0.3*86400)
 
     if (segment%direction == OBC_DIRECTION_W) then
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
       jsd = segment%HI%jsd ; jed = segment%HI%jed
+      JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do j=jsd,jed ; do I=IsdB,IedB
         x1 = 1000. * G%geoLonCu(I,j)
         y1 = 1000. * G%geoLatCu(I,j)
@@ -225,13 +226,27 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         else
           segment%eta(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
-          do k=1,nz
-            segment%nudged_normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
+          if (segment%nudged) then
+            do k=1,nz
+              segment%nudged_normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
                    exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(CS%omega * time_sec)
-          enddo
+            enddo
+          elseif (segment%specified) then
+            do k=1,nz
+              segment%normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
+                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
+                   cos(CS%omega * time_sec)
+              segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * &
+                   h(i+1,j,k) * G%dyCu(I,j)
+            enddo
+          endif
         endif
       enddo ; enddo
+!     if (allocated(segment%tangential_vel)) then
+!       do J=JsdB,JedB ; do I=IsdB,IedB
+!       enddo ; enddo
+!     endif
     else
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
@@ -249,10 +264,19 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         else
           segment%eta(i,J) = 0.0
           segment%normal_vel_bt(i,J) = 0.0
-          do k=1,nz
-            segment%nudged_normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
+          if (segment%nudged) then
+            do k=1,nz
+              segment%nudged_normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
                    exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
-          enddo
+            enddo
+          elseif (segment%specified) then
+            do k=1,nz
+              segment%normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
+                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
+              segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * &
+                   h(i,j+1,k) * G%dxCv(i,J)
+            enddo
+          endif
         endif
       enddo ; enddo
     endif
