@@ -4,7 +4,7 @@ module Neverland_surface_forcing
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ctrl
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -73,23 +73,23 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
 
   !  The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
-    PI = 4.0*atan(1.0)
-    forces%taux(:,:) = 0.0
-    tau_max = 0.2
-    off = 0.02
+  PI = 4.0*atan(1.0)
+  forces%taux(:,:) = 0.0
+  tau_max = 0.2
+  off = 0.02
   do j=js,je ; do I=is-1,Ieq
-!    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
-     y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
-!    forces%taux(I,j) =  G%mask2dCu(I,j) * 0.0
+!    x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
+    y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
+!    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0
 
-    if (y.le.0.29) then
-       forces%taux(I,j) = forces%taux(I,j) +  tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
+    if (y <= 0.29) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
     endif
-    if (y.gt.0.29 .and. y.le.(0.8-off)) then
-       forces%taux(I,j) = forces%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
+    if ((y > 0.29) .and. (y <= (0.8-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
     endif
-    if (y.gt.(0.8-off) .and. y.le.(1-off) ) then
-       forces%taux(I,j) = forces%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
+    if ((y > (0.8-off)) .and. (y <= (1-off))) then
+      forces%taux(I,j) = forces%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
     endif
   enddo ; enddo
 
@@ -160,13 +160,13 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
         "Temperature and salinity mode not coded!" )
   else
     ! This is the buoyancy only mode.
-    call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%buoy, isd, ied, jsd, jed)
   endif
 
 
   ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
   if (CS%restorebuoy .and. CS%first_call) then
-    call alloc_if_needed(CS%buoy_restore, isd, ied, jsd, jed)
+    call safe_alloc_ptr(CS%buoy_restore, isd, ied, jsd, jed)
     CS%first_call = .false.
     ! Set CS%buoy_restore(i,j) here
   endif
@@ -204,18 +204,6 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   endif                                             ! end RESTOREBUOY
 
 end subroutine Neverland_buoyancy_forcing
-
-!> If ptr is not associated, this routine allocates it with the given size
-!! and zeros out its contents.  This is equivalent to safe_alloc_ptr in
-!! MOM_diag_mediator, but is here so as to be completely transparent.
-subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
-  real, pointer :: ptr(:,:)
-  integer :: isd, ied, jsd, jed
-  if (.not.ASSOCIATED(ptr)) then
-    allocate(ptr(isd:ied,jsd:jed))
-    ptr(:,:) = 0.0
-  endif
-end subroutine alloc_if_needed
 
 !> Initializes the Neverland control structure.
 subroutine Neverland_surface_forcing_init(Time, G, param_file, diag, CS)

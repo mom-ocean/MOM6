@@ -109,7 +109,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! layer detrainment, in the same units as
                                                   !! h - usually m or kg m-2 (i.e., H).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment, in the same units as h - usually
                                                   !! m or kg m-2 (i.e., H).
@@ -168,7 +168,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! layer detrainment, in the same units as h -
                                                   !! usually m or kg m-2 (i.e., H).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment, in the same units as h - usually
                                                   !! m or kg m-2 (i.e., H).
@@ -277,7 +277,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
 
   if (GV%nkml<1) return
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
-  if (.not.ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
+  if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, &
     "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
 
@@ -1062,7 +1062,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'nondim')
 #endif
 
-  if(CS%allow_clocks_in_omp_loops) then
+  if (CS%allow_clocks_in_omp_loops) then
     id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
   endif
   id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)

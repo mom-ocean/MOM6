@@ -282,8 +282,10 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 
   do_print = .false. ; if (present(may_print) .and. present(CS)) do_print = may_print
 
-  dPEa_dKd(:) = 0.0 ; dPEa_dKd_est(:) = 0.0 ; dPEa_dKd_err(:) = 0.0 ; dPEa_dKd_err_norm(:) = 0.0 ; dPEa_dKd_trunc(:) = 0.0
-  dPEb_dKd(:) = 0.0 ; dPEb_dKd_est(:) = 0.0 ; dPEb_dKd_err(:) = 0.0 ; dPEb_dKd_err_norm(:) = 0.0 ; dPEb_dKd_trunc(:) = 0.0
+  dPEa_dKd(:) = 0.0 ; dPEa_dKd_est(:) = 0.0 ; dPEa_dKd_err(:) = 0.0
+  dPEa_dKd_err_norm(:) = 0.0 ; dPEa_dKd_trunc(:) = 0.0
+  dPEb_dKd(:) = 0.0 ; dPEb_dKd_est(:) = 0.0 ; dPEb_dKd_err(:) = 0.0
+  dPEb_dKd_err_norm(:) = 0.0 ; dPEb_dKd_trunc(:) = 0.0
 
   htot = 0.0 ; pres(1) = 0.0 ; Z_int(1) = 0.0
   do k=1,nz
@@ -1089,7 +1091,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
     ColHt_chg = ColHt_core * y1
     if (ColHt_chg < 0.0) PE_chg = PE_chg - pres * ColHt_chg
     if (present(ColHt_cor)) ColHt_cor = -pres * min(ColHt_chg, 0.0)
-  else if (present(ColHt_cor)) then
+  elseif (present(ColHt_cor)) then
     y1 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
     ColHt_cor = -pres * min(ColHt_core * y1, 0.0)
   endif

@@ -209,7 +209,7 @@ end subroutine diag_remap_get_axes_info
 !! Configuration is complete when diag_remap_configure_axes() has been
 !! successfully called.
 function diag_remap_axes_configured(remap_cs)
-  type(diag_remap_ctrl), intent(in) :: remap_cs
+  type(diag_remap_ctrl), intent(in) :: remap_cs !< Diagnostic coordinate control structure
   logical :: diag_remap_axes_configured
 
   diag_remap_axes_configured = remap_cs%configured
@@ -223,10 +223,10 @@ end function
 !! target grid whenever T/S change.
 subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
-  type(ocean_grid_type),    pointer    :: G !< The ocean's grid type
+  type(ocean_grid_type),    pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
   real, dimension(:, :, :), intent(in) :: h, T, S !< New thickness, T and S
-  type(EOS_type),  pointer, intent(in) :: eqn_of_state !< A pointer to the equation of state
+  type(EOS_type),           pointer    :: eqn_of_state !< A pointer to the equation of state
 
   ! Local variables
   real, dimension(remap_cs%nz + 1) :: zInterfaces
@@ -264,11 +264,11 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
     endif
 
     if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
-      call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), nz, &
+      call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), &
                               G%bathyT(i,j)*GV%m_to_H, sum(h(i,j,:)), &
                               zInterfaces, zScale=GV%m_to_H)
     elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
-      call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), nz, &
+      call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
                               GV%m_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
