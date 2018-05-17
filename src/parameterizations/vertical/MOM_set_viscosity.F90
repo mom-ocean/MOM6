@@ -46,6 +46,7 @@ use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
 use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
+use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
@@ -1791,7 +1792,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_cvmix_shear = .false. ;
+  use_kappa_shear = .false. ; use_cvmix_shear = .false.
   useKPP = .false. ; useEPBL = .false. ; use_cvmix_conv = .false. ;
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
@@ -1870,7 +1871,8 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   real    :: Kv_background
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
-  logical :: use_kappa_shear, adiabatic, differential_diffusion, use_omega
+  logical :: use_kappa_shear, adiabatic, use_omega
+  logical :: use_CVMix_ddiff
   type(OBC_segment_type), pointer :: segment  ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1893,8 +1895,8 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
-  CS%RiNo_mix = .false.
-  use_kappa_shear = .false. ; differential_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
+  CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
+  use_kappa_shear = .false. !; adiabatic = .false.  ! Needed? -AJA
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
@@ -1921,11 +1923,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
     CS%RiNo_mix = use_kappa_shear
-    call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differential_diffusion, &
-                 "If true, increase diffusivitives for temperature or salt \n"//&
-                 "based on double-diffusive paramaterization from MOM4/KPP.", &
-                 default=.false.)
+    use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
   endif
+
   call get_param(param_file, mdl, "PRANDTL_TURB", visc%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
                  "instability.", units="nondim", default=1.0)
@@ -2067,7 +2067,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
        Time, 'Rayleigh drag velocity at v points', 'm s-1')
   endif
 
-  if (differential_diffusion) then
+  if (use_CVMix_ddiff) then
     allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T = 0.0
     allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S = 0.0
   endif
