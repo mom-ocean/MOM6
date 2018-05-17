@@ -30,6 +30,7 @@ use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngr
 use MOM_variables, only : surface
 use MOM_forcing_type, only : forcing, allocate_forcing_type, MOM_forcing_chksum
 use MOM_forcing_type, only : mech_forcing, allocate_mech_forcing, MOM_mech_forcing_chksum
+use MOM_forcing_type, only : copy_common_forcing_fields
 use MOM_get_input, only : directories, Get_MOM_input
 use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze
 use MOM_EOS, only : EOS_type, EOS_init
@@ -456,7 +457,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement) then
      CS%time_step = time_step
      ! update shelf mass
-     if (CS%mass_from_file)    call update_shelf_mass(G, CS, Time, fluxes)
+     if (CS%mass_from_file) call update_shelf_mass(G, CS, Time, fluxes, forces)
   endif
 
    if (CS%DEBUG) then
@@ -880,7 +881,6 @@ subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
         if (associated(fluxes%lprec)) fluxes%lprec(i,j) = 0.0
         if (associated(fluxes%sens)) fluxes%sens(i,j) = 0.0
         if (associated(fluxes%frac_shelf_h)) fluxes%frac_shelf_h(i,j) = 0.0
-        if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = 0.0
         if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
 
         if (CS%lprec(i,j) / CS%density_ice * time_step .lt. CS%h_shelf (i,j)) then
@@ -1060,9 +1060,9 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 
       if (associated(fluxes%sens)) fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
       if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
-      if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
+      if (associated(forces%p_surf)) forces%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
       ! Same for IOB%p
-      if (associated(fluxes%p_surf_full) ) fluxes%p_surf_full(i,j) = &
+      if (associated(forces%p_surf_full) ) forces%p_surf_full(i,j) = &
            frac_area * CS%g_Earth * CS%mass_shelf(i,j)
 
     endif
@@ -1176,6 +1176,8 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
                                     max(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
   endif
+
+  call copy_common_forcing_fields(forces, fluxes, G)
 
 end subroutine add_shelf_flux
 
@@ -1792,14 +1794,18 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     endif
     if (present(fluxes)) then
       if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
-      if (associated(fluxes%p_surf)) &
-        fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + &
+    endif
+    if (present(forces)) then
+      if (associated(forces%p_surf)) &
+        forces%p_surf(i,j) = forces%p_surf(i,j) + &
           fluxes%frac_shelf_h(i,j) * (CS%g_Earth * CS%mass_shelf(i,j))
-      if (associated(fluxes%p_surf_full)) &
-        fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + &
+      if (associated(forces%p_surf_full)) &
+        forces%p_surf_full(i,j) = forces%p_surf_full(i,j) + &
           fluxes%frac_shelf_h(i,j) * (CS%g_Earth * CS%mass_shelf(i,j))
     endif
   enddo ; enddo
+  if (present(fluxes) .and. present(forces)) &
+    call copy_common_forcing_fields(forces, fluxes, G)
 
   if (CS%DEBUG) then
     call hchksum (fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
@@ -2061,11 +2067,12 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 end subroutine initialize_shelf_mass
 
 !> Updates the ice shelf mass using data from a file.
-subroutine update_shelf_mass(G, CS, Time, fluxes)
+subroutine update_shelf_mass(G, CS, Time, fluxes, forces)
   type(ocean_grid_type), intent(inout) :: G
   type(ice_shelf_CS),         pointer    :: CS
   type(time_type),            intent(in) :: Time
   type(forcing),       intent(inout) :: fluxes
+  type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
 
   ! local variables
   integer :: i, j, is, ie, js, je
@@ -2085,7 +2092,7 @@ subroutine update_shelf_mass(G, CS, Time, fluxes)
         if (associated(fluxes%lprec)) fluxes%lprec(i,j) = 0.0
         if (associated(fluxes%sens)) fluxes%sens(i,j) = 0.0
         if (associated(fluxes%frac_shelf_h)) fluxes%frac_shelf_h(i,j) = 0.0
-        if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = 0.0
+        if (associated(forces%p_surf)) forces%p_surf(i,j) = 0.0
         if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
      endif
      CS%area_shelf_h(i,j) = 0.0
@@ -2110,16 +2117,17 @@ subroutine update_shelf_mass(G, CS, Time, fluxes)
   call pass_var(CS%mass_shelf, G%domain)
 
 
-  ! update psurf and frac_shelf_h in fluxes
+  ! update psurf in forces and frac_shelf_h in fluxes
   do j=js,je ; do i=is,ie
-    if (associated(fluxes%p_surf)) &
-      fluxes%p_surf(i,j) = (CS%g_Earth * CS%mass_shelf(i,j))
-    if (associated(fluxes%p_surf_full)) &
-      fluxes%p_surf_full(i,j) = (CS%g_Earth * CS%mass_shelf(i,j))
+    if (associated(forces%p_surf)) &
+      forces%p_surf(i,j) = (CS%g_Earth * CS%mass_shelf(i,j))
+    if (associated(forces%p_surf_full)) &
+      forces%p_surf_full(i,j) = (CS%g_Earth * CS%mass_shelf(i,j))
     if (G%areaT(i,j) > 0.0) &
         fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
   enddo ; enddo
 
+  call copy_common_forcing_fields(forces, fluxes, G)
 
 end subroutine update_shelf_mass
 
@@ -6872,11 +6880,11 @@ end subroutine ice_shelf_advect_temp_y
 !       ! Same for -1*IOB%t_flux
 !     ! fluxes%salt_flux(i,j) = fluxes%salt_flux(i,j) + frac_area * CS%salt_flux(i,j)
 !     ! ! Same for IOB%salt_flux.
-!       fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + &
+!       forces%p_surf(i,j) = forces%p_surf(i,j) + &
 !                            frac_area * CS%g_Earth * CS%mass_shelf(i,j)
 !       ! Same for IOB%p
-!       if (associated(fluxes%p_surf_full)) fluxes%p_surf_full(i,j) = &
-!            fluxes%p_surf_full(i,j) + frac_area * CS%g_Earth * CS%mass_shelf(i,j)
+!       if (associated(forces%p_surf_full)) forces%p_surf_full(i,j) = &
+!            forces%p_surf_full(i,j) + frac_area * CS%g_Earth * CS%mass_shelf(i,j)
 !     endif
 !   enddo ; enddo
 
