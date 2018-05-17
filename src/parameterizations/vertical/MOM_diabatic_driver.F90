@@ -9,7 +9,8 @@ use MOM_debugging,           only : hchksum
 use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_CVMix_shear,         only : cvmix_shear_is_used
+use MOM_CVMix_shear,         only : CVMix_shear_is_used
+use MOM_CVMix_ddiff,         only : CVMix_ddiff_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
@@ -90,8 +91,9 @@ type, public:: diabatic_CS ; private
                                      !! in the surface boundary layer.
   logical :: use_kappa_shear         !< If true, use the kappa_shear module to find the
                                      !! shear-driven diapycnal diffusivity.
-  logical :: use_cvmix_shear         !< If true, use the CVMix module to find the
+  logical :: use_CVMix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
+  logical :: use_CVMix_ddiff         !< If true, use the CVMix double diffusion module.
   logical :: use_tidal_mixing        !< If true, activate tidal mixing diffusivity.
   logical :: use_cvmix_conv          !< If true, use the CVMix module to get enhanced
                                      !! mixing due to convection.
@@ -244,7 +246,7 @@ end type diabatic_CS
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
-integer :: id_clock_kpp
+integer :: id_clock_kpp, id_clock_CVMix_ddiff
 
 contains
 
@@ -721,10 +723,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   ! a diffusivity and happen before KPP.  But generally in MOM, we do not match
   ! KPP boundary layer to interior, so this diffusivity can be computed when convenient.
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
-    call cpu_clock_begin(id_clock_differential_diff)
+    call cpu_clock_begin(id_clock_CVMix_ddiff)
 
     call differential_diffuse_T_S(h, tv, visc, dt, G, GV)
-    call cpu_clock_end(id_clock_differential_diff)
+    call cpu_clock_end(id_clock_CVMix_ddiff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
 
@@ -736,7 +738,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
         Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K)
       enddo ; enddo ; enddo
     endif
-
 
   endif
 
@@ -1872,7 +1873,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   real    :: Kd
   integer :: num_mode
-  logical :: use_temperature, differentialDiffusion
+  logical :: use_temperature
   type(vardesc) :: vd
 
 ! This "include" declares and sets the variable "version".
@@ -1924,11 +1925,10 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, the diffusivity from ePBL is added to all\n"//&
                  "other diffusivities. Otherwise, the larger of kappa-\n"//&
                  "shear and ePBL diffusivities are used.", default=.true.)
-  call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
-                 "If true, apply parameterization of double-diffusion.", &
-                 default=.false. )
+  CS%use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
-  CS%use_cvmix_shear = cvmix_shear_is_used(param_file)
+  CS%use_CVMix_shear = CVMix_shear_is_used(param_file)
+
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
@@ -2384,8 +2384,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     id_clock_sponge = cpu_clock_id('(Ocean sponges)', grain=CLOCK_MODULE)
   id_clock_tridiag = cpu_clock_id('(Ocean diabatic tridiag)', grain=CLOCK_ROUTINE)
   id_clock_pass = cpu_clock_id('(Ocean diabatic message passing)', grain=CLOCK_ROUTINE)
-  id_clock_differential_diff = -1 ; if (differentialDiffusion) &
-    id_clock_differential_diff = cpu_clock_id('(Ocean differential diffusion)', grain=CLOCK_ROUTINE)
+  id_clock_CVMix_ddiff = -1 ; if (CS%use_CVMix_ddiff) &
+    id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion)', grain=CLOCK_ROUTINE)
 
   ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, GV, param_file, diag, CS%diabatic_aux_CSp, &
