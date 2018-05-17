@@ -441,7 +441,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
     call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, CS%tm_csp, &
-                                N2_lay, N2_int, Kd, Kd_int, CS%Kd_max)
+                                N2_lay, N2_int, Kd, Kd_int, CS%Kd_max, visc%Kv_slow)
 
     ! This adds the diffusion sustained by the energy extracted from the flow
     ! by the bottom drag.
