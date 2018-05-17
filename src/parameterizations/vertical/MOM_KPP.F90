@@ -1548,6 +1548,9 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
     enddo
   enddo
 
+  ! prevent OBL depths deeper than the bathymetric depth
+  where (CS%OBLdepth > G%bathyT) CS%OBLdepth = G%bathyT
+
   ! Update kOBL for smoothed OBL depths
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
