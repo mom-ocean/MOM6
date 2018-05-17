@@ -134,10 +134,12 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_temp_budget = -1
   integer :: id_NLT_saln_budget = -1
   integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
+  integer :: id_OBLdepth_original = -1
 
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
+  real, allocatable, dimension(:,:)   :: OBLdepth_original  !< Depth (positive) of OBL (m) without smoothing
   real, allocatable, dimension(:,:)   :: kOBL      !< Level (+fraction) of OBL extent
   real, allocatable, dimension(:,:)   :: OBLdepthprev !< previous Depth (positive) of OBL (m)
   real, allocatable, dimension(:,:,:) :: dRho      !< Bulk difference in density (kg/m3)
@@ -437,6 +439,10 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
       ! CMOR names are placeholders; must be modified by time period
       ! for CMOR compliance. Diag manager will be used for omlmax and
       ! omldamax.
+  CS%id_OBLdepth_original = register_diag_field('ocean_model', 'KPP_OBLdepth_original', diag%axesT1, Time, &
+      'Thickness of the surface Ocean Boundary Layer without smoothing calculated by [CVMix] KPP', 'meter', &
+      cmor_field_name='oml', cmor_long_name='ocean_mixed_layer_thickness_defined_by_mixing_scheme', &
+      cmor_units='m', cmor_standard_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   CS%id_BulkDrho = register_diag_field('ocean_model', 'KPP_BulkDrho', diag%axesTL, Time, &
       'Bulk difference in density used in Bulk Richardson number, as used by [CVMix] KPP', 'kg/m3')
   CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
@@ -498,6 +504,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%OBLdepth(:,:) = 0.
   allocate( CS%kOBL( SZI_(G), SZJ_(G) ) )
   CS%kOBL(:,:) = 0.
+  if (CS%id_OBLdepth_original > 0) allocate( CS%OBLdepth_original( SZI_(G), SZJ_(G) ) )
 
   allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -1063,6 +1070,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
   ! send diagnostics to post_data
   if (CS%id_OBLdepth > 0) call post_data(CS%id_OBLdepth, CS%OBLdepth,        CS%diag)
+  if (CS%id_OBLdepth_original > 0) call post_data(CS%id_OBLdepth_original,CS%OBLdepth_original,CS%diag)
   if (CS%id_BulkDrho > 0) call post_data(CS%id_BulkDrho, CS%dRho,            CS%diag)
   if (CS%id_BulkUz2  > 0) call post_data(CS%id_BulkUz2,  CS%Uz2,             CS%diag)
   if (CS%id_BulkRi   > 0) call post_data(CS%id_BulkRi,   CS%BulkRi,          CS%diag)
@@ -1516,6 +1524,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   call pass_var(CS%OBLdepth, G%Domain)
 
   OBLdepth_original = CS%OBLdepth
+  CS%OBLdepth_original = OBLdepth_original
 
   ! apply smoothing on OBL depth
   do j = G%jsc, G%jec
