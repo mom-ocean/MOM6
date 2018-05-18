@@ -4,6 +4,7 @@ module MOM_marine_ice
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_constants,     only : hlf
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_domains,       only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains,       only : TO_ALL, Omit_Corners
@@ -20,10 +21,17 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public add_berg_flux_to_shelf, marine_ice_init
+public iceberg_forces, iceberg_fluxes, marine_ice_init
 
 !> Control structure for MOM_marine_ice
 type, public :: marine_ice_CS ; private
+  real :: kv_iceberg          !< The viscosity of the icebergs in m2/s (for ice rigidity)
+  real :: berg_area_threshold !< Fraction of grid cell which iceberg must occupy
+                              !! so that fluxes below are set to zero. (0.5 is a
+                              !! good value to use.) Not applied for negative values.
+  real :: latent_heat_fusion  !< Latent heat of fusion
+  real :: density_iceberg     !< A typical density of icebergs in kg/m3 (for ice rigidity)
+
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
 end type marine_ice_CS
@@ -33,42 +41,30 @@ contains
 !> add_berg_flux_to_shelf adds rigidity and ice-area coverage due to icebergs
 !! to the forces type fields, and adds ice-areal coverage and modifies various
 !! thermodynamic fluxes due to the presence of icebergs.
-subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice, kv_ice, &
-                                  latent_heat_fusion, sfc_state, time_step, berg_area_threshold)
+subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
+                                  time_step, CS)
   type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
   type(mech_forcing),    intent(inout) :: forces  !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
-                                                  !! tracer and mass exchange forcing fields
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
-  real,                  intent(in)    :: kv_ice      !< The viscosity of ice, in m2 s-1.
-  real,                  intent(in)    :: density_ice !< A typical density of ice, in kg m-3.
-  real,                  intent(in)    :: latent_heat_fusion   !< The latent heat of fusion, in J kg-1.
   real,                  intent(in)    :: time_step   !< The coupling time step, in s.
-  real,                  intent(in)    :: berg_area_threshold !< Area threshold for zeroing fluxes below iceberg
-! Arguments:
-!  (in)      fluxes - A structure of surface fluxes that may be used.
-!  (in)      G - The ocean's grid structure.
-  real :: fraz      ! refreezing rate in kg m-2 s-1
-  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion, in kg J-1 s-1.
+  type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
+
   real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
   !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
   !which can then be used to change the top of ocean boundary condition used in
   !the ocean model. This routine is taken from the add_shelf_flux subroutine
   !within the ice shelf model.
 
+  if (.not.associated(CS)) return
+
   if (.not.(associated(forces%area_berg) .and.  associated(forces%mass_berg) ) ) return
 
   if (.not.(associated(forces%frac_shelf_u) .and. associated(forces%frac_shelf_v) .and. &
             associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) ) return
-
-  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
-            associated(fluxes%mass_berg) ) ) return
-  if (.not.(associated(fluxes%frac_shelf_h) .and. associated(fluxes%ustar_shelf)) ) return
 
   ! This section sets or augments the values of fields in forces.
   if (.not. use_ice_shelf) then
@@ -80,7 +76,7 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
 
   call pass_var(forces%area_berg, G%domain, TO_ALL+Omit_corners, halo=1, complete=.false.)
   call pass_var(forces%mass_berg, G%domain, TO_ALL+Omit_corners, halo=1, complete=.true.)
-  kv_rho_ice = kv_ice / density_ice
+  kv_rho_ice = CS%kv_iceberg / CS%density_iceberg
   do j=js,je ; do I=is-1,ie
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
       forces%frac_shelf_u(I,j) = forces%frac_shelf_u(I,j) + &
@@ -102,7 +98,36 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
   !### This halo update may be unnecessary. Test it.  -RWH
   call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
 
-  ! The remaining code sets or augments the values of fields in fluxes.
+end subroutine iceberg_forces
+
+!> iceberg_fluxes adds ice-area-coverage and modifies various
+!! thermodynamic fluxes due to the presence of icebergs.
+subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
+                          time_step, CS)
+  type(ocean_grid_type), intent(inout) :: G       !< The ocean's grid structure
+  type(forcing),         intent(inout) :: fluxes  !< A structure with pointers to themodynamic,
+                                                  !! tracer and mass exchange forcing fields
+  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
+  real,                  intent(in)    :: time_step   !< The coupling time step, in s.
+  type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
+
+  real :: fraz      ! refreezing rate in kg m-2 s-1
+  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion, in kg J-1 s-1.
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
+  !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
+  !which can then be used to change the top of ocean boundary condition used in
+  !the ocean model. This routine is taken from the add_shelf_flux subroutine
+  !within the ice shelf model.
+
+  if (.not.associated(CS)) return
+  if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
+            associated(fluxes%mass_berg) ) ) return
+  if (.not.(associated(fluxes%frac_shelf_h) .and. associated(fluxes%ustar_shelf)) ) return
+
 
   if (.not.(associated(fluxes%area_berg) .and. associated(fluxes%ustar_berg) .and. &
             associated(fluxes%mass_berg) ) ) return
@@ -116,10 +141,11 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
   endif ; enddo ; enddo
 
   !Zero'ing out other fluxes under the tabular icebergs
-  if (berg_area_threshold >= 0.) then
-    I_dt_LHF = 1.0 / (time_step * latent_heat_fusion)
+  if (CS%berg_area_threshold >= 0.) then
+    I_dt_LHF = 1.0 / (time_step * CS%latent_heat_fusion)
     do j=jsd,jed ; do i=isd,ied
-      if (fluxes%frac_shelf_h(i,j) > berg_area_threshold) then  !Only applying for ice shelf covering most of cell
+      if (fluxes%frac_shelf_h(i,j) > CS%berg_area_threshold) then
+        ! Only applying for ice shelf covering most of cell.
 
         if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
         if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
@@ -145,7 +171,7 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
     enddo ; enddo
   endif
 
-end subroutine add_berg_flux_to_shelf
+end subroutine iceberg_fluxes
 
 !> Initialize control structure for MOM_marine_ice
 subroutine marine_ice_init(Time, G, param_file, diag, CS)
@@ -153,7 +179,7 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
   type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Runtime parameter handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(marine_ice_CS),     pointer :: CS !< Control structure for MOM_marine_ice
+  type(marine_ice_CS),     pointer       :: CS   !< Pointer to the control structure for MOM_marine_ice
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_marine_ice"  ! This module's name.
@@ -166,6 +192,17 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
 
   ! Write all relevant parameters to the model log.
   call log_version(mdl, version)
+
+  call get_param(param_file, mdl, "KV_ICEBERG",  CS%kv_iceberg, &
+                 "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
+  call get_param(param_file, mdl, "DENSITY_ICEBERGS",  CS%density_iceberg, &
+                 "A typical density of icebergs.", units="kg m-3", default=917.0)
+  call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
+                 "The latent heat of fusion.", units="J/kg", default=hlf)
+  call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", CS%berg_area_threshold, &
+                 "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
+                 "below berg are set to zero. Not applied for negative \n"//&
+                 "values.", units="non-dim", default=-1.0)
 
 end subroutine marine_ice_init
 

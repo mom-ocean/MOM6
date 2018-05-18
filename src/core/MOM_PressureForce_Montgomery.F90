@@ -31,12 +31,12 @@ type, public :: PressureForce_Mont_CS ; private
   real    :: GFS_scale      !< Ratio between gravity applied to top interface
                             !! and the gravitational acceleration of the planet.
                             !! Usually this ratio is 1.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  real, pointer :: PFu_bc(:,:,:) => NULL()   ! Accelerations due to pressure
-  real, pointer :: PFv_bc(:,:,:) => NULL()   ! gradients deriving from density
-                                             ! gradients within layers, m s-2.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate
+                            !! the timing of diagnostic output.
+  real, pointer :: PFu_bc(:,:,:) => NULL()   !< Accelerations due to pressure
+  real, pointer :: PFv_bc(:,:,:) => NULL()   !< gradients deriving from density
+                                             !! gradients within layers, m s-2.
   integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
 end type PressureForce_Mont_CS
@@ -63,12 +63,14 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
                                                                 !! (equal to -dM/dy) in m/s2.
   type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
-  real, dimension(:,:),                     optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+  real, dimension(:,:),            optional, pointer     :: p_atm !< The pressure at the ice-ocean or
                                                                 !! atmosphere-ocean in Pa.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                   optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies,
                                                                 !! in m2 s-2 H-1.
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height, in m.
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: eta !< Free surface height, in m.
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     M, &          ! The Montgomery potential, M = (p/rho + gz) , in m2 s-2.
@@ -902,7 +904,7 @@ end subroutine PressureForce_Mont_init
 
 !> Deallocates the Montgomery-potential form of PGF control structure
 subroutine PressureForce_Mont_end(CS)
-  type(PressureForce_Mont_CS), pointer :: CS
+  type(PressureForce_Mont_CS), pointer :: CS  !< Control structure for Montgomery potential PGF
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_Mont_end
 
