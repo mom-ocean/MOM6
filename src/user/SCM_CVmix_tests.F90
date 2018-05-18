@@ -25,7 +25,7 @@ public SCM_CVMix_tests_buoyancy_forcing
 public SCM_CVMix_tests_CS
 
 !> Container for surface forcing parameters
-type SCM_CVMix_tests_CS ;
+type SCM_CVMix_tests_CS
 private
   logical :: UseWindStress  !< True to use wind stress
   logical :: UseHeatFlux  !< True to use heat flux
@@ -104,13 +104,13 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
       eta(K+1) = eta(K) - h(i,j,k)*GV%H_to_m ! Interface below layer (in m)
       zC = 0.5*( eta(K) + eta(K+1) )        ! Z of middle of layer (in m)
       DZ = min(0., zC + UpperLayerTempMLD)
-      if (DZ.ge.0.0) then ! in Layer 1
+      if (DZ >= 0.0) then ! in Layer 1
         T(i,j,k) = UpperLayerTemp
       else ! in Layer 2
         T(i,j,k) = LowerLayerTemp + LowerLayerdTdZ * DZ
       endif
       DZ = min(0., zC + UpperLayerSaltMLD)
-      if (DZ.ge.0.0) then ! in Layer 1
+      if (DZ >= 0.0) then ! in Layer 1
         S(i,j,k) = UpperLayerSalt
       else ! in Layer 2
         S(i,j,k) = LowerLayerSalt + LowerLayerdSdZ * DZ
@@ -245,7 +245,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
     ! by Rho0*Cp
     do J=Jsq,Jeq ; do i=is,ie
       fluxes%sens(i,J) = CS%surf_HF * CS%Rho0 * fluxes%C_p
-    enddo; enddo
+    enddo ; enddo
   endif
 
   if (CS%UseEvaporation) then
@@ -254,7 +254,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
     ! This therefore must be converted to mass flux
     ! by multiplying by density
       fluxes%evap(i,J) = CS%surf_evap * CS%Rho0
-    enddo; enddo
+    enddo ; enddo
   endif
 
   if (CS%UseDiurnalSW) then
@@ -265,7 +265,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
     ! Note diurnal cycle peaks at Noon.
       fluxes%sw(i,J) = CS%Max_sw * max(0.0,cos(2*PI*     &
            (time_type_to_real(DAY)/86400.-0.5))) * CS%RHO0 * fluxes%C_p
-    enddo; enddo
+    enddo ; enddo
   endif
 
 end subroutine SCM_CVMix_tests_buoyancy_forcing

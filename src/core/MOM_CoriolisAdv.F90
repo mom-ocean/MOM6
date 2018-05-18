@@ -290,6 +290,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         if (OBC%freeslip_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
           dudy(I,J) = 0.
         enddo ; endif
+        if (OBC%computed_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            dudy(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%dxCu(I,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            dudy(I,J) = 2.0*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dxCu(I,j+1)
+          endif
+        enddo ; endif
+        if (OBC%specified_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
+          endif
+        enddo ; endif
 
         ! Project thicknesses across OBC points with a no-gradient condition.
         do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
@@ -315,6 +329,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         enddo ; endif
         if (OBC%freeslip_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
           dvdx(I,J) = 0.
+        enddo ; endif
+        if (OBC%computed_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            dvdx(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%dyCv(i,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            dvdx(I,J) = 2.0*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dyCv(i+1,J)
+          endif
+        enddo ; endif
+        if (OBC%specified_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
+          endif
         enddo ; endif
 
         ! Project thicknesses across OBC points with a no-gradient condition.
@@ -521,7 +549,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           vhm = 10.0*vhc
         elseif (abs(vhc) > c1*abs(vhm)) then
           if (abs(vhc) < c2*abs(vhm)) then ; vhc = (3.0*vhc+(1.0-c2*3.0)*vhm)
-          else if (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
+          elseif (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
           else ; vhc = slope*vhc+(1.0-c3*slope)*vhm
           endif
         endif
@@ -832,7 +860,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
 
 
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
-  if (CS%KE_Scheme.eq.KE_ARAKAWA) then
+  if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
@@ -843,7 +871,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
                    +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
                 )*0.25*G%IareaT(i,j)
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_SIMPLE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme which does not take into account any geometric factors
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -853,7 +881,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

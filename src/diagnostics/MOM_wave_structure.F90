@@ -272,10 +272,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
-    do i=is,ie ; if(cn(i,j)>0.0)then
+    do i=is,ie ; if (cn(i,j)>0.0)then
       !----for debugging, remove later----
       ig = i + G%idg_offset ; jg = j + G%jdg_offset
-      !if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
+      !if (ig == CS%int_tide_source_x .and. jg == CS%int_tide_source_y) then
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
@@ -423,10 +423,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               a_diag(row) = gprime(K)*(-Igu(K))
               b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
               c_diag(row) = gprime(K)*(-Igl(K))
-              if(isnan(lam_z(row)))then  ; print *, "Wave_structure: lam_z(row) is NAN" ; endif
-              if(isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
-              if(isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
-              if(isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
+              if (isnan(lam_z(row)))then  ; print *, "Wave_structure: lam_z(row) is NAN" ; endif
+              if (isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
+              if (isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
+              if (isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
             enddo
             ! Populate top row of tridiagonal matrix
             K=2 ; row = K-1
@@ -457,9 +457,9 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
             ! Check to see if solver worked
             ig_stop = 0 ; jg_stop = 0
-            if(isnan(sum(w_strct(1:kc+1))))then
+            if (isnan(sum(w_strct(1:kc+1))))then
               print *, "Wave_structure: w_strct has a NAN at ig=", ig, ", jg=", jg
-              if(i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
+              if (i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
                 print *, "This is occuring at a halo point."
               endif
               ig_stop = ig ; jg_stop = jg
@@ -534,7 +534,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             CS%num_intfaces(i,j)      = nzm
 
             !----for debugging; delete later----
-            !if(ig .eq. ig_stop .and. jg .eq. jg_stop) then
+            !if (ig == ig_stop .and. jg == jg_stop) then
               !print *, 'cn(ig,jg)=', cn(i,j)
               !print *, "e_guess=", e_guess(1:kc-1)
               !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
@@ -598,7 +598,7 @@ end subroutine wave_structure
 !>    This subroutine solves a tri-diagonal system Ax=y using either the standard
 !! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
 !! "Hallberg substitution" (TDMA_H).
-subroutine tridiag_solver(a,b,c,h,y,method,x)
+subroutine tridiag_solver(a, b, c, h, y, method, x)
   real, dimension(:), intent(in)  :: a !< lower diagonal with first entry equal to zero.
   real, dimension(:), intent(in)  :: b !< middle diagonal.
   real, dimension(:), intent(in)  :: c !< upper diagonal with last entry equal to zero.
@@ -610,7 +610,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
            !! where a(k)=[-alpha(k-1/2)], b(k)=[alpha(k-1/2)+alpha(k+1/2) + h(k)],
            !! and c(k)=[-alpha(k+1/2)]. Only used with TDMA_H method.
   real, dimension(:), intent(in)  :: y !< vector of known values on right hand side.
-  character(len=*),   intent(in)  :: method
+  character(len=*),   intent(in)  :: method !< A string describing the algorithm to use
   real, dimension(:), intent(out) :: x !< vector of unknown values to solve for.
 
 !    This subroutine solves a tri-diagonal system Ax=y using either the standard
@@ -673,14 +673,14 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
 
     ! Check results - delete later
     !do j=1,nrow ; do i=1,nrow
-    !  if(i==j)then ;       A_check(i,j) = b(i)
-    !  elseif(i==j+1)then ; A_check(i,j) = a(i)
-    !  elseif(i==j-1)then ; A_check(i,j) = c(i)
+    !  if (i==j)then ;       A_check(i,j) = b(i)
+    !  elseif (i==j+1)then ; A_check(i,j) = a(i)
+    !  elseif (i==j-1)then ; A_check(i,j) = c(i)
     !  endif
     !enddo ; enddo
     !print *, 'A(2,1),A(2,2),A(1,2)=', A_check(2,1), A_check(2,2), A_check(1,2)
     !y_check = matmul(A_check,x)
-    !if(all(y_check .ne. y))then
+    !if (all(y_check /= y))then
     !  print *, "tridiag_solver: Uh oh, something's not right!"
     !  print *, "y=", y
     !  print *, "y_check=", y_check
@@ -713,12 +713,12 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Forward sweep
     do k=2,nrow-1
       beta = 1/(h(k)+alpha(k-1)*Q_prime+alpha(k))
-      if(isnan(beta))then ; print *, "Tridiag_solver: beta is NAN" ; endif
+      if (isnan(beta))then ; print *, "Tridiag_solver: beta is NAN" ; endif
       q(k) = beta*alpha(k)
       y_prime(k) = beta*(y(k)+alpha(k-1)*y_prime(k-1))
       Q_prime = beta*(h(k)+alpha(k-1)*Q_prime)
     enddo
-    if((h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow)) == 0.0)then
+    if ((h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow)) == 0.0)then
       call MOM_error(WARNING, "Tridiag_solver: this system is not stable; overriding beta(nrow).")
       beta = 1/(1e-15) ! place holder for unstable systems - delete later
     else

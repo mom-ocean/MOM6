@@ -57,7 +57,7 @@ type, public :: geothermal_CS ; private
                              ! W m-2.
   real    :: geothermal_thick !  The thickness over which geothermal heating is
                              ! applied, in m.
-  logical :: apply_geothermal !  If true, geothermal heating will be applied;
+  logical :: apply_geothermal !  If true, geothermal heating will be applied
                              ! otherwise GEOTHERMAL_SCALE has been set to 0 and
                              ! there is no heat to apply.
 

@@ -299,7 +299,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       h_pre(i,j,k) = h_new(i,j,k)
     enddo ; enddo ; enddo
 
-    if(CS%debug) then
+    if (CS%debug) then
       call hchksum(h_vol,"h_vol before advect",G%HI)
       call uvchksum("[uv]htr_sub before advect", uhtr_sub, vhtr_sub, G%HI)
       write(debug_msg, '(A,I4.4)') 'Before advect ', iter
@@ -607,7 +607,7 @@ real function remaining_transport_sum(CS, uhtr, vhtr)
     if (ABS(vhtr(i,J,k))>vh_neglect) then
       remaining_transport_sum = remaining_transport_sum + ABS(vhtr(i,J,k))
     endif
-  enddo; enddo; enddo
+  enddo ; enddo ; enddo
   call sum_across_PEs(remaining_transport_sum)
 
 end function remaining_transport_sum
@@ -852,15 +852,15 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
     do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
       eatr_sub(i,j,k) = eatr(i,j,k)
       ebtr_sub(i,j,k) = ebtr(i,j,k)
-    enddo; enddo ; enddo
+    enddo ; enddo ; enddo
 
     do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
       uhtr_sub(I,j,k) = uhtr(I,j,k)
-    enddo; enddo ; enddo
+    enddo ; enddo ; enddo
 
     do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
       vhtr_sub(i,J,k) = vhtr(i,J,k)
-    enddo; enddo ; enddo
+    enddo ; enddo ; enddo
 
 
     ! Calculate 3d mass transports to be used in this iteration
@@ -881,7 +881,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
         h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-      enddo; enddo; enddo
+      enddo ; enddo ; enddo
       call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
 
@@ -898,7 +898,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
         h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-      enddo; enddo; enddo
+      enddo ; enddo ; enddo
       call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
 
@@ -922,15 +922,15 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
     do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
       eatr(i,j,k) = eatr(i,j,k) - eatr_sub(i,j,k)
       ebtr(i,j,k) = ebtr(i,j,k) - ebtr_sub(i,j,k)
-    enddo; enddo ; enddo
+    enddo ; enddo ; enddo
 
     do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
       uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
-    enddo; enddo ; enddo
+    enddo ; enddo ; enddo
 
     do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
       vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
-    enddo; enddo ; enddo
+    enddo ; enddo ; enddo
 
     call pass_var(eatr,G%Domain)
     call pass_var(ebtr,G%Domain)
@@ -946,7 +946,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       sum_v = sum_v + abs(vhtr(i,J-1,k))+abs(vhtr(I,J,k))
       sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
           abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
     call sum_across_PEs(sum_abs_fluxes)
 
     print *, "Remaining u-flux, v-flux:", sum_u, sum_v
@@ -958,7 +958,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
     ! Switch order of Strang split every iteration
     z_first = .not. z_first
     x_before_y = .not. x_before_y
-  end do
+  enddo
 
 end subroutine offline_advection_layer
 
@@ -1025,26 +1025,26 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
     if (CS%G%mask2dT(i,j)<1.0) then
       CS%h_end(i,j,k) = CS%GV%Angstrom
     endif
-  enddo; enddo ; enddo
+  enddo ; enddo ; enddo
 
   do k=1,nz+1 ; do j=js,je ; do i=is,ie
     CS%Kd(i,j,k) = max(0.0, CS%Kd(i,j,k))
     if (CS%Kd_max>0.) then
       CS%Kd(i,j,k) = MIN(CS%Kd_max, CS%Kd(i,j,k))
     endif
-  enddo ; enddo ; enddo ;
+  enddo ; enddo ; enddo
 
   do k=1,nz ; do J=js-1,je ; do i=is,ie
     if (CS%G%mask2dCv(i,J)<1.0) then
       CS%vhtr(i,J,k) = 0.0
     endif
-  enddo; enddo ; enddo
+  enddo ; enddo ; enddo
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie
     if (CS%G%mask2dCu(I,j)<1.0) then
       CS%uhtr(I,j,k) = 0.0
     endif
-  enddo; enddo ; enddo
+  enddo ; enddo ; enddo
 
   if (CS%debug) then
     call uvchksum("[uv]htr_sub after update_offline_fields", CS%uhtr, CS%vhtr, CS%G%HI)

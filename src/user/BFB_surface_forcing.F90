@@ -202,12 +202,12 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
        ! density in kg m-3 that is being restored toward.
         if (G%geoLatT(i,j) < CS%lfrslat) then
             Temp_restore = CS%SST_s
-        else if (G%geoLatT(i,j) > CS%lfrnlat) then
+        elseif (G%geoLatT(i,j) > CS%lfrnlat) then
             Temp_restore = CS%SST_n
         else
             Temp_restore = (CS%SST_s - CS%SST_n)/(CS%lfrslat - CS%lfrnlat) * &
                     (G%geoLatT(i,j) - CS%lfrslat) + CS%SST_s
-        end if
+        endif
 
         density_restore = Temp_restore*CS%drho_dt + CS%Rho0
 

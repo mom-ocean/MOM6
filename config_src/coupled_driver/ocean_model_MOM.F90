@@ -585,7 +585,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                   Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
                   reset_therm=Ocn_fluxes_used)
  !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
-    
+
   elseif (OS%single_step_call) then
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else
@@ -685,9 +685,9 @@ end subroutine update_ocean_model
 ! </DESCRIPTION>
 !
 subroutine ocean_model_restart(OS, timestamp)
-  type(ocean_state_type),        pointer :: OS !< A pointer to the structure containing the
+  type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
                                                !! internal ocean state being saved to a restart file
-  character(len=*), intent(in), optional :: timestamp !< An optional timestamp string that should be
+  character(len=*), optional, intent(in) :: timestamp !< An optional timestamp string that should be
                                                !! prepended to the file name. (Currently this is unused.)
 
   if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
@@ -800,10 +800,11 @@ end subroutine ocean_model_save_restart
 
 subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
                                         gas_fields_ocn)
-  type(domain2D), intent(in)             :: input_domain
+  type(domain2D),          intent(in)    :: input_domain
   type(ocean_public_type), intent(inout) :: Ocean_sfc
-  type(diag_ctrl), intent(in)            :: diag
-  logical, intent(in), optional          :: maskmap(:,:)
+  type(diag_ctrl),         intent(in)    :: diag
+  logical, dimension(:,:), &
+                 optional, intent(in)    :: maskmap
   type(coupler_1d_bc_type), &
                  optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate
@@ -817,7 +818,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
-  if(PRESENT(maskmap)) then
+  if (PRESENT(maskmap)) then
      call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
   else
      call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
@@ -1078,9 +1079,9 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
   case('mask')
      array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
-!     do j=g_jsc,g_jec; do i=g_isc,g_iec
+!     do j=g_jsc,g_jec ; do i=g_isc,g_iec
 !        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
-!     enddo; enddo
+!     enddo ; enddo
   case('t_surf')
      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_pme')

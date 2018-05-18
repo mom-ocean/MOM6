@@ -1622,7 +1622,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
                               glb%ocn_state%dirs%restart_output_dir, .true.)
     ! Once we start using the ice shelf module, the following will be needed
     if (glb%ocn_state%use_ice_shelf) then
-      call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, glb%ocn_state%dirs%restart_output_dir, .true.)
+      call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, &
+                                  glb%ocn_state%dirs%restart_output_dir, .true.)
     endif
 
   endif
@@ -1675,7 +1676,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   type(cpl_indices),      intent(inout) :: ind !< Structure with MCT attribute vectors and indices
   logical,                intent(in)    :: sw_decomp !< controls if shortwave is
                                                      !!decomposed into four components
-  real(kind=8),           intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  real(kind=8), optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
 
   ! local variables
   type(time_type) :: Master_time !< This allows step_MOM to temporarily change
@@ -1732,7 +1733,8 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
     !  This assumes that the iceshelf and ocean are on the same grid. I hope this is true.
-    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
+    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg, &
+    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Indicate that there are new unused fluxes.
@@ -1752,7 +1754,8 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
+    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg, &
+    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Accumulate the forcing over time steps
@@ -1812,21 +1815,21 @@ end subroutine update_ocean_model
 !! the future.
 subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
                              c1, c2, c3, c4, restore_salt, restore_temp)
-  type(mech_forcing),         intent(inout)        :: forces !<  Driving mechanical forces
-  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes
-  type(time_type),            intent(in)           :: Time !< Model time
-  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid
-  type(surface_forcing_CS),   pointer              :: CS !< control structure returned by
-                                                   !! a previous call to surface_forcing_init
-  type(surface),              intent(in)           :: state !< control structure to ocean
-                                                   !! surface state fields.
-  real(kind=8),               intent(in)           :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
-  type(cpl_indices),          intent(inout)        :: ind !< Structure with MCT attribute vectors and indices
-  logical,                    intent(in)           :: sw_decomp !< controls if shortwave is
-                                                   !!decomposed into four components
-  real(kind=8),               intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-  logical, optional,          intent(in)            :: restore_salt, restore_temp !< Controls if salt and temp are
-                                                   !! restored
+  type(mech_forcing),         intent(inout) :: forces !<  Driving mechanical forces
+  type(forcing),              intent(inout) :: fluxes !< Surface fluxes
+  type(time_type),            intent(in)    :: Time !< Model time
+  type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid
+  type(surface_forcing_CS),   pointer       :: CS !< control structure returned by
+                                            !! a previous call to surface_forcing_init
+  type(surface),              intent(in)    :: state !< control structure to ocean
+                                            !! surface state fields.
+  real(kind=8),               intent(in)    :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
+  type(cpl_indices),          intent(inout) :: ind !< Structure with MCT attribute vectors and indices
+  logical,                    intent(in)    :: sw_decomp !< controls if shortwave is
+                                            !!decomposed into four components
+  real(kind=8),     optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  logical, optional,          intent(in)    :: restore_salt, restore_temp !< Controls if salt and temp are
+                                            !! restored
 
   ! local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &

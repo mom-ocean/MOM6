@@ -284,7 +284,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   do j=jsd,jed ; do i=isd,ied ; test(i,j,1) = 1.0 ; test(i,j,2) = 0.0 ; enddo ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     call create_group_pass(pass_En, CS%En(:,:,:,fr,m), G%domain)
-  enddo; enddo
+  enddo ; enddo
   call create_group_pass(pass_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
   call start_group_pass(pass_test, G%domain)
 
@@ -324,7 +324,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
         CS%En(i,j,a,fr,m) = 0.0
-        if(abs(CS%En(i,j,a,fr,m))>1.0)then! only print if large
+        if (abs(CS%En(i,j,a,fr,m))>1.0)then! only print if large
           print *, 'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g
           print *, 'En=',CS%En(i,j,a,fr,m)
           print *, 'Setting En to zero'
@@ -440,8 +440,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
         Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
         !! for debugging print profile, etc. Delete later
-        !if(id_g .eq. 260 .and. &
-        !   jd_g .eq. 50 .and. &
+        !if (id_g == 260 .and. &
+        !   jd_g == 50 .and. &
         !   tot_En_mode(i,j,1,1)>500.0) then
         !  print *, 'Profiles for mode ',m,' and frequency ',fr
         !  print *, 'id_g=', id_g, 'jd_g=', jd_g
@@ -654,17 +654,17 @@ subroutine sum_En(G, CS, En, label)
   call get_time(CS%Time, seconds)
   days = real(seconds) * Isecs_per_day
 
-  En_sum = 0.0;
+  En_sum = 0.0
   tmpForSumming = 0.0
   do a=1,CS%nAngle
     tmpForSumming = global_area_mean(En(:,:,a),G)*G%areaT_global
     En_sum = En_sum + tmpForSumming
   enddo
   En_sum_diff = En_sum - CS%En_sum
-  if (CS%En_sum .ne. 0.0) then
+  if (CS%En_sum /= 0.0) then
     En_sum_pdiff= (En_sum_diff/CS%En_sum)*100.0
   else
-    En_sum_pdiff= 0.0;
+    En_sum_pdiff= 0.0
   endif
   CS%En_sum = En_sum
   !! Print to screen
@@ -761,7 +761,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
     !  do a=1,CS%nAngle
     !    frac_per_sector = En(i,j,a,fr,m)/En_tot
     !    TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot
-    !    if(TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
+    !    if (TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
     !      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
     !    else
     !      call MOM_error(WARNING, "itidal_lowmode_loss: energy loss greater than avalable, "// &
@@ -796,10 +796,10 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   ! Arguments:
   !  (out)      TKE_loss_sum - total energy loss rate due to specified mechanism, in W m-2.
 
-  if(mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)   ! not used for mixing yet
-  if(mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)   ! not used for mixing yet
-  if(mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j) ! currently used for mixing
-  if(mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j) ! not used for mixing yet
+  if (mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)   ! not used for mixing yet
+  if (mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)   ! not used for mixing yet
+  if (mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j) ! currently used for mixing
+  if (mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j) ! not used for mixing yet
 
 end subroutine get_lowmode_loss
 
@@ -864,7 +864,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   enddo
 
   !### There should also be refraction due to cn.grad(grid_orientation).
-  CFL_ang(:,:,:) = 0.0;
+  CFL_ang(:,:,:) = 0.0
   do j=js,je
   ! Copy En into angle space with halos.
     do a=1,na ; do i=is,ie
@@ -920,10 +920,10 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
         call MOM_error(WARNING, "refract: CFL exceeds 1.", .true.)
         if (CFL_ang(i,j,A) > 0.0) then ; CFL_ang(i,j,A) = 1.0 ; else ; CFL_ang(i,j,A) = -1.0 ; endif
       endif
-    enddo; enddo
+    enddo ; enddo
 
     ! Advect in angular space
-    if(.not.use_PPMang) then
+    if (.not.use_PPMang) then
       ! Use simple upwind
       do  A=0,na ; do i=is,ie
         if (CFL_ang(i,j,A) > 0.0) then
@@ -931,7 +931,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
         else
           Flux_E(i,A) = CFL_ang(i,j,A) * En2d(i,A+1)
         endif
-      enddo; enddo
+      enddo ; enddo
     else
       ! Use PPM
       do i=is,ie
@@ -941,7 +941,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
 
   ! Update and copy back to En.
     do a=1,na ; do i=is,ie
-      !if(En2d(i,a)+(Flux_E(i,A-1)-Flux_E(i,A)) < 0.0)then ! for debugging
+      !if (En2d(i,a)+(Flux_E(i,A-1)-Flux_E(i,A)) < 0.0)then ! for debugging
       !  print *,"refract: OutFlux>Available" ; !stop
       !endif
       En(i,j,a) = En2d(i,a) + (Flux_E(i,A-1) - Flux_E(i,A))
@@ -1096,10 +1096,10 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
 
   if (CS%corner_adv) then
     ! IMPLEMENT CORNER ADVECTION IN HORIZONTAL--------------------
-    ! FIND AVERAGE GROUP VELOCITY (SPEED) AT CELL CORNERS;
+    ! FIND AVERAGE GROUP VELOCITY (SPEED) AT CELL CORNERS
     ! NOTE: THIS HAS NOT BE ADAPTED FOR REFLECTION YET (BDM)!!
     ! Fix indexing here later
-    speed(:,:) = 0;
+    speed(:,:) = 0
     do J=jsh-1,jeh ; do I=ish-1,ieh
       f2 = G%CoriolisBu(I,J)**2
       speed(I,J) = 0.25*(cn(i,j) + cn(i+1,j) + cn(i+1,j+1) + cn(i,j+1)) * &
@@ -1109,7 +1109,7 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
       ! Apply the propagation WITH CORNER ADVECTION/FINITE VOLUME APPROACH.
       LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie
       call propagate_corner_spread(En(:,:,a), a, NAngle, speed, dt, G, CS, LB)
-    end do ! a-loop
+    enddo ! a-loop
   else
     ! IMPLEMENT PPM ADVECTION IN HORIZONTAL-----------------------
     ! These could be in the control structure, as they do not vary.
@@ -1199,7 +1199,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   real :: TwoPi, Angle_size
   real :: energized_angle ! angle through center of current wedge
   real :: theta ! angle at edge of wedge
-  real :: Nsubrays     ! number of sub-rays for averaging;
+  real :: Nsubrays     ! number of sub-rays for averaging
                        ! count includes the two rays that bound the current wedge,
                        ! i.e. those at -dtheta/2 and +dtheta/2 from energized angle
   real :: I_Nsubwedges ! inverse of number of sub-wedges
@@ -1323,7 +1323,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
       aW = 0.0; aSW = 0.0; aS = 0.0; ! initialize areas
       aSE = 0.0; aE = 0.0; aC = 0.0; ! initialize areas
       if (0.0 <= theta .and. theta < 0.25*TwoPi) then
-          xCrn = x(I-1,J-1); yCrn = y(I-1,J-1);
+          xCrn = x(I-1,J-1); yCrn = y(I-1,J-1)
           ! west area
           a1 = (yN - yCrn)*(0.5*(xN + xCrn))
           a2 = (yCrn - yW)*(0.5*(xCrn + xW))
@@ -1349,7 +1349,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a4 = (yN - yNE)*(0.5*(xN + xNE))
           aC = a1 + a2 + a3 + a4
       elseif (0.25*TwoPi <= theta .and. theta < 0.5*TwoPi) then
-          xCrn = x(I,J-1); yCrn = y(I,J-1);
+          xCrn = x(I,J-1); yCrn = y(I,J-1)
           ! south area
           a1 = (yCrn - yS)*(0.5*(xCrn + xS))
           a2 = (yS - ySW)*(0.5*(xS + xSW))
@@ -1375,7 +1375,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a4 = (yNW - yN)*(0.5*(xNW + xN))
           aC = a1 + a2 + a3 + a4
       elseif (0.5*TwoPi <= theta .and. theta < 0.75*TwoPi) then
-          xCrn = x(I,J); yCrn = y(I,J);
+          xCrn = x(I,J); yCrn = y(I,J)
           ! east area
           a1 = (yE - ySE)*(0.5*(xE + xSE))
           a2 = (ySE - yS)*(0.5*(xSE + xS))
@@ -1401,7 +1401,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a4 = (yW - yCrn)*(0.5*(xW + xCrn))
           aC = a1 + a2 + a3 + a4
       elseif (0.75*TwoPi <= theta .and. theta <= 1.00*TwoPi) then
-          xCrn = x(I-1,J); yCrn = y(I-1,J);
+          xCrn = x(I-1,J); yCrn = y(I-1,J)
           ! north area
           a1 = (yNE - yE)*(0.5*(xNE + xE))
           a2 = (yE - yCrn)*(0.5*(xE + xCrn))
@@ -1413,7 +1413,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           a2 = (yCrn - yW)*(0.5*(xCrn + xW))
           a3 = (yW - yNW)*(0.5*(xW + xNW))
           a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aNW = a1 + a2 + a3 + a4;
+          aNW = a1 + a2 + a3 + a4
           ! west area
           a1 = (yCrn - yS)*(0.5*(xCrn + xS))
           a2 = (yS - ySW)*(0.5*(xS + xSW))
@@ -1436,7 +1436,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
     enddo ! m-loop
     ! update energy in cell
     En(i,j) = sum(E_new)/Nsubrays
-  enddo; enddo
+  enddo ; enddo
 end subroutine propagate_corner_spread
 
 ! #@# This subroutine needs a doxygen description
@@ -1519,7 +1519,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
-    !  if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
     !    print *,"propagate_x: OutFlux>Available" ; !stop
     !  endif
     !enddo
@@ -1588,7 +1588,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
     do j=jsh,jeh ; do i=ish,ieh
       Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx (J)
       Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx (J)
-      !if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+      !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
       !  print *,"propagate_y: OutFlux>Available prior to reflection" ; !stop
       !  print *,"flux_y_south=",flux_y(i,J-1)
       !  print *,"flux_y_north=",flux_y(i,J)
@@ -1616,7 +1616,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
-    !  if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
     !    print *,"propagate_y: OutFlux>Available" ; !stop
     !  endif
     !enddo
@@ -1768,7 +1768,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   isc = G%isc  ; iec = G%iec  ; jsc = G%jsc  ; jec = G%jec
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
 
-  TwoPi = 8.0*atan(1.0);
+  TwoPi = 8.0*atan(1.0)
   Angle_size = TwoPi / (real(NAngle))
 
   do a=1,NAngle
@@ -1790,7 +1790,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
       id_g = i + G%idg_offset
       ! redistribute energy in angular space if ray will hit boundary
       ! i.e., if energy is in a reflecting cell
-      if (angle_c(i,j) .ne. CS%nullangle) then
+      if (angle_c(i,j) /= CS%nullangle) then
         do a=1,NAngle
           if (En(i,j,a) > 0.0) then
             ! if ray is incident, keep specified boundary angle
@@ -1818,7 +1818,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
               endif
               a_r = nint(angle_r/Angle_size) + 1
               do while (a_r > Nangle) ; a_r = a_r - Nangle ; enddo
-              if (a .ne. a_r) then
+              if (a /= a_r) then
                 En_reflected(a_r) = part_refl(i,j)*En(i,j,a)
                 En(i,j,a)   = (1.0-part_refl(i,j))*En(i,j,a)
               endif
@@ -2069,7 +2069,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
         slp(i,j) = sign(1.,slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
                 ! * (G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j))
       endif
-    enddo; enddo
+    enddo ; enddo
 
     do j=jsl,jel ; do i=isl,iel
       ! Neighboring values should take into account any boundaries.  The 3
@@ -2081,7 +2081,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
       ! Left/right values following Eq. B2 in Lin 1994, MWR (132)
       h_l(i,j) = 0.5*( h_im1 + h_in(i,j) ) + oneSixth*( slp(i-1,j) - slp(i,j) )
       h_r(i,j) = 0.5*( h_ip1 + h_in(i,j) ) + oneSixth*( slp(i,j) - slp(i+1,j) )
-    enddo; enddo
+    enddo ; enddo
   endif
 
   call PPM_limit_pos(h_in, h_l, h_r, 0.0, G, isl, iel, jsl, jel)
@@ -2498,11 +2498,11 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
-    ! Compute the fixed part; units are [kg m-2] here;
+    ! Compute the fixed part; units are [kg m-2] here
     ! will be multiplied by N and En to get into [W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * h2(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   ! Read in prescribed coast/ridge/shelf angles from file
   call get_param(param_file, mdl, "REFL_ANGLE_FILE", refl_angle_file, &
@@ -2516,7 +2516,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
                      G%domain, timelevel=1)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if(is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
+    if (is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
   enddo ; enddo
   call pass_var(CS%refl_angle,G%domain)
 
@@ -2536,7 +2536,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   do j=jsd,jed
     do i=isd,ied
       ! flag cells with partial reflection
-      if (CS%refl_angle(i,j) .ne. CS%nullangle .and. &
+      if (CS%refl_angle(i,j) /= CS%nullangle .and. &
         CS%refl_pref(i,j) < 1.0 .and. CS%refl_pref(i,j) > 0.0) then
         CS%refl_pref_logical(i,j) = .true.
       endif
@@ -2556,7 +2556,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   do i=isd,ied; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
-  enddo; enddo
+  enddo ; enddo
 
   ! Read in prescribed land mask from file (if overwriting -BDM).
   ! This should be done in MOM_initialize_topography subroutine

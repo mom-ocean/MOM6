@@ -1421,7 +1421,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, optional,               intent(in)    :: NJPROC       !< Processor counts, required with
                                                                  !! static memory.
   integer, dimension(2), optional, intent(inout) :: min_halo     !< If present, this sets the
-                                        !! minimum halo size for this domain in the x- and y-
+                                        !! minimum halo size for this domain in the i- and j-
                                         !! directions, and returns the actual halo size used.
   character(len=*),      optional, intent(in)    :: domain_name  !< A name for this domain, "MOM"
                                                                  !! if missing.
@@ -1444,7 +1444,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !  (in,opt)  NIGLOBAL, NJGLOBAL - Total domain sizes, required with static memory.
 !  (in,opt)  NIPROC, NJPROC - Processor counts, required with static memory.
 !  (in,opt)  min_halo - If present, this sets the minimum halo size for this
-!                       domain in the x- and y- directions, and returns the
+!                       domain in the i- and j- directions, and returns the
 !                       actual halo size used.
 !  (in,opt)  domain_name - A name for this domain, "MOM" if missing.
 !  (in,opt)  include_name - A name for model's include file, "MOM_memory.h" if missing.
@@ -1717,7 +1717,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(njproc_nm), layout(2), &
-                 "The number of processors in the x-direction. With \n"//&
+                 "The number of processors in the x-direction. With \n"//& !### FIX THIS COMMENT
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(layout_nm), layout, &
@@ -1738,7 +1738,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call parse_mask_table(mask_table, MOM_dom%maskmap, dom_name)
   endif
 
-  !   Set up the I/O lay-out, and check that it uses an even multiple of the
+  !   Set up the I/O layout, and check that it uses an even multiple of the
   ! number of PEs in each direction.
   io_layout(:) = (/ 1, 1 /)
   call get_param(param_file, mdl, trim(io_layout_nm), io_layout, &
@@ -1751,8 +1751,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
          &"are not allowed in ")') io_layout(1)
     call MOM_error(FATAL, mesg//trim(IO_layout_nm))
   elseif (io_layout(1) > 0) then ; if (modulo(layout(1), io_layout(1)) /= 0) then
-    write(mesg,'("MOM_domains_init: The x-direction I/O-layout, IO_LAYOUT(1)=",i4, &
-         &", does not evenly divide the x-direction layout, NIPROC=,",i4,".")') &
+    write(mesg,'("MOM_domains_init: The i-direction I/O-layout, IO_LAYOUT(1)=",i4, &
+         &", does not evenly divide the i-direction layout, NIPROC=,",i4,".")') &
           io_layout(1),layout(1)
     call MOM_error(FATAL, mesg)
   endif ; endif
@@ -1762,8 +1762,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
          &"are not allowed in ")') io_layout(2)
     call MOM_error(FATAL, mesg//trim(IO_layout_nm))
   elseif (io_layout(2) /= 0) then ; if (modulo(layout(2), io_layout(2)) /= 0) then
-    write(mesg,'("MOM_domains_init: The y-direction I/O-layout, IO_LAYOUT(2)=",i4, &
-         &", does not evenly divide the y-direction layout, NJPROC=,",i4,".")') &
+    write(mesg,'("MOM_domains_init: The j-direction I/O-layout, IO_LAYOUT(2)=",i4, &
+         &", does not evenly divide the j-direction layout, NJPROC=,",i4,".")') &
           io_layout(2),layout(2)
     call MOM_error(FATAL, mesg)
   endif ; endif
@@ -1834,12 +1834,23 @@ end subroutine MOM_domains_init
 !! some properties of the new type to differ from the original one.
 subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                           domain_name)
-  type(MOM_domain_type),           intent(in)    :: MD_in
-  type(MOM_domain_type),           pointer       :: MOM_dom
-  integer, dimension(2), optional, intent(inout) :: min_halo
-  integer,               optional, intent(in)    :: halo_size
-  logical,               optional, intent(in)    :: symmetric
-  character(len=*),      optional, intent(in)    :: domain_name
+  type(MOM_domain_type), intent(in)    :: MD_in  !< An existing MOM_domain
+  type(MOM_domain_type), pointer       :: MOM_dom !< A pointer to a MOM_domain that will be
+                                  !! allocated if it is unassociated, and will have data
+                                  !! copied from MD_in
+  integer, dimension(2), &
+               optional, intent(inout) :: min_halo !< If present, this sets the
+                                  !! minimum halo size for this domain in the i- and j-
+                                  !! directions, and returns the actual halo size used.
+  integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
+                                  !! size for the domian in the i- and j-directions.
+                                  !! min_halo and halo_size can not both be present.
+  logical,     optional, intent(in)    :: symmetric !< If present, this specifies
+                                  !! whether the new domain is symmetric, regardless of
+                                  !! whether the macro SYMMETRIC_MEMORY_ is defined.
+  character(len=*), &
+               optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
+                                  !! if missing.
 
   integer :: global_indices(4)
   logical :: mask_table_exists
@@ -1915,12 +1926,21 @@ end subroutine clone_MD_to_MD
 !! the original one.
 subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
                            domain_name)
-  type(MOM_domain_type),           intent(in)    :: MD_in
-  type(domain2d),                  intent(inout) :: mpp_domain
-  integer, dimension(2), optional, intent(inout) :: min_halo
-  integer,               optional, intent(in)    :: halo_size
-  logical,               optional, intent(in)    :: symmetric
-  character(len=*),      optional, intent(in)    :: domain_name
+  type(MOM_domain_type), intent(in)    :: MD_in !< An existing MOM_domain to be cloned
+  type(domain2d),        intent(inout) :: mpp_domain !< The new mpp_domain to be set up
+  integer, dimension(2), &
+               optional, intent(inout) :: min_halo !< If present, this sets the
+                                  !! minimum halo size for this domain in the i- and j-
+                                  !! directions, and returns the actual halo size used.
+  integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
+                                  !! size for the domian in the i- and j-directions.
+                                  !! min_halo and halo_size can not both be present.
+  logical,     optional, intent(in)    :: symmetric !< If present, this specifies
+                                  !! whether the new domain is symmetric, regardless of
+                                  !! whether the macro SYMMETRIC_MEMORY_ is defined.
+  character(len=*), &
+               optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
+                                  !! if missing.
 
   integer :: global_indices(4), layout(2), io_layout(2)
   integer :: X_FLAGS, Y_FLAGS, niglobal, njglobal, nihalo, njhalo
@@ -1981,7 +2001,7 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
                              symmetric, local_indexing, index_offset)
   type(MOM_domain_type), &
-           intent(in)  :: Domain
+           intent(in)  :: Domain                 !< The MOM domain from which to extract information
   integer, intent(out) :: isc, iec, jsc, jec     !< The start & end indices of the computational
                                                  !! domain.
   integer, intent(out) :: isd, ied, jsd, jed     !< The start & end indices of the data domain.
@@ -2042,7 +2062,7 @@ end subroutine get_domain_extent
 
 !> Returns the global shape of h-point arrays
 subroutine get_global_shape(domain, niglobal, njglobal)
-  type(MOM_domain_type), intent(in)  :: domain !< MOM domain
+  type(MOM_domain_type), intent(in)  :: domain   !< MOM domain
   integer,               intent(out) :: niglobal !< i-index global size of h-point arrays
   integer,               intent(out) :: njglobal !< j-index global size of h-point arrays
 

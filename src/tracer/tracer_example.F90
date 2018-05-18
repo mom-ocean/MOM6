@@ -89,15 +89,15 @@ contains
 !> This subroutine is used to register tracer fields and subroutines
 !! to be used with MOM.
 function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),    intent(in)   :: HI   !< A horizontal index type structure.
+  type(hor_index_type),    intent(in)   :: HI   !< A horizontal index type structure
   type(verticalGrid_type), intent(in)   :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)   :: param_file !< A structure to parse for run-time parameters
   type(USER_tracer_example_CS), pointer :: CS   !< A pointer that is set to point to the control
                                                 !! structure for this module
   type(tracer_registry_type), pointer   :: tr_Reg !< A pointer that is set to point to the control
                                                   !! structure for the tracer advection and
-                                                  !! diffusion module.
-  type(MOM_restart_CS),       pointer   :: restart_CS !< A pointer to the restart control structure.
+                                                  !! diffusion module
+  type(MOM_restart_CS),       pointer   :: restart_CS !< A pointer to the restart control structure
 
 ! Local variables
   character(len=80)  :: name, longname
@@ -174,13 +174,13 @@ end function USER_register_tracer_example
 subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
-                                                            !! been read from a restart file.
-  type(time_type), target,            intent(in) :: day  !< Time of the start of the run.
+                                                         !! been read from a restart file.
+  type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                       intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(diag_ctrl), target,            intent(in) :: diag !< A structure that is used to regulate
+  type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
                                                          !! diagnostic output.
   type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
                                                          !! whether, where, and what open boundary
@@ -298,23 +298,25 @@ end subroutine USER_initialize_tracer
 !! The arguments to this subroutine are redundant in that
 !!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
-                                              !! fluid entrained from the layer above during this
-                                              !! call will be added, in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
-                                              !! fluid entrained from the layer below during this
-                                              !! call will be added, in m or kg m-2.
-  type(forcing),                      intent(in) :: fluxes !< A structure containing pointers to
-                                              !! any possible forcing fields.  Unused fields have NULL ptrs.
-  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(USER_tracer_example_CS),       pointer    :: CS   !< The control structure returned by a previous
-                                                         !! call to USER_register_tracer_example.
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: ea   !< an array to which the amount of fluid entrained
+                                              !! from the layer above during this call will be
+                                              !! added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: eb   !< an array to which the amount of fluid entrained
+                                              !! from the layer below during this call will be
+                                              !! added, in m or kg m-2.
+  type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
+                                              !! and tracer forcing fields.  Unused fields have NULL ptrs.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  type(USER_tracer_example_CS), pointer :: CS !< The control structure returned by a previous
+                                              !! call to USER_register_tracer_example.
 
 ! Local variables
   real :: hold0(SZI_(G))       ! The original topmost layer thickness,
@@ -402,12 +404,12 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
                                                               !! tracer, in kg times concentration units.
   type(USER_tracer_example_CS),       pointer       :: CS     !< The control structure returned by a
                                                               !! previous call to register_USER_tracer.
-  character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
-  character(len=*), dimension(:),     intent(out)   :: units  !< the units of the stocks calculated.
-  integer, optional,                  intent(in)    :: stock_index !< the coded index of a specific stock
-                                                                   !! being sought.
+  character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
+  character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.
+  integer, optional,                  intent(in)    :: stock_index !< The coded index of a specific stock
+                                                              !! being sought.
   integer                                           :: USER_tracer_stock !< Return value: the number of
-                                                                         !! stocks calculated here.
+                                                              !! stocks calculated here.
 
 ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, m
@@ -471,7 +473,8 @@ end subroutine USER_tracer_surface_state
 
 !> Clean up allocated memory at the end.
 subroutine USER_tracer_example_end(CS)
-  type(USER_tracer_example_CS), pointer :: CS
+  type(USER_tracer_example_CS), pointer :: CS !< The control structure returned by a previous
+                                              !! call to register_USER_tracer.
   integer :: m
 
   if (associated(CS)) then

@@ -10,8 +10,7 @@ use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid
 implicit none ; private
 
 !> Control structure containing required parameters for the HyCOM coordinate
-type, public :: hycom_CS
-  private
+type, public :: hycom_CS ; private
 
   !> Number of layers/levels in generated grid
   integer :: nk
@@ -40,7 +39,7 @@ contains
 subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS)
   type(hycom_CS),       pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in generated grid
-  real, dimension(nk),  intent(in) :: coordinateResolution !< Z-space thicknesses (m)
+  real, dimension(nk),  intent(in) :: coordinateResolution !< Nominal near-surface resolution (m)
   real, dimension(nk+1),intent(in) :: target_density !< Interface target densities (kg/m3)
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
@@ -55,8 +54,9 @@ subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp
   CS%interp_CS               = interp_CS
 end subroutine init_coord_hycom
 
+!> This subroutine deallocates memory in the control structure for the coord_hycom module
 subroutine end_coord_hycom(CS)
-  type(hycom_CS), pointer :: CS
+  type(hycom_CS), pointer :: CS !< Coordinate control structure
 
   ! nothing to do
   if (.not. associated(CS)) return
@@ -67,11 +67,12 @@ subroutine end_coord_hycom(CS)
   deallocate(CS)
 end subroutine end_coord_hycom
 
+!> This subroutine can be used to set the parameters for the coord_hycom module
 subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, interp_CS)
-  type(hycom_CS),                 pointer    :: CS
-  real, optional, dimension(:),   intent(in) :: max_interface_depths
-  real, optional, dimension(:),   intent(in) :: max_layer_thickness
-  type(interp_CS_type), optional, intent(in) :: interp_CS
+  type(hycom_CS),                 pointer    :: CS !< Coordinate control structure
+  real, dimension(:),   optional, intent(in) :: max_interface_depths !< Maximum depths of interfaces in m
+  real, dimension(:),   optional, intent(in) :: max_layer_thickness  !< Maximum thicknesses of layers in m
+  type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_hycom_params: CS not associated")
 

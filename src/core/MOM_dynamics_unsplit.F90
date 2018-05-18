@@ -166,49 +166,51 @@ contains
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE, Waves)
-  type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure.
-  type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: u      !< The zonal velocity, in m s-1.
+                           intent(inout) :: u      !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                    intent(inout) :: v      !< The meridional velocity, in m s-1.
+                           intent(inout) :: v      !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                    intent(inout) :: h      !< Layer thicknesses, in H.
-                                                            !! (usually m or kg m-2).
-  type(thermo_var_ptrs),            intent(in)    :: tv     !< A structure pointing to various
-                                                            !! thermodynamic variables.
-  type(vertvisc_type),              intent(inout) :: visc   !< A structure containing vertical
+                           intent(inout) :: h      !< Layer thicknesses, in H.
+                                                   !! (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure pointing to various
+                                                   !! thermodynamic variables.
+  type(vertvisc_type),     intent(inout) :: visc   !< A structure containing vertical
                                  !! viscosities, bottom drag viscosities, and related fields.
-  type(time_type),                  intent(in)    :: Time_local   !< The model time at the end
-                                                                  !! of the time step.
-  real,                             intent(in)    :: dt     !< The dynamics time step, in s.
-  type(mech_forcing),               intent(in)    :: forces !< A structure with the driving mechanical forces
-  real, dimension(:,:),             pointer       :: p_surf_begin !< A pointer (perhaps NULL) to the
+  type(time_type),         intent(in)    :: Time_local   !< The model time at the end
+                                                         !! of the time step.
+  real,                    intent(in)    :: dt     !< The dynamics time step, in s.
+  type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
+  real, dimension(:,:),    pointer       :: p_surf_begin !< A pointer (perhaps NULL) to the
                                  !! surface pressure at the beginning of this dynamic step, in Pa.
-  real, dimension(:,:),             pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the
+  real, dimension(:,:),    pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the
                                  !! surface pressure at the end of this dynamic step, in Pa.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: uh     !< The zonal volume or mass transport,
-                                                            !! in m3 s-1 or kg s-1.
+                           intent(inout) :: uh     !< The zonal volume or mass transport,
+                                                   !! in m3 s-1 or kg s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                    intent(inout) :: vh     !< The meridional volume or mass
-                                                            !! transport, in m3 s-1 or kg s-1.
+                           intent(inout) :: vh     !< The meridional volume or mass
+                                                   !! transport, in m3 s-1 or kg s-1.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: uhtr   !< he accumulated zonal volume or mass
-                                        !! transport since the last tracer advection, in m3 or kg.
+                           intent(inout) :: uhtr   !< he accumulated zonal volume or mass
+                                 !! transport since the last tracer advection, in m3 or kg.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                    intent(inout) :: vhtr   !< The accumulated meridional volume or
-                                  !! mass transport since the last tracer advection, in m3 or kg.
-  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: eta_av !< The time-mean free surface height or
-                                                            !! column mass, in m or kg m-2.
-  type(MOM_dyn_unsplit_CS),         pointer       :: CS     !< The control structure set up by
-                                                            !! initialize_dyn_unsplit.
-  type(VarMix_CS),                  pointer       :: VarMix !< A pointer to a structure with fields
-                                  !! that specify the spatially variable viscosities.
-  type(MEKE_type),                  pointer       :: MEKE   !< A pointer to a structure containing
-                                  !! fields related to the Mesoscale Eddy Kinetic Energy.
-  type(wave_parameters_CS), pointer, optional     :: Waves  !< A pointer to a structure containing
-                                  !! fields related to the surface wave conditions
+                           intent(inout) :: vhtr   !< The accumulated meridional volume or
+                                 !! mass transport since the last tracer advection, in m3 or kg.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(out)   :: eta_av !< The time-mean free surface height or
+                                                   !! column mass, in m or kg m-2.
+  type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
+                                                   !! initialize_dyn_unsplit.
+  type(VarMix_CS),         pointer       :: VarMix !< A pointer to a structure with fields
+                                 !! that specify the spatially variable viscosities.
+  type(MEKE_type),         pointer       :: MEKE   !< A pointer to a structure containing
+                                 !! fields related to the Mesoscale Eddy Kinetic Energy.
+  type(wave_parameters_CS), &
+                 optional, pointer     :: Waves  !< A pointer to a structure containing
+                                 !! fields related to the surface wave conditions
 
 ! Arguments: u - The input and output zonal velocity, in m s-1.
 !  (inout)   v - The input and output meridional velocity, in m s-1.
