@@ -484,13 +484,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
     endif
 
     if (CS%ML_mix_first > 0.0) then
-!  This subroutine
-!    (1) Cools the mixed layer.
-!    (2) Performs convective adjustment by mixed layer entrainment.
-!    (3) Heats the mixed layer and causes it to detrain to
-!        Monin-Obukhov depth or minimum mixed layer depth.
-!    (4) Uses any remaining TKE to drive mixed layer entrainment.
-!    (5) Possibly splits buffer layer into two isopycnal layers (when using isopycnal coordinate)
+    ! This subroutine:
+    ! (1) Cools the mixed layer.
+    ! (2) Performs convective adjustment by mixed layer entrainment.
+    ! (3) Heats the mixed layer and causes it to detrain to
+    !     Monin-Obukhov depth or minimum mixed layer depth.
+    ! (4) Uses any remaining TKE to drive mixed layer entrainment.
+    ! (5) Possibly splits buffer layer into two isopycnal layers (when using isopycnal coordinate)
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
 
       call cpu_clock_begin(id_clock_mixedlayer)
@@ -525,11 +525,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       if (showCallTree) call callTree_waypoint("done with 1st bulkmixedlayer (diabatic)")
       if (CS%debugConservation) call MOM_state_stats('1st bulkmixedlayer', u, v, h, tv%T, tv%S, G)
     endif
-  endif
+  endif ! end CS%bulkmixedlayer
 
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
+
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
@@ -586,7 +587,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
                               CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, GV, CS%int_tide_CSp)
     endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
-  endif
+  endif ! end CS%use_int_tides
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
