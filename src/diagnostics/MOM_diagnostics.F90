@@ -56,13 +56,14 @@ implicit none ; private
 
 public calculate_diagnostic_fields, register_time_deriv, write_static_fields
 public find_eta
-public MOM_diagnostics_init, MOM_diagnostics_end
-public register_surface_diags, post_surface_diagnostics
+public register_surface_diags, post_surface_dyn_diags, post_surface_thermo_diags
 public register_transport_diags, post_transport_diagnostics
+public MOM_diagnostics_init, MOM_diagnostics_end
 
 type, public :: diagnostics_CS ; private
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
-                                       !! monotonic for the purposes of calculating the equivalent barotropic wave speed.
+                                       !! monotonic for the purposes of calculating the equivalent
+                                       !! barotropic wave speed.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
                                        !! calculating the equivalent barotropic wave speed. (m)
 
@@ -343,7 +344,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       endif
     else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
-        if(associated(p_surf)) then ! Pressure loading at top of surface layer (Pa)
+        if (associated(p_surf)) then ! Pressure loading at top of surface layer (Pa)
           do i=is,ie
             pressure_1d(i) = p_surf(i,j)
           enddo
@@ -385,7 +386,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = gsw_pt_from_ct(tv%S(i,j,k),tv%T(i,j,k))
-      enddo; enddo ; enddo
+      enddo ; enddo ; enddo
       if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
     endif
@@ -402,7 +403,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
-      enddo; enddo ; enddo
+      enddo ; enddo ; enddo
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
       if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
     endif
@@ -690,15 +691,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
 end subroutine calculate_diagnostic_fields
 
-!> This subroutine finds location of R_in in an increasing ordered
+!> This subroutine finds the location of R_in in an increasing ordered
 !! list, Rlist, returning as k the element such that
 !! Rlist(k) <= R_in < Rlist(k+1), and where wt and wt_p are the linear
 !! weights that should be assigned to elements k and k+1.
 subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
-  real,     intent(in)    :: Rlist(:), R_in
-  integer,  intent(inout) :: k
-  integer,  intent(in)    :: nz
-  real,     intent(out)   :: wt, wt_p
+  real, dimension(:), &
+            intent(in)    :: Rlist !< The list of target densities, in kg m-3
+  real,     intent(in)    :: R_in !< The density being inserted into Rlist, in kg m-3
+  integer,  intent(inout) :: k    !< The value of k such that Rlist(k) <= R_in < Rlist(k+1)
+                                  !! The input value is a first guess
+  integer,  intent(in)    :: nz   !< The number of layers in Rlist
+  real,     intent(out)   :: wt   !< The weight of layer k for interpolation, nondim
+  real,     intent(out)   :: wt_p !< The weight of layer k+1 for interpolation, nondim
 
   ! This subroutine finds location of R_in in an increasing ordered
   ! list, Rlist, returning as k the element such that
@@ -717,19 +722,19 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
       if ((k_lower == 1) .or. (R_in >= Rlist(k_lower))) exit
       k_upper = k_lower
       inc = inc*2
-    end do
+    enddo
   else
     do
       k_upper = min(k_upper+inc, nz)
       if ((k_upper == nz) .or. (R_in < Rlist(k_upper))) exit
       k_lower = k_upper
       inc = inc*2
-    end do
+    enddo
   endif
 
   if ((k_lower == 1) .and. (R_in <= Rlist(k_lower))) then
     k = 1 ; wt = 1.0 ; wt_p = 0.0
-  else if ((k_upper == nz) .and. (R_in >= Rlist(k_upper))) then
+  elseif ((k_upper == nz) .and. (R_in >= Rlist(k_upper))) then
     k = nz-1 ; wt = 0.0 ; wt_p = 1.0
   else
     do
@@ -740,7 +745,7 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
       else
         k_lower = k_new
       endif
-    end do
+    enddo
 
 !   Uncomment this as a code check
 !    if ((R_in < Rlist(k_lower)) .or. (R_in >= Rlist(k_upper)) .or. (k_upper-k_lower /= 1)) &
@@ -931,8 +936,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_KE > 0) call post_data(CS%id_KE, CS%KE, CS%diag)
   endif
 
-  if(.not.G%symmetric) then
-    if(associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_CorAdv) .OR. &
+  if (.not.G%symmetric) then
+    if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_CorAdv) .OR. &
        associated(CS%KE_adv) .OR. associated(CS%KE_visc)  .OR. associated(CS%KE_horvisc).OR. &
        associated(CS%KE_dia) ) then
         call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
@@ -1148,9 +1153,46 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
+!> This routine posts diagnostics of various dynamic ocean surface quantities,
+!! including velocities, speed and sea surface height, at the time the ocean
+!! state is reported back to the caller
+subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
+  type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
+  type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
+  type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
+  type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: ssh !< Time mean surface height without corrections for
+                                              !! ice displacement (m)
+
+  real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
+  integer :: i, j, is, ie, js, je
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (IDs%id_ssh > 0) &
+    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
+
+  if (IDs%id_ssu > 0) &
+    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
+
+  if (IDs%id_ssv > 0) &
+    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
+
+  if (IDs%id_speed > 0) then
+    do j=js,je ; do i=is,ie
+      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
+                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
+    enddo ; enddo
+    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
+  endif
+
+end subroutine post_surface_dyn_diags
+
+
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
-subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
+subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
                                     ssh, ssh_ibc)
   type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
@@ -1181,10 +1223,6 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_ssh_ga, ssh_ga, diag)
   endif
 
-  I_time_int = 1.0 / dt_int
-  if (IDs%id_ssh > 0) &
-    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
-
   ! post the dynamic sea level, zos, and zossq.
   ! zos is ave_ssh with sea ice inverse barometer removed,
   ! and with zero global area mean.
@@ -1214,6 +1252,9 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     volo = global_area_integral(work_2d, G)
     call post_data(IDs%id_volo, volo, diag)
   endif
+
+  ! Use Adcroft's rule of reciprocals; it does the right thing here.
+  I_time_int = 0.0 ; if (dt_int > 0.0) I_time_int = 1.0 / dt_int
 
   ! post time-averaged rate of frazil formation
   if (associated(tv%frazil) .and. (IDs%id_fraz > 0)) then
@@ -1288,26 +1329,15 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_sss_sq, work_2d, diag, mask=G%mask2dT)
   endif
 
-  if (IDs%id_ssu > 0) &
-    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
-  if (IDs%id_ssv > 0) &
-    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
-
-  if (IDs%id_speed > 0) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
-                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
-    enddo ; enddo
-    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
-  endif
-
   call coupler_type_send_data(sfc_state%tr_fields, get_diag_time_end(diag))
 
-end subroutine post_surface_diagnostics
+end subroutine post_surface_thermo_diags
+
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, diag, dt_trans, diag_to_Z_CSp, Reg)
+subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, diag, dt_trans, &
+                                      diag_to_Z_CSp, Reg)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1352,7 +1382,7 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
     call post_data(IDs%id_umo_2d, umo2d, diag)
   endif
   if (IDs%id_umo > 0) then
-    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+    ! Convert to kg/s.
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       umo(I,j,k) = uhtr(I,j,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
@@ -1366,7 +1396,7 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
     call post_data(IDs%id_vmo_2d, vmo2d, diag)
   endif
   if (IDs%id_vmo > 0) then
-    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+    ! Convert to kg/s.
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       vmo(i,J,k) = vhtr(i,J,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
@@ -1375,7 +1405,8 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
 
   if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h = diag_pre_dyn%h_state)
   if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h = diag_pre_dyn%h_state)
-  if (IDs%id_dynamics_h > 0 ) call post_data(IDs%id_dynamics_h, diag_pre_dyn%h_state, diag, alt_h = diag_pre_dyn%h_state)
+  if (IDs%id_dynamics_h > 0) call post_data(IDs%id_dynamics_h, diag_pre_dyn%h_state, diag, &
+                                            alt_h = diag_pre_dyn%h_state)
   ! Post the change in thicknesses
   if (IDs%id_dynamics_h_tendency > 0) then
     h_tend(:,:,:) = 0.
@@ -2057,9 +2088,12 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
 
 end subroutine set_dependent_diagnostics
 
+!> Deallocate memory associated with the diagnostics module
 subroutine MOM_diagnostics_end(CS, ADp)
-  type(diagnostics_CS),   pointer       :: CS
-  type(accel_diag_ptrs),  intent(inout) :: ADp
+  type(diagnostics_CS),   pointer       :: CS  !< Control structure returned by a
+                                               !! previous call to diagnostics_init.
+  type(accel_diag_ptrs),  intent(inout) :: ADp !< structure with pointers to
+                                               !! accelerations in momentum equation.
   integer :: m
 
   if (associated(CS%e))          deallocate(CS%e)

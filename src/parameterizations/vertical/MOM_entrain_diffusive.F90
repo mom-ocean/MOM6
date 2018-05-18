@@ -736,7 +736,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
           F(i,k) = MIN(F(i,k), ds_dsp1(i,k)*( ((F(i,k-1) + &
               dsp1_ds(i,k-1)*F(i,k-1)) - F(i,k-2)) + (h(i,j,k-1) - Angstrom)))
           F(i,k) = MAX(F(i,k),MIN(minF(i,k),0.0))
-        else if (k == kb(i)+1) then
+        elseif (k == kb(i)+1) then
           F(i,k) = MIN(F(i,k), ds_dsp1(i,k)*( ((F(i,k-1) + eakb(i)) - &
               eb_kmb(i)) + (h(i,j,k-1) - Angstrom)))
           F(i,k) = MAX(F(i,k),MIN(minF(i,k),0.0))
@@ -791,7 +791,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 
               ea(i,j,k) = ea(i,j,k) - dsp1_ds(i,k)*F_cor
               eb(i,j,k) = eb(i,j,k) + F_cor
-            else if ((k==kb(i)) .and. (F(i,k) > 0.0)) then
+            elseif ((k==kb(i)) .and. (F(i,k) > 0.0)) then
               !   Rho_cor is the density anomaly that needs to be corrected,
               ! taking into account that the true potential density of the
               ! deepest buffer layer is not exactly what is returned as dS_kb.
@@ -817,7 +817,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 
               ea(i,j,k) = ea(i,j,k) + ea_cor
               eb(i,j,k) = eb(i,j,k) - (dS_kb(i) * I_dSkbp1(i)) * ea_cor
-            else if (k < kb(i)) then
+            elseif (k < kb(i)) then
               ! Repetative, unless ea(kb) has been corrected.
               ea(i,j,k) = ea(i,j,k+1)
             endif
@@ -1007,7 +1007,7 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
         ! elsewhere, so F should always be nonnegative.
         ea(i,j,k) = dsp1_ds(i,k)*F(i,k)
         eb(i,j,k) = F(i,k)
-      else if (k == kb(i)) then
+      elseif (k == kb(i)) then
         ea(i,j,k) = eakb(i)
         eb(i,j,k) = F(i,k)
       elseif (k == kb(i)-1) then
@@ -1513,7 +1513,10 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
 
 end subroutine determine_dSkb
 
-
+!>   Given an entrainment from below for layer kb, determine a consistent
+!! entrainment from above, such that dSkb * ea_kb = dSkbp1 * F_kb.  The input
+!! value of ea_kb is both the maximum value that can be obtained and the first
+!! guess of the iterations.  Ideally ea_kb should be an under-estimate
 subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
                          G, GV, CS, ea_kb, tol_in)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
@@ -1525,10 +1528,6 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   real, dimension(SZI_(G)),      intent(inout) :: ea_kb
   real,                optional, intent(in)    :: tol_in
 
-  !   Given an entrainment from below for layer kb, determine a consistent
-  ! entrainment from above, such that dSkb * ea_kb = dSkbp1 * F_kb.  The input
-  ! value of ea_kb is both the maximum value that can be obtained and the first
-  ! guess of the iterations.  Also, make sure that ea_kb is an under-estimate
   real :: max_ea, min_ea
   real :: err, err_min, err_max
   real :: derr_dea
@@ -1630,6 +1629,9 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
 end subroutine F_kb_to_ea_kb
 
 
+!>  This subroutine determines the entrainment from above by the top interior
+!! layer (labeled kb elsewhere) given an entrainment by the layer below it,
+!! constrained to be within the provided bounds.
 subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                            min_eakb, max_eakb, kmb, is, ie, do_i, G, GV, CS, Ent, &
                            error, err_min_eakb0, err_max_eakb0, F_kb, dFdfm_kb)
@@ -1667,19 +1669,19 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real, dimension(SZI_(G)),         intent(inout) :: Ent    !< The entrainment rate of the uppermost
                                                             !! interior layer, in H. The input value
                                                             !! is the first guess.
-  real, dimension(SZI_(G)), intent(out), optional :: error  !< The error (locally defined in this
+  real, dimension(SZI_(G)), optional, intent(out) :: error  !< The error (locally defined in this
                                                             !! routine) associated with the returned
                                                             !! solution.
-  real, dimension(SZI_(G)), intent(in),  optional :: err_min_eakb0, err_max_eakb0 !< The errors
+  real, dimension(SZI_(G)), optional, intent(in)  :: err_min_eakb0, err_max_eakb0 !< The errors
                                                             !! (locally defined) associated with
                                                             !! min_eakb and max_eakb when ea_kbp1
                                                             !! = 0, returned from a previous call
                                                             !! to this routine.
-  real, dimension(SZI_(G)), intent(out), optional :: F_kb   !< The entrainment from below by the
+  real, dimension(SZI_(G)), optional, intent(out) :: F_kb   !< The entrainment from below by the
                                                             !! uppermost interior layer
                                                             !! corresponding to the returned
                                                             !! value of Ent, in H.
-  real, dimension(SZI_(G)), intent(out), optional :: dFdfm_kb !< The partial derivative of F_kb with
+  real, dimension(SZI_(G)), optional, intent(out) :: dFdfm_kb !< The partial derivative of F_kb with
                                                             !! ea_kbp1, nondim.
 
 ! Arguments: h_bl - Layer thickness, with the top interior layer at k-index
@@ -1868,71 +1870,49 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
 
 end subroutine determine_Ea_kb
 
+!> Maximize F = ent*ds_kb*I_dSkbp1 in the range min_ent < ent < max_ent.
 subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
                         kmb, is, ie, G, GV, CS, maxF, ent_maxF, do_i_in, &
                         F_lim_maxent, F_thresh)
-  type(ocean_grid_type),        intent(in)  :: G        !< The ocean's grid structure.
-  type(verticalGrid_type),      intent(in)  :: GV       !< The ocean's vertical grid structure.
+  type(ocean_grid_type),      intent(in)  :: G        !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)  :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK_(G)), &
-                                intent(in)  :: h_bl     !< Layer thickness, in m or kg m-2
-                                                        !! (abbreviated as H below).
+                              intent(in)  :: h_bl     !< Layer thickness, in m or kg m-2
+                                                      !! (abbreviated as H below).
   real, dimension(SZI_(G),SZK_(G)), &
-                                 intent(in) :: Sref     !< Reference potential density (in kg m-3?).
+                              intent(in)  :: Sref     !< Reference potential density (in kg m-3?).
   real, dimension(SZI_(G),SZK_(G)), &
-                                intent(in)  :: Ent_bl   !< The average entrainment upward and
-                                                        !! downward across each interface around
-                                                        !! the buffer layers, in H.
-  real, dimension(SZI_(G)),     intent(in)  :: I_dSkbp1 !< The inverse of the difference in
-                                                        !! reference potential density across the
-                                                        !! base of the uppermost interior layer,
-                                                        !! in units of m3 kg-1.
-  real, dimension(SZI_(G)),     intent(in)  :: min_ent_in !< The minimum value of ent to search,
-                                                        !! in H.
-  real, dimension(SZI_(G)),     intent(in)  :: max_ent_in !< The maximum value of ent to search,
-                                                        !! in H.
-  integer,                      intent(in)  :: kmb
-  integer,                      intent(in)  :: is, ie   !< The range of i-indices to work on.
-  type(entrain_diffusive_CS),   pointer     :: CS       !< This module's control structure.
-  real, dimension(SZI_(G)),     intent(out) :: maxF     !< The maximum value of F
-                                                        !! = ent*ds_kb*I_dSkbp1 found in the range
-                                                        !! min_ent < ent < max_ent, in H.
-  real, dimension(SZI_(G)),     intent(out), &
-                                   optional :: ent_maxF !< The value of ent at that maximum, in H.
-  logical, dimension(SZI_(G)),  intent(in),  &
-                                   optional :: do_i_in  !< A logical array indicating which columns
-                                                        !! to work on.
-  real, dimension(SZI_(G)),     intent(out), &
-                                   optional :: F_lim_maxent !< If present, do not apply the limit in
-                                                        !! finding the maximum value, but return the
-                                                        !! limited value at ent=max_ent_in in this
-                                                        !! array, in H.
-  real, dimension(SZI_(G)),     intent(in),  &
-                                   optional :: F_thresh !< If F_thresh is present, return the first
-                                                        !! value found that has F > F_thresh, or
-                                                        !! the maximum.
-
-! Arguments: h_bl - Layer thickness, in m or kg m-2 (abbreviated as H below).
-!  (in)      Sref - Reference potential density (in kg m-3?)
-!  (in)      Ent_bl - The average entrainment upward and downward across
-!                     each interface around the buffer layers, in H.
-!  (in)      I_dSkbp1 - The inverse of the difference in reference potential
-!                       density across the base of the uppermost interior layer,
-!                       in units of m3 kg-1.
-!  (in)      min_ent_in - The minimum value of ent to search, in H.
-!  (in)      max_ent_in - The maximum value of ent to search, in H.
-!  (in)      is, ie - The range of i-indices to work on.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - This module's control structure.
-!  (out)     maxF - The maximum value of F = ent*ds_kb*I_dSkbp1 found in the
-!                   range min_ent < ent < max_ent, in H.
-!  (out,opt) ent_maxF - The value of ent at that maximum, in H.
-!  (in, opt) do_i_in - A logical array indicating which columns to work on.
-!  (out,opt) F_lim_maxent - If present, do not apply the limit in finding the
-!                           maximum value, but return the limited value at
-!                           ent=max_ent_in in this array, in H.
-!  (in, opt) F_thresh - If F_thresh is present, return the first value found
-!                       that has F > F_thresh, or the maximum.
+                              intent(in)  :: Ent_bl   !< The average entrainment upward and
+                                                      !! downward across each interface around
+                                                      !! the buffer layers, in H.
+  real, dimension(SZI_(G)),   intent(in)  :: I_dSkbp1 !< The inverse of the difference in
+                                                      !! reference potential density across the
+                                                      !! base of the uppermost interior layer,
+                                                      !! in units of m3 kg-1.
+  real, dimension(SZI_(G)),   intent(in)  :: min_ent_in !< The minimum value of ent to search,
+                                                      !! in H.
+  real, dimension(SZI_(G)),   intent(in)  :: max_ent_in !< The maximum value of ent to search,
+                                                      !! in H.
+  integer,                    intent(in)  :: kmb
+  integer,                    intent(in)  :: is, ie   !< The range of i-indices to work on.
+  type(entrain_diffusive_CS), pointer     :: CS       !< This module's control structure.
+  real, dimension(SZI_(G)),   intent(out) :: maxF     !< The maximum value of F
+                                                      !! = ent*ds_kb*I_dSkbp1 found in the range
+                                                      !! min_ent < ent < max_ent, in H.
+  real, dimension(SZI_(G)), &
+                    optional, intent(out) :: ent_maxF !< The value of ent at that maximum, in H.
+  logical, dimension(SZI_(G)), &
+                    optional, intent(in)  :: do_i_in  !< A logical array indicating which columns
+                                                      !! to work on.
+  real, dimension(SZI_(G)), &
+                    optional, intent(out) :: F_lim_maxent !< If present, do not apply the limit in
+                                                      !! finding the maximum value, but return the
+                                                      !! limited value at ent=max_ent_in in this
+                                                      !! array, in H.
+  real, dimension(SZI_(G)), &
+                    optional, intent(in)  :: F_thresh !< If F_thresh is present, return the first
+                                                      !! value found that has F > F_thresh, or
+                                                      !! the maximum.
 
 ! Maximize F = ent*ds_kb*I_dSkbp1 in the range min_ent < ent < max_ent.
 ! ds_kb may itself be limited to positive values in determine_dSkb, which gives
@@ -2109,7 +2089,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
             new_min_bound = .false. ! We have a new maximum bound.
           else ! This case would bracket a minimum.  Wierd.
              ! Unless the derivative indicates that there is a maximum near the
-             ! lower bound, try keeping the end with the larger value of F;
+             ! lower bound, try keeping the end with the larger value of F
              ! in a tie keep the minimum as the answer here will be compared
              ! with the maximum input value later.
              new_min_bound = .true.

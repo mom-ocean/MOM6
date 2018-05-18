@@ -22,7 +22,7 @@ use MOM_shortwave_abs,    only : optics_type
 use MOM_diag_mediator,    only : post_data
 use MOM_forcing_type,     only : forcing
 
-implicit none
+implicit none ; private
 
 public update_offline_from_files
 public update_offline_from_arrays
@@ -252,7 +252,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       else
         h2d(i,k) = GV%H_subroundoff
       endif
-    enddo; enddo;
+    enddo ; enddo
 
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
     ! does not deplete a cell
@@ -320,7 +320,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       else
         h2d(j,k) = GV%H_subroundoff
       endif
-    enddo; enddo;
+    enddo ; enddo
 
     ! Distribute flux evenly throughout a column
     do j=js-1,je
@@ -578,16 +578,16 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
 
     call diurnal_solar(G%geoLatT(i,j)*rad, G%geoLonT(i,j)*rad, Time_start, cosz=cosz_dt, &
                        fracday=fracday_dt, rrsun=rrsun_dt, dt_time=dt_here)
-    call daily_mean_solar (G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
+    call daily_mean_solar(G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
     diurnal_factor = cosz_dt*fracday_dt*rrsun_dt / &
                      max(1e-30, cosz_day*fracday_day*rrsun_day)
 
     i2 = i+i_off ; j2 = j+j_off
     fluxes%sw(i2,j2) = fluxes%sw(i2,j2) * diurnal_factor
     fluxes%sw_vis_dir(i2,j2) = fluxes%sw_vis_dir(i2,j2) * diurnal_factor
-    fluxes%sw_vis_dif (i2,j2) = fluxes%sw_vis_dif (i2,j2) * diurnal_factor
+    fluxes%sw_vis_dif(i2,j2) = fluxes%sw_vis_dif(i2,j2) * diurnal_factor
     fluxes%sw_nir_dir(i2,j2) = fluxes%sw_nir_dir(i2,j2) * diurnal_factor
-    fluxes%sw_nir_dif (i2,j2) = fluxes%sw_nir_dif (i2,j2) * diurnal_factor
+    fluxes%sw_nir_dif(i2,j2) = fluxes%sw_nir_dif(i2,j2) * diurnal_factor
   enddo ; enddo
 
 end subroutine offline_add_diurnal_sw
@@ -631,7 +631,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   integer :: i, j, k, is, ie, js, je, nz
   real    :: Initer_vert
 
-  do_ale = .false.;
+  do_ale = .false.
   if (present(do_ale_in) ) do_ale = do_ale_in
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -707,17 +707,17 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
         timelevel=ridx_sum)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
-    fluxes%sw_vis_dif (:,:) = fluxes%sw_vis_dir
+    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
     fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
-    fluxes%sw_nir_dif (:,:) = fluxes%sw_nir_dir
+    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir
     fluxes%sw = fluxes%sw_vis_dir + fluxes%sw_vis_dif + fluxes%sw_nir_dir + fluxes%sw_nir_dif
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)<1.0) then
         fluxes%sw(i,j) = 0.0
         fluxes%sw_vis_dir(i,j) = 0.0
         fluxes%sw_nir_dir(i,j) = 0.0
-        fluxes%sw_vis_dif (i,j) = 0.0
-        fluxes%sw_nir_dif (i,j) = 0.0
+        fluxes%sw_vis_dif(i,j) = 0.0
+        fluxes%sw_nir_dif(i,j) = 0.0
       endif
     enddo ; enddo
     call pass_var(fluxes%sw,G%Domain)

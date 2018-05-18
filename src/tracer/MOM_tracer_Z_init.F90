@@ -319,7 +319,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   mdl = "MOM_tracer_Z_init read_Z_edges: "
   tr_msg = trim(tr_name)//" in "//trim(filename)
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
+  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,mdl//" Difficulties opening "//trim(filename)//&
         " - "//trim(NF90_STRERROR(status)))

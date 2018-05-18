@@ -143,7 +143,7 @@ end subroutine MOM_thermo_chksum
 subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
   character(len=*),      intent(in) :: mesg !< A message that appears on the chksum lines.
   type(surface),         intent(inout) :: sfc !< transparent ocean surface state
-                                              !! structure shared with the calling routine;
+                                              !! structure shared with the calling routine
                                               !! data in this structure is intent out.
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   integer,     optional, intent(in) :: haloshift !< The width of halos to check (default 0).
@@ -200,7 +200,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                   optional, intent(in) :: pbce !< The baroclinic pressure anomaly in each layer
                                                !! due to free surface height anomalies, in
-                                               !! m2 s-2 H-1.                                                                         !! NULL.
+                                               !! m2 s-2 H-1.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                   optional, intent(in) :: u_accel_bt !< The zonal acceleration from terms in the
                                                      !! barotropic solver,in m s-2.

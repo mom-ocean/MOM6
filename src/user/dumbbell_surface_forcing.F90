@@ -6,7 +6,7 @@ module dumbbell_surface_forcing
 !*                                                                     *
 !*                                                                     *
 !*  This file contains subroutines for specifying surface dynamic      *
-!*  forcing for the dumbbell case.                                      *
+!*  forcing for the dumbbell case.                                     *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
@@ -162,7 +162,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
             ((CS%S_restore(i,j) - state%SSS(i,j)) / &
              (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
 
-        end if
+        endif
       enddo ; enddo
   endif
       ! end RESTOREBUOY
@@ -230,9 +230,11 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
   ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
 
   do j=js,je ; do i=is,ie
-    fluxes%p_surf(i,j) = CS%forcing_mask(i,j)* CS%slp_amplitude * G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
-    fluxes%p_surf_full(i,j) = CS%forcing_mask(i,j) * CS%slp_amplitude * G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
-  enddo; enddo
+    fluxes%p_surf(i,j) = CS%forcing_mask(i,j)* CS%slp_amplitude * &
+                         G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
+    fluxes%p_surf_full(i,j) = CS%forcing_mask(i,j) * CS%slp_amplitude * &
+                         G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
+  enddo ; enddo
 
 
 
@@ -251,10 +253,10 @@ subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
 end subroutine alloc_if_needed
 
 subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),                            intent(in) :: Time
-  type(ocean_grid_type),                      intent(in) :: G    !< The ocean's grid structure
-  type(param_file_type),                      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,                    intent(in) :: diag
+  type(time_type),                   intent(in) :: Time
+  type(ocean_grid_type),             intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),             intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(diag_ctrl), target,           intent(in) :: diag
   type(dumbbell_surface_forcing_CS), pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
@@ -337,7 +339,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
       if ((x>0.25)) then
         CS%forcing_mask(i,j) = 1
         CS%S_restore(i,j) = CS%S_surf + CS%S_range
-      else if ((x<-0.25)) then
+      elseif ((x<-0.25)) then
         CS%forcing_mask(i,j) = 1
         CS%S_restore(i,j) = CS%S_surf - CS%S_range
       endif

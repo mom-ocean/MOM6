@@ -618,19 +618,21 @@ end subroutine PressureForce_Mont_Bouss
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the free surface height.
 subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star)
-  type(ocean_grid_type),                intent(in)  :: G  !< Ocean grid structure
-  type(verticalGrid_type),              intent(in)  :: GV !< Vertical grid structure
+  type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
+  type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in H.
-  type(thermo_var_ptrs),                intent(in)  :: tv !< Thermodynamic variables
+  type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
   real,                                 intent(in)  :: g_Earth !< The gravitational acceleration, in m s-2.
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density, in kg m-3.
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
-                                                                 !! and the gravitational acceleration of the planet.
-                                                                 !! Usually this ratio is 1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
-                                                                !! to free surface height anomalies, in m2 H-1 s-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: rho_star !< The layer densities (maybe
-                                                                !! compressibility compensated), times g/rho_0, in m s-2.
+                                                            !! and the gravitational acceleration of the planet.
+                                                            !! Usually this ratio is 1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                        intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
+                                                            !! to free surface height anomalies, in m2 H-1 s-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              optional, intent(in) :: rho_star !< The layer densities (maybe compressibility
+                                                            !! compensated), times g/rho_0, in m s-2.
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer
                              ! thicknesses, in m-1.

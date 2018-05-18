@@ -1,6 +1,6 @@
 !> Implements the thermodynamic aspects of ocean / ice-shelf interactions,
-!  along with a crude placeholder for a later implementation of full
-!  ice shelf dynamics, all using the MOM framework and coding style.
+!!  along with a crude placeholder for a later implementation of full
+!!  ice shelf dynamics, all using the MOM framework and coding style.
 module MOM_ice_shelf
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -151,7 +151,8 @@ type, public :: ice_shelf_CS ; private
 !!! OVS !!!
     t_boundary_values => NULL(), &
 
-    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress - exact form depends on basal law exponent
+    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress -
+                ! exact form depends on basal law exponent
                 ! and/or whether flow is "hybridized" a la Goldberg 2011
     taub_beta_eff_lower_tri => NULL(), &
     taub_beta_eff_upper_tri => NULL(), &
@@ -234,7 +235,8 @@ type, public :: ice_shelf_CS ; private
                     ! ~ once a day (maybe longer) because it will depend on ocean values
                     ! that are averaged over this time interval, and the solve will begin
                     ! to lose meaning if it is done too frequently
-  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve; the counter will have to be stored
+  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve
+                                         ! the counter will have to be stored
   integer :: velocity_update_counter ! the "outer" timestep number
   integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)
 
@@ -243,7 +245,7 @@ type, public :: ice_shelf_CS ; private
   integer :: nonlin_solve_err_mode  ! 1: exit vel solve based on nonlin residual
                     ! 2: exit based on "fixed point" metric (|u - u_last| / |u| < tol where | | is infty-norm
   real    :: CFL_factor            ! in uncoupled run, how to limit subcycled advective timestep
-                      ! i.e. dt = CFL_factor * min (dx / u)
+                      ! i.e. dt = CFL_factor * min(dx / u)
   logical :: use_reproducing_sums !< use new reproducing sums of Bob & Alistair for
                                   !! global sums.
                                   !! NOTE: for this to work all tiles must have the same & of
@@ -312,9 +314,9 @@ function slope_limiter (num, denom)
   real :: slope_limiter
   real :: r
 
-  if (denom .eq. 0) then
+  if (denom == 0) then
     slope_limiter = 0
-  elseif (num*denom .le. 0) then
+  elseif (num*denom <= 0) then
     slope_limiter = 0
   else
     r = num/denom
@@ -411,7 +413,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   character(4) :: stepnum
   character(2) :: procnum
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, parameter :: c2_3 = 2.0/3.0
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3, iters_vel_solve
   real, parameter :: rho_fw = 1000.0 ! fresh water density
@@ -460,12 +462,12 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   endif
 
    if (CS%DEBUG) then
-     call hchksum (fluxes%frac_shelf_h, "frac_shelf_h before apply melting", G%HI, haloshift=0)
-     call hchksum (state%sst, "sst before apply melting", G%HI, haloshift=0)
-     call hchksum (state%sss, "sss before apply melting", G%HI, haloshift=0)
-     call hchksum (state%u, "u_ml before apply melting", G%HI, haloshift=0)
-     call hchksum (state%v, "v_ml before apply melting", G%HI, haloshift=0)
-     call hchksum (state%ocean_mass, "ocean_mass before apply melting", G%HI, haloshift=0)
+     call hchksum(fluxes%frac_shelf_h, "frac_shelf_h before apply melting", G%HI, haloshift=0)
+     call hchksum(state%sst, "sst before apply melting", G%HI, haloshift=0)
+     call hchksum(state%sss, "sss before apply melting", G%HI, haloshift=0)
+     call hchksum(state%u, "u_ml before apply melting", G%HI, haloshift=0)
+     call hchksum(state%v, "v_ml before apply melting", G%HI, haloshift=0)
+     call hchksum(state%ocean_mass, "ocean_mass before apply melting", G%HI, haloshift=0)
    endif
 
   do j=js,je
@@ -808,21 +810,22 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
 
     ! note time_step is [s] and lprec is [kg / m^2 / s]
 
-    call ice_shelf_advect (CS, time_step, CS%lprec, Time)
+    call ice_shelf_advect(CS, time_step, CS%lprec, Time)
 
     CS%velocity_update_sub_counter = CS%velocity_update_sub_counter+1
 
     if (CS%GL_couple .and. .not. CS%solo_ice_sheet) then
-      call update_OD_ffrac (CS, state%ocean_mass, CS%velocity_update_sub_counter, CS%nstep_velocity, CS%time_step, CS%velocity_update_time_step)
+      call update_OD_ffrac(CS, state%ocean_mass, CS%velocity_update_sub_counter, CS%nstep_velocity, &
+                           CS%time_step, CS%velocity_update_time_step)
     else
-      call update_OD_ffrac_uncoupled (CS)
+      call update_OD_ffrac_uncoupled(CS)
     endif
 
-    if (CS%velocity_update_sub_counter .eq. CS%nstep_velocity) then
+    if (CS%velocity_update_sub_counter == CS%nstep_velocity) then
 
       if (is_root_pe()) write(*,*) "ABOUT TO CALL VELOCITY SOLVER"
 
-      call ice_shelf_solve_outer (CS, CS%u_shelf, CS%v_shelf, 1, iters_vel_solve, Time)
+      call ice_shelf_solve_outer(CS, CS%u_shelf, CS%v_shelf, 1, iters_vel_solve, Time)
 
       CS%velocity_update_sub_counter = 0
 
@@ -864,10 +867,10 @@ end subroutine shelf_calc_flux
 
 !> Changes the thickness (mass) of the ice shelf based on sub-ice-shelf melting
 subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
-  type(ocean_grid_type),              intent(inout)    :: G
-  type(ice_shelf_CS),                 intent(inout)    :: CS
-  real,                               intent(in)  :: time_step
-  type(forcing),                      intent(inout) :: fluxes
+  type(ocean_grid_type), intent(inout)    :: G  !< The ocean's grid structure.
+  type(ice_shelf_CS),    intent(inout)    :: CS !< A pointer to the ice shelf control structure
+  real,                  intent(in)  :: time_step
+  type(forcing),         intent(inout) :: fluxes
 
   ! locals
   integer :: i, j
@@ -875,15 +878,15 @@ subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
   do j=G%jsc,G%jec
     do i=G%isc,G%iec
 
-      if ((CS%hmask(i,j) .eq. 1) .or. (CS%hmask(i,j) .eq. 2)) then
+      if ((CS%hmask(i,j) == 1) .or. (CS%hmask(i,j) == 2)) then
         ! first, zero out fluxes applied during previous time step
         if (associated(fluxes%lprec)) fluxes%lprec(i,j) = 0.0
         if (associated(fluxes%sens)) fluxes%sens(i,j) = 0.0
         if (associated(fluxes%frac_shelf_h)) fluxes%frac_shelf_h(i,j) = 0.0
         if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
 
-        if (CS%lprec(i,j) / CS%density_ice * time_step .lt. CS%h_shelf (i,j)) then
-           CS%h_shelf (i,j) = CS%h_shelf (i,j) - CS%lprec(i,j) / CS%density_ice * time_step
+        if (CS%lprec(i,j) / CS%density_ice * time_step < CS%h_shelf(i,j)) then
+           CS%h_shelf(i,j) = CS%h_shelf(i,j) - CS%lprec(i,j) / CS%density_ice * time_step
         else
            ! the ice is about to melt away
            ! in this case set thickness, area, and mask to zero
@@ -905,7 +908,7 @@ subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
     do j=G%jsd,G%jed
        do i=G%isd,G%ied
 
-         if ((CS%hmask(i,j) .eq. 1) .or. (CS%hmask(i,j) .eq. 2)) then
+         if ((CS%hmask(i,j) == 1) .or. (CS%hmask(i,j) == 2)) then
           CS%mass_shelf(i,j) = CS%h_shelf(i,j)*CS%density_ice
          endif
        enddo
@@ -914,8 +917,8 @@ subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
     call pass_var(CS%mass_shelf, G%domain)
 
     if (CS%DEBUG) then
-      call hchksum (CS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0)
-      call hchksum (CS%mass_shelf, "mass_shelf after change thickness using melt", G%HI, haloshift=0)
+      call hchksum(CS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0)
+      call hchksum(CS%mass_shelf, "mass_shelf after change thickness using melt", G%HI, haloshift=0)
     endif
 
 end subroutine change_thickness_using_melt
@@ -1088,7 +1091,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
        if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
          sponge_area = sponge_area + G%areaT(i,j)
        endif
-    enddo;  enddo
+    enddo ; enddo
 
     ! take into account changes in mass (or thickness) when imposing ice shelf mass
     if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement .and. &
@@ -1108,7 +1111,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 
           ! apply calving
           if (CS%min_thickness_simple_calve > 0.0) then
-             call ice_shelf_min_thickness_calve (CS,last_h_shelf,last_area_shelf_h,last_hmask)
+             call ice_shelf_min_thickness_calve(CS,last_h_shelf,last_area_shelf_h,last_hmask)
              ! convert to mass again
              last_mass_shelf = last_h_shelf * CS%density_ice
           endif
@@ -1124,7 +1127,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
                 shelf_mass1 = shelf_mass1 + (CS%mass_shelf(i,j) * CS%area_shelf_h(i,j))
 
              endif
-          enddo;  enddo
+          enddo ; enddo
           call mpp_sum(shelf_mass0); call mpp_sum(shelf_mass1)
           delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
 !          delta_mass_shelf = (shelf_mass1 - shelf_mass0)* &
@@ -1151,7 +1154,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
           fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! W /m^2
           fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! kg (salt)/(m^2 s)
        endif
-    enddo;  enddo
+    enddo ; enddo
 
     if (CS%DEBUG) then
      if (is_root_pe()) write(*,*)'Mean melt flux (kg/(m^2 s)),dt',mean_melt_flux,CS%time_step
@@ -1170,7 +1173,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   type(ocean_grid_type), pointer    :: ocn_grid
   type(time_type),    intent(inout)   :: Time
-  type(ice_shelf_CS), pointer         :: CS
+  type(ice_shelf_CS), pointer         :: CS !< A pointer to the ice shelf control structure
   type(diag_ctrl), target, intent(in) :: diag
   type(forcing),      optional, intent(inout) :: fluxes
   type(mech_forcing), optional, intent(inout) :: forces
@@ -1269,7 +1272,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "GROUNDING_LINE_COUPLE", CS%GL_couple, &
                  "THIS PARAMETER NEEDS A DESCRIPTION.", default=.false.)
     if (CS%GL_regularize) CS%GL_couple = .false.
-    if (CS%GL_regularize .and. (CS%n_sub_regularize.eq.0)) call MOM_error (FATAL, &
+    if (CS%GL_regularize .and. (CS%n_sub_regularize == 0)) call MOM_error (FATAL, &
       "GROUNDING_LINE_INTERP_SUBGRID_N must be a positive integer if GL regularization is used")
   endif
   call get_param(param_file, mdl, "SHELF_THERMO", CS%isthermo, &
@@ -1524,45 +1527,45 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   allocate( CS%exch_vel_s(isd:ied,jsd:jed) )  ; CS%exch_vel_s(:,:) = 0.0
   allocate( CS%exch_vel_t(isd:ied,jsd:jed) )  ; CS%exch_vel_t(:,:) = 0.0
 
-  allocate ( CS%h_shelf(isd:ied,jsd:jed) )   ; CS%h_shelf(:,:) = 0.0
-  allocate ( CS%hmask(isd:ied,jsd:jed) )   ; CS%hmask(:,:) = -2.0
+  allocate( CS%h_shelf(isd:ied,jsd:jed) )   ; CS%h_shelf(:,:) = 0.0
+  allocate( CS%hmask(isd:ied,jsd:jed) )   ; CS%hmask(:,:) = -2.0
 
 
   ! OVS vertically integrated Temperature
-  allocate ( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
-  allocate ( CS%t_boundary_values(isd:ied,jsd:jed) )   ; CS%t_boundary_values(:,:) = -15.0
-  allocate ( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
+  allocate( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
+  allocate( CS%t_boundary_values(isd:ied,jsd:jed) )   ; CS%t_boundary_values(:,:) = -15.0
+  allocate( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     ! DNG
-    allocate ( CS%u_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_shelf(:,:) = 0.0
-    allocate ( CS%v_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_shelf(:,:) = 0.0
-    allocate ( CS%u_boundary_values(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_boundary_values(:,:) = 0.0
-    allocate ( CS%v_boundary_values(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_boundary_values(:,:) = 0.0
-    allocate ( CS%h_boundary_values(isd:ied,jsd:jed) ) ; CS%h_boundary_values(:,:) = 0.0
-    allocate ( CS%thickness_boundary_values(isd:ied,jsd:jed) ) ; CS%thickness_boundary_values(:,:) = 0.0
-    allocate ( CS%ice_visc_bilinear(isd:ied,jsd:jed) ) ; CS%ice_visc_bilinear(:,:) = 0.0
-    allocate ( CS%ice_visc_lower_tri(isd:ied,jsd:jed) ) ; CS%ice_visc_lower_tri = 0.0
-    allocate ( CS%ice_visc_upper_tri(isd:ied,jsd:jed) ) ; CS%ice_visc_upper_tri = 0.0
-    allocate ( CS%u_face_mask(Isdq:Iedq,jsd:jed) ) ; CS%u_face_mask(:,:) = 0.0
-    allocate ( CS%v_face_mask(isd:ied,Jsdq:Jedq) ) ; CS%v_face_mask(:,:) = 0.0
-    allocate ( CS%u_face_mask_boundary(Isdq:Iedq,jsd:jed) ) ; CS%u_face_mask_boundary(:,:) = -2.0
-    allocate ( CS%v_face_mask_boundary(isd:ied,Jsdq:Jedq) ) ; CS%v_face_mask_boundary(:,:) = -2.0
-    allocate ( CS%u_flux_boundary_values(Isdq:Iedq,jsd:jed) ) ; CS%u_flux_boundary_values(:,:) = 0.0
-    allocate ( CS%v_flux_boundary_values(isd:ied,Jsdq:Jedq) ) ; CS%v_flux_boundary_values(:,:) = 0.0
-    allocate ( CS%umask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%umask(:,:) = -1.0
-    allocate ( CS%vmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%vmask(:,:) = -1.0
+    allocate( CS%u_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_shelf(:,:) = 0.0
+    allocate( CS%v_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_shelf(:,:) = 0.0
+    allocate( CS%u_boundary_values(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_boundary_values(:,:) = 0.0
+    allocate( CS%v_boundary_values(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_boundary_values(:,:) = 0.0
+    allocate( CS%h_boundary_values(isd:ied,jsd:jed) ) ; CS%h_boundary_values(:,:) = 0.0
+    allocate( CS%thickness_boundary_values(isd:ied,jsd:jed) ) ; CS%thickness_boundary_values(:,:) = 0.0
+    allocate( CS%ice_visc_bilinear(isd:ied,jsd:jed) ) ; CS%ice_visc_bilinear(:,:) = 0.0
+    allocate( CS%ice_visc_lower_tri(isd:ied,jsd:jed) ) ; CS%ice_visc_lower_tri = 0.0
+    allocate( CS%ice_visc_upper_tri(isd:ied,jsd:jed) ) ; CS%ice_visc_upper_tri = 0.0
+    allocate( CS%u_face_mask(Isdq:Iedq,jsd:jed) ) ; CS%u_face_mask(:,:) = 0.0
+    allocate( CS%v_face_mask(isd:ied,Jsdq:Jedq) ) ; CS%v_face_mask(:,:) = 0.0
+    allocate( CS%u_face_mask_boundary(Isdq:Iedq,jsd:jed) ) ; CS%u_face_mask_boundary(:,:) = -2.0
+    allocate( CS%v_face_mask_boundary(isd:ied,Jsdq:Jedq) ) ; CS%v_face_mask_boundary(:,:) = -2.0
+    allocate( CS%u_flux_boundary_values(Isdq:Iedq,jsd:jed) ) ; CS%u_flux_boundary_values(:,:) = 0.0
+    allocate( CS%v_flux_boundary_values(isd:ied,Jsdq:Jedq) ) ; CS%v_flux_boundary_values(:,:) = 0.0
+    allocate( CS%umask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%umask(:,:) = -1.0
+    allocate( CS%vmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%vmask(:,:) = -1.0
 
-    allocate ( CS%taub_beta_eff_bilinear(isd:ied,jsd:jed) ) ; CS%taub_beta_eff_bilinear(:,:) = 0.0
-    allocate ( CS%taub_beta_eff_upper_tri(isd:ied,jsd:jed) ) ; CS%taub_beta_eff_upper_tri(:,:) = 0.0
-    allocate ( CS%taub_beta_eff_lower_tri(isd:ied,jsd:jed) ) ; CS%taub_beta_eff_lower_tri(:,:) = 0.0
-    allocate ( CS%OD_rt(isd:ied,jsd:jed) ) ; CS%OD_rt(:,:) = 0.0
-    allocate ( CS%OD_av(isd:ied,jsd:jed) ) ; CS%OD_av(:,:) = 0.0
-    allocate ( CS%float_frac(isd:ied,jsd:jed) ) ; CS%float_frac(:,:) = 0.0
-    allocate ( CS%float_frac_rt(isd:ied,jsd:jed) ) ; CS%float_frac_rt(:,:) = 0.0
+    allocate( CS%taub_beta_eff_bilinear(isd:ied,jsd:jed) ) ; CS%taub_beta_eff_bilinear(:,:) = 0.0
+    allocate( CS%taub_beta_eff_upper_tri(isd:ied,jsd:jed) ) ; CS%taub_beta_eff_upper_tri(:,:) = 0.0
+    allocate( CS%taub_beta_eff_lower_tri(isd:ied,jsd:jed) ) ; CS%taub_beta_eff_lower_tri(:,:) = 0.0
+    allocate( CS%OD_rt(isd:ied,jsd:jed) ) ; CS%OD_rt(:,:) = 0.0
+    allocate( CS%OD_av(isd:ied,jsd:jed) ) ; CS%OD_av(:,:) = 0.0
+    allocate( CS%float_frac(isd:ied,jsd:jed) ) ; CS%float_frac(:,:) = 0.0
+    allocate( CS%float_frac_rt(isd:ied,jsd:jed) ) ; CS%float_frac_rt(:,:) = 0.0
 
     if (CS%calve_to_mask) then
-      allocate ( CS%calve_mask (isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
+      allocate( CS%calve_mask(isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
     endif
 
   endif
@@ -1663,29 +1666,29 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
     if (new_sim) then
       ! new simulation, initialize ice thickness as in the static case
-      call initialize_ice_thickness (CS%h_shelf, CS%area_shelf_h, CS%hmask, G, param_file)
+      call initialize_ice_thickness(CS%h_shelf, CS%area_shelf_h, CS%hmask, G, param_file)
 
     ! next make sure mass is consistent with thickness
     do j=G%jsd,G%jed
       do i=G%isd,G%ied
-        if ((CS%hmask(i,j) .eq. 1) .or. (CS%hmask(i,j) .eq. 2)) then
+        if ((CS%hmask(i,j) == 1) .or. (CS%hmask(i,j) == 2)) then
            CS%mass_shelf(i,j) = CS%h_shelf(i,j)*CS%density_ice
         endif
       enddo
     enddo
 
     if (CS%min_thickness_simple_calve > 0.0) then
-      call ice_shelf_min_thickness_calve (CS, CS%h_shelf, CS%area_shelf_h, CS%hmask)
+      call ice_shelf_min_thickness_calve(CS, CS%h_shelf, CS%area_shelf_h, CS%hmask)
     endif
 
     endif
 
-    !  else if (CS%shelf_mass_is_dynamic) then
+    !  elseif (CS%shelf_mass_is_dynamic) then
     !    call initialize_ice_shelf_boundary ( CS%u_face_mask_boundary, CS%v_face_mask_boundary, &
     !                                         CS%u_flux_boundary_values, CS%v_flux_boundary_values, &
     !                                         CS%u_boundary_values, CS%v_boundary_values, CS%h_boundary_values, &
 !                                         CS%hmask, G, param_file)
-  end if
+  endif
 
   if (CS%shelf_mass_is_dynamic .and. .not. CS%override_shelf_movement) then
     ! the only reason to initialize boundary conds is if the shelf is dynamic
@@ -1695,17 +1698,17 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     !MJH                                     CS%u_boundary_values, CS%v_boundary_values, CS%h_boundary_values, &
     !MJH                                     CS%hmask, G, param_file)
 
-  end if
+  endif
 
   if (new_sim .and. (.not. (CS%override_shelf_movement .and. CS%mass_from_file))) then
 
     ! This model is initialized internally or from a file.
-    call initialize_ice_thickness (CS%h_shelf, CS%area_shelf_h, CS%hmask, G, param_file)
+    call initialize_ice_thickness(CS%h_shelf, CS%area_shelf_h, CS%hmask, G, param_file)
 
     ! next make sure mass is consistent with thickness
     do j=G%jsd,G%jed
       do i=G%isd,G%ied
-        if ((CS%hmask(i,j) .eq. 1) .or. (CS%hmask(i,j) .eq. 2)) then
+        if ((CS%hmask(i,j) == 1) .or. (CS%hmask(i,j) == 2)) then
           CS%mass_shelf(i,j) = CS%h_shelf(i,j)*CS%density_ice
         endif
       enddo
@@ -1730,26 +1733,26 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
       if (.not. G%symmetric) then
         do j=G%jsd,G%jed
           do i=G%isd,G%ied
-            if (((i+G%idg_offset) .eq. (G%domain%nihalo+1)).and.(CS%u_face_mask(i-1,j).eq.3)) then
-              CS%u_shelf (i-1,j-1) = CS%u_boundary_values (i-1,j-1)
-              CS%u_shelf (i-1,j) = CS%u_boundary_values (i-1,j)
+            if (((i+G%idg_offset) == (G%domain%nihalo+1)).and.(CS%u_face_mask(i-1,j) == 3)) then
+              CS%u_shelf(i-1,j-1) = CS%u_boundary_values(i-1,j-1)
+              CS%u_shelf(i-1,j) = CS%u_boundary_values(i-1,j)
             endif
-            if (((j+G%jdg_offset) .eq. (G%domain%njhalo+1)).and.(CS%v_face_mask(i,j-1).eq.3)) then
-              CS%u_shelf (i-1,j-1) = CS%u_boundary_values (i-1,j-1)
-              CS%u_shelf (i,j-1) = CS%u_boundary_values (i,j-1)
+            if (((j+G%jdg_offset) == (G%domain%njhalo+1)).and.(CS%v_face_mask(i,j-1) == 3)) then
+              CS%u_shelf(i-1,j-1) = CS%u_boundary_values(i-1,j-1)
+              CS%u_shelf(i,j-1) = CS%u_boundary_values(i,j-1)
             endif
           enddo
         enddo
       endif
 
-      call pass_var (CS%OD_av,G%domain)
-      call pass_var (CS%float_frac,G%domain)
-      call pass_var (CS%ice_visc_bilinear,G%domain)
-      call pass_var (CS%taub_beta_eff_bilinear,G%domain)
+      call pass_var(CS%OD_av,G%domain)
+      call pass_var(CS%float_frac,G%domain)
+      call pass_var(CS%ice_visc_bilinear,G%domain)
+      call pass_var(CS%taub_beta_eff_bilinear,G%domain)
       call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
-      call pass_var (CS%area_shelf_h,G%domain)
-      call pass_var (CS%h_shelf,G%domain)
-      call pass_var (CS%hmask,G%domain)
+      call pass_var(CS%area_shelf_h,G%domain)
+      call pass_var(CS%h_shelf,G%domain)
+      call pass_var(CS%hmask,G%domain)
 
       if (is_root_pe()) PRINT *, "RESTORING ICE SHELF FROM FILE!!!!!!!!!!!!!"
     endif
@@ -1767,7 +1770,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call cpu_clock_begin(id_clock_pass)
     call pass_var(G%bathyT, G%domain)
     call pass_var(CS%hmask, G%domain)
-    call update_velocity_masks (CS)
+    call update_velocity_masks(CS)
     call cpu_clock_end(id_clock_pass)
   endif
 
@@ -1792,7 +1795,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call copy_common_forcing_fields(forces, fluxes, G)
 
   if (CS%DEBUG) then
-    call hchksum (fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
+    call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
   endif
 
   if (present(forces) .and. .not. CS%solo_ice_sheet) then
@@ -1854,11 +1857,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
       enddo
     enddo
 
-    call pass_var (CS%calve_mask,G%domain)
+    call pass_var(CS%calve_mask,G%domain)
   endif
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
-!    call init_boundary_values (CS, time, CS%input_flux, CS%input_thickness, new_sim)
+!    call init_boundary_values(CS, time, CS%input_flux, CS%input_thickness, new_sim)
 
     if (.not. CS%isthermo) then
       CS%lprec(:,:) = 0.0
@@ -1867,8 +1870,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
     if (new_sim) then
       if (is_root_pe()) print *,"NEW SIM: initialize velocity"
-      call update_OD_ffrac_uncoupled (CS)
-      call ice_shelf_solve_outer (CS, CS%u_shelf, CS%v_shelf, 1, iters, Time)
+      call update_OD_ffrac_uncoupled(CS)
+      call ice_shelf_solve_outer(CS, CS%u_shelf, CS%v_shelf, 1, iters, Time)
 
 !      write (procnum,'(I2)') mpp_pe()
 
@@ -1964,10 +1967,10 @@ end subroutine initialize_ice_shelf
 !> Initializes shelf mass based on three options (file, zero and user)
 subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure.
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(ice_shelf_CS),    pointer    :: CS
-  logical, optional            :: new_sim
+  type(ice_shelf_CS),    pointer    :: CS !< A pointer to the ice shelf control structure
+  logical,     optional, intent(in) :: new_sim !< If present and false, this run is being restarted
 
   integer :: i, j, is, ie, js, je
   logical :: read_shelf_area, new_sim_2
@@ -1977,11 +1980,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
   character(len=40)  :: mdl = "MOM_ice_shelf"
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  if (.not. present(new_sim)) then
-    new_sim_2 = .true.
-  else
-    new_sim_2 = .false.
-  endif
+  new_sim_2 = .true. ; if (present(new_sim)) new_sim_2 = new_sim
 
   call get_param(param_file, mdl, "ICE_SHELF_CONFIG", config, &
                  "A string that specifies how the ice shelf is \n"//&
@@ -2053,8 +2052,8 @@ end subroutine initialize_shelf_mass
 
 !> Updates the ice shelf mass using data from a file.
 subroutine update_shelf_mass(G, CS, Time, fluxes, forces)
-  type(ocean_grid_type), intent(inout) :: G
-  type(ice_shelf_CS),         pointer    :: CS
+  type(ocean_grid_type), intent(inout) :: G   !< The ocean's grid structure.
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   type(time_type),            intent(in) :: Time
   type(forcing),       intent(inout) :: fluxes
   type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
@@ -2062,12 +2061,6 @@ subroutine update_shelf_mass(G, CS, Time, fluxes, forces)
   ! local variables
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  ! first, zero out fluxes applied during previous time step
-  do j=js,je; do i=is,ie
-
-
-  enddo; enddo
 
   call time_interp_external(CS%id_read_mass, Time, CS%mass_shelf)
 
@@ -2093,7 +2086,7 @@ subroutine update_shelf_mass(G, CS, Time, fluxes, forces)
   !                            CS%hmask, CS%grid, CS%user_CS, Time, .true.)
 
   if (CS%min_thickness_simple_calve > 0.0) then
-      call ice_shelf_min_thickness_calve (CS, CS%h_shelf, CS%area_shelf_h, CS%hmask)
+    call ice_shelf_min_thickness_calve(CS, CS%h_shelf, CS%area_shelf_h, CS%hmask)
   endif
 
   call pass_var(CS%area_shelf_h, G%domain)
@@ -2116,8 +2109,8 @@ subroutine update_shelf_mass(G, CS, Time, fluxes, forces)
 
 end subroutine update_shelf_mass
 
-subroutine initialize_diagnostic_fields (CS, FE, Time)
-  type(ice_shelf_CS), pointer    :: CS
+subroutine initialize_diagnostic_fields(CS, FE, Time)
+  type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
   integer             :: FE
   type(time_type),            intent(in) :: Time
 
@@ -2138,19 +2131,19 @@ subroutine initialize_diagnostic_fields (CS, FE, Time)
 
   do j=jsd,jed
     do i=isd,ied
-      OD = G%bathyT(i,j) - rhoi/rhow * h_shelf (i,j)
-      if (OD.ge.0) then
+      OD = G%bathyT(i,j) - rhoi/rhow * h_shelf(i,j)
+      if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
-        OD_av (i,j) = OD
+        OD_av(i,j) = OD
         float_frac(i,j) = 0.
       else
-        OD_av (i,j) = 0.
+        OD_av(i,j) = 0.
         float_frac(i,j) = 1.
       endif
     enddo
   enddo
 
-  call ice_shelf_solve_outer (CS, CS%u_shelf, CS%v_shelf, FE, iters, dummy_time)
+  call ice_shelf_solve_outer(CS, CS%u_shelf, CS%v_shelf, FE, iters, dummy_time)
 
 end subroutine initialize_diagnostic_fields
 
@@ -2191,7 +2184,7 @@ end subroutine ice_shelf_save_restart
 
 
 subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),   pointer    :: CS
+  type(ice_shelf_CS),   pointer    :: CS !< A pointer to the ice shelf control structure
   real,                 intent(in) :: time_step
   real, dimension(:,:), pointer    :: melt_rate
   type(time_type),      intent(in) :: Time
@@ -2219,10 +2212,10 @@ subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
   ! ###Perhaps flux_enter should be changed into u-face and v-face
   ! ###fluxes, which can then be used in halo updates, etc.
   !
-  !   from left neighbor:   flux_enter (:,:,1)
-  !   from right neighbor:  flux_enter (:,:,2)
-  !   from bottom neighbor: flux_enter (:,:,3)
-  !   from top neighbor:    flux_enter (:,:,4)
+  !   from left neighbor:   flux_enter(:,:,1)
+  !   from right neighbor:  flux_enter(:,:,2)
+  !   from bottom neighbor: flux_enter(:,:,3)
+  !   from top neighbor:    flux_enter(:,:,4)
   !
   !  THESE ARE NOT CONSISTENT ==> FIND OUT WHAT YOU IMPLEMENTED
 
@@ -2250,50 +2243,50 @@ subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
-  flux_enter (:,:,:) = 0.0
+  flux_enter(:,:,:) = 0.0
 
-  h_after_uflux (:,:) = 0.0
-  h_after_vflux (:,:) = 0.0
+  h_after_uflux(:,:) = 0.0
+  h_after_vflux(:,:) = 0.0
 !   if (is_root_pe()) write(*,*) "ice_shelf_advect called"
 
   do j=jsd,jed
     do i=isd,ied
       thick_bd = CS%thickness_boundary_values(i,j)
-      if (thick_bd .ne. 0.0) then
+      if (thick_bd /= 0.0) then
           CS%h_shelf(i,j) = CS%thickness_boundary_values(i,j)
       endif
     enddo
   enddo
 
-  call ice_shelf_advect_thickness_x (CS, time_step/spy, CS%h_shelf, h_after_uflux, flux_enter)
+  call ice_shelf_advect_thickness_x(CS, time_step/spy, CS%h_shelf, h_after_uflux, flux_enter)
 
 !  call enable_averaging(time_step,Time,CS%diag)
- ! call pass_var (h_after_uflux, G%domain)
+ ! call pass_var(h_after_uflux, G%domain)
 !  if (CS%id_h_after_uflux > 0) call post_data(CS%id_h_after_uflux, h_after_uflux, CS%diag)
 !  call disable_averaging(CS%diag)
 
-  call ice_shelf_advect_thickness_y (CS, time_step/spy, h_after_uflux, h_after_vflux, flux_enter)
+  call ice_shelf_advect_thickness_y(CS, time_step/spy, h_after_uflux, h_after_vflux, flux_enter)
 
 !  call enable_averaging(time_step,Time,CS%diag)
-!  call pass_var (h_after_vflux, G%domain)
+!  call pass_var(h_after_vflux, G%domain)
 !  if (CS%id_h_after_vflux > 0) call post_data(CS%id_h_after_vflux, h_after_vflux, CS%diag)
 !  call disable_averaging(CS%diag)
 
   do j=jsd,jed
     do i=isd,ied
-      if (CS%hmask(i,j) .eq. 1) then
-        CS%h_shelf (i,j) = h_after_vflux(i,j)
+      if (CS%hmask(i,j) == 1) then
+        CS%h_shelf(i,j) = h_after_vflux(i,j)
       endif
     enddo
   enddo
 
   if (CS%moving_shelf_front) then
-    call shelf_advance_front (CS, flux_enter)
+    call shelf_advance_front(CS, flux_enter)
     if (CS%min_thickness_simple_calve > 0.0) then
-      call ice_shelf_min_thickness_calve (CS, CS%h_shelf, CS%area_shelf_h, CS%hmask)
+      call ice_shelf_min_thickness_calve(CS, CS%h_shelf, CS%area_shelf_h, CS%hmask)
     endif
     if (CS%calve_to_mask) then
-      call calve_to_mask (CS, CS%h_shelf, CS%area_shelf_h, CS%hmask, CS%calve_mask)
+      call calve_to_mask(CS, CS%h_shelf, CS%area_shelf_h, CS%hmask, CS%calve_mask)
     endif
   endif
 
@@ -2303,12 +2296,12 @@ subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
 
   !call change_thickness_using_melt(CS,G,time_step, fluxes)
 
-  call update_velocity_masks (CS)
+  call update_velocity_masks(CS)
 
 end subroutine ice_shelf_advect
 
-subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
-  type(ice_shelf_CS),                     pointer       :: CS
+subroutine ice_shelf_solve_outer(CS, u, v, FE, iters, time)
+  type(ice_shelf_CS),                     pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u, v
   integer,                                intent(in)    :: FE
   integer,                                intent(out)   :: iters
@@ -2323,8 +2316,8 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   real                     :: err_max, err_tempu, err_tempv, err_init, area, max_vel, tempu, tempv, rhoi, rhow
   real, pointer, dimension(:,:,:,:) :: Phi
   real, pointer, dimension(:,:,:,:,:,:) :: Phisub
-  real, dimension (8,4)       :: Phi_temp
-  real, dimension (2,2)       :: X,Y
+  real, dimension(8,4)       :: Phi_temp
+  real, dimension(2,2)       :: X,Y
   character(2)                :: iternum
   character(2)                :: procnum, numproc
 
@@ -2336,18 +2329,18 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   rhoi = CS%density_ice
   rhow = CS%density_ocean_avg
-  allocate(TAUDX (isdq:iedq,jsdq:jedq) ) ; TAUDX(:,:)=0
-  allocate(TAUDY (isdq:iedq,jsdq:jedq) ) ; TAUDY(:,:)=0
-  allocate(u_prev_iterate (isdq:iedq,jsdq:jedq) )
-  allocate(v_prev_iterate (isdq:iedq,jsdq:jedq) )
-  allocate(u_bdry_cont (isdq:iedq,jsdq:jedq) ) ; u_bdry_cont(:,:)=0
-  allocate(v_bdry_cont (isdq:iedq,jsdq:jedq) ) ; v_bdry_cont(:,:)=0
-  allocate(Au (isdq:iedq,jsdq:jedq) ) ; Au(:,:)=0
-  allocate(Av (isdq:iedq,jsdq:jedq) ) ; Av(:,:)=0
-  allocate(err_u (isdq:iedq,jsdq:jedq) )
-  allocate(err_v (isdq:iedq,jsdq:jedq) )
-  allocate(u_last (isdq:iedq,jsdq:jedq) )
-  allocate(v_last (isdq:iedq,jsdq:jedq) )
+  allocate(TAUDX(isdq:iedq,jsdq:jedq) ) ; TAUDX(:,:)=0
+  allocate(TAUDY(isdq:iedq,jsdq:jedq) ) ; TAUDY(:,:)=0
+  allocate(u_prev_iterate(isdq:iedq,jsdq:jedq) )
+  allocate(v_prev_iterate(isdq:iedq,jsdq:jedq) )
+  allocate(u_bdry_cont(isdq:iedq,jsdq:jedq) ) ; u_bdry_cont(:,:)=0
+  allocate(v_bdry_cont(isdq:iedq,jsdq:jedq) ) ; v_bdry_cont(:,:)=0
+  allocate(Au(isdq:iedq,jsdq:jedq) ) ; Au(:,:)=0
+  allocate(Av(isdq:iedq,jsdq:jedq) ) ; Av(:,:)=0
+  allocate(err_u(isdq:iedq,jsdq:jedq) )
+  allocate(err_v(isdq:iedq,jsdq:jedq) )
+  allocate(u_last(isdq:iedq,jsdq:jedq) )
+  allocate(v_last(isdq:iedq,jsdq:jedq) )
 
   ! need to make these conditional on GL interpolation
   allocate(float_cond (G%isd:G%ied,G%jsd:G%jed)) ; float_cond(:,:)=0
@@ -2372,7 +2365,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
     jsumstart = JSUMSTART_INT_
   endif
 
-  call calc_shelf_driving_stress (CS, TAUDX, TAUDY, CS%OD_av, FE)
+  call calc_shelf_driving_stress(CS, TAUDX, TAUDY, CS%OD_av, FE)
 
   ! this is to determine which cells contain the grounding line,
   !  the criterion being that the cell is ice-covered, with some nodes
@@ -2384,7 +2377,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
   if (CS%GL_regularize) then
 
-    call interpolate_H_to_B (CS, CS%h_shelf, CS%hmask, H_node)
+    call interpolate_H_to_B(CS, CS%h_shelf, CS%hmask, H_node)
     call savearray2 ("H_node",H_node,CS%write_output_to_file)
 
     do j=G%jsc,G%jec
@@ -2392,24 +2385,24 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
         nodefloat = 0
         do k=0,1
           do l=0,1
-            if ((CS%hmask(i,j) .eq. 1) .and. &
-              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%bathyT(i,j) .le. 0)) then
+            if ((CS%hmask(i,j) == 1) .and. &
+              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%bathyT(i,j) <= 0)) then
               nodefloat = nodefloat + 1
             endif
           enddo
         enddo
-        if ((nodefloat .gt. 0) .and. (nodefloat .lt. 4)) then
+        if ((nodefloat > 0) .and. (nodefloat < 4)) then
           !print *,"nodefloat",nodefloat
-          float_cond (i,j) = 1.0
-          CS%float_frac (i,j) = 1.0
+          float_cond(i,j) = 1.0
+          CS%float_frac(i,j) = 1.0
         endif
       enddo
     enddo
     call savearray2 ("float_cond",float_cond,CS%write_output_to_file)
 
-    call pass_var (float_cond, G%Domain)
+    call pass_var(float_cond, G%Domain)
 
-    call bilinear_shape_functions_subgrid (Phisub, nsub)
+    call bilinear_shape_functions_subgrid(Phisub, nsub)
 
     call savearray2("Phisub1111",Phisub(:,:,1,1,1,1),CS%write_output_to_file)
 
@@ -2417,21 +2410,21 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
   ! make above conditional
 
-  u_prev_iterate (:,:) = u(:,:)
-  v_prev_iterate (:,:) = v(:,:)
+  u_prev_iterate(:,:) = u(:,:)
+  v_prev_iterate(:,:) = v(:,:)
 
   isym=0
 
   ! must prepare phi
-  if (FE .eq. 1) then
-    allocate (Phi (isd:ied,jsd:jed,1:8,1:4)) ; Phi(:,:,:,:)=0
+  if (FE == 1) then
+    allocate(Phi(isd:ied,jsd:jed,1:8,1:4)) ; Phi(:,:,:,:)=0
 
     do j=jsd,jed
       do i=isd,ied
 
-        if (((i .gt. isd) .and. (j .gt. jsd)) .or. (isym .eq. 1)) then
-          X(:,:) = geolonq (i-1:i,j-1:j)*1000
-          Y(:,:) = geolatq (i-1:i,j-1:j)*1000
+        if (((i > isd) .and. (j > jsd)) .or. (isym == 1)) then
+          X(:,:) = geolonq(i-1:i,j-1:j)*1000
+          Y(:,:) = geolatq(i-1:i,j-1:j)*1000
         else
           X(2,:) = geolonq(i,j)*1000
           X(1,:) = geolonq(i,j)*1000-G%dxT(i,j)
@@ -2439,55 +2432,55 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
           Y(:,1) = geolatq(i,j)*1000-G%dyT(i,j)
         endif
 
-        call bilinear_shape_functions (X, Y, Phi_temp, area)
-        Phi (i,j,:,:) = Phi_temp
+        call bilinear_shape_functions(X, Y, Phi_temp, area)
+        Phi(i,j,:,:) = Phi_temp
 
       enddo
     enddo
   endif
 
-  if (FE .eq. 1) then
-      call calc_shelf_visc_bilinear (CS, u, v)
+  if (FE == 1) then
+      call calc_shelf_visc_bilinear(CS, u, v)
 
-      call pass_var (CS%ice_visc_bilinear, G%domain)
-      call pass_var (CS%taub_beta_eff_bilinear, G%domain)
+      call pass_var(CS%ice_visc_bilinear, G%domain)
+      call pass_var(CS%taub_beta_eff_bilinear, G%domain)
   else
-      call calc_shelf_visc_triangular (CS,u,v)
+      call calc_shelf_visc_triangular(CS,u,v)
 
-      call pass_var (CS%ice_visc_upper_tri, G%domain)
-      call pass_var (CS%taub_beta_eff_upper_tri, G%domain)
-      call pass_var (CS%ice_visc_lower_tri, G%domain)
-      call pass_var (CS%taub_beta_eff_lower_tri, G%domain)
+      call pass_var(CS%ice_visc_upper_tri, G%domain)
+      call pass_var(CS%taub_beta_eff_upper_tri, G%domain)
+      call pass_var(CS%ice_visc_lower_tri, G%domain)
+      call pass_var(CS%taub_beta_eff_lower_tri, G%domain)
   endif
 
   ! makes sure basal stress is only applied when it is supposed to be
 
   do j=G%jsd,G%jed
     do i=G%isd,G%ied
-      if (FE .eq. 1) then
-        CS%taub_beta_eff_bilinear (i,j) = CS%taub_beta_eff_bilinear (i,j) * CS%float_frac (i,j)
+      if (FE == 1) then
+        CS%taub_beta_eff_bilinear(i,j) = CS%taub_beta_eff_bilinear(i,j) * CS%float_frac(i,j)
       else
-        CS%taub_beta_eff_upper_tri (i,j) = CS%taub_beta_eff_upper_tri (i,j) * CS%float_frac (i,j)
-        CS%taub_beta_eff_lower_tri (i,j) = CS%taub_beta_eff_lower_tri (i,j) * CS%float_frac (i,j)
+        CS%taub_beta_eff_upper_tri(i,j) = CS%taub_beta_eff_upper_tri(i,j) * CS%float_frac(i,j)
+        CS%taub_beta_eff_lower_tri(i,j) = CS%taub_beta_eff_lower_tri(i,j) * CS%float_frac(i,j)
       endif
     enddo
   enddo
 
-  if (FE .eq. 1) then
-    call apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond, &
+  if (FE == 1) then
+    call apply_boundary_values_bilinear(CS, time, Phisub, H_node, float_cond, &
       rhoi/rhow, u_bdry_cont, v_bdry_cont)
-  elseif (FE .eq. 2) then
-    call apply_boundary_values_triangle (CS, time, u_bdry_cont, v_bdry_cont)
+  elseif (FE == 2) then
+    call apply_boundary_values_triangle(CS, time, u_bdry_cont, v_bdry_cont)
   endif
 
   Au(:,:) = 0.0 ; Av(:,:) = 0.0
 
-  if (FE .eq. 1) then
-    call CG_action_bilinear (Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, CS%hmask, H_node, &
+  if (FE == 1) then
+    call CG_action_bilinear(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, CS%hmask, H_node, &
               CS%ice_visc_bilinear, float_cond, G%bathyT, CS%taub_beta_eff_bilinear, G%areaT, &
               G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi/rhow)
-  elseif (FE .eq. 2) then
-    call CG_action_triangular (Au, Av, u, v, CS%umask, CS%vmask, CS%hmask, CS%ice_visc_upper_tri, &
+  elseif (FE == 2) then
+    call CG_action_triangular(Au, Av, u, v, CS%umask, CS%vmask, CS%hmask, CS%ice_visc_upper_tri, &
               CS%ice_visc_lower_tri, CS%taub_beta_eff_upper_tri, CS%taub_beta_eff_lower_tri, &
               G%dxT, G%dyT, G%areaT, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, isym)
   endif
@@ -2498,19 +2491,19 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   err_init = 0 ; err_tempu = 0; err_tempv = 0
   do j=jsumstart,G%jecB
     do i=isumstart,G%iecB
-      if (CS%umask(i,j) .eq. 1) then
+      if (CS%umask(i,j) == 1) then
         err_tempu = ABS (Au(i,j) + u_bdry_cont(i,j) - TAUDX(i,j))
       endif
-      if (CS%vmask(i,j) .eq. 1) then
+      if (CS%vmask(i,j) == 1) then
         err_tempv = MAX(ABS (Av(i,j) + v_bdry_cont(i,j) - TAUDY(i,j)), err_tempu)
       endif
-      if (err_tempv .ge. err_init) then
+      if (err_tempv >= err_init) then
         err_init = err_tempv
       endif
     enddo
   enddo
 
-  call mpp_max (err_init)
+  call mpp_max(err_init)
 
   if (is_root_pe()) print *,"INITIAL nonlinear residual: ",err_init
 
@@ -2521,30 +2514,30 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   do iter=1,100
 
 
-    call ice_shelf_solve_inner (CS, u, v, TAUDX, TAUDY, H_node, float_cond, &
+    call ice_shelf_solve_inner(CS, u, v, TAUDX, TAUDY, H_node, float_cond, &
                                 FE, conv_flag, iters, time, Phi, Phisub)
 
 
     if (CS%DEBUG) then
-      call qchksum (u, "u shelf", G%HI, haloshift=2)
-      call qchksum (v, "v shelf", G%HI, haloshift=2)
+      call qchksum(u, "u shelf", G%HI, haloshift=2)
+      call qchksum(v, "v shelf", G%HI, haloshift=2)
     endif
 
     if (is_root_pe()) print *,"linear solve done",iters," iterations"
 
-    if (FE .eq. 1) then
-      call calc_shelf_visc_bilinear (CS,u,v)
-      call pass_var (CS%ice_visc_bilinear, G%domain)
-      call pass_var (CS%taub_beta_eff_bilinear, G%domain)
+    if (FE == 1) then
+      call calc_shelf_visc_bilinear(CS,u,v)
+      call pass_var(CS%ice_visc_bilinear, G%domain)
+      call pass_var(CS%taub_beta_eff_bilinear, G%domain)
     else
-      call calc_shelf_visc_triangular (CS,u,v)
-      call pass_var (CS%ice_visc_upper_tri, G%domain)
-      call pass_var (CS%taub_beta_eff_upper_tri, G%domain)
-      call pass_var (CS%ice_visc_lower_tri, G%domain)
-      call pass_var (CS%taub_beta_eff_lower_tri, G%domain)
+      call calc_shelf_visc_triangular(CS,u,v)
+      call pass_var(CS%ice_visc_upper_tri, G%domain)
+      call pass_var(CS%taub_beta_eff_upper_tri, G%domain)
+      call pass_var(CS%ice_visc_lower_tri, G%domain)
+      call pass_var(CS%taub_beta_eff_lower_tri, G%domain)
     endif
 
-    if (iter .eq. 1) then
+    if (iter == 1) then
 !      call savearray2 ("visc1",CS%ice_visc_bilinear,CS%write_output_to_file)
     endif
 
@@ -2552,91 +2545,91 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
     do j=G%jsd,G%jed
       do i=G%isd,G%ied
-        if (FE .eq. 1) then
-          CS%taub_beta_eff_bilinear (i,j) = CS%taub_beta_eff_bilinear (i,j) * CS%float_frac (i,j)
+        if (FE == 1) then
+          CS%taub_beta_eff_bilinear(i,j) = CS%taub_beta_eff_bilinear(i,j) * CS%float_frac(i,j)
         else
-          CS%taub_beta_eff_upper_tri (i,j) = CS%taub_beta_eff_upper_tri (i,j) * CS%float_frac (i,j)
-          CS%taub_beta_eff_lower_tri (i,j) = CS%taub_beta_eff_lower_tri (i,j) * CS%float_frac (i,j)
+          CS%taub_beta_eff_upper_tri(i,j) = CS%taub_beta_eff_upper_tri(i,j) * CS%float_frac(i,j)
+          CS%taub_beta_eff_lower_tri(i,j) = CS%taub_beta_eff_lower_tri(i,j) * CS%float_frac(i,j)
         endif
       enddo
     enddo
 
-    u_bdry_cont (:,:) = 0 ; v_bdry_cont (:,:) = 0
+    u_bdry_cont(:,:) = 0 ; v_bdry_cont(:,:) = 0
 
-    if (FE .eq. 1) then
-      call apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond, &
+    if (FE == 1) then
+      call apply_boundary_values_bilinear(CS, time, Phisub, H_node, float_cond, &
         rhoi/rhow, u_bdry_cont, v_bdry_cont)
-    elseif (FE .eq. 2) then
-      call apply_boundary_values_triangle (CS, time, u_bdry_cont, v_bdry_cont)
+    elseif (FE == 2) then
+      call apply_boundary_values_triangle(CS, time, u_bdry_cont, v_bdry_cont)
     endif
 
     Au(:,:) = 0 ; Av(:,:) = 0
 
-    if (FE .eq. 1) then
-      call CG_action_bilinear (Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, CS%hmask, H_node, &
+    if (FE == 1) then
+      call CG_action_bilinear(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, CS%hmask, H_node, &
               CS%ice_visc_bilinear, float_cond, G%bathyT, CS%taub_beta_eff_bilinear, G%areaT, G%isc-1, &
               G%iec+1, G%jsc-1, G%jec+1, rhoi/rhow)
-    elseif (FE .eq. 2) then
-      call CG_action_triangular (Au, Av, u, v, CS%umask, CS%vmask, CS%hmask, CS%ice_visc_upper_tri, &
+    elseif (FE == 2) then
+      call CG_action_triangular(Au, Av, u, v, CS%umask, CS%vmask, CS%hmask, CS%ice_visc_upper_tri, &
               CS%ice_visc_lower_tri, CS%taub_beta_eff_upper_tri, CS%taub_beta_eff_lower_tri, &
               G%dxT, G%dyT, G%areaT, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, isym)
     endif
 
     err_max = 0
 
-      if (CS%nonlin_solve_err_mode .eq. 1) then
+      if (CS%nonlin_solve_err_mode == 1) then
 
       do j=jsumstart,G%jecB
         do i=isumstart,G%iecB
-          if (CS%umask(i,j) .eq. 1) then
+          if (CS%umask(i,j) == 1) then
             err_tempu = ABS (Au(i,j) + u_bdry_cont(i,j) - TAUDX(i,j))
           endif
-          if (CS%vmask(i,j) .eq. 1) then
+          if (CS%vmask(i,j) == 1) then
             err_tempv = MAX(ABS (Av(i,j) + v_bdry_cont(i,j) - TAUDY(i,j)), err_tempu)
           endif
-          if (err_tempv .ge. err_max) then
+          if (err_tempv >= err_max) then
             err_max = err_tempv
           endif
         enddo
       enddo
 
-      call mpp_max (err_max)
+      call mpp_max(err_max)
 
-    elseif (CS%nonlin_solve_err_mode .eq. 2) then
+    elseif (CS%nonlin_solve_err_mode == 2) then
 
       max_vel = 0 ; tempu = 0 ; tempv = 0
 
       do j=jsumstart,G%jecB
         do i=isumstart,G%iecB
-          if (CS%umask(i,j) .eq. 1) then
+          if (CS%umask(i,j) == 1) then
             err_tempu = ABS (u_last(i,j)-u(i,j))
             tempu = u(i,j)
           endif
-          if (CS%vmask(i,j) .eq. 1) then
+          if (CS%vmask(i,j) == 1) then
             err_tempv = MAX(ABS (v_last(i,j)- v(i,j)), err_tempu)
             tempv = SQRT(v(i,j)**2+tempu**2)
           endif
-          if (err_tempv .ge. err_max) then
+          if (err_tempv >= err_max) then
             err_max = err_tempv
           endif
-          if  (tempv .ge. max_vel) then
+          if  (tempv >= max_vel) then
             max_vel = tempv
           endif
         enddo
       enddo
 
-      u_last (:,:) = u(:,:)
-      v_last (:,:) = v(:,:)
+      u_last(:,:) = u(:,:)
+      v_last(:,:) = v(:,:)
 
-      call mpp_max (max_vel)
-      call mpp_max (err_max)
+      call mpp_max(max_vel)
+      call mpp_max(err_max)
       err_init = max_vel
 
     endif
 
     if (is_root_pe()) print *,"nonlinear residual: ",err_max/err_init
 
-    if (err_max .le. CS%nonlinear_tolerance * err_init) then
+    if (err_max <= CS%nonlinear_tolerance * err_init) then
       if (is_root_pe()) &
         print *,"exiting nonlinear solve after ",iter," iterations"
       exit
@@ -2647,26 +2640,26 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   !write (procnum,'(I1)') mpp_pe()
   !write (numproc,'(I1)') mpp_npes()
 
-  deallocate (TAUDX)
-  deallocate (TAUDY)
-  deallocate (u_prev_iterate)
-  deallocate (v_prev_iterate)
-  deallocate (u_bdry_cont)
-  deallocate (v_bdry_cont)
-  deallocate (Au)
-  deallocate (Av)
-  deallocate (err_u)
-  deallocate (err_v)
-  deallocate (u_last)
-  deallocate (v_last)
-  deallocate (H_node)
-  deallocate (float_cond)
-  deallocate (Phisub)
+  deallocate(TAUDX)
+  deallocate(TAUDY)
+  deallocate(u_prev_iterate)
+  deallocate(v_prev_iterate)
+  deallocate(u_bdry_cont)
+  deallocate(v_bdry_cont)
+  deallocate(Au)
+  deallocate(Av)
+  deallocate(err_u)
+  deallocate(err_v)
+  deallocate(u_last)
+  deallocate(v_last)
+  deallocate(H_node)
+  deallocate(float_cond)
+  deallocate(Phisub)
 
 end subroutine ice_shelf_solve_outer
 
-subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE, conv_flag, iters, time, Phi, Phisub)
-  type(ice_shelf_CS),         pointer    :: CS
+subroutine ice_shelf_solve_inner(CS, u, v, taudx, taudy, H_node, float_cond, FE, conv_flag, iters, time, Phi, Phisub)
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)  :: u, v
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(in)     :: taudx, taudy, H_node
   real, dimension(:,:),intent(in)                        :: float_cond
@@ -2674,7 +2667,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
   integer, intent(out)         :: conv_flag, iters
   type(time_type)              :: time
   real, pointer, dimension(:,:,:,:)      :: Phi
-  real, dimension (:,:,:,:,:,:),pointer :: Phisub
+  real, dimension(:,:,:,:,:,:),pointer :: Phisub
 
 ! one linear solve (nonlinear iteration) of the solution for velocity
 
@@ -2701,8 +2694,8 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
   character(1)                       :: procnum
   character(2)                       :: gridsize
 
-  real, dimension (8,4)              :: Phi_temp
-  real, dimension (2,2)              :: X,Y
+  real, dimension(8,4)              :: Phi_temp
+  real, dimension(2,2)              :: X,Y
 
   hmask => CS%hmask
   umask => CS%umask
@@ -2721,8 +2714,8 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
 
   Zu(:,:) = 0 ; Zv(:,:) = 0 ; DIAGu(:,:) = 0 ; DIAGv(:,:) = 0
-  Ru(:,:) = 0 ; Rv (:,:) = 0 ; Au (:,:) = 0 ; Av (:,:) = 0
-  Du(:,:) = 0 ; Dv (:,:) = 0 ; ubd(:,:) = 0 ; vbd(:,:) = 0
+  Ru(:,:) = 0 ; Rv(:,:) = 0 ; Au(:,:) = 0 ; Av(:,:) = 0
+  Du(:,:) = 0 ; Dv(:,:) = 0 ; ubd(:,:) = 0 ; vbd(:,:) = 0
   dot_p1 = 0 ; dot_p2 = 0
 
 !   if (G%symmetric) then
@@ -2749,21 +2742,21 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
     jsumstart = JSUMSTART_INT_
   endif
 
-  if (FE .eq. 1) then
+  if (FE == 1) then
     visc => CS%ice_visc_bilinear
     beta => CS%taub_beta_eff_bilinear
-  elseif (FE .eq. 2) then
+  elseif (FE == 2) then
     visc => CS%ice_visc_upper_tri
     visc_lo => CS%ice_visc_lower_tri
     beta => CS%taub_beta_eff_upper_tri
     beta_lo => CS%taub_beta_eff_lower_tri
   endif
 
-  if (FE .eq. 1) then
-    call apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond, &
+  if (FE == 1) then
+    call apply_boundary_values_bilinear(CS, time, Phisub, H_node, float_cond, &
       CS%density_ice/CS%density_ocean_avg, ubd, vbd)
-  elseif (FE .eq. 2) then
-    call apply_boundary_values_triangle (CS, time, ubd, vbd)
+  elseif (FE == 2) then
+    call apply_boundary_values_triangle(CS, time, ubd, vbd)
   endif
 
   RHSu(:,:) = taudx(:,:) - ubd(:,:)
@@ -2773,12 +2766,12 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
   call pass_vector(RHSu, RHSv, G%domain, TO_ALL, BGRID_NE)
 
 
-  if (FE .eq. 1) then
+  if (FE == 1) then
     call matrix_diagonal_bilinear(CS, float_cond, H_node, &
       CS%density_ice/CS%density_ocean_avg, Phisub, DIAGu, DIAGv)
 !    DIAGu(:,:) = 1 ; DIAGv(:,:) = 1
-  elseif (FE .eq. 2) then
-    call matrix_diagonal_triangle (CS, DIAGu, DIAGv)
+  elseif (FE == 2) then
+    call matrix_diagonal_triangle(CS, DIAGu, DIAGv)
     DIAGu(:,:) = 1 ; DIAGv(:,:) = 1
   endif
 
@@ -2786,12 +2779,12 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
 
 
-  if (FE .eq. 1) then
-    call CG_action_bilinear (Au, Av, u, v, Phi, Phisub, umask, vmask, hmask, &
+  if (FE == 1) then
+    call CG_action_bilinear(Au, Av, u, v, Phi, Phisub, umask, vmask, hmask, &
             H_node, visc, float_cond, G%bathyT, beta, G%areaT, isc-1, iec+1, jsc-1, &
             jec+1, CS%density_ice/CS%density_ocean_avg)
-  elseif (FE .eq. 2) then
-    call CG_action_triangular (Au, Av, u, v, umask, vmask, hmask, visc, visc_lo, &
+  elseif (FE == 2) then
+    call CG_action_triangular(Au, Av, u, v, umask, vmask, hmask, visc, visc_lo, &
             beta, beta_lo, G%dxT, G%dyT, G%areaT, isc-1, iec+1, jsc-1, jec+1, isym)
   endif
 
@@ -2803,12 +2796,12 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
     do j=jsumstart,jecq
       do i=isumstart,iecq
-        if (umask(i,j) .eq. 1) dot_p1 = dot_p1 + Ru(i,j)**2
-        if (vmask(i,j) .eq. 1) dot_p1 = dot_p1 + Rv(i,j)**2
+        if (umask(i,j) == 1) dot_p1 = dot_p1 + Ru(i,j)**2
+        if (vmask(i,j) == 1) dot_p1 = dot_p1 + Rv(i,j)**2
       enddo
     enddo
 
-    call mpp_sum (dot_p1)
+    call mpp_sum(dot_p1)
 
   else
 
@@ -2816,12 +2809,12 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
     do j=JSUMSTART_INT_,jecq
       do i=ISUMSTART_INT_,iecq
-        if (umask(i,j) .eq. 1) sum_vec(i,j) = Ru(i,j)**2
-        if (vmask(i,j) .eq. 1) sum_vec(i,j) = sum_vec(i,j) + Rv(i,j)**2
+        if (umask(i,j) == 1) sum_vec(i,j) = Ru(i,j)**2
+        if (vmask(i,j) == 1) sum_vec(i,j) = sum_vec(i,j) + Rv(i,j)**2
       enddo
     enddo
 
-    dot_p1 = reproducing_sum ( sum_vec, ISUMSTART_INT_, iecq, &
+    dot_p1 = reproducing_sum( sum_vec, ISUMSTART_INT_, iecq, &
                                         JSUMSTART_INT_, jecq )
 
   endif
@@ -2830,8 +2823,8 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
   do j=jsdq,jedq
     do i=isdq,iedq
-      if (umask(i,j) .eq. 1) Zu(i,j) = Ru (i,j) / DIAGu (i,j)
-      if (vmask(i,j) .eq. 1) Zv(i,j) = Rv (i,j) / DIAGv (i,j)
+      if (umask(i,j) == 1) Zu(i,j) = Ru(i,j) / DIAGu(i,j)
+      if (vmask(i,j) == 1) Zv(i,j) = Rv(i,j) / DIAGv(i,j)
     enddo
   enddo
 
@@ -2862,15 +2855,15 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
     Au(:,:) = 0 ; Av(:,:) = 0
 
-    if (FE .eq. 1) then
+    if (FE == 1) then
 
-      call CG_action_bilinear (Au, Av, Du, Dv, Phi, Phisub, umask, vmask, hmask, &
+      call CG_action_bilinear(Au, Av, Du, Dv, Phi, Phisub, umask, vmask, hmask, &
             H_node, visc, float_cond, G%bathyT, beta, G%areaT, is, ie, js, &
             je, CS%density_ice/CS%density_ocean_avg)
 
-    elseif (FE .eq. 2) then
+    elseif (FE == 2) then
 
-      call CG_action_triangular (Au, Av, Du, Dv, umask, vmask, hmask, visc, visc_lo, &
+      call CG_action_triangular(Au, Av, Du, Dv, umask, vmask, hmask, visc, visc_lo, &
                 beta, beta_lo, G%dxT, G%dyT, G%areaT, is, ie, js, je, isym)
     endif
 
@@ -2884,37 +2877,37 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
       dot_p1 = 0 ; dot_p2 = 0
       do j=jsumstart,jecq
         do i=isumstart,iecq
-          if (umask(i,j) .eq. 1) then
+          if (umask(i,j) == 1) then
             dot_p1 = dot_p1 + Zu(i,j)*Ru(i,j)
             dot_p2 = dot_p2 + Du(i,j)*Au(i,j)
           endif
-          if (vmask(i,j) .eq. 1) then
+          if (vmask(i,j) == 1) then
               dot_p1 = dot_p1 + Zv(i,j)*Rv(i,j)
               dot_p2 = dot_p2 + Dv(i,j)*Av(i,j)
           endif
         enddo
       enddo
-      call mpp_sum (dot_p1) ; call mpp_sum (dot_p2)
+      call mpp_sum(dot_p1) ; call mpp_sum(dot_p2)
     else
 
       sum_vec(:,:) = 0.0 ; sum_vec_2(:,:) = 0.0
 
       do j=jscq,jecq
         do i=iscq,iecq
-          if (umask(i,j) .eq. 1) sum_vec(i,j) = Zu(i,j) * Ru(i,j)
-          if (vmask(i,j) .eq. 1) sum_vec(i,j) = sum_vec(i,j) + &
+          if (umask(i,j) == 1) sum_vec(i,j) = Zu(i,j) * Ru(i,j)
+          if (vmask(i,j) == 1) sum_vec(i,j) = sum_vec(i,j) + &
                                                 Zv(i,j) * Rv(i,j)
 
-          if (umask(i,j) .eq. 1) sum_vec_2(i,j) = Du(i,j) * Au(i,j)
-          if (vmask(i,j) .eq. 1) sum_vec_2(i,j) = sum_vec_2(i,j) + &
+          if (umask(i,j) == 1) sum_vec_2(i,j) = Du(i,j) * Au(i,j)
+          if (vmask(i,j) == 1) sum_vec_2(i,j) = sum_vec_2(i,j) + &
                                                 Dv(i,j) * Av(i,j)
         enddo
       enddo
 
-      dot_p1 = reproducing_sum ( sum_vec, iscq, iecq, &
+      dot_p1 = reproducing_sum( sum_vec, iscq, iecq, &
                                           jscq, jecq )
 
-      dot_p2 = reproducing_sum ( sum_vec_2, iscq, iecq, &
+      dot_p2 = reproducing_sum( sum_vec_2, iscq, iecq, &
                                           jscq, jecq )
 
     endif
@@ -2929,17 +2922,17 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
     do j=jsd,jed
       do i=isd,ied
-        if (umask(i,j) .eq. 1) u(i,j) = u(i,j) + alpha_k * Du(i,j)
-        if (vmask(i,j) .eq. 1) v(i,j) = v(i,j) + alpha_k * Dv(i,j)
+        if (umask(i,j) == 1) u(i,j) = u(i,j) + alpha_k * Du(i,j)
+        if (vmask(i,j) == 1) v(i,j) = v(i,j) + alpha_k * Dv(i,j)
       enddo
     enddo
 
     do j=jsd,jed
       do i=isd,ied
-        if (umask(i,j) .eq. 1) then
+        if (umask(i,j) == 1) then
           Ru_old(i,j) = Ru(i,j) ; Zu_old(i,j) = Zu(i,j)
         endif
-        if (vmask(i,j) .eq. 1) then
+        if (vmask(i,j) == 1) then
           Rv_old(i,j) = Rv(i,j) ; Zv_old(i,j) = Zv(i,j)
         endif
       enddo
@@ -2950,19 +2943,19 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
     do j=jsd,jed
       do i=isd,ied
-        if (umask(i,j) .eq. 1) Ru(i,j) = Ru(i,j) - alpha_k * Au(i,j)
-        if (vmask(i,j) .eq. 1) Rv(i,j) = Rv(i,j) - alpha_k * Av(i,j)
+        if (umask(i,j) == 1) Ru(i,j) = Ru(i,j) - alpha_k * Au(i,j)
+        if (vmask(i,j) == 1) Rv(i,j) = Rv(i,j) - alpha_k * Av(i,j)
       enddo
     enddo
 
 
     do j=jsdq,jedq
       do i=isdq,iedq
-        if (umask(i,j) .eq. 1) then
-          Zu(i,j) = Ru (i,j) / DIAGu (i,j)
+        if (umask(i,j) == 1) then
+          Zu(i,j) = Ru(i,j) / DIAGu(i,j)
         endif
-        if (vmask(i,j) .eq. 1) then
-          Zv(i,j) = Rv (i,j) / DIAGv (i,j)
+        if (vmask(i,j) == 1) then
+          Zv(i,j) = Rv(i,j) / DIAGv(i,j)
         endif
       enddo
     enddo
@@ -2975,17 +2968,17 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
       dot_p1 = 0 ; dot_p2 = 0
       do j=jsumstart,jecq
         do i=isumstart,iecq
-          if (umask(i,j) .eq. 1) then
+          if (umask(i,j) == 1) then
             dot_p1 = dot_p1 + Zu(i,j)*Ru(i,j)
             dot_p2 = dot_p2 + Zu_old(i,j)*Ru_old(i,j)
           endif
-          if (vmask(i,j) .eq. 1) then
+          if (vmask(i,j) == 1) then
             dot_p1 = dot_p1 + Zv(i,j)*Rv(i,j)
             dot_p2 = dot_p2 + Zv_old(i,j)*Rv_old(i,j)
           endif
         enddo
       enddo
-      call mpp_sum (dot_p1) ; call mpp_sum (dot_p2)
+      call mpp_sum(dot_p1) ; call mpp_sum(dot_p2)
 
 
     else
@@ -2994,21 +2987,21 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
       do j=JSUMSTART_INT_,jecq
         do i=ISUMSTART_INT_,iecq
-          if (umask(i,j) .eq. 1) sum_vec(i,j) = Zu(i,j) * Ru(i,j)
-          if (vmask(i,j) .eq. 1) sum_vec(i,j) = sum_vec(i,j) + &
+          if (umask(i,j) == 1) sum_vec(i,j) = Zu(i,j) * Ru(i,j)
+          if (vmask(i,j) == 1) sum_vec(i,j) = sum_vec(i,j) + &
                                                 Zv(i,j) * Rv(i,j)
 
-          if (umask(i,j) .eq. 1) sum_vec_2(i,j) = Zu_old(i,j) * Ru_old(i,j)
-          if (vmask(i,j) .eq. 1) sum_vec_2(i,j) = sum_vec_2(i,j) + &
+          if (umask(i,j) == 1) sum_vec_2(i,j) = Zu_old(i,j) * Ru_old(i,j)
+          if (vmask(i,j) == 1) sum_vec_2(i,j) = sum_vec_2(i,j) + &
                                                 Zv_old(i,j) * Rv_old(i,j)
         enddo
       enddo
 
 
-      dot_p1 = reproducing_sum ( sum_vec, ISUMSTART_INT_, iecq, &
+      dot_p1 = reproducing_sum( sum_vec, ISUMSTART_INT_, iecq, &
                                           JSUMSTART_INT_, jecq )
 
-      dot_p2 = reproducing_sum ( sum_vec_2, ISUMSTART_INT_, iecq, &
+      dot_p2 = reproducing_sum( sum_vec_2, ISUMSTART_INT_, iecq, &
                                           JSUMSTART_INT_, jecq )
 
     endif
@@ -3021,8 +3014,8 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
     do j=jsd,jed
       do i=isd,ied
-        if (umask(i,j) .eq. 1) Du(i,j) = Zu(i,j) + beta_k * Du(i,j)
-        if (vmask(i,j) .eq. 1) Dv(i,j) = Zv(i,j) + beta_k * Dv(i,j)
+        if (umask(i,j) == 1) Du(i,j) = Zu(i,j) + beta_k * Du(i,j)
+        if (vmask(i,j) == 1) Dv(i,j) = Zv(i,j) + beta_k * Dv(i,j)
       enddo
     enddo
 
@@ -3034,15 +3027,15 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
       do j=jsumstart,jecq
         do i=isumstart,iecq
-          if (umask(i,j) .eq. 1) then
+          if (umask(i,j) == 1) then
             dot_p1 = dot_p1 + Ru(i,j)**2
           endif
-          if (vmask(i,j) .eq. 1) then
+          if (vmask(i,j) == 1) then
             dot_p1 = dot_p1 + Rv(i,j)**2
           endif
         enddo
       enddo
-      call mpp_sum (dot_p1)
+      call mpp_sum(dot_p1)
 
     else
 
@@ -3050,12 +3043,12 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
       do j=JSUMSTART_INT_,jecq
         do i=ISUMSTART_INT_,iecq
-          if (umask(i,j) .eq. 1) sum_vec(i,j) = Ru(i,j)**2
-          if (vmask(i,j) .eq. 1) sum_vec(i,j) = sum_vec(i,j) + Rv(i,j)**2
+          if (umask(i,j) == 1) sum_vec(i,j) = Ru(i,j)**2
+          if (vmask(i,j) == 1) sum_vec(i,j) = sum_vec(i,j) + Rv(i,j)**2
         enddo
       enddo
 
-      dot_p1 = reproducing_sum ( sum_vec, ISUMSTART_INT_, iecq, &
+      dot_p1 = reproducing_sum( sum_vec, ISUMSTART_INT_, iecq, &
                                         JSUMSTART_INT_, jecq )
 
 !      if (is_root_pe()) print *, dot_p1
@@ -3069,7 +3062,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 !         print *,"|r|",dot_p1
 !     endif
 
-    if (dot_p1 .le. CS%cg_tolerance * resid0) then
+    if (dot_p1 <= CS%cg_tolerance * resid0) then
       iters = iter
       conv_flag = 1
       exit
@@ -3077,7 +3070,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
     cg_halo = cg_halo - 1
 
-    if (cg_halo .eq. 0) then
+    if (cg_halo == 0) then
       ! pass vectors
       call pass_vector(Du, Dv, G%domain, TO_ALL, BGRID_NE)
       call pass_vector(u, v, G%domain, TO_ALL, BGRID_NE)
@@ -3089,30 +3082,30 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
   do j=jsdq,jedq
     do i=isdq,iedq
-      if (umask(i,j) .eq. 3) then
+      if (umask(i,j) == 3) then
         u(i,j) = u_bdry(i,j)
-      elseif (umask(i,j) .eq. 0) then
+      elseif (umask(i,j) == 0) then
         u(i,j) = 0
       endif
 
-      if (vmask(i,j) .eq. 3) then
+      if (vmask(i,j) == 3) then
         v(i,j) = v_bdry(i,j)
-      elseif (vmask(i,j) .eq. 0) then
+      elseif (vmask(i,j) == 0) then
         v(i,j) = 0
       endif
     enddo
   enddo
 
-  call pass_vector (u,v, G%domain, TO_ALL, BGRID_NE)
+  call pass_vector(u,v, G%domain, TO_ALL, BGRID_NE)
 
-  if (conv_flag .eq. 0) then
+  if (conv_flag == 0) then
     iters = CS%cg_max_iterations
   endif
 
 end subroutine ice_shelf_solve_inner
 
-subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+subroutine ice_shelf_advect_thickness_x(CS, time_step, h0, h_after_uflux, flux_enter)
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h0
   real, dimension(:,:), intent(inout) :: h_after_uflux
@@ -3124,10 +3117,10 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter (:,:,1)
-  !   from right neighbor:  flux_enter (:,:,2)
-  !   from bottom neighbor: flux_enter (:,:,3)
-  !   from top neighbor:    flux_enter (:,:,4)
+  !   from left neighbor:   flux_enter(:,:,1)
+  !   from right neighbor:  flux_enter(:,:,2)
+  !   from bottom neighbor: flux_enter(:,:,3)
+  !   from top neighbor:    flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -3163,29 +3156,29 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do j=jsd+1,jed-1
-    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+        ((j+j_off) >= G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
-!     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo)
+!     if (i+i_off == G%domain%nihalo+G%domain%nihalo)
       do i=is,ie
 
-        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+i_off) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) >= G%domain%nihalo+1)) then
 
-          if (i+i_off .eq. G%domain%nihalo+1) then
+          if (i+i_off == G%domain%nihalo+1) then
             at_west_bdry=.true.
           else
             at_west_bdry=.false.
           endif
 
-          if (i+i_off .eq. G%domain%niglobal+G%domain%nihalo) then
+          if (i+i_off == G%domain%niglobal+G%domain%nihalo) then
             at_east_bdry=.true.
           else
             at_east_bdry=.false.
           endif
 
-          if (hmask(i,j) .eq. 1) then
+          if (hmask(i,j) == 1) then
 
             dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
 
@@ -3197,29 +3190,29 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
             ! 1ST DO LEFT FACE
 
-            if (u_face_mask (i-1,j) .eq. 4.) then
+            if (u_face_mask(i-1,j) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values (i-1,j) / dxdyh
+              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values(i-1,j) / dxdyh
 
             else
 
               ! get u-velocity at center of left face
               u_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i-1,j))
 
-  !            if (at_west_bdry .and. (i .eq. G%isc)) then
+  !            if (at_west_bdry .and. (i == G%isc)) then
   !                print *, j, u_face, stencil(-1)
   !            endif
 
-              if (u_face .gt. 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
+              if (u_face > 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
 
               ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_west_bdry .AND. (hmask(i-1,j).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                              ! and the stencil contains it
+                if (at_west_bdry .AND. (hmask(i-1,j) == 3)) then ! at western bdry but there is a
+                              ! thickness bdry condition, and the stencil contains it
                   stencil (-1) = CS%thickness_boundary_values(i-1,j)
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(-1) / dxdyh
 
-                elseif (hmask(i-1,j) * hmask(i-2,j) .eq. 1) then  ! h(i-2) and h(i-1) are valid
+                elseif (hmask(i-1,j) * hmask(i-2,j) == 1) then  ! h(i-2) and h(i-1) are valid
                   phi = slope_limiter (stencil(-1)-stencil(-2), stencil(0)-stencil(-1))
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh* time_step / dxdyh * &
                            (stencil(-1) - phi * (stencil(-1)-stencil(0))/2)
@@ -3232,8 +3225,8 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
                 endif
 
-              elseif (u_face .lt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
-                if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
+              elseif (u_face < 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+                if (hmask(i-1,j) * hmask(i+1,j) == 1) then         ! h(i-1) and h(i+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * &
                              (stencil(0) - phi * (stencil(0)-stencil(-1))/2)
@@ -3241,7 +3234,7 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
                 else
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * stencil(0)
 
-                  if ((hmask(i-1,j) .eq. 0) .OR. (hmask(i-1,j) .eq. 2)) then
+                  if ((hmask(i-1,j) == 0) .OR. (hmask(i-1,j) == 2)) then
                     flux_enter(i-1,j,2) = ABS(u_face) * dyh * time_step * stencil(0)
                   endif
                 endif
@@ -3252,22 +3245,22 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
             ! get u-velocity at center of right face
 
-            if (u_face_mask (i+1,j) .eq. 4.) then
+            if (u_face_mask(i+1,j) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values (i+1,j) / dxdyh
+              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values(i+1,j) / dxdyh
 
             else
 
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
 
-              if (u_face .lt. 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
+              if (u_face < 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
 
-                if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_east_bdry .AND. (hmask(i+1,j) == 3)) then ! at eastern bdry but there is a
+                              ! thickness bdry condition, and the stencil contains it
 
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(1) / dxdyh
 
-                elseif (hmask(i+1,j) * hmask(i+2,j) .eq. 1) then  ! h(i+2) and h(i+1) are valid
+                elseif (hmask(i+1,j) * hmask(i+2,j) == 1) then  ! h(i+2) and h(i+1) are valid
 
                   phi = slope_limiter (stencil(1)-stencil(2), stencil(0)-stencil(1))
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step / dxdyh * &
@@ -3281,9 +3274,9 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
                 endif
 
-              elseif (u_face .gt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+              elseif (u_face > 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
 
-                if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
+                if (hmask(i-1,j) * hmask(i+1,j) == 1) then         ! h(i-1) and h(i+1) are both valid
 
                   phi = slope_limiter (stencil(0)-stencil(-1), stencil(1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * &
@@ -3295,7 +3288,7 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * stencil(0)
 
-                  if ((hmask(i+1,j) .eq. 0) .OR. (hmask(i+1,j) .eq. 2)) then
+                  if ((hmask(i+1,j) == 0) .OR. (hmask(i+1,j) == 2)) then
                     flux_enter(i+1,j,1) = ABS(u_face) * dyh * time_step  * stencil(0)
                   endif
 
@@ -3307,30 +3300,32 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
             endif
 
-          elseif ((hmask(i,j) .eq. 0) .OR. (hmask(i,j) .eq. 2)) then
+          elseif ((hmask(i,j) == 0) .OR. (hmask(i,j) == 2)) then
 
-            if (at_west_bdry .AND. (hmask(i-1,j) .EQ. 3)) then
+            if (at_west_bdry .AND. (hmask(i-1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i-1,j))
-              flux_enter (i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * CS%thickness_boundary_values(i-1,j)
-            elseif (u_face_mask (i-1,j) .eq. 4.) then
-              flux_enter (i,j,1) = G%dyT(i,j) * time_step * u_flux_boundary_values (i-1,j)
+              flux_enter(i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * CS%thickness_boundary_values(i-1,j)
+            elseif (u_face_mask(i-1,j) == 4.) then
+              flux_enter(i,j,1) = G%dyT(i,j) * time_step * u_flux_boundary_values(i-1,j)
             endif
 
-            if (at_east_bdry .AND. (hmask(i+1,j) .EQ. 3)) then
+            if (at_east_bdry .AND. (hmask(i+1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
               flux_enter(i,j,2) = ABS(u_face) * G%dyT(i,j) * time_step * CS%thickness_boundary_values(i+1,j)
-            elseif (u_face_mask (i+1,j) .eq. 4.) then
-              flux_enter (i,j,2) = G%dyT(i,j) * time_step * u_flux_boundary_values (i+1,j)
+            elseif (u_face_mask(i+1,j) == 4.) then
+              flux_enter(i,j,2) = G%dyT(i,j) * time_step * u_flux_boundary_values(i+1,j)
             endif
 
-            if ((i .eq. is) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i-1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+            if ((i == is) .AND. (hmask(i,j) == 0) .AND. (hmask(i-1,j) == 1)) then
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 
               hmask(i,j) = 2
-            elseif ((i .eq. ie) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i+1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
+            elseif ((i == ie) .AND. (hmask(i,j) == 0) .AND. (hmask(i+1,j) == 1)) then
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 
               hmask(i,j) = 2
 
@@ -3350,8 +3345,8 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
 
 end subroutine ice_shelf_advect_thickness_x
 
-subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_vflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+subroutine ice_shelf_advect_thickness_y(CS, time_step, h_after_uflux, h_after_vflux, flux_enter)
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h_after_uflux
   real, dimension(:,:), intent(inout) :: h_after_vflux
@@ -3363,10 +3358,10 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter (:,:,1)
-  !   from right neighbor:  flux_enter (:,:,2)
-  !   from bottom neighbor: flux_enter (:,:,3)
-  !   from top neighbor:    flux_enter (:,:,4)
+  !   from left neighbor:   flux_enter(:,:,1)
+  !   from right neighbor:  flux_enter(:,:,2)
+  !   from bottom neighbor: flux_enter(:,:,3)
+  !   from top neighbor:    flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -3401,55 +3396,55 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do i=isd+2,ied-2
-    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+       ((i+i_off) >= G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-             ((j+j_off) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+             ((j+j_off) >= G%domain%njhalo+1)) then
 
-          if (j+j_off .eq. G%domain%njhalo+1) then
+          if (j+j_off == G%domain%njhalo+1) then
             at_south_bdry=.true.
           else
             at_south_bdry=.false.
           endif
 
-          if (j+j_off .eq. G%domain%njglobal+G%domain%njhalo) then
+          if (j+j_off == G%domain%njglobal+G%domain%njhalo) then
             at_north_bdry=.true.
           else
             at_north_bdry=.false.
           endif
 
-          if (hmask(i,j) .eq. 1) then
+          if (hmask(i,j) == 1) then
             dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
-            h_after_vflux (i,j) = h_after_uflux (i,j)
+            h_after_vflux(i,j) = h_after_uflux(i,j)
 
-            stencil (:) = h_after_uflux (i,j-2:j+2)  ! fine as long has ny_halo >= 2
+            stencil(:) = h_after_uflux(i,j-2:j+2)  ! fine as long has ny_halo >= 2
             flux_diff_cell = 0
 
             ! 1ST DO south FACE
 
-            if (v_face_mask (i,j-1) .eq. 4.) then
+            if (v_face_mask(i,j-1) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values (i,j-1) / dxdyh
+              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values(i,j-1) / dxdyh
 
             else
 
               ! get u-velocity at center of left face
               v_face = 0.5 * (CS%v_shelf(i-1,j-1) + CS%v_shelf(i,j-1))
 
-              if (v_face .gt. 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
+              if (v_face > 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
 
                 ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_south_bdry .AND. (hmask(i,j-1).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_south_bdry .AND. (hmask(i,j-1) == 3)) then ! at western bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(-1) / dxdyh
 
-                elseif (hmask(i,j-1) * hmask(i,j-2) .eq. 1) then  ! h(j-2) and h(j-1) are valid
+                elseif (hmask(i,j-1) * hmask(i,j-2) == 1) then  ! h(j-2) and h(j-1) are valid
 
                   phi = slope_limiter (stencil(-1)-stencil(-2), stencil(0)-stencil(-1))
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * &
@@ -3461,16 +3456,16 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(-1)
                 endif
 
-              elseif (v_face .lt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face < 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
-                if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then  ! h(j-1) and h(j+1) are both valid
+                if (hmask(i,j-1) * hmask(i,j+1) == 1) then  ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * &
                       (stencil(0) - phi * (stencil(0)-stencil(-1))/2)
                 else
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * stencil(0)
 
-                  if ((hmask(i,j-1) .eq. 0) .OR. (hmask(i,j-1) .eq. 2)) then
+                  if ((hmask(i,j-1) == 0) .OR. (hmask(i,j-1) == 2)) then
                     flux_enter(i,j-1,4) = ABS(v_face) * dyh * time_step * stencil(0)
                   endif
 
@@ -3482,21 +3477,21 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
 
             ! NEXT DO north FACE
 
-            if (v_face_mask(i,j+1) .eq. 4.) then
+            if (v_face_mask(i,j+1) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values (i,j+1) / dxdyh
+              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values(i,j+1) / dxdyh
 
             else
 
             ! get u-velocity at center of right face
               v_face = 0.5 * (CS%v_shelf(i-1,j) + CS%v_shelf(i,j))
 
-              if (v_face .lt. 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
+              if (v_face < 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
 
-                if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_north_bdry .AND. (hmask(i,j+1) == 3)) then ! at eastern bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(1) / dxdyh
-                elseif (hmask(i,j+1) * hmask(i,j+2) .eq. 1) then  ! h(j+2) and h(j+1) are valid
+                elseif (hmask(i,j+1) * hmask(i,j+2) == 1) then  ! h(j+2) and h(j+1) are valid
                   phi = slope_limiter (stencil(1)-stencil(2), stencil(0)-stencil(1))
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * &
                       (stencil(1) - phi * (stencil(1)-stencil(0))/2)
@@ -3506,9 +3501,9 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(1)
                 endif
 
-              elseif (v_face .gt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face > 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
-                if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then         ! h(j-1) and h(j+1) are both valid
+                if (hmask(i,j-1) * hmask(i,j+1) == 1) then         ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(-1), stencil(1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * &
                       (stencil(0) - phi * (stencil(0)-stencil(1))/2)
@@ -3516,7 +3511,7 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
                        ! (o.w. flux would most likely be out of cell)
                        !  but h(j+2) is not
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * stencil(0)
-                  if ((hmask(i,j+1) .eq. 0) .OR. (hmask(i,j+1) .eq. 2)) then
+                  if ((hmask(i,j+1) == 0) .OR. (hmask(i,j+1) == 2)) then
                     flux_enter(i,j+1,3) = ABS(v_face) * dxh * time_step * stencil(0)
                   endif
                 endif
@@ -3525,32 +3520,34 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
 
             endif
 
-            h_after_vflux (i,j) = h_after_vflux (i,j) + flux_diff_cell
+            h_after_vflux(i,j) = h_after_vflux(i,j) + flux_diff_cell
 
-          elseif ((hmask(i,j) .eq. 0) .OR. (hmask(i,j) .eq. 2)) then
+          elseif ((hmask(i,j) == 0) .OR. (hmask(i,j) == 2)) then
 
-            if (at_south_bdry .AND. (hmask(i,j-1) .EQ. 3)) then
+            if (at_south_bdry .AND. (hmask(i,j-1) == 3)) then
               v_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i,j-1))
-              flux_enter (i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * CS%thickness_boundary_values(i,j-1)
-            elseif (v_face_mask(i,j-1) .eq. 4.) then
-              flux_enter (i,j,3) = G%dxT(i,j) * time_step * v_flux_boundary_values (i,j-1)
+              flux_enter(i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * CS%thickness_boundary_values(i,j-1)
+            elseif (v_face_mask(i,j-1) == 4.) then
+              flux_enter(i,j,3) = G%dxT(i,j) * time_step * v_flux_boundary_values(i,j-1)
             endif
 
-            if (at_north_bdry .AND. (hmask(i,j+1) .EQ. 3)) then
+            if (at_north_bdry .AND. (hmask(i,j+1) == 3)) then
               v_face = 0.5 * (CS%u_shelf(i-1,j) + CS%u_shelf(i,j))
-              flux_enter (i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * CS%thickness_boundary_values(i,j+1)
-            elseif (v_face_mask(i,j+1) .eq. 4.) then
-              flux_enter (i,j,4) = G%dxT(i,j) * time_step * v_flux_boundary_values (i,j+1)
+              flux_enter(i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * CS%thickness_boundary_values(i,j+1)
+            elseif (v_face_mask(i,j+1) == 4.) then
+              flux_enter(i,j,4) = G%dxT(i,j) * time_step * v_flux_boundary_values(i,j+1)
             endif
 
-            if ((j .eq. js) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j-1) .eq. 1)) then
-                ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
-              hmask (i,j) = 2
-            elseif ((j .eq. je) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j+1) .eq. 1)) then
-                ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
-              hmask (i,j) = 2
+            if ((j == js) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j-1) == 1)) then
+                ! this is solely for the purposes of keeping the mask consistent while advancing
+                ! the front without having to call pass_var - if cell is empty and cell to left
+                ! is ice-covered then this cell will become partly covered
+              hmask(i,j) = 2
+            elseif ((j == je) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j+1) == 1)) then
+                ! this is solely for the purposes of keeping the mask consistent while advancing
+                ! the front without having to call pass_var - if cell is empty and cell to left
+                ! is ice-covered then this cell will become partly covered
+              hmask(i,j) = 2
             endif
 
           endif
@@ -3563,8 +3560,8 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
 
 end subroutine ice_shelf_advect_thickness_y
 
-subroutine shelf_advance_front (CS, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+subroutine shelf_advance_front(CS, flux_enter)
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:,:), intent(inout)  :: flux_enter
 
   ! in this subroutine we go through the computational cells only and, if they are empty or partial cells,
@@ -3582,10 +3579,10 @@ subroutine shelf_advance_front (CS, flux_enter)
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter (:,:,1)
-  !   from right neighbor:  flux_enter (:,:,2)
-  !   from bottom neighbor: flux_enter (:,:,3)
-  !   from top neighbor:    flux_enter (:,:,4)
+  !   from left neighbor:   flux_enter(:,:,1)
+  !   from right neighbor:  flux_enter(:,:,2)
+  !   from bottom neighbor: flux_enter(:,:,3)
+  !   from top neighbor:    flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -3602,7 +3599,7 @@ subroutine shelf_advance_front (CS, flux_enter)
   real :: h_reference, dxh, dyh, dxdyh, rho, partial_vol, tot_flux
   integer, dimension(4) :: mapi, mapj, new_partial
 !   real, dimension(size(flux_enter,1),size(flux_enter,2),size(flux_enter,2)) :: flux_enter_replace
-  real, dimension (:,:,:), pointer :: flux_enter_replace => NULL()
+  real, dimension(:,:,:), pointer :: flux_enter_replace => NULL()
 
   G => CS%grid
   h_shelf => CS%h_shelf
@@ -3627,37 +3624,37 @@ subroutine shelf_advance_front (CS, flux_enter)
   mapi(1) = -1 ; mapi(2) = 1 ; mapi(3:4) = 0
   mapj(3) = -1 ; mapj(4) = 1 ; mapj(1:2) = 0
 
-  do while (iter_flag .eq. 1)
+  do while (iter_flag == 1)
 
     iter_flag = 0
 
-    if (iter_count .gt. 0) then
-      flux_enter (:,:,:) = flux_enter_replace(:,:,:)
-      flux_enter_replace (:,:,:) = 0.0
+    if (iter_count > 0) then
+      flux_enter(:,:,:) = flux_enter_replace(:,:,:)
+      flux_enter_replace(:,:,:) = 0.0
     endif
 
     iter_count = iter_count + 1
 
-    ! if iter_count .ge. 3 then some halo updates need to be done...
+    ! if iter_count >= 3 then some halo updates need to be done...
 
 
 
     do j=jsc-1,jec+1
 
-      if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-         ((j+j_off) .ge. G%domain%njhalo+1)) then
+      if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+         ((j+j_off) >= G%domain%njhalo+1)) then
 
       do i=isc-1,iec+1
 
-         if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+i_off) .ge. G%domain%nihalo+1)) then
+         if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) >= G%domain%nihalo+1)) then
         ! first get reference thickness by averaging over cells that are fluxing into this cell
             n_flux = 0
             h_reference = 0.0
             tot_flux = 0.0
 
             do k=1,2
-              if (flux_enter(i,j,k) .gt. 0) then
+              if (flux_enter(i,j,k) > 0) then
                 n_flux = n_flux + 1
                 h_reference = h_reference + h_shelf(i+2*k-3,j)
                 tot_flux = tot_flux + flux_enter(i,j,k)
@@ -3666,71 +3663,71 @@ subroutine shelf_advance_front (CS, flux_enter)
             enddo
 
             do k=1,2
-              if (flux_enter(i,j,k+2) .gt. 0) then
+              if (flux_enter(i,j,k+2) > 0) then
                 n_flux = n_flux + 1
-                h_reference = h_reference + h_shelf (i,j+2*k-3)
+                h_reference = h_reference + h_shelf(i,j+2*k-3)
                 tot_flux = tot_flux + flux_enter(i,j,k+2)
-                flux_enter (i,j,k+2) = 0.0
+                flux_enter(i,j,k+2) = 0.0
               endif
             enddo
 
-            if (n_flux .gt. 0) then
+            if (n_flux > 0) then
               dxdyh = G%areaT(i,j)
               h_reference = h_reference / real(n_flux)
-              partial_vol = h_shelf (i,j) * area_shelf_h (i,j) + tot_flux
+              partial_vol = h_shelf(i,j) * area_shelf_h(i,j) + tot_flux
 
-              if ((partial_vol / dxdyh) .eq. h_reference) then ! cell is exactly covered, no overflow
-                hmask (i,j) = 1
-                h_shelf (i,j) = h_reference
+              if ((partial_vol / dxdyh) == h_reference) then ! cell is exactly covered, no overflow
+                hmask(i,j) = 1
+                h_shelf(i,j) = h_reference
                 area_shelf_h(i,j) = dxdyh
-              elseif ((partial_vol / dxdyh) .lt. h_reference) then
-                hmask (i,j) = 2
-        !         mass_shelf (i,j) = partial_vol * rho
-                area_shelf_h (i,j) = partial_vol / h_reference
-                h_shelf (i,j) = h_reference
+              elseif ((partial_vol / dxdyh) < h_reference) then
+                hmask(i,j) = 2
+        !         mass_shelf(i,j) = partial_vol * rho
+                area_shelf_h(i,j) = partial_vol / h_reference
+                h_shelf(i,j) = h_reference
               else
                 if (.not. associated (flux_enter_replace)) then
-                  allocate ( flux_enter_replace (G%isd:G%ied,G%jsd:G%jed,1:4) )
-                  flux_enter_replace (:,:,:) = 0.0
+                  allocate( flux_enter_replace (G%isd:G%ied,G%jsd:G%jed,1:4) )
+                  flux_enter_replace(:,:,:) = 0.0
                 endif
 
-                hmask (i,j) = 1
+                hmask(i,j) = 1
                 area_shelf_h(i,j) = dxdyh
-                !h_temp (i,j) = h_reference
+                !h_temp(i,j) = h_reference
                 partial_vol = partial_vol - h_reference * dxdyh
 
                 iter_flag  = 1
 
-                n_flux = 0 ; new_partial (:) = 0
+                n_flux = 0 ; new_partial(:) = 0
 
                 do k=1,2
-                  if (u_face_mask (i-2+k,j) .eq. 2) then
+                  if (u_face_mask(i-2+k,j) == 2) then
                     n_flux = n_flux + 1
-                  elseif (hmask (i+2*k-3,j) .eq. 0) then
+                  elseif (hmask(i+2*k-3,j) == 0) then
                     n_flux = n_flux + 1
-                    new_partial (k) = 1
+                    new_partial(k) = 1
                   endif
                 enddo
                 do k=1,2
-                  if (v_face_mask (i,j-2+k) .eq. 2) then
+                  if (v_face_mask(i,j-2+k) == 2) then
                     n_flux = n_flux + 1
-                  elseif (hmask (i,j+2*k-3) .eq. 0) then
+                  elseif (hmask(i,j+2*k-3) == 0) then
                     n_flux = n_flux + 1
-                    new_partial (k+2) = 1
+                    new_partial(k+2) = 1
                   endif
                 enddo
 
-                if (n_flux .eq. 0) then ! there is nowhere to put the extra ice!
+                if (n_flux == 0) then ! there is nowhere to put the extra ice!
                   h_shelf(i,j) = h_reference + partial_vol / dxdyh
                 else
                   h_shelf(i,j) = h_reference
 
                   do k=1,2
-                    if (new_partial(k) .eq. 1) &
-                      flux_enter_replace (i+2*k-3,j,3-k) = partial_vol / real(n_flux)
+                    if (new_partial(k) == 1) &
+                      flux_enter_replace(i+2*k-3,j,3-k) = partial_vol / real(n_flux)
                   enddo
                   do k=1,2 ! ### Combine these two loops?
-                    if (new_partial(k+2) .eq. 1) &
+                    if (new_partial(k+2) == 1) &
                       flux_enter_replace(i,j+2*k-3,5-k) = partial_vol / real(n_flux)
                   enddo
                 endif
@@ -3749,15 +3746,15 @@ subroutine shelf_advance_front (CS, flux_enter)
 
   call mpp_max(iter_count)
 
-  if(is_root_pe() .and. (iter_count.gt.1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
+  if (is_root_pe() .and. (iter_count > 1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
 
   if (associated(flux_enter_replace)) deallocate(flux_enter_replace)
 
 end subroutine shelf_advance_front
 
 !> Apply a very simple calving law using a minimum thickness rule
-subroutine ice_shelf_min_thickness_calve (CS, h_shelf, area_shelf_h,hmask)
-  type(ice_shelf_CS),    pointer        :: CS
+subroutine ice_shelf_min_thickness_calve(CS, h_shelf, area_shelf_h,hmask)
+  type(ice_shelf_CS),    pointer        :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(inout)   :: h_shelf, area_shelf_h, hmask
   type(ocean_grid_type), pointer :: G
   integer                        :: i,j
@@ -3766,9 +3763,9 @@ subroutine ice_shelf_min_thickness_calve (CS, h_shelf, area_shelf_h,hmask)
 
   do j=G%jsd,G%jed
     do i=G%isd,G%ied
-!      if ((h_shelf(i,j) .lt. CS%min_thickness_simple_calve) .and. (hmask(i,j).eq.1) .and. &
-!           (CS%float_frac(i,j) .eq. 0.0)) then
-       if ((h_shelf(i,j) .lt. CS%min_thickness_simple_calve) .and. (area_shelf_h(i,j).gt. 0.)) then
+!      if ((h_shelf(i,j) < CS%min_thickness_simple_calve) .and. (hmask(i,j) == 1) .and. &
+!           (CS%float_frac(i,j) == 0.0)) then
+       if ((h_shelf(i,j) < CS%min_thickness_simple_calve) .and. (area_shelf_h(i,j) > 0.)) then
         h_shelf(i,j) = 0.0
         area_shelf_h(i,j) = 0.0
         hmask(i,j) = 0.0
@@ -3778,8 +3775,8 @@ subroutine ice_shelf_min_thickness_calve (CS, h_shelf, area_shelf_h,hmask)
 
 end subroutine ice_shelf_min_thickness_calve
 
-subroutine calve_to_mask (CS, h_shelf, area_shelf_h, hmask, calve_mask)
-  type(ice_shelf_CS), pointer       :: CS
+subroutine calve_to_mask(CS, h_shelf, area_shelf_h, hmask, calve_mask)
+  type(ice_shelf_CS), pointer       :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(inout)   :: h_shelf, area_shelf_h, hmask, calve_mask
 
   type(ocean_grid_type), pointer :: G
@@ -3790,7 +3787,7 @@ subroutine calve_to_mask (CS, h_shelf, area_shelf_h, hmask, calve_mask)
   if (CS%calve_to_mask) then
     do j=G%jsc,G%jec
       do i=G%isc,G%iec
-        if ((calve_mask(i,j) .eq. 0.0) .and. (hmask(i,j) .ne. 0.0)) then
+        if ((calve_mask(i,j) == 0.0) .and. (hmask(i,j) /= 0.0)) then
           h_shelf(i,j) = 0.0
           area_shelf_h(i,j) = 0.0
           hmask(i,j) = 0.0
@@ -3801,8 +3798,8 @@ subroutine calve_to_mask (CS, h_shelf, area_shelf_h, hmask, calve_mask)
 
 end subroutine calve_to_mask
 
-subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
-  type(ice_shelf_CS),         pointer   :: CS
+subroutine calc_shelf_driving_stress(CS, TAUD_X, TAUD_Y, OD, FE)
+  type(ice_shelf_CS),         pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(in)    :: OD
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)    :: TAUD_X, TAUD_Y
   integer, intent(in)            :: FE
@@ -3820,10 +3817,10 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
 
 ! FE : 1 if bilinear, 2 if triangular linear FE
 
-  real, dimension (:,:), pointer :: D, & ! ocean floor depth
+  real, dimension(:,:), pointer :: D, & ! ocean floor depth
                                     H, &  ! ice shelf thickness
                           hmask, u_face_mask, v_face_mask, float_frac
-  real, dimension (SIZE(OD,1),SIZE(OD,2))  :: S, &     ! surface elevation
+  real, dimension(SIZE(OD,1),SIZE(OD,2))  :: S, &     ! surface elevation
                             BASE     ! basal elevation of shelf/stream
   character(1)                   :: procnum
 
@@ -3831,7 +3828,8 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
   real      :: rho, rhow, sx, sy, neumann_val, dxh, dyh, dxdyh
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq
+  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
   integer :: i_off, j_off
 
   G => CS%grid
@@ -3888,35 +3886,35 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
       dxdyh = G%areaT(i,j)
 !     print *,dxh," ",dyh," ",dxdyh
 
-      if (hmask(i,j) .eq. 1) then ! we are inside the global computational bdry, at an ice-filled cell
+      if (hmask(i,j) == 1) then ! we are inside the global computational bdry, at an ice-filled cell
 
         ! calculate sx
-        if ((i+i_off) .eq. gisc) then ! at left computational bdry
-          if (hmask(i+1,j) .eq. 1) then
+        if ((i+i_off) == gisc) then ! at left computational bdry
+          if (hmask(i+1,j) == 1) then
             sx = (S(i+1,j)-S(i,j))/dxh
           else
             sx = 0
           endif
-        elseif ((i+i_off) .eq. giec) then ! at right computational bdry
-          if (hmask(i-1,j) .eq. 1) then
+        elseif ((i+i_off) == giec) then ! at right computational bdry
+          if (hmask(i-1,j) == 1) then
             sx = (S(i,j)-S(i-1,j))/dxh
           else
             sx=0
           endif
         else ! interior
-          if (hmask(i+1,j) .eq. 1) then
+          if (hmask(i+1,j) == 1) then
             cnt = cnt+1
                 sx = S(i+1,j)
           else
             sx = S(i,j)
               endif
-              if (hmask(i-1,j) .eq. 1) then
+              if (hmask(i-1,j) == 1) then
             cnt = cnt+1
                 sx = sx - S(i-1,j)
           else
             sx = sx - S(i,j)
               endif
-          if (cnt .eq. 0) then
+          if (cnt == 0) then
             sx=0
           else
             sx = sx / (cnt * dxh)
@@ -3926,32 +3924,32 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
         cnt = 0
 
         ! calculate sy, similarly
-        if ((j+j_off) .eq. gjsc) then ! at south computational bdry
-          if (hmask(i,j+1) .eq. 1) then
+        if ((j+j_off) == gjsc) then ! at south computational bdry
+          if (hmask(i,j+1) == 1) then
             sy = (S(i,j+1)-S(i,j))/dyh
           else
             sy = 0
           endif
-        elseif ((j+j_off) .eq. gjec) then ! at nprth computational bdry
-          if (hmask(i,j-1) .eq. 1) then
+        elseif ((j+j_off) == gjec) then ! at nprth computational bdry
+          if (hmask(i,j-1) == 1) then
             sy = (S(i,j)-S(i,j-1))/dyh
           else
             sy = 0
           endif
         else ! interior
-          if (hmask(i,j+1) .eq. 1) then
+          if (hmask(i,j+1) == 1) then
             cnt = cnt+1
             sy = S(i,j+1)
           else
             sy = S(i,j)
           endif
-          if (hmask(i,j-1) .eq. 1) then
+          if (hmask(i,j-1) == 1) then
             cnt = cnt+1
             sy = sy - S(i,j-1)
           else
             sy = sy - S(i,j)
           endif
-          if (cnt .eq. 0) then
+          if (cnt == 0) then
             sy=0
           else
             sy = sy / (cnt * dyh)
@@ -3959,10 +3957,10 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
         endif
 
 
-        if (FE .eq. 1) then
+        if (FE == 1) then
 
           ! SW vertex
-          taud_x (i-1,j-1) = taud_x (i-1,j-1) - .25 * rho * grav * H(i,j) * sx * dxdyh
+          taud_x(i-1,j-1) = taud_x(i-1,j-1) - .25 * rho * grav * H(i,j) * sx * dxdyh
           taud_y(i-1,j-1) = taud_y(i-1,j-1) - .25 * rho * grav * H(i,j) * sy * dxdyh
 
           ! SE vertex
@@ -3998,35 +3996,42 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
 
         endif
 
-        if (float_frac(i,j) .eq. 1) then
-          neumann_val = .5 * grav * (rho * H (i,j) ** 2 - rhow * D(i,j) ** 2)
+        if (float_frac(i,j) == 1) then
+          neumann_val = .5 * grav * (rho * H(i,j) ** 2 - rhow * D(i,j) ** 2)
         else
           neumann_val = .5 * grav * (1-rho/rhow) * rho * H(i,j) ** 2
         endif
 
 
-        if ((u_face_mask(i-1,j) .eq. 2) .OR. (hmask(i-1,j) .eq. 0) .OR. (hmask(i-1,j) .eq. 2) ) then ! left face of the cell is at a stress boundary
-          ! the depth-integrated longitudinal stress is equal to the difference of depth-integrated pressure on either side of the face
+        if ((u_face_mask(i-1,j) == 2) .OR. (hmask(i-1,j) == 0) .OR. (hmask(i-1,j) == 2) ) then
+          ! left face of the cell is at a stress boundary
+          ! the depth-integrated longitudinal stress is equal to the difference of depth-integrated
+          ! pressure on either side of the face
           ! on the ice side, it is rho g h^2 / 2
           ! on the ocean side, it is rhow g (delta OD)^2 / 2
-          ! OD can be zero under the ice; but it is ASSUMED on the ice-free side of the face, topography elevation is not above the base of the
-          !     ice in the current cell
-          taud_x(i-1,j-1) = taud_x(i-1,j-1) - .5 * dyh * neumann_val  ! note negative sign is due to direction of normal vector
+          ! OD can be zero under the ice; but it is ASSUMED on the ice-free side of the face, topography elevation
+          !     is not above the base of the ice in the current cell
+
+          ! note negative sign due to direction of normal vector
+          taud_x(i-1,j-1) = taud_x(i-1,j-1) - .5 * dyh * neumann_val
           taud_x(i-1,j) = taud_x(i-1,j) - .5 * dyh * neumann_val
         endif
 
-        if ((u_face_mask(i,j) .eq. 2) .OR. (hmask(i+1,j) .eq. 0) .OR. (hmask(i+1,j) .eq. 2) ) then ! right face of the cell is at a stress boundary
+        if ((u_face_mask(i,j) == 2) .OR. (hmask(i+1,j) == 0) .OR. (hmask(i+1,j) == 2) ) then
+          ! right face of the cell is at a stress boundary
           taud_x(i,j-1) = taud_x(i,j-1) + .5 * dyh * neumann_val
           taud_x(i,j) = taud_x(i,j) + .5 * dyh * neumann_val
         endif
 
-        if ((v_face_mask(i,j-1) .eq. 2) .OR. (hmask(i,j-1) .eq. 0) .OR. (hmask(i,j-1) .eq. 2) ) then ! south face of the cell is at a stress boundary
+        if ((v_face_mask(i,j-1) == 2) .OR. (hmask(i,j-1) == 0) .OR. (hmask(i,j-1) == 2) ) then
+          ! south face of the cell is at a stress boundary
           taud_y(i-1,j-1) = taud_y(i-1,j-1) - .5 * dxh * neumann_val
           taud_y(i,j-1) = taud_y(i,j-1) - .5 * dxh * neumann_val
         endif
 
-        if ((v_face_mask(i,j) .eq. 2) .OR. (hmask(i,j+1) .eq. 0) .OR. (hmask(i,j+1) .eq. 2) ) then ! north face of the cell is at a stress boundary
-          taud_y(i-1,j) = taud_y(i-1,j) + .5 * dxh * neumann_val ! note negative sign is due to direction of normal vector
+        if ((v_face_mask(i,j) == 2) .OR. (hmask(i,j+1) == 0) .OR. (hmask(i,j+1) == 2) ) then
+          ! north face of the cell is at a stress boundary
+          taud_y(i-1,j) = taud_y(i-1,j) + .5 * dxh * neumann_val ! note negative sign due to direction of normal vector
           taud_y(i,j) = taud_y(i,j) + .5 * dxh * neumann_val
         endif
 
@@ -4040,11 +4045,11 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
 
 end subroutine calc_shelf_driving_stress
 
-subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
+subroutine init_boundary_values(CS, time, input_flux, input_thick, new_sim)
   type(time_type),       intent(in)    :: Time
-  type(ice_shelf_CS),    pointer       :: CS
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
   real, intent(in)               :: input_flux, input_thick
-  logical, optional               :: new_sim
+  logical, optional, intent(in) :: new_sim !< If present and false, this run is being restarted
 
 ! this will be a per-setup function. the boundary values of thickness and velocity
 ! (and possibly other variables) will be updated in this function
@@ -4054,12 +4059,13 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
 !               computational domain -- if this function gets moves to another module,
 !               DO NOT TAKE THE RESTARTING BIT WITH IT
 
-  real, dimension (:,:) , pointer      :: thickness_boundary_values, &
+  real, dimension(:,:) , pointer      :: thickness_boundary_values, &
                           u_boundary_values, &
                           v_boundary_values, &
                           u_face_mask, v_face_mask, hmask
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
+  integer :: gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
   integer :: i_off, j_off
   real :: A, n, ux, uy, vx, vy, eps_min, domain_width
 
@@ -4090,20 +4096,20 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
   do j=jsd,jed
     do i=isd,ied
 
-!      if ((i .eq. 4) .AND. ((mpp_pe() .eq. 0) .or. (mpp_pe() .eq. 6))) then
+!      if ((i == 4) .AND. ((mpp_pe() == 0) .or. (mpp_pe() == 6))) then
 !    print *,hmask(i,j),i,j,mpp_pe()
 !      endif
 
-      if (hmask(i,j) .eq. 3) then
-        thickness_boundary_values (i,j) = input_thick
+      if (hmask(i,j) == 3) then
+        thickness_boundary_values(i,j) = input_thick
       endif
 
-      if ((hmask(i,j) .eq. 0) .or. (hmask(i,j) .eq. 1) .or. (hmask(i,j) .eq. 2)) then
-        if ((i.le.iec).and.(i.ge.isc)) then
-          if (u_face_mask (i-1,j) .eq. 3) then
-            u_boundary_values (i-1,j-1) = (1 - ((G%geoLatBu(i-1,j-1) - 0.5*CS%len_lat)*2./CS%len_lat)**2) * &
+      if ((hmask(i,j) == 0) .or. (hmask(i,j) == 1) .or. (hmask(i,j) == 2)) then
+        if ((i <= iec).and.(i >= isc)) then
+          if (u_face_mask(i-1,j) == 3) then
+            u_boundary_values(i-1,j-1) = (1 - ((G%geoLatBu(i-1,j-1) - 0.5*CS%len_lat)*2./CS%len_lat)**2) * &
                   1.5 * input_flux / input_thick
-            u_boundary_values (i-1,j) = (1 - ((G%geoLatBu(i-1,j) - 0.5*CS%len_lat)*2./CS%len_lat)**2) * &
+            u_boundary_values(i-1,j) = (1 - ((G%geoLatBu(i-1,j) - 0.5*CS%len_lat)*2./CS%len_lat)**2) * &
                   1.5 * input_flux / input_thick
           endif
         endif
@@ -4111,14 +4117,14 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
 
       if (.not.(new_sim)) then
         if (.not. G%symmetric) then
-          if (((i+i_off) .eq. (G%domain%nihalo+1)).and.(u_face_mask(i-1,j).eq.3)) then
-            CS%u_shelf (i-1,j-1) = u_boundary_values (i-1,j-1)
-            CS%u_shelf (i-1,j) = u_boundary_values (i-1,j)
-!            print *, u_boundary_values (i-1,j)
+          if (((i+i_off) == (G%domain%nihalo+1)).and.(u_face_mask(i-1,j) == 3)) then
+            CS%u_shelf(i-1,j-1) = u_boundary_values(i-1,j-1)
+            CS%u_shelf(i-1,j) = u_boundary_values(i-1,j)
+!            print *, u_boundary_values(i-1,j)
           endif
-          if (((j+j_off) .eq. (G%domain%njhalo+1)).and.(v_face_mask(i,j-1).eq.3)) then
-            CS%u_shelf (i-1,j-1) = u_boundary_values (i-1,j-1)
-            CS%u_shelf (i,j-1) = u_boundary_values (i,j-1)
+          if (((j+j_off) == (G%domain%njhalo+1)).and.(v_face_mask(i,j-1) == 3)) then
+            CS%u_shelf(i-1,j-1) = u_boundary_values(i-1,j-1)
+            CS%u_shelf(i,j-1) = u_boundary_values(i,j-1)
           endif
         endif
       endif
@@ -4130,11 +4136,11 @@ end subroutine init_boundary_values
 subroutine CG_action_triangular (uret, vret, u, v, umask, vmask, hmask, nu_upper, nu_lower, &
                 beta_upper, beta_lower, dxh, dyh, dxdyh, is, ie, js, je, isym)
 
-real, dimension (:,:), intent (inout)  :: uret, vret
-real, dimension (:,:), intent (in)     :: u, v
-real, dimension (:,:), intent (in)     :: umask, vmask
-real, dimension (:,:), intent (in)     :: hmask, nu_upper, nu_lower, beta_upper, beta_lower
-real, dimension (:,:), intent (in)     :: dxh, dyh, dxdyh
+real, dimension(:,:), intent (inout)  :: uret, vret
+real, dimension(:,:), intent (in)     :: u, v
+real, dimension(:,:), intent (in)     :: umask, vmask
+real, dimension(:,:), intent (in)     :: hmask, nu_upper, nu_lower, beta_upper, beta_lower
+real, dimension(:,:), intent (in)     :: dxh, dyh, dxdyh
 integer, intent(in)               :: is, ie, js, je, isym
 
 ! the linear action of the matrix on (u,v) with triangular finite elements
@@ -4151,20 +4157,20 @@ integer, intent(in)               :: is, ie, js, je, isym
   do i=is,ie
     do j=js,je
 
-      if (hmask(i,j) .eq. 1) then ! this cell's vertices contain degrees of freedom
+      if (hmask(i,j) == 1) then ! this cell's vertices contain degrees of freedom
 
         ux = (u(i,j-1)-u(i-1,j-1))/dxh(i,j)
         vx = (v(i,j-1)-v(i-1,j-1))/dxh(i,j)
         uy = (u(i-1,j)-u(i-1,j-1))/dyh(i,j)
         vy = (v(i-1,j)-v(i-1,j-1))/dyh(i,j)
 
-        if (umask(i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+        if (umask(i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
           uret(i,j-1) = uret(i,j-1) + &
-              .5 * dxdyh(i,j) * nu_lower (i,j) * ((4*ux+2*vy) * (1./dxh(i,j)) + (uy+vy) * (0./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_lower(i,j) * ((4*ux+2*vy) * (1./dxh(i,j)) + (uy+vy) * (0./dyh(i,j)))
 
           vret(i,j-1) = vret(i,j-1) + &
-              .5 * dxdyh(i,j) * nu_lower (i,j) * ((uy+vx) * (1./dxh(i,j)) + (4*vy+2*ux) * (0./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_lower(i,j) * ((uy+vx) * (1./dxh(i,j)) + (4*vy+2*ux) * (0./dyh(i,j)))
 
           uret(i,j-1) = uret(i,j-1) + &
               beta_lower(i,j) * dxdyh(i,j) * 1./24 * (u(i-1,j-1) + &
@@ -4175,13 +4181,13 @@ integer, intent(in)               :: is, ie, js, je, isym
                                       v(i-1,j) + v(i,j-1))
         endif
 
-        if (umask(i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+        if (umask(i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
           uret(i-1,j) = uret(i-1,j) + &
-              .5 * dxdyh(i,j) * nu_lower (i,j) * ((4*ux+2*vy) * (0./dxh(i,j)) + (uy+vy) * (1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_lower(i,j) * ((4*ux+2*vy) * (0./dxh(i,j)) + (uy+vy) * (1./dyh(i,j)))
 
           vret(i-1,j) = vret(i-1,j) + &
-              .5 * dxdyh(i,j) * nu_lower (i,j) * ((uy+vx) * (0./dxh(i,j)) + (4*vy+2*ux) * (1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_lower(i,j) * ((uy+vx) * (0./dxh(i,j)) + (4*vy+2*ux) * (1./dyh(i,j)))
 
           uret(i,j-1) = uret(i,j-1) + &
               beta_lower(i,j) * dxdyh(i,j) * 1./24 * (u(i-1,j-1) + &
@@ -4192,13 +4198,13 @@ integer, intent(in)               :: is, ie, js, je, isym
                                       v(i-1,j) + v(i,j-1))
         endif
 
-        if (umask(i-1,j-1) .eq. 1) then ! this (bot left) is a degree of freedom node
+        if (umask(i-1,j-1) == 1) then ! this (bot left) is a degree of freedom node
 
           uret(i-1,j-1) = uret(i-1,j-1) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh(i,j)) + (uy+vy) * (-1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((4*ux+2*vy) * (-1./dxh(i,j)) + (uy+vy) * (-1./dyh(i,j)))
 
           vret(i-1,j-1) = vret(i-1,j-1) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((uy+vx) * (-1./dxh(i,j)) + (4*vy+2*ux) * (-1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((uy+vx) * (-1./dxh(i,j)) + (4*vy+2*ux) * (-1./dyh(i,j)))
 
           uret(i-1,j-1) = uret(i-1,j-1) + &
               beta_lower(i,j) * dxdyh(i,j) * 1./24 * (u(i-1,j-1) + &
@@ -4215,13 +4221,13 @@ integer, intent(in)               :: is, ie, js, je, isym
         uy = (u(i,j)-u(i,j-1))/dyh(i,j)
         vy = (v(i,j)-v(i,j-1))/dyh(i,j)
 
-        if (umask(i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+        if (umask(i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
           uret(i,j-1) = uret(i,j-1) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (0./dxh(i,j)) + (uy+vy) * (-1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((4*ux+2*vy) * (0./dxh(i,j)) + (uy+vy) * (-1./dyh(i,j)))
 
           vret(i,j-1) = vret(i,j-1) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((uy+vx) * (0./dxh(i,j)) + (4*vy+2*ux) * (-1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((uy+vx) * (0./dxh(i,j)) + (4*vy+2*ux) * (-1./dyh(i,j)))
 
           uret(i,j-1) = uret(i,j-1) + &
               beta_upper(i,j) * dxdyh(i,j) * 1./24 * (u(i,j) + &
@@ -4232,13 +4238,13 @@ integer, intent(in)               :: is, ie, js, je, isym
                                       u(i-1,j) + u(i,j-1))
         endif
 
-        if (umask(i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+        if (umask(i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
           uret(i-1,j) = uret(i-1,j) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh(i,j)) + (uy+vy) * (0./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((4*ux+2*vy) * (-1./dxh(i,j)) + (uy+vy) * (0./dyh(i,j)))
 
           vret(i-1,j) = vret(i-1,j) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((uy+vx) * (-1./dxh(i,j)) + (4*vy+2*ux) * (0./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((uy+vx) * (-1./dxh(i,j)) + (4*vy+2*ux) * (0./dyh(i,j)))
 
           uret(i,j-1) = uret(i,j-1) + &
               beta_upper(i,j) * dxdyh(i,j) * 1./24 * (u(i,j) + &
@@ -4249,13 +4255,13 @@ integer, intent(in)               :: is, ie, js, je, isym
                                       u(i-1,j) + u(i,j-1))
         endif
 
-        if (umask(i,j) .eq. 1) then ! this (top right) is a degree of freedom node
+        if (umask(i,j) == 1) then ! this (top right) is a degree of freedom node
 
           uret(i,j) = uret(i,j) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (1./dxh(i,j)) + (uy+vy) * (1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((4*ux+2*vy) * (1./dxh(i,j)) + (uy+vy) * (1./dyh(i,j)))
 
           vret(i,j) = vret(i,j) + &
-              .5 * dxdyh(i,j) * nu_upper (i,j) * ((uy+vx) * (1./dxh(i,j)) + (4*vy+2*ux) * (1./dyh(i,j)))
+              .5 * dxdyh(i,j) * nu_upper(i,j) * ((uy+vx) * (1./dxh(i,j)) + (4*vy+2*ux) * (1./dyh(i,j)))
 
           uret(i,j) = uret(i,j) + &
               beta_upper(i,j) * dxdyh(i,j) * 1./24 * (u(i,j) + &
@@ -4276,12 +4282,12 @@ end subroutine CG_action_triangular
 subroutine CG_action_bilinear (uret, vret, u, v, Phi, Phisub, umask, vmask, hmask, H_node, &
                 nu, float_cond, D, beta, dxdyh, is, ie, js, je, dens_ratio)
 
-real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (inout)  :: uret, vret
-real, dimension (:,:,:,:), pointer :: Phi
-real, dimension (:,:,:,:,:,:),pointer :: Phisub
-real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: u, v
-real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: umask, vmask, H_node
-real, dimension (:,:), intent (in)     :: hmask, nu, float_cond, D, beta, dxdyh
+real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent (inout)  :: uret, vret
+real, dimension(:,:,:,:), pointer :: Phi
+real, dimension(:,:,:,:,:,:),pointer :: Phisub
+real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: u, v
+real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: umask, vmask, H_node
+real, dimension(:,:), intent (in)     :: hmask, nu, float_cond, D, beta, dxdyh
 real, intent(in)                       :: dens_ratio
 integer, intent(in)               :: is, ie, js, je
 
@@ -4295,15 +4301,15 @@ integer, intent(in)               :: is, ie, js, je
 
 ! the linear action of the matrix on (u,v) with triangular finite elements
 ! Phi has the form
-! Phi (i,j,k,q) - applies to cell i,j
+! Phi(i,j,k,q) - applies to cell i,j
 
     !  3 - 4
     !  |   |
     !  1 - 2
 
-! Phi (i,j,2*k-1,q) gives d(Phi_k)/dx at quadrature point q
-! Phi (i,j,2*k,q) gives d(Phi_k)/dy at quadrature point q
-! Phi_k is equal to 1 at vertex k, and 0 at vertex l .ne. k, and bilinear
+! Phi(i,j,2*k-1,q) gives d(Phi_k)/dx at quadrature point q
+! Phi(i,j,2*k,q) gives d(Phi_k)/dy at quadrature point q
+! Phi_k is equal to 1 at vertex k, and 0 at vertex l /= k, and bilinear
 
   real :: ux, vx, uy, vy, uq, vq, area, basel
   integer :: iq, jq, iphi, jphi, i, j, ilq, jlq
@@ -4313,7 +4319,7 @@ integer, intent(in)               :: is, ie, js, je
   xquad(1) = .5 * (1-sqrt(1./3)) ; xquad(2) = .5 * (1+sqrt(1./3))
 
   do j=js,je
-    do i=is,ie ; if (hmask(i,j) .eq. 1) then
+    do i=is,ie ; if (hmask(i,j) == 1) then
 !     dxh = G%dxh(i,j)
 !     dyh = G%dyh(i,j)
 !
@@ -4335,13 +4341,13 @@ integer, intent(in)               :: is, ie, js, je
       do iq=1,2 ; do jq=1,2
 
 
-        if (iq .eq. 2) then
+        if (iq == 2) then
             ilq = 2
         else
             ilq = 1
         endif
 
-        if (jq .eq. 2) then
+        if (jq == 2) then
             jlq = 2
         else
             jlq = 1
@@ -4378,67 +4384,69 @@ integer, intent(in)               :: is, ie, js, je
         v(i,j) * Phi(i,j,8,2*(jq-1)+iq)
 
         do iphi=1,2 ; do jphi=1,2
-          if (umask (i-2+iphi,j-2+jphi) .eq. 1) then
+          if (umask(i-2+iphi,j-2+jphi) == 1) then
 
-            uret (i-2+iphi,j-2+jphi) = uret (i-2+iphi,j-2+jphi) + &
-                .25 * area * nu (i,j) * ((4*ux+2*vy) * Phi(i,j,2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
+            uret(i-2+iphi,j-2+jphi) = uret(i-2+iphi,j-2+jphi) + &
+                .25 * area * nu(i,j) * ((4*ux+2*vy) * Phi(i,j,2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
                                 (uy+vx) * Phi(i,j,2*(2*(jphi-1)+iphi),2*(jq-1)+iq))
           endif
-          if (vmask (i-2+iphi,j-2+jphi) .eq. 1) then
+          if (vmask(i-2+iphi,j-2+jphi) == 1) then
 
-            vret (i-2+iphi,j-2+jphi) = vret (i-2+iphi,j-2+jphi) + &
-                .25 * area * nu (i,j) * ((uy+vx) * Phi(i,j,2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
+            vret(i-2+iphi,j-2+jphi) = vret(i-2+iphi,j-2+jphi) + &
+                .25 * area * nu(i,j) * ((uy+vx) * Phi(i,j,2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
                                 (4*vy+2*ux) * Phi(i,j,2*(2*(jphi-1)+iphi),2*(jq-1)+iq))
           endif
 
-          if (iq .eq. iphi) then
+          if (iq == iphi) then
             ilq = 2
           else
             ilq = 1
           endif
 
-          if (jq .eq. jphi) then
+          if (jq == jphi) then
             jlq = 2
           else
             jlq = 1
           endif
 
-          if (float_cond(i,j) .eq. 0) then
+          if (float_cond(i,j) == 0) then
 
-            if (umask (i-2+iphi,j-2+jphi) .eq. 1) then
+            if (umask(i-2+iphi,j-2+jphi) == 1) then
 
-              uret (i-2+iphi,j-2+jphi) = uret (i-2+iphi,j-2+jphi) + &
+              uret(i-2+iphi,j-2+jphi) = uret(i-2+iphi,j-2+jphi) + &
                 .25 * beta(i,j) * area * uq * xquad(ilq) * xquad(jlq)
 
             endif
 
-            if (vmask (i-2+iphi,j-2+jphi) .eq. 1) then
+            if (vmask(i-2+iphi,j-2+jphi) == 1) then
 
-              vret (i-2+iphi,j-2+jphi) = vret (i-2+iphi,j-2+jphi) + &
+              vret(i-2+iphi,j-2+jphi) = vret(i-2+iphi,j-2+jphi) + &
                 .25 * beta(i,j) * area * vq * xquad(ilq) * xquad(jlq)
 
             endif
 
           endif
               Ucontr(iphi,jphi) = Ucontr(iphi,jphi) + .25 * area * uq * xquad(ilq) * xquad(jlq) * beta(i,j)
-!              if((i.eq.27) .and. (j.eq.8) .and. (iphi.eq.1) .and. (jphi.eq.1))  print *, "grid", uq, .25 * area * uq * xquad(ilq) * xquad(jlq)
+!              if ((i == 27) .and. (j == 8) .and. (iphi == 1) .and. (jphi == 1)) &
+!                 print *, "grid", uq, .25 * area * uq * xquad(ilq) * xquad(jlq)
 
           !endif
         enddo ; enddo
       enddo ; enddo
 
-      if (float_cond(i,j) .eq. 1) then
+      if (float_cond(i,j) == 1) then
         Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = D(i,j)
         Ucell(:,:) = u(i-1:i,j-1:j) ; Vcell(:,:) = v(i-1:i,j-1:j) ; Hcell(:,:) = H_node(i-1:i,j-1:j)
         call CG_action_subgrid_basal_bilinear &
             (Phisub, Hcell, Ucell, Vcell, area, basel, dens_ratio, Usubcontr, Vsubcontr, i, j)
         do iphi=1,2 ; do jphi=1,2
-          if (umask (i-2+iphi,j-2+jphi) .eq. 1) then
-            uret (i-2+iphi,j-2+jphi) = uret (i-2+iphi,j-2+jphi) + Usubcontr (iphi,jphi) * beta(i,j)
+          if (umask(i-2+iphi,j-2+jphi) == 1) then
+            uret(i-2+iphi,j-2+jphi) = uret(i-2+iphi,j-2+jphi) + Usubcontr (iphi,jphi) * beta(i,j)
           endif
-          if (vmask (i-2+iphi,j-2+jphi) .eq. 1) then
-            vret (i-2+iphi,j-2+jphi) = vret (i-2+iphi,j-2+jphi) + Vsubcontr (iphi,jphi) * beta(i,j)
-            !if ( (iphi.eq.1) .and. (jphi.eq.1)) print *,  i,j, Usubcontr (iphi,jphi) * beta(i,j), " ", Ucontr(iphi,jphi)
+          if (vmask(i-2+iphi,j-2+jphi) == 1) then
+            vret(i-2+iphi,j-2+jphi) = vret(i-2+iphi,j-2+jphi) + Vsubcontr (iphi,jphi) * beta(i,j)
+            !if ( (iphi == 1) .and. (jphi == 1)) 8
+            !  print *,  i,j, Usubcontr (iphi,jphi) * beta(i,j), " ", Ucontr(iphi,jphi)
           endif
         enddo ; enddo
       endif
@@ -4487,13 +4495,13 @@ subroutine CG_action_subgrid_basal_bilinear (Phisub, H, U, V, DXDYH, D, dens_rat
               hloc = Phisub(i,j,1,1,qx,qy)*H(1,1)+Phisub(i,j,1,2,qx,qy)*H(1,2)+&
                 Phisub(i,j,2,1,qx,qy)*H(2,1)+Phisub(i,j,2,2,qx,qy)*H(2,2)
 
-              if (dens_ratio * hloc - D .gt. 0) then
+              if (dens_ratio * hloc - D > 0) then
               !if (.true.) then
                 uq = 0 ; vq = 0
                 do k=1,2
                   do l=1,2
-                    !Ucontr (m,n) = Ucontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * U(k,l)
-                    !Vcontr (m,n) = Vcontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * V(k,l)
+                    !Ucontr(m,n) = Ucontr(m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * U(k,l)
+                    !Vcontr(m,n) = Vcontr(m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * Phisub(i,j,k,l,qx,qy) * V(k,l)
                     uq = uq + Phisub(i,j,k,l,qx,qy) * U(k,l) ; vq = vq + Phisub(i,j,k,l,qx,qy) * V(k,l)
                   enddo
                 enddo
@@ -4501,7 +4509,8 @@ subroutine CG_action_subgrid_basal_bilinear (Phisub, H, U, V, DXDYH, D, dens_rat
                 Ucontr (m,n) = Ucontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * uq
                 Vcontr (m,n) = Vcontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy) * vq
 
- !               if ((i_m .eq. 27) .and. (j_m .eq. 8) .and. (m.eq.1) .and. (n.eq.1)) print *, "in subgrid", uq,  Phisub(i,j,m,n,qx,qy)
+ !               if ((i_m == 27) .and. (j_m == 8) .and. (m == 1) .and. (n == 1)) &
+                   print *, "in subgrid", uq,  Phisub(i,j,m,n,qx,qy)
 
               endif
 
@@ -4514,14 +4523,14 @@ subroutine CG_action_subgrid_basal_bilinear (Phisub, H, U, V, DXDYH, D, dens_rat
 
 end subroutine CG_action_subgrid_basal_bilinear
 
-subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
+subroutine matrix_diagonal_triangle(CS, u_diagonal, v_diagonal)
 
-  type(ice_shelf_CS),    pointer       :: CS
-  real, dimension (:,:), intent(inout) :: u_diagonal, v_diagonal
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
+  real, dimension(:,:), intent(inout) :: u_diagonal, v_diagonal
 
 ! returns the diagonal entries of the matrix for a Jacobi preconditioning
 
-  real, pointer, dimension (:,:)       :: umask, vmask, &
+  real, pointer, dimension(:,:)       :: umask, vmask, &
                           nu_lower, nu_upper, beta_lower, beta_upper, hmask
   type(ocean_grid_type), pointer :: G
   integer :: isym, i, j, is, js, cnt, isc, jsc, iec, jec
@@ -4543,130 +4552,130 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
   nu_lower => CS%ice_visc_lower_tri ; nu_upper => CS%ice_visc_upper_tri
   beta_lower => CS%taub_beta_eff_lower_tri ; beta_upper => CS%taub_beta_eff_upper_tri
 
-  do i=isc-1,iec+1  ; do j=jsc-1,jec+1 ; if (hmask(i,j) .eq. 1) then
+  do i=isc-1,iec+1  ; do j=jsc-1,jec+1 ; if (hmask(i,j) == 1) then
     dxh = G%dxT(i,j)
     dyh = G%dyT(i,j)
     dxdyh = G%areaT(i,j)
 
-    if (umask (i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+    if (umask(i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
       ux = 1./dxh ; uy = 0./dyh
       vx = 0. ; vy = 0.
 
-      u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
-          .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (0./dyh))
+      u_diagonal(i,j-1) = u_diagonal(i,j-1) + &
+          .5 * dxdyh * nu_lower(i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (0./dyh))
 
-      u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
+      u_diagonal(i,j-1) = u_diagonal(i,j-1) + &
           beta_lower(i,j) * dxdyh * 1./24
 
       ux = 0. ; uy = 0.
       vx = 1./dxh ; vy = 0./dyh
 
-      v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
-          .5 * dxdyh * nu_lower (i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (0./dyh))
+      v_diagonal(i,j-1) = v_diagonal(i,j-1) + &
+          .5 * dxdyh * nu_lower(i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (0./dyh))
 
-      v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
+      v_diagonal(i,j-1) = v_diagonal(i,j-1) + &
           beta_lower(i,j) * dxdyh * 1./24
 
       ux = 0./dxh ; uy = -1./dyh
       vx = 0. ; vy = 0.
 
-      u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
-          .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (-1./dyh))
+      u_diagonal(i,j-1) = u_diagonal(i,j-1) + &
+          .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (-1./dyh))
 
-      u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
+      u_diagonal(i,j-1) = u_diagonal(i,j-1) + &
           beta_upper(i,j) * dxdyh * 1./24
 
       vx = 0./dxh ; vy = -1./dyh
       ux = 0. ; uy = 0.
 
-      v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
-          .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (-1./dyh))
+      v_diagonal(i,j-1) = v_diagonal(i,j-1) + &
+          .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (-1./dyh))
 
-      v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
+      v_diagonal(i,j-1) = v_diagonal(i,j-1) + &
           beta_upper(i,j) * dxdyh * 1./24
 
     endif
 
-    if (umask (i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+    if (umask(i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
       ux = 0./dxh ; uy = 1./dyh
       vx = 0. ; vy = 0.
 
-      u_diagonal (i-1,j) = u_diagonal (i-1,j) + &
-          .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (1./dyh))
+      u_diagonal(i-1,j) = u_diagonal(i-1,j) + &
+          .5 * dxdyh * nu_lower(i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (1./dyh))
 
-      u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
+      u_diagonal(i,j-1) = u_diagonal(i,j-1) + &
           beta_lower(i,j) * dxdyh * 1./24
 
       ux = 0. ; uy = 0.
       vx = 0./dxh ; vy = 1./dyh
 
-      v_diagonal (i-1,j) = v_diagonal (i-1,j) + &
-          .5 * dxdyh * nu_lower (i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (1./dyh))
+      v_diagonal(i-1,j) = v_diagonal(i-1,j) + &
+          .5 * dxdyh * nu_lower(i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (1./dyh))
 
-      v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
+      v_diagonal(i,j-1) = v_diagonal(i,j-1) + &
           beta_lower(i,j) * dxdyh * 1./24
 
       ux = -1./dxh ; uy = 0./dyh
       vx = 0. ; vy = 0.
 
-      u_diagonal (i-1,j) = u_diagonal (i-1,j) + &
-          .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (0./dyh))
+      u_diagonal(i-1,j) = u_diagonal(i-1,j) + &
+          .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (0./dyh))
 
-      u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
+      u_diagonal(i,j-1) = u_diagonal(i,j-1) + &
           beta_upper(i,j) * dxdyh * 1./24
 
       vx = -1./dxh ; vy = 0./dyh
       ux = 0. ; uy = 0.
 
-      v_diagonal (i-1,j) = v_diagonal (i-1,j) + &
-          .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (0./dyh))
+      v_diagonal(i-1,j) = v_diagonal(i-1,j) + &
+          .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (0./dyh))
 
-      v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
+      v_diagonal(i,j-1) = v_diagonal(i,j-1) + &
           beta_upper(i,j) * dxdyh * 1./24
 
     endif
 
-    if (umask (i-1,j-1) .eq. 1) then ! this (bot left) is a degree of freedom node
+    if (umask(i-1,j-1) == 1) then ! this (bot left) is a degree of freedom node
 
       ux = -1./dxh ; uy = -1./dyh
       vx = 0. ; vy = 0.
 
-      u_diagonal (i-1,j-1) = u_diagonal (i-1,j-1) + &
-          .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (-1./dyh))
+      u_diagonal(i-1,j-1) = u_diagonal(i-1,j-1) + &
+          .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (-1./dyh))
 
-      u_diagonal (i-1,j-1) = u_diagonal (i-1,j-1) + &
+      u_diagonal(i-1,j-1) = u_diagonal(i-1,j-1) + &
           beta_lower(i,j) * dxdyh * 1./24
 
       vx = -1./dxh ; vy = -1./dyh
       ux = 0. ; uy = 0.
 
-      v_diagonal (i-1,j-1) = v_diagonal (i-1,j-1) + &
-          .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (-1./dyh))
+      v_diagonal(i-1,j-1) = v_diagonal(i-1,j-1) + &
+          .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (-1./dyh))
 
-      v_diagonal (i-1,j-1) = v_diagonal (i-1,j-1) + &
+      v_diagonal(i-1,j-1) = v_diagonal(i-1,j-1) + &
           beta_lower(i,j) * dxdyh * 1./24
     endif
 
-    if (umask (i,j) .eq. 1) then ! this (top right) is a degree of freedom node
+    if (umask(i,j) == 1) then ! this (top right) is a degree of freedom node
 
       ux = 1./ dxh ; uy = 1./dyh
       vx = 0. ; vy = 0.
 
-      u_diagonal (i,j) = u_diagonal (i,j) + &
-          .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (1./dyh))
+      u_diagonal(i,j) = u_diagonal(i,j) + &
+          .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (1./dyh))
 
-      u_diagonal (i,j) = u_diagonal (i,j) + &
+      u_diagonal(i,j) = u_diagonal(i,j) + &
           beta_upper(i,j) * dxdyh * 1./24
 
       vx = 1./ dxh ; vy = 1./dyh
       ux = 0. ; uy = 0.
 
-      v_diagonal (i,j) = v_diagonal (i,j) + &
-          .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (1./dyh))
+      v_diagonal(i,j) = v_diagonal(i,j) + &
+          .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (1./dyh))
 
-      v_diagonal (i,j) = v_diagonal (i,j) + &
+      v_diagonal(i,j) = v_diagonal(i,j) + &
           beta_upper(i,j) * dxdyh * 1./24
 
     endif
@@ -4676,17 +4685,17 @@ end subroutine matrix_diagonal_triangle
 
 subroutine matrix_diagonal_bilinear(CS, float_cond, H_node, dens_ratio, Phisub, u_diagonal, v_diagonal)
 
-  type(ice_shelf_CS),    pointer       :: CS
-  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(in) :: H_node
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(in) :: H_node
   real                                :: dens_ratio
-  real, dimension (:,:), intent(in) :: float_cond
-  real, dimension (:,:,:,:,:,:),pointer :: Phisub
-  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u_diagonal, v_diagonal
+  real, dimension(:,:), intent(in) :: float_cond
+  real, dimension(:,:,:,:,:,:),pointer :: Phisub
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u_diagonal, v_diagonal
 
 
 ! returns the diagonal entries of the matrix for a Jacobi preconditioning
 
-  real, dimension (:,:), pointer       :: umask, vmask, hmask, &
+  real, dimension(:,:), pointer       :: umask, vmask, hmask, &
                           nu, beta
   type(ocean_grid_type), pointer :: G
   integer :: isym, i, j, is, js, cnt, isc, jsc, iec, jec, iphi, jphi, iq, jq, ilq, jlq
@@ -4721,18 +4730,18 @@ subroutine matrix_diagonal_bilinear(CS, float_cond, H_node, dens_ratio, Phisub, 
 ! Phi (2*i-1,j) gives d(Phi_i)/dx at quadrature point j
 ! Phi (2*i,j) gives d(Phi_i)/dy at quadrature point j
 
-  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (hmask(i,j) .eq. 1) then
+  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (hmask(i,j) == 1) then
 
     dxh = G%dxT(i,j)
     dyh = G%dyT(i,j)
     dxdyh = G%areaT(i,j)
 
-    X(1:2) = G%geoLonBu (i-1:i,j-1)*1000
-    X(3:4) = G%geoLonBu (i-1:i,j) *1000
-    Y(1:2) = G%geoLatBu (i-1:i,j-1) *1000
-    Y(3:4) = G%geoLatBu (i-1:i,j)*1000
+    X(1:2) = G%geoLonBu(i-1:i,j-1)*1000
+    X(3:4) = G%geoLonBu(i-1:i,j) *1000
+    Y(1:2) = G%geoLatBu(i-1:i,j-1) *1000
+    Y(3:4) = G%geoLatBu(i-1:i,j)*1000
 
-    call bilinear_shape_functions (X, Y, Phi, area)
+    call bilinear_shape_functions(X, Y, Phi, area)
 
     ! X and Y must be passed in the form
         !  3 - 4
@@ -4745,68 +4754,68 @@ subroutine matrix_diagonal_bilinear(CS, float_cond, H_node, dens_ratio, Phisub, 
 
       do iphi=1,2 ; do jphi=1,2
 
-          if (iq .eq. iphi) then
+          if (iq == iphi) then
             ilq = 2
           else
             ilq = 1
           endif
 
-          if (jq .eq. jphi) then
+          if (jq == jphi) then
             jlq = 2
           else
             jlq = 1
           endif
 
-        if (umask (i-2+iphi,j-2+jphi) .eq. 1) then
+        if (umask(i-2+iphi,j-2+jphi) == 1) then
 
           ux = Phi (2*(2*(jphi-1)+iphi)-1, 2*(jq-1)+iq)
           uy = Phi (2*(2*(jphi-1)+iphi), 2*(jq-1)+iq)
           vx = 0.
           vy = 0.
 
-          u_diagonal (i-2+iphi,j-2+jphi) = u_diagonal (i-2+iphi,j-2+jphi) + &
-              .25 * dxdyh * nu (i,j) * ((4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
+          u_diagonal(i-2+iphi,j-2+jphi) = u_diagonal(i-2+iphi,j-2+jphi) + &
+              .25 * dxdyh * nu(i,j) * ((4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
                               (uy+vy) * Phi(2*(2*(jphi-1)+iphi),2*(jq-1)+iq))
 
           uq = xquad(ilq) * xquad(jlq)
 
-          if (float_cond(i,j) .eq. 0) then
-            u_diagonal (i-2+iphi,j-2+jphi) = u_diagonal (i-2+iphi,j-2+jphi) + &
+          if (float_cond(i,j) == 0) then
+            u_diagonal(i-2+iphi,j-2+jphi) = u_diagonal(i-2+iphi,j-2+jphi) + &
                 .25 * beta(i,j) * dxdyh * uq * xquad(ilq) * xquad(jlq)
           endif
 
         endif
 
-        if (vmask (i-2+iphi,j-2+jphi) .eq. 1) then
+        if (vmask(i-2+iphi,j-2+jphi) == 1) then
 
           vx = Phi (2*(2*(jphi-1)+iphi)-1, 2*(jq-1)+iq)
           vy = Phi (2*(2*(jphi-1)+iphi), 2*(jq-1)+iq)
           ux = 0.
           uy = 0.
 
-          v_diagonal (i-2+iphi,j-2+jphi) = v_diagonal (i-2+iphi,j-2+jphi) + &
-              .25 * dxdyh * nu (i,j) * ((uy+vx) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
+          v_diagonal(i-2+iphi,j-2+jphi) = v_diagonal(i-2+iphi,j-2+jphi) + &
+              .25 * dxdyh * nu(i,j) * ((uy+vx) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
                               (4*vy+2*ux) * Phi(2*(2*(jphi-1)+iphi),2*(jq-1)+iq))
 
           vq = xquad(ilq) * xquad(jlq)
 
-          if (float_cond(i,j) .eq. 0) then
-            v_diagonal (i-2+iphi,j-2+jphi) = v_diagonal (i-2+iphi,j-2+jphi) + &
+          if (float_cond(i,j) == 0) then
+            v_diagonal(i-2+iphi,j-2+jphi) = v_diagonal(i-2+iphi,j-2+jphi) + &
                 .25 * beta(i,j) * dxdyh * vq * xquad(ilq) * xquad(jlq)
           endif
 
         endif
       enddo ; enddo
     enddo ; enddo
-    if (float_cond(i,j) .eq. 1) then
+    if (float_cond(i,j) == 1) then
       Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%bathyT(i,j)
       Hcell(:,:) = H_node(i-1:i,j-1:j)
       call CG_diagonal_subgrid_basal_bilinear &
           (Phisub, Hcell, dxdyh, basel, dens_ratio, Usubcontr, Vsubcontr)
       do iphi=1,2 ; do jphi=1,2
-        if (umask (i-2+iphi,j-2+jphi) .eq. 1) then
-          u_diagonal (i-2+iphi,j-2+jphi) = u_diagonal (i-2+iphi,j-2+jphi) + Usubcontr (iphi,jphi) * beta(i,j)
-          v_diagonal (i-2+iphi,j-2+jphi) = v_diagonal (i-2+iphi,j-2+jphi) + Vsubcontr (iphi,jphi) * beta(i,j)
+        if (umask(i-2+iphi,j-2+jphi) == 1) then
+          u_diagonal(i-2+iphi,j-2+jphi) = u_diagonal(i-2+iphi,j-2+jphi) + Usubcontr(iphi,jphi) * beta(i,j)
+          v_diagonal(i-2+iphi,j-2+jphi) = v_diagonal(i-2+iphi,j-2+jphi) + Vsubcontr(iphi,jphi) * beta(i,j)
         endif
       enddo ; enddo
     endif
@@ -4838,7 +4847,7 @@ subroutine CG_diagonal_subgrid_basal_bilinear (Phisub, H, DXDYH, D, dens_ratio, 
               hloc = Phisub(i,j,1,1,qx,qy)*H(1,1)+Phisub(i,j,1,2,qx,qy)*H(1,2)+&
                 Phisub(i,j,2,1,qx,qy)*H(2,1)+Phisub(i,j,2,2,qx,qy)*H(2,2)
 
-              if (dens_ratio * hloc - D .gt. 0) then
+              if (dens_ratio * hloc - D > 0) then
                 Ucontr (m,n) = Ucontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy)**2
                 Vcontr (m,n) = Vcontr (m,n) + subarea * 0.25 * Phisub(i,j,m,n,qx,qy)**2
               endif
@@ -4854,16 +4863,16 @@ subroutine CG_diagonal_subgrid_basal_bilinear (Phisub, H, DXDYH, D, dens_ratio, 
 end subroutine CG_diagonal_subgrid_basal_bilinear
 
 
-subroutine apply_boundary_values_triangle (CS, time, u_boundary_contr, v_boundary_contr)
+subroutine apply_boundary_values_triangle(CS, time, u_boundary_contr, v_boundary_contr)
 
   type(time_type),       intent(in)    :: Time
-  type(ice_shelf_CS),    pointer       :: CS
-  real, dimension (:,:), intent(inout) :: u_boundary_contr, v_boundary_contr
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
+  real, dimension(:,:), intent(inout) :: u_boundary_contr, v_boundary_contr
 
 ! this will be a per-setup function. the boundary values of thickness and velocity
 ! (and possibly other variables) will be updated in this function
 
-  real, pointer, dimension (:,:)       :: u_boundary_values, &
+  real, pointer, dimension(:,:)       :: u_boundary_values, &
                           v_boundary_values, &
                           umask, vmask, hmask, &
                           nu_lower, nu_upper, beta_lower, beta_upper
@@ -4891,9 +4900,9 @@ subroutine apply_boundary_values_triangle (CS, time, u_boundary_contr, v_boundar
 
   domain_width = CS%len_lat
 
-  do i=isc-1,iec+1 ; do j=jsc-1,jec+1 ; if (hmask(i,j) .eq. 1) then
+  do i=isc-1,iec+1 ; do j=jsc-1,jec+1 ; if (hmask(i,j) == 1) then
 
-    if ((umask(i-1,j-1) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then
+    if ((umask(i-1,j-1) == 3) .OR. (umask(i,j-1) == 3) .OR. (umask(i-1,j) == 3)) then
 
       dxh = G%dxT(i,j)
       dyh = G%dyT(i,j)
@@ -4904,60 +4913,60 @@ subroutine apply_boundary_values_triangle (CS, time, u_boundary_contr, v_boundar
       uy = (u_boundary_values(i-1,j)-u_boundary_values(i-1,j-1))/dyh
       vy = (v_boundary_values(i-1,j)-v_boundary_values(i-1,j-1))/dyh
 
-      if (umask (i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+      if (umask(i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
-        u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
-            .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (0./dyh))
+        u_boundary_contr(i,j-1) = u_boundary_contr(i,j-1) + &
+            .5 * dxdyh * nu_lower(i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (0./dyh))
 
-        v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
-            .5 * dxdyh * nu_lower (i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (0./dyh))
+        v_boundary_contr(i,j-1) = v_boundary_contr(i,j-1) + &
+            .5 * dxdyh * nu_lower(i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (0./dyh))
 
-        u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
+        u_boundary_contr(i,j-1) = u_boundary_contr(i,j-1) + &
             beta_lower(i,j) * dxdyh * 1./24 * (u_boundary_values(i-1,j-1) + &
                           u_boundary_values(i-1,j) + u_boundary_values(i,j-1))
 
-        v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
+        v_boundary_contr(i,j-1) = v_boundary_contr(i,j-1) + &
             beta_lower(i,j) * dxdyh * 1./24 * (v_boundary_values(i-1,j-1) + &
                          v_boundary_values(i-1,j) + v_boundary_values(i,j-1))
       endif
 
-      if (umask (i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+      if (umask(i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
-        u_boundary_contr (i-1,j) = u_boundary_contr (i-1,j) + &
-            .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (1./dyh))
+        u_boundary_contr(i-1,j) = u_boundary_contr(i-1,j) + &
+            .5 * dxdyh * nu_lower(i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (1./dyh))
 
-        v_boundary_contr (i-1,j) = v_boundary_contr (i-1,j) + &
-            .5 * dxdyh * nu_lower (i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (1./dyh))
+        v_boundary_contr(i-1,j) = v_boundary_contr(i-1,j) + &
+            .5 * dxdyh * nu_lower(i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (1./dyh))
 
-        u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
+        u_boundary_contr(i,j-1) = u_boundary_contr(i,j-1) + &
             beta_lower(i,j) * dxdyh * 1./24 * (u_boundary_values(i-1,j-1) + &
                             u_boundary_values(i-1,j) + u_boundary_values(i,j-1))
 
-        v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
+        v_boundary_contr(i,j-1) = v_boundary_contr(i,j-1) + &
             beta_lower(i,j) * dxdyh * 1./24 * (v_boundary_values(i-1,j-1) + &
                             v_boundary_values(i-1,j) + v_boundary_values(i,j-1))
       endif
 
-      if (umask (i-1,j-1) .eq. 1) then ! this (bot left) is a degree of freedom node
+      if (umask(i-1,j-1) == 1) then ! this (bot left) is a degree of freedom node
 
-        u_boundary_contr (i-1,j-1) = u_boundary_contr (i-1,j-1) + &
-            .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (-1./dyh))
+        u_boundary_contr(i-1,j-1) = u_boundary_contr(i-1,j-1) + &
+            .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (-1./dyh))
 
-        v_boundary_contr (i-1,j-1) = v_boundary_contr (i-1,j-1) + &
-            .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (-1./dyh))
+        v_boundary_contr(i-1,j-1) = v_boundary_contr(i-1,j-1) + &
+            .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (-1./dyh))
 
-        u_boundary_contr (i-1,j-1) = u_boundary_contr (i-1,j-1) + &
+        u_boundary_contr(i-1,j-1) = u_boundary_contr(i-1,j-1) + &
             beta_lower(i,j) * dxdyh * 1./24 * (u_boundary_values(i-1,j-1) + &
                             u_boundary_values(i-1,j) + u_boundary_values(i,j-1))
 
-        v_boundary_contr (i-1,j-1) = v_boundary_contr (i-1,j-1) + &
+        v_boundary_contr(i-1,j-1) = v_boundary_contr(i-1,j-1) + &
             beta_lower(i,j) * dxdyh * 1./24 * (v_boundary_values(i-1,j-1) + &
                             v_boundary_values(i-1,j) + v_boundary_values(i,j-1))
       endif
 
     endif
 
-    if ((umask(i,j) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then
+    if ((umask(i,j) == 3) .OR. (umask(i,j-1) == 3) .OR. (umask(i-1,j) == 3)) then
 
       dxh = G%dxT(i,j)
       dyh = G%dyT(i,j)
@@ -4968,58 +4977,58 @@ subroutine apply_boundary_values_triangle (CS, time, u_boundary_contr, v_boundar
       uy = (u_boundary_values(i,j)-u_boundary_values(i,j-1))/dyh
       vy = (v_boundary_values(i,j)-v_boundary_values(i,j-1))/dyh
 
-      if (umask (i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+      if (umask(i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
-          u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
-              .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (-1./dyh))
+          u_boundary_contr(i,j-1) = u_boundary_contr(i,j-1) + &
+              .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (-1./dyh))
 
-          v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
-              .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (-1./dyh))
+          v_boundary_contr(i,j-1) = v_boundary_contr(i,j-1) + &
+              .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (-1./dyh))
 
-          u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
+          u_boundary_contr(i,j-1) = u_boundary_contr(i,j-1) + &
               beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
                                       u_boundary_values(i-1,j) +  &
                                 u_boundary_values(i,j-1))
 
-          v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
+          v_boundary_contr(i,j-1) = v_boundary_contr(i,j-1) + &
               beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
                                       u_boundary_values(i-1,j) +  &
                                 u_boundary_values(i,j-1))
       endif
 
-      if (umask (i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+      if (umask(i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
-        u_boundary_contr (i-1,j) = u_boundary_contr (i-1,j) + &
-            .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (0./dyh))
+        u_boundary_contr(i-1,j) = u_boundary_contr(i-1,j) + &
+            .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (0./dyh))
 
-        v_boundary_contr (i-1,j) = v_boundary_contr (i-1,j) + &
-            .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (0./dyh))
+        v_boundary_contr(i-1,j) = v_boundary_contr(i-1,j) + &
+            .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (0./dyh))
 
-        u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
+        u_boundary_contr(i,j-1) = u_boundary_contr(i,j-1) + &
             beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
                                     u_boundary_values(i-1,j) +  &
                               u_boundary_values(i,j-1))
 
-        v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
+        v_boundary_contr(i,j-1) = v_boundary_contr(i,j-1) + &
             beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
                                     u_boundary_values(i-1,j) +  &
                               u_boundary_values(i,j-1))
       endif
 
-      if (umask (i,j) .eq. 1) then ! this (top right) is a degree of freedom node
+      if (umask(i,j) == 1) then ! this (top right) is a degree of freedom node
 
-        u_boundary_contr (i,j) = u_boundary_contr (i,j) + &
-            .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (1./dyh))
+        u_boundary_contr(i,j) = u_boundary_contr(i,j) + &
+            .5 * dxdyh * nu_upper(i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (1./dyh))
 
-        v_boundary_contr (i,j) = v_boundary_contr (i,j) + &
-            .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (1./dyh))
+        v_boundary_contr(i,j) = v_boundary_contr(i,j) + &
+            .5 * dxdyh * nu_upper(i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (1./dyh))
 
-        u_boundary_contr (i,j) = u_boundary_contr (i,j) + &
+        u_boundary_contr(i,j) = u_boundary_contr(i,j) + &
             beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
                                     u_boundary_values(i-1,j) +  &
                               u_boundary_values(i,j-1))
 
-        v_boundary_contr (i,j) = v_boundary_contr (i,j) + &
+        v_boundary_contr(i,j) = v_boundary_contr(i,j) + &
             beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
                                     u_boundary_values(i-1,j) +  &
                               u_boundary_values(i,j-1))
@@ -5031,20 +5040,21 @@ subroutine apply_boundary_values_triangle (CS, time, u_boundary_contr, v_boundar
 
 end subroutine apply_boundary_values_triangle
 
-subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond, dens_ratio, u_boundary_contr, v_boundary_contr)
+subroutine apply_boundary_values_bilinear(CS, time, Phisub, H_node, float_cond, dens_ratio, &
+                                          u_boundary_contr, v_boundary_contr)
 
   type(time_type),       intent(in)    :: Time
-  real, dimension (:,:,:,:,:,:),pointer:: Phisub
-  type(ice_shelf_CS),    pointer       :: CS
-  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: H_node
-  real, dimension (:,:), intent (in)   :: float_cond
+  real, dimension(:,:,:,:,:,:),pointer:: Phisub
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: H_node
+  real, dimension(:,:), intent (in)   :: float_cond
   real                                 :: dens_ratio
-  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u_boundary_contr, v_boundary_contr
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u_boundary_contr, v_boundary_contr
 
 ! this will be a per-setup function. the boundary values of thickness and velocity
 ! (and possibly other variables) will be updated in this function
 
-  real, pointer, dimension (:,:)       :: u_boundary_values, &
+  real, pointer, dimension(:,:)       :: u_boundary_values, &
                           v_boundary_values, &
                           umask, vmask, &
                           nu, beta, hmask
@@ -5083,25 +5093,25 @@ subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond,
 ! Phi (2*i-1,j) gives d(Phi_i)/dx at quadrature point j
 ! Phi (2*i,j) gives d(Phi_i)/dy at quadrature point j
 
-  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (hmask(i,j) .eq. 1) then
+  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (hmask(i,j) == 1) then
 
     ! process this cell if any corners have umask set to non-dirichlet bdry.
     ! NOTE: vmask not considered, probably should be
 
-    if ((umask(i-1,j-1) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. &
-        (umask(i-1,j) .eq. 3) .OR. (umask(i,j) .eq. 3)) then
+    if ((umask(i-1,j-1) == 3) .OR. (umask(i,j-1) == 3) .OR. &
+        (umask(i-1,j) == 3) .OR. (umask(i,j) == 3)) then
 
 
       dxh = G%dxT(i,j)
       dyh = G%dyT(i,j)
       dxdyh = G%areaT(i,j)
 
-      X(1:2) = G%geoLonBu (i-1:i,j-1)*1000
-      X(3:4) = G%geoLonBu (i-1:i,j)*1000
-      Y(1:2) = G%geoLatBu (i-1:i,j-1)*1000
-      Y(3:4) = G%geoLatBu (i-1:i,j)*1000
+      X(1:2) = G%geoLonBu(i-1:i,j-1)*1000
+      X(3:4) = G%geoLonBu(i-1:i,j)*1000
+      Y(1:2) = G%geoLatBu(i-1:i,j-1)*1000
+      Y(3:4) = G%geoLatBu(i-1:i,j)*1000
 
-      call bilinear_shape_functions (X, Y, Phi, area)
+      call bilinear_shape_functions(X, Y, Phi, area)
 
       ! X and Y must be passed in the form
           !  3 - 4
@@ -5146,41 +5156,41 @@ subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond,
 
         do iphi=1,2 ; do jphi=1,2
 
-          if (iq .eq. iphi) then
+          if (iq == iphi) then
             ilq = 2
           else
             ilq = 1
           endif
 
-          if (jq .eq. jphi) then
+          if (jq == jphi) then
             jlq = 2
           else
             jlq = 1
           endif
 
-          if (umask (i-2+iphi,j-2+jphi) .eq. 1) then
+          if (umask(i-2+iphi,j-2+jphi) == 1) then
 
 
-            u_boundary_contr (i-2+iphi,j-2+jphi) = u_boundary_contr (i-2+iphi,j-2+jphi) + &
-            .25 * dxdyh * nu (i,j) * ( (4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
+            u_boundary_contr(i-2+iphi,j-2+jphi) = u_boundary_contr(i-2+iphi,j-2+jphi) + &
+            .25 * dxdyh * nu(i,j) * ( (4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
                          (uy+vx) * Phi(2*(2*(jphi-1)+iphi),2*(jq-1)+iq) )
 
-            if (float_cond(i,j) .eq. 0) then
-              u_boundary_contr (i-2+iphi,j-2+jphi) = u_boundary_contr (i-2+iphi,j-2+jphi) + &
+            if (float_cond(i,j) == 0) then
+              u_boundary_contr(i-2+iphi,j-2+jphi) = u_boundary_contr(i-2+iphi,j-2+jphi) + &
                 .25 * beta(i,j) * dxdyh * uq * xquad(ilq) * xquad(jlq)
             endif
 
           endif
 
-          if (vmask (i-2+iphi,j-2+jphi) .eq. 1) then
+          if (vmask(i-2+iphi,j-2+jphi) == 1) then
 
 
-            v_boundary_contr (i-2+iphi,j-2+jphi) = v_boundary_contr (i-2+iphi,j-2+jphi) + &
-              .25 * dxdyh * nu (i,j) * ( (uy+vx) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
+            v_boundary_contr(i-2+iphi,j-2+jphi) = v_boundary_contr(i-2+iphi,j-2+jphi) + &
+              .25 * dxdyh * nu(i,j) * ( (uy+vx) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
                            (4*vy+2*ux) * Phi(2*(2*(jphi-1)+iphi),2*(jq-1)+iq))
 
-            if (float_cond(i,j) .eq. 0) then
-              v_boundary_contr (i-2+iphi,j-2+jphi) = v_boundary_contr (i-2+iphi,j-2+jphi) + &
+            if (float_cond(i,j) == 0) then
+              v_boundary_contr(i-2+iphi,j-2+jphi) = v_boundary_contr(i-2+iphi,j-2+jphi) + &
                 .25 * beta(i,j) * dxdyh * vq * xquad(ilq) * xquad(jlq)
             endif
 
@@ -5188,20 +5198,20 @@ subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond,
         enddo ; enddo
       enddo ; enddo
 
-      if (float_cond(i,j) .eq. 1) then
+      if (float_cond(i,j) == 1) then
         Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%bathyT(i,j)
         Ucell(:,:) = u_boundary_values(i-1:i,j-1:j) ; Vcell(:,:) = v_boundary_values(i-1:i,j-1:j)
         Hcell(:,:) = H_node(i-1:i,j-1:j)
         call CG_action_subgrid_basal_bilinear &
             (Phisub, Hcell, Ucell, Vcell, dxdyh, basel, dens_ratio, Usubcontr, Vsubcontr)
         do iphi=1,2 ; do jphi = 1,2
-          if (umask (i-2+iphi,j-2+jphi) .eq. 1) then
-            u_boundary_contr (i-2+iphi,j-2+jphi) = u_boundary_contr (i-2+iphi,j-2+jphi) + &
-              Usubcontr(iphi,jphi) * beta (i,j)
+          if (umask(i-2+iphi,j-2+jphi) == 1) then
+            u_boundary_contr(i-2+iphi,j-2+jphi) = u_boundary_contr(i-2+iphi,j-2+jphi) + &
+              Usubcontr(iphi,jphi) * beta(i,j)
           endif
-          if (vmask (i-2+iphi,j-2+jphi) .eq. 1) then
-            v_boundary_contr (i-2+iphi,j-2+jphi) = v_boundary_contr (i-2+iphi,j-2+jphi) + &
-              Vsubcontr(iphi,jphi) * beta (i,j)
+          if (vmask(i-2+iphi,j-2+jphi) == 1) then
+            v_boundary_contr(i-2+iphi,j-2+jphi) = v_boundary_contr(i-2+iphi,j-2+jphi) + &
+              Vsubcontr(iphi,jphi) * beta(i,j)
           endif
         enddo ; enddo
       endif
@@ -5210,8 +5220,8 @@ subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond,
 
 end subroutine apply_boundary_values_bilinear
 
-subroutine calc_shelf_visc_triangular (CS,u,v)
-  type(ice_shelf_CS),         pointer   :: CS
+subroutine calc_shelf_visc_triangular(CS,u,v)
+  type(ice_shelf_CS),         pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(:,:), intent(inout)    :: u, v
 
 ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for triangle FEM solve so there is
@@ -5221,15 +5231,16 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
 
 ! this may be subject to change later... to make it "hybrid"
 
-  real, pointer, dimension (:,:)    :: nu_lower , &
+  real, pointer, dimension(:,:)    :: nu_lower , &
                          nu_upper, &
                        beta_eff_lower, &
                        beta_eff_upper
-  real, pointer, dimension (:,:)    :: H,    &! thickness
+  real, pointer, dimension(:,:)    :: H,    &! thickness
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed
+  integer :: iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -5266,7 +5277,7 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
       dyh = G%dyT(i,j)
       dxdyh = G%areaT(i,j)
 
-      if (hmask (i,j) .eq. 1) then
+      if (hmask(i,j) == 1) then
         ux = (u(i,j-1)-u(i-1,j-1)) / dxh
         vx = (v(i,j-1)-v(i-1,j-1)) / dxh
         uy = (u(i-1,j)-u(i-1,j-1)) / dyh
@@ -5275,7 +5286,8 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
         nu_lower(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy+0.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         umid = 1./3 * (u(i-1,j-1)+u(i-1,j)+u(i,j-1))
         vmid = 1./3 * (v(i-1,j-1)+v(i-1,j)+v(i,j-1))
-        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        beta_eff_lower(i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
         ux = (u(i,j)-u(i-1,j)) / dxh
         vx = (v(i,j)-v(i-1,j)) / dxh
@@ -5285,7 +5297,8 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
         nu_upper(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy+0.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         umid = 1./3 * (u(i,j)+u(i-1,j)+u(i,j-1))
         vmid = 1./3 * (v(i,j)+v(i-1,j)+v(i,j-1))
-        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_upper (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        beta_eff_upper(i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
       endif
     enddo
@@ -5293,8 +5306,8 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
 
 end subroutine calc_shelf_visc_triangular
 
-subroutine calc_shelf_visc_bilinear (CS, u, v)
-  type(ice_shelf_CS),         pointer   :: CS
+subroutine calc_shelf_visc_bilinear(CS, u, v)
+  type(ice_shelf_CS),         pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)    :: u, v
 
 ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for triangle FEM solve so there is
@@ -5304,13 +5317,14 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
 
 ! this may be subject to change later... to make it "hybrid"
 
-  real, pointer, dimension (:,:)    :: nu, &
+  real, pointer, dimension(:,:)    :: nu, &
                        beta
-  real, pointer, dimension (:,:)    :: H,    &! thickness
+  real, pointer, dimension(:,:)    :: H,    &! thickness
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
+  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -5339,7 +5353,7 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
       dyh = G%dyT(i,j)
       dxdyh = G%areaT(i,j)
 
-      if (hmask (i,j) .eq. 1) then
+      if (hmask(i,j) == 1) then
         ux = (u(i,j) + u(i,j-1) - u(i-1,j) - u(i-1,j-1)) / (2*dxh)
         vx = (v(i,j) + v(i,j-1) - v(i-1,j) - v(i-1,j-1)) / (2*dxh)
         uy = (u(i,j) - u(i,j-1) + u(i-1,j) - u(i-1,j-1)) / (2*dyh)
@@ -5349,15 +5363,15 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
 
         umid = (u(i,j) + u(i,j-1) + u(i-1,j) + u(i-1,j-1))/4
         vmid = (v(i,j) + v(i,j-1) + v(i-1,j) + v(i-1,j-1))/4
-        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta(i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
       endif
     enddo
   enddo
 
 end subroutine calc_shelf_visc_bilinear
 
-subroutine update_OD_ffrac (CS, ocean_mass, counter, nstep_velocity, time_step, velocity_update_time_step)
-  type(ice_shelf_CS),         pointer   :: CS
+subroutine update_OD_ffrac(CS, ocean_mass, counter, nstep_velocity, time_step, velocity_update_time_step)
+  type(ice_shelf_CS), pointer   :: CS !< A pointer to the ice shelf control structure
   real, dimension(CS%grid%isd:,CS%grid%jsd:) :: ocean_mass
   integer,intent(in)            :: counter
   integer,intent(in)            :: nstep_velocity
@@ -5386,12 +5400,12 @@ subroutine update_OD_ffrac (CS, ocean_mass, counter, nstep_velocity, time_step, 
     enddo
   enddo
 
-  if (counter .eq. nstep_velocity) then
+  if (counter == nstep_velocity) then
 
     do j=jsc,jec
       do i=isc,iec
         CS%float_frac(i,j) = 1.0 - (CS%float_frac_rt(i,j) / real(nstep_velocity))
-!    if ((CS%float_frac(i,j) .gt. 0) .and. (CS%float_frac(i,j) .lt. 1)) then
+!    if ((CS%float_frac(i,j) > 0) .and. (CS%float_frac(i,j) < 1)) then
 !        print *,"PARTLY GROUNDED", CS%float_frac(i,j),i,j,mpp_pe()
 !    endif
         CS%OD_av(i,j) = CS%OD_rt(i,j) / real(nstep_velocity)
@@ -5407,8 +5421,8 @@ subroutine update_OD_ffrac (CS, ocean_mass, counter, nstep_velocity, time_step, 
 
 end subroutine update_OD_ffrac
 
-subroutine update_OD_ffrac_uncoupled (CS)
-  type(ice_shelf_CS), pointer    :: CS
+subroutine update_OD_ffrac_uncoupled(CS)
+  type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
 
   type(ocean_grid_type), pointer :: G
   integer             :: i, j, iters, isd, ied, jsd, jed
@@ -5430,13 +5444,13 @@ subroutine update_OD_ffrac_uncoupled (CS)
 
   do j=jsd,jed
     do i=isd,ied
-      OD = G%bathyT(i,j) - rhoi/rhow * h_shelf (i,j)
-      if (OD.ge.0) then
+      OD = G%bathyT(i,j) - rhoi/rhow * h_shelf(i,j)
+      if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
-        OD_av (i,j) = OD
+        OD_av(i,j) = OD
         float_frac(i,j) = 0.
       else
-        OD_av (i,j) = 0.
+        OD_av(i,j) = 0.
         float_frac(i,j) = 1.
       endif
     enddo
@@ -5462,12 +5476,12 @@ subroutine bilinear_shape_functions (X, Y, Phi, area)
 !
 ! Phi (2*i-1,j) gives d(Phi_i)/dx at quadrature point j
 ! Phi (2*i,j) gives d(Phi_i)/dy at quadrature point j
-! Phi_i is equal to 1 at vertex i, and 0 at vertex k .ne. i, and bilinear
+! Phi_i is equal to 1 at vertex i, and 0 at vertex k /= i, and bilinear
 !
 ! This should be a one-off; once per nonlinear solve? once per lifetime?
 ! ... will all cells have the same shape and dimension?
 
-  real, dimension (4) :: xquad, yquad
+  real, dimension(4) :: xquad, yquad
   integer :: node, qpoint, xnode, xq, ynode, yq
   real :: a,b,c,d,e,f,xexp,yexp
 
@@ -5485,13 +5499,13 @@ subroutine bilinear_shape_functions (X, Y, Phi, area)
 
       xnode = 2-mod(node,2) ; ynode = ceiling(REAL(node)/2)
 
-      if (ynode .eq. 1) then
+      if (ynode == 1) then
         yexp = 1-yquad(qpoint)
       else
         yexp = yquad(qpoint)
       endif
 
-      if (1 .eq. xnode) then
+      if (1 == xnode) then
         xexp = 1-xquad(qpoint)
       else
         xexp = xquad(qpoint)
@@ -5520,7 +5534,7 @@ subroutine bilinear_shape_functions_subgrid (Phisub, nsub)
   ! i think this general approach may not work for nonrectangular elements...
   !
 
-  ! Phisub (i,j,k,l,q1,q2)
+  ! Phisub(i,j,k,l,q1,q2)
   !  i: subgrid index in x-direction
   !  j: subgrid index in y-direction
   !  k: basis function x-index
@@ -5554,17 +5568,17 @@ subroutine bilinear_shape_functions_subgrid (Phisub, nsub)
           do k=1,2
             do l=1,2
               val = 1.0
-              if (k .eq. 1) then
+              if (k == 1) then
                 val = val * (1.0-x)
               else
                 val = val * x
               endif
-              if (l .eq. 1) then
+              if (l == 1) then
                 val = val * (1.0-y)
               else
                 val = val * y
               endif
-              Phisub (i,j,k,l,qx,qy) = val
+              Phisub(i,j,k,l,qx,qy) = val
             enddo
           enddo
         enddo
@@ -5578,18 +5592,20 @@ subroutine bilinear_shape_functions_subgrid (Phisub, nsub)
 end subroutine bilinear_shape_functions_subgrid
 
 
-subroutine update_velocity_masks (CS)
-  type(ice_shelf_CS),    pointer    :: CS
+subroutine update_velocity_masks(CS)
+  type(ice_shelf_CS),    pointer    :: CS !< A pointer to the ice shelf control structure
 
   ! sets masks for velocity solve
   ! ignores the fact that their might be ice-free cells - this only considers the computational boundary
 
-  ! !!!!IMPORTANT!!!! relies on thickness mask - assumed that this is called after hmask has been updated (and halo-updated)
+  ! !!!IMPORTANT!!! relies on thickness mask - assumed that this is called after hmask has been updated & halo-updated
 
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, k
+  integer :: isym, i, j, k, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq
+  integer :: giec, gjec, gisc, gjsc, isc, jsc, iec, jec
   integer :: i_off, j_off
-  type(ocean_grid_type), pointer :: G
-  real, dimension(:,:), pointer  :: umask, vmask, u_face_mask, v_face_mask, hmask, u_face_mask_boundary, v_face_mask_boundary
+  type(ocean_grid_type), pointer :: G => NULL()
+  real, dimension(:,:), pointer  :: umask, vmask, u_face_mask, v_face_mask, hmask
+  real, dimension(:,:), pointer  :: u_face_mask_boundary, v_face_mask_boundary
 
   G => CS%grid
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -5617,8 +5633,8 @@ subroutine update_velocity_masks (CS)
 
   isym = 0
 
-  umask (:,:) = 0 ; vmask (:,:) = 0
-  u_face_mask (:,:) = 0 ; v_face_mask (:,:) = 0
+  umask(:,:) = 0 ; vmask(:,:) = 0
+  u_face_mask(:,:) = 0 ; v_face_mask(:,:) = 0
 
   if (G%symmetric) then
    is = isd ; js = jsd
@@ -5629,7 +5645,7 @@ subroutine update_velocity_masks (CS)
   do j=js,G%jed
     do i=is,G%ied
 
-      if (hmask(i,j) .eq. 1) then
+      if (hmask(i,j) == 1) then
 
         umask(i-1:i,j-1:j) = 1.
         vmask(i-1:i,j-1:j) = 1.
@@ -5681,47 +5697,47 @@ subroutine update_velocity_masks (CS)
         enddo
 
         !if (u_face_mask_boundary(i-1,j).geq.0) then !left boundary
-        !  u_face_mask (i-1,j) = u_face_mask_boundary(i-1,j)
-        !  umask (i-1,j-1:j) = 3.
-        !  vmask (i-1,j-1:j) = 0.
+        !  u_face_mask(i-1,j) = u_face_mask_boundary(i-1,j)
+        !  umask(i-1,j-1:j) = 3.
+        !  vmask(i-1,j-1:j) = 0.
         !endif
 
-        !if (j_off+j .eq. gjsc+1) then !bot boundary
-        !  v_face_mask (i,j-1) = 0.
+        !if (j_off+j == gjsc+1) then !bot boundary
+        !  v_face_mask(i,j-1) = 0.
         !  umask (i-1:i,j-1) = 0.
         !  vmask (i-1:i,j-1) = 0.
-        !elseif (j_off+j .eq. gjec) then !top boundary
-        !  v_face_mask (i,j) = 0.
+        !elseif (j_off+j == gjec) then !top boundary
+        !  v_face_mask(i,j) = 0.
         !  umask (i-1:i,j) = 0.
         !  vmask (i-1:i,j) = 0.
         !endif
 
-        if (i .lt. G%ied) then
-          if ((hmask(i+1,j) .eq. 0) &
-              .OR. (hmask(i+1,j) .eq. 2)) then
+        if (i < G%ied) then
+          if ((hmask(i+1,j) == 0) &
+              .OR. (hmask(i+1,j) == 2)) then
             !right boundary or adjacent to unfilled cell
-            u_face_mask (i,j) = 2.
+            u_face_mask(i,j) = 2.
           endif
         endif
 
-        if (i .gt. G%isd) then
-          if ((hmask(i-1,j) .eq. 0) .OR. (hmask(i-1,j) .eq. 2)) then
+        if (i > G%isd) then
+          if ((hmask(i-1,j) == 0) .OR. (hmask(i-1,j) == 2)) then
             !adjacent to unfilled cell
-            u_face_mask (i-1,j) = 2.
+            u_face_mask(i-1,j) = 2.
           endif
         endif
 
-        if (j .gt. G%jsd) then
-          if ((hmask(i,j-1) .eq. 0) .OR. (hmask(i,j-1) .eq. 2)) then
+        if (j > G%jsd) then
+          if ((hmask(i,j-1) == 0) .OR. (hmask(i,j-1) == 2)) then
             !adjacent to unfilled cell
-            v_face_mask (i,j-1) = 2.
+            v_face_mask(i,j-1) = 2.
           endif
         endif
 
-        if (j .lt. G%jed) then
-          if ((hmask(i,j+1) .eq. 0) .OR. (hmask(i,j+1) .eq. 2)) then
+        if (j < G%jed) then
+          if ((hmask(i,j+1) == 0) .OR. (hmask(i,j+1) == 2)) then
             !adjacent to unfilled cell
-            v_face_mask (i,j) = 2.
+            v_face_mask(i,j) = 2.
           endif
         endif
 
@@ -5735,17 +5751,18 @@ subroutine update_velocity_masks (CS)
   ! so this subroutine must update its own symmetric part of the halo
 
   call pass_vector(u_face_mask, v_face_mask, G%domain, TO_ALL, CGRID_NE)
-  call pass_vector (umask,vmask,G%domain,TO_ALL,BGRID_NE)
+  call pass_vector(umask,vmask,G%domain,TO_ALL,BGRID_NE)
 
 end subroutine update_velocity_masks
 
 
-subroutine interpolate_H_to_B (CS, h_shelf, hmask, H_node)
-  type(ice_shelf_CS), pointer                            :: CS
-  real, dimension (:,:), intent(in)                      :: h_shelf, hmask
-  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: H_node
+subroutine interpolate_H_to_B(CS, h_shelf, hmask, H_node)
+  type(ice_shelf_CS),   pointer       :: CS !< A pointer to the ice shelf control structure
+  real, dimension(:,:), intent(in)    :: h_shelf, hmask
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), &
+                        intent(inout) :: H_node
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   integer                        :: i, j, isc, iec, jsc, jec, num_h, k, l
   real                           :: summ
 
@@ -5763,13 +5780,13 @@ subroutine interpolate_H_to_B (CS, h_shelf, hmask, H_node)
       num_h = 0
       do k=0,1
         do l=0,1
-          if (hmask (i+k,j+l) .eq. 1.0) then
-            summ = summ + h_shelf (i+k,j+l)
+          if (hmask(i+k,j+l) == 1.0) then
+            summ = summ + h_shelf(i+k,j+l)
             num_h = num_h + 1
           endif
         enddo
       enddo
-      if (num_h .gt. 0) then
+      if (num_h > 0) then
         H_node(i,j) = summ / num_h
       endif
     enddo
@@ -5781,7 +5798,7 @@ end subroutine interpolate_H_to_B
 
 !> Deallocates all memory associated with this module
 subroutine ice_shelf_end(CS)
-  type(ice_shelf_CS), pointer   :: CS
+  type(ice_shelf_CS), pointer   :: CS !< A pointer to the ice shelf control structure
 
   if (.not.associated(CS)) return
 
@@ -5789,7 +5806,7 @@ subroutine ice_shelf_end(CS)
   deallocate(CS%t_flux) ; deallocate(CS%lprec)
   deallocate(CS%salt_flux)
 
-  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze);
+  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze)
   deallocate(CS%exch_vel_t) ; deallocate(CS%exch_vel_s)
 
   deallocate(CS%h_shelf) ; deallocate(CS%hmask)
@@ -5797,7 +5814,7 @@ subroutine ice_shelf_end(CS)
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     deallocate(CS%u_shelf) ; deallocate(CS%v_shelf)
 !!! OVS !!!
-    deallocate(CS%t_shelf); deallocate(CS%tmask);
+    deallocate(CS%t_shelf); deallocate(CS%tmask)
     deallocate(CS%t_boundary_values)
     deallocate(CS%u_boundary_values) ; deallocate(CS%v_boundary_values)
     deallocate(CS%ice_visc_bilinear)
@@ -5847,21 +5864,21 @@ N = size(A,2)
 OPEN(unit=fin,FILE=fname,STATUS='REPLACE',ACCESS='SEQUENTIAL',&
    ACTION='WRITE',IOSTAT=iock)
 
-IF(M .gt. 1300) THEN
+if (M > 1300) THEN
    WRITE(fin) 'SECOND DIMENSION TOO LARGE'
    CLOSE(fin)
    RETURN
-END IF
+ENDIF
 
 DO i=1,M
   WRITE(ln,'(E17.9)') A(i,1)
   DO j=2,N
     WRITE(sing,'(E17.9)') A(i,j)
     ln = TRIM(ln) // ' ' // TRIM(sing)
-  END DO
+  ENDDO
 
 
-  IF(i.eq.1) THEN
+  if (i == 1) THEN
 
    lh = LEN(TRIM(ln))
 
@@ -5884,28 +5901,28 @@ DO i=1,M
 
    FMT1 = TRIM(FMT1) // ')'
 
-  END IF
+  ENDIF
 
   WRITE(UNIT=fin,IOSTAT=iock,FMT=TRIM(FMT1)) TRIM(ln)
 
-  IF(iock .ne. 0) THEN
-     PRINT*,iock
-  END IF
-END DO
+  if (iock /= 0) THEN
+     PRINT *,iock
+  ENDIF
+ENDDO
 
 CLOSE(FIN)
 
 end subroutine savearray2
 
 
-subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
-  type(ice_shelf_CS), pointer    :: CS
+subroutine solo_time_step(CS, time_step, n, Time, min_time_step_in)
+  type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
   real,intent(in)      :: time_step
   integer, intent(inout)      :: n
   type(time_type)      :: Time
   real,optional,intent(in)   :: min_time_step_in
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   integer          :: is, iec, js, jec, i, j, ki, kj, iters
   real             :: ratio, min_ratio, time_step_remain, local_u_max, &
                local_v_max, time_step_int, min_time_step,spy,dumtimeprint
@@ -5935,7 +5952,7 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
   ! dumtimeprint=time_type_to_real(Time)/spy
   if (is_root_pe()) print *, "TIME in ice shelf call, yrs: ", time_type_to_real(Time)/spy
 
-  do while (time_step_remain .gt. 0.0)
+  do while (time_step_remain > 0.0)
 
   min_ratio = 1.0e16
   n=n+1
@@ -5944,18 +5961,18 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
 
        local_u_max = 0 ; local_v_max = 0
 
-       if (hmask (i,j) .eq. 1.0) then
+       if (hmask(i,j) == 1.0) then
          ! all 4 corners of the cell should have valid velocity values; otherwise something is wrong
         ! this is done by checking that umask and vmask are nonzero at all 4 corners
         do ki=1,2 ; do kj = 1,2
 
-          local_u_max = max (local_u_max, abs(u_shelf(i-1+ki,j-1+kj)))
-          local_v_max = max (local_v_max, abs(v_shelf(i-1+ki,j-1+kj)))
+          local_u_max = max(local_u_max, abs(u_shelf(i-1+ki,j-1+kj)))
+          local_v_max = max(local_v_max, abs(v_shelf(i-1+ki,j-1+kj)))
 
         enddo ; enddo
 
-        ratio = min (G%areaT(i,j) / (local_u_max+1.0e-12), G%areaT(i,j) / (local_v_max+1.0e-12))
-        min_ratio = min (min_ratio, ratio)
+        ratio = min(G%areaT(i,j) / (local_u_max+1.0e-12), G%areaT(i,j) / (local_v_max+1.0e-12))
+        min_ratio = min(min_ratio, ratio)
 
        endif
      enddo ! j loop
@@ -5963,19 +5980,19 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
 
    ! solved velocities are in m/yr; we want m/s
 
-   call mpp_min (min_ratio)
+   call mpp_min(min_ratio)
 
    time_step_int = min(CS%CFL_factor * min_ratio * (365*86400), time_step)
 
-   if (time_step_int .lt. min_time_step) then
-     call MOM_error (FATAL, "MOM_ice_shelf:solo_time_step: abnormally small timestep")
+   if (time_step_int < min_time_step) then
+     call MOM_error(FATAL, "MOM_ice_shelf:solo_time_step: abnormally small timestep")
    else
      if (is_root_pe()) then
    write(*,*) "Ice model timestep: ", time_step_int, " seconds"
      endif
    endif
 
-   if (time_step_int .ge. time_step_remain) then
+   if (time_step_int >= time_step_remain) then
      time_step_int = time_step_remain
      time_step_remain = 0.0
    else
@@ -5984,9 +6001,9 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
 
    write (stepnum,'(I4)') CS%velocity_update_sub_counter
 
-   call ice_shelf_advect (CS, time_step_int, CS%lprec, Time)
+   call ice_shelf_advect(CS, time_step_int, CS%lprec, Time)
 
-   if (mpp_pe() .eq. 7) then
+   if (mpp_pe() == 7) then
       call savearray2 ("hmask",CS%hmask,CS%write_output_to_file)
 !!! OVS!!!
 !      call savearray2 ("tshelf",CS%t_shelf,CS%write_output_to_file)
@@ -5994,18 +6011,18 @@ subroutine solo_time_step (CS, time_step, n, Time, min_time_step_in)
 
    ! if the last mini-timestep is a day or less, we cannot expect velocities to change by much.
    ! do not update them
-   if (time_step_int .gt. 1000) then
-     call update_velocity_masks (CS)
+   if (time_step_int > 1000) then
+     call update_velocity_masks(CS)
 
 !     call savearray2 ("Umask"//"p"//trim(procnum)//"_"//trim(stepnum),CS%umask,CS%write_output_to_file)
 !     call savearray2 ("Vmask"//"p"//trim(procnum)//"_"//trim(stepnum),CS%vmask,CS%write_output_to_file)
 
-     call update_OD_ffrac_uncoupled (CS)
-     call ice_shelf_solve_outer (CS, CS%u_shelf, CS%v_shelf, 1, iters, dummy)
+     call update_OD_ffrac_uncoupled(CS)
+     call ice_shelf_solve_outer(CS, CS%u_shelf, CS%v_shelf, 1, iters, dummy)
    endif
 
 !!! OVS!!!
-   call ice_shelf_temp (CS, time_step_int, CS%lprec, Time)
+   call ice_shelf_temp(CS, time_step_int, CS%lprec, Time)
 
   call enable_averaging(time_step,Time,CS%diag)
    if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, CS%area_shelf_h, CS%diag)
@@ -6033,7 +6050,7 @@ end subroutine solo_time_step
 
 !!! OVS !!!
 subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),   pointer    :: CS
+  type(ice_shelf_CS),   pointer    :: CS !< A pointer to the ice shelf control structure
   real,                 intent(in) :: time_step
   real, dimension(:,:), pointer    :: melt_rate
   type(time_type),      intent(in) :: Time
@@ -6048,7 +6065,8 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
 ! t_after_uflux - an array containing the temperature after advection in u-direction
 ! t_after_vflux - similar
 !
-!    This subroutine takes the velocity (on the Bgrid) and timesteps (HT)_t = - div (uHT) + (adot Tsurd -bdot Tbot) once and then calculates T=HT/H
+!    This subroutine takes the velocity (on the Bgrid) and timesteps
+!      (HT)_t = - div (uHT) + (adot Tsurd -bdot Tbot) once and then calculates T=HT/H
 !
 !    The flux overflows are included here. That is because they will be used to advect 3D scalars
 !    into partial cells
@@ -6059,10 +6077,10 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   ! ###Perhaps flux_enter should be changed into u-face and v-face
   ! ###fluxes, which can then be used in halo updates, etc.
   !
-  !   from left neighbor:   flux_enter (:,:,1)
-  !   from right neighbor:  flux_enter (:,:,2)
-  !   from bottom neighbor: flux_enter (:,:,3)
-  !   from top neighbor:    flux_enter (:,:,4)
+  !   from left neighbor:   flux_enter(:,:,1)
+  !   from right neighbor:  flux_enter(:,:,2)
+  !   from bottom neighbor: flux_enter(:,:,3)
+  !   from top neighbor:    flux_enter(:,:,4)
   !
   !  THESE ARE NOT CONSISTENT ==> FIND OUT WHAT YOU IMPLEMENTED
 
@@ -6075,7 +6093,7 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   !   o--- (3) ---o
   !
 
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, dimension(size(CS%h_shelf,1),size(CS%h_shelf,2))   :: th_after_uflux, th_after_vflux, TH
   real, dimension(size(CS%h_shelf,1),size(CS%h_shelf,2),4) :: flux_enter
   integer                           :: isd, ied, jsd, jed, i, j, isc, iec, jsc, jec
@@ -6094,16 +6112,16 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
-  flux_enter (:,:,:) = 0.0
+  flux_enter(:,:,:) = 0.0
 
-  th_after_uflux (:,:) = 0.0
-  th_after_vflux (:,:) = 0.0
+  th_after_uflux(:,:) = 0.0
+  th_after_vflux(:,:) = 0.0
 
   do j=jsd,jed
     do i=isd,ied
       t_bd = CS%t_boundary_values(i,j)
-!      if (CS%hmask(i,j) .gt. 1) then
-      if ((CS%hmask(i,j) .eq. 3) .or. (CS%hmask(i,j) .eq. -2)) then
+!      if (CS%hmask(i,j) > 1) then
+      if ((CS%hmask(i,j) == 3) .or. (CS%hmask(i,j) == -2)) then
           CS%t_shelf(i,j) = CS%t_boundary_values(i,j)
       endif
     enddo
@@ -6111,32 +6129,32 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
 
   do j=jsd,jed
     do i=isd,ied
-        TH (i,j) = CS%t_shelf(i,j)*CS%h_shelf (i,j)
+        TH(i,j) = CS%t_shelf(i,j)*CS%h_shelf(i,j)
     enddo
   enddo
 
 
 !  call enable_averaging(time_step,Time,CS%diag)
- ! call pass_var (h_after_uflux, G%domain)
+ ! call pass_var(h_after_uflux, G%domain)
 !  if (CS%id_h_after_uflux > 0) call post_data(CS%id_h_after_uflux, h_after_uflux, CS%diag)
 !  call disable_averaging(CS%diag)
 
 
 !  call enable_averaging(time_step,Time,CS%diag)
-!  call pass_var (h_after_vflux, G%domain)
+!  call pass_var(h_after_vflux, G%domain)
 !  if (CS%id_h_after_vflux > 0) call post_data(CS%id_h_after_vflux, h_after_vflux, CS%diag)
 !  call disable_averaging(CS%diag)
 
 
 
-  call ice_shelf_advect_temp_x (CS, time_step/spy, TH, th_after_uflux, flux_enter)
-  call ice_shelf_advect_temp_y (CS, time_step/spy, th_after_uflux, th_after_vflux, flux_enter)
+  call ice_shelf_advect_temp_x(CS, time_step/spy, TH, th_after_uflux, flux_enter)
+  call ice_shelf_advect_temp_y(CS, time_step/spy, th_after_uflux, th_after_vflux, flux_enter)
 
   do j=jsd,jed
     do i=isd,ied
-!      if (CS%hmask(i,j) .eq. 1) then
-      if (CS%h_shelf(i,j) .gt. 0.0) then
-        CS%t_shelf (i,j) = th_after_vflux(i,j)/CS%h_shelf (i,j)
+!      if (CS%hmask(i,j) == 1) then
+      if (CS%h_shelf(i,j) > 0.0) then
+        CS%t_shelf(i,j) = th_after_vflux(i,j)/CS%h_shelf(i,j)
       else
           CS%t_shelf(i,j) = -10.0
       endif
@@ -6146,8 +6164,8 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   do j=jsd,jed
     do i=isd,ied
       t_bd = CS%t_boundary_values(i,j)
-!      if (CS%hmask(i,j) .gt. 1) then
-      if ((CS%hmask(i,j) .eq. 3) .or. (CS%hmask(i,j) .eq. -2)) then
+!      if (CS%hmask(i,j) > 1) then
+      if ((CS%hmask(i,j) == 3) .or. (CS%hmask(i,j) == -2)) then
           CS%t_shelf(i,j) = t_bd
 !          CS%t_shelf(i,j) = -15.0
       endif
@@ -6156,10 +6174,10 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
 
   do j=jsc,jec
     do i=isc,iec
-      if ((CS%hmask(i,j) .eq. 1) .or. (CS%hmask(i,j) .eq. 2)) then
-        if (CS%h_shelf(i,j) .gt. 0.0) then
-!          CS%t_shelf (i,j) = CS%t_shelf (i,j) + time_step*(adot*Tsurf -melt_rate (i,j)*Tbot(i,j))/CS%h_shelf (i,j)
-          CS%t_shelf (i,j) = CS%t_shelf (i,j) + time_step*(adot*Tsurf -3/spy*Tbot(i,j))/CS%h_shelf (i,j)
+      if ((CS%hmask(i,j) == 1) .or. (CS%hmask(i,j) == 2)) then
+        if (CS%h_shelf(i,j) > 0.0) then
+!          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf -melt_rate(i,j)*Tbot(i,j))/CS%h_shelf(i,j)
+          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf -3/spy*Tbot(i,j))/CS%h_shelf(i,j)
         else
           ! the ice is about to melt away
           ! in this case set thickness, area, and mask to zero
@@ -6177,14 +6195,14 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   call pass_var(CS%tmask, G%domain)
 
   if (CS%DEBUG) then
-    call hchksum (CS%t_shelf, "temp after front", G%HI, haloshift=3)
+    call hchksum(CS%t_shelf, "temp after front", G%HI, haloshift=3)
   endif
 
 end subroutine ice_shelf_temp
 
 
-subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+subroutine ice_shelf_advect_temp_x(CS, time_step, h0, h_after_uflux, flux_enter)
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h0
   real, dimension(:,:), intent(inout) :: h_after_uflux
@@ -6196,10 +6214,10 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter (:,:,1)
-  !   from right neighbor:  flux_enter (:,:,2)
-  !   from bottom neighbor: flux_enter (:,:,3)
-  !   from top neighbor:    flux_enter (:,:,4)
+  !   from left neighbor:   flux_enter(:,:,1)
+  !   from right neighbor:  flux_enter(:,:,2)
+  !   from bottom neighbor: flux_enter(:,:,3)
+  !   from top neighbor:    flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -6211,7 +6229,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
   integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
   integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, dimension(-2:2) :: stencil
   real, dimension(:,:), pointer  :: hmask, u_face_mask, u_flux_boundary_values,u_boundary_values,t_boundary
   real :: u_face, &  ! positive if out
@@ -6238,29 +6256,29 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do j=jsd+1,jed-1
-    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+        ((j+j_off) >= G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
-!     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo)
+!     if (i+i_off == G%domain%nihalo+G%domain%nihalo)
       do i=is,ie
 
-        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+i_off) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) >= G%domain%nihalo+1)) then
 
-          if (i+i_off .eq. G%domain%nihalo+1) then
+          if (i+i_off == G%domain%nihalo+1) then
             at_west_bdry=.true.
           else
             at_west_bdry=.false.
           endif
 
-          if (i+i_off .eq. G%domain%niglobal+G%domain%nihalo) then
+          if (i+i_off == G%domain%niglobal+G%domain%nihalo) then
             at_east_bdry=.true.
           else
             at_east_bdry=.false.
           endif
 
-          if (hmask(i,j) .eq. 1) then
+          if (hmask(i,j) == 1) then
 
             dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
 
@@ -6272,9 +6290,9 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
             ! 1ST DO LEFT FACE
 
-            if (u_face_mask (i-1,j) .eq. 4.) then
+            if (u_face_mask(i-1,j) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values (i-1,j) * &
+              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values(i-1,j) * &
                                t_boundary(i-1,j) / dxdyh
 ! assume no flux bc for temp
 !               flux_diff_cell = flux_diff_cell + dyh * time_step * CS%u_shelf(i,j)*t_boundary(i-1,j) / dxdyh
@@ -6284,20 +6302,20 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
               ! get u-velocity at center of left face
               u_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i-1,j))
 
-  !            if (at_west_bdry .and. (i .eq. G%isc)) then
+  !            if (at_west_bdry .and.(i == G%isc)) then
   !                print *, j, u_face, stencil(-1)
   !            endif
 
-              if (u_face .gt. 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
+              if (u_face > 0) then !flux is into cell - we need info from h(i-2), h(i-1) if available
 
               ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_west_bdry .AND. (hmask(i-1,j).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                              ! and the stencil contains it
+                if (at_west_bdry .AND. (hmask(i-1,j) == 3)) then ! at western bdry but there is a
+                              ! thickness bdry condition, and the stencil contains it
                   stencil (-1) = CS%t_boundary_values(i-1,j)*CS%h_shelf(i-1,j)
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(-1) / dxdyh
 
-                elseif (hmask(i-1,j) * hmask(i-2,j) .eq. 1) then  ! h(i-2) and h(i-1) are valid
+                elseif (hmask(i-1,j) * hmask(i-2,j) == 1) then  ! h(i-2) and h(i-1) are valid
                   phi = slope_limiter (stencil(-1)-stencil(-2), stencil(0)-stencil(-1))
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh* time_step / dxdyh * &
                            (stencil(-1) - phi * (stencil(-1)-stencil(0))/2)
@@ -6310,8 +6328,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
                 endif
 
-              elseif (u_face .lt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
-                if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
+              elseif (u_face < 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+                if (hmask(i-1,j) * hmask(i+1,j) == 1) then         ! h(i-1) and h(i+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * &
                              (stencil(0) - phi * (stencil(0)-stencil(-1))/2)
@@ -6319,7 +6337,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
                 else
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * stencil(0)
 
-                  if ((hmask(i-1,j) .eq. 0) .OR. (hmask(i-1,j) .eq. 2)) then
+                  if ((hmask(i-1,j) == 0) .OR. (hmask(i-1,j) == 2)) then
                     flux_enter(i-1,j,2) = ABS(u_face) * dyh * time_step * stencil(0)
                   endif
                 endif
@@ -6330,25 +6348,25 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
             ! get u-velocity at center of right face
 
-            if (u_face_mask (i+1,j) .eq. 4.) then
+            if (u_face_mask(i+1,j) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values (i+1,j) *&
+              flux_diff_cell = flux_diff_cell + dyh * time_step * u_flux_boundary_values(i+1,j) *&
                                t_boundary(i+1,j)/ dxdyh
 ! assume no flux bc for temp
-!               flux_diff_cell = flux_diff_cell + dyh * time_step *  CS%u_shelf(i,j)*t_boundary (i+1,j)/ dxdyh
+!               flux_diff_cell = flux_diff_cell + dyh * time_step *  CS%u_shelf(i,j)*t_boundary(i+1,j)/ dxdyh
 
             else
 
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
 
-              if (u_face .lt. 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
+              if (u_face < 0) then !flux is into cell - we need info from h(i+2), h(i+1) if available
 
-                if (at_east_bdry .AND. (hmask(i+1,j).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_east_bdry .AND. (hmask(i+1,j) == 3)) then ! at eastern bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
 
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step * stencil(1) / dxdyh
 
-                elseif (hmask(i+1,j) * hmask(i+2,j) .eq. 1) then  ! h(i+2) and h(i+1) are valid
+                elseif (hmask(i+1,j) * hmask(i+2,j) == 1) then  ! h(i+2) and h(i+1) are valid
 
                   phi = slope_limiter (stencil(1)-stencil(2), stencil(0)-stencil(1))
                   flux_diff_cell = flux_diff_cell + ABS(u_face) * dyh * time_step / dxdyh * &
@@ -6362,9 +6380,9 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
                 endif
 
-              elseif (u_face .gt. 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
+              elseif (u_face > 0) then !flux is out of cell - we need info from h(i-1), h(i+1) if available
 
-                if (hmask(i-1,j) * hmask(i+1,j) .eq. 1) then         ! h(i-1) and h(i+1) are both valid
+                if (hmask(i-1,j) * hmask(i+1,j) == 1) then         ! h(i-1) and h(i+1) are both valid
 
                   phi = slope_limiter (stencil(0)-stencil(-1), stencil(1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * &
@@ -6376,7 +6394,7 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
                   flux_diff_cell = flux_diff_cell - ABS(u_face) * dyh * time_step / dxdyh * stencil(0)
 
-                  if ((hmask(i+1,j) .eq. 0) .OR. (hmask(i+1,j) .eq. 2)) then
+                  if ((hmask(i+1,j) == 0) .OR. (hmask(i+1,j) == 2)) then
 
                     flux_enter(i+1,j,1) = ABS(u_face) * dyh * time_step  * stencil(0)
                   endif
@@ -6389,35 +6407,37 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
             endif
 
-          elseif ((hmask(i,j) .eq. 0) .OR. (hmask(i,j) .eq. 2)) then
+          elseif ((hmask(i,j) == 0) .OR. (hmask(i,j) == 2)) then
 
-            if (at_west_bdry .AND. (hmask(i-1,j) .EQ. 3)) then
+            if (at_west_bdry .AND. (hmask(i-1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i-1,j))
-              flux_enter (i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i-1,j)*CS%thickness_boundary_values(i+1,j)
-            elseif (u_face_mask (i-1,j) .eq. 4.) then
-              flux_enter (i,j,1) = G%dyT(i,j) * time_step * u_flux_boundary_values (i-1,j)*t_boundary(i-1,j)
-!              flux_enter (i,j,1) = G%dyh(i,j) * time_step *  CS%u_shelf(i,j)*t_boundary (i-1,j)
+              flux_enter(i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i-1,j)* &
+                                  CS%thickness_boundary_values(i+1,j)
+            elseif (u_face_mask(i-1,j) == 4.) then
+              flux_enter(i,j,1) = G%dyT(i,j) * time_step * u_flux_boundary_values(i-1,j)*t_boundary(i-1,j)
+!              flux_enter(i,j,1) = G%dyh(i,j) * time_step *  CS%u_shelf(i,j)*t_boundary(i-1,j)
 ! assume no flux bc for temp
             endif
 
-            if (at_east_bdry .AND. (hmask(i+1,j) .EQ. 3)) then
+            if (at_east_bdry .AND. (hmask(i+1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
-              flux_enter(i,j,2) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i+1,j)*CS%thickness_boundary_values(i+1,j)
-            elseif (u_face_mask (i+1,j) .eq. 4.) then
-              flux_enter (i,j,2) = G%dyT(i,j) * time_step * u_flux_boundary_values (i+1,j) * t_boundary(i+1,j)
+              flux_enter(i,j,2) = ABS(u_face) * G%dyT(i,j) * time_step * t_boundary(i+1,j)* &
+                                  CS%thickness_boundary_values(i+1,j)
+            elseif (u_face_mask(i+1,j) == 4.) then
+              flux_enter(i,j,2) = G%dyT(i,j) * time_step * u_flux_boundary_values(i+1,j) * t_boundary(i+1,j)
 ! assume no flux bc for temp
-!              flux_enter (i,j,2) = G%dyh(i,j) * time_step *  CS%u_shelf(i,j)*t_boundary (i+1,j)
+!              flux_enter(i,j,2) = G%dyh(i,j) * time_step *  CS%u_shelf(i,j)*t_boundary(i+1,j)
             endif
 
-!            if ((i .eq. is) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i-1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
-
+!            if ((i == is) .AND. (hmask(i,j) == 0) .AND. (hmask(i-1,j) == 1)) then
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 !              hmask(i,j) = 2
-!            elseif ((i .eq. ie) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i+1,j) .eq. 1)) then
-              ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-              ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
-
+!            elseif ((i == ie) .AND. (hmask(i,j) == 0) .AND. (hmask(i+1,j) == 1)) then
+              ! this is solely for the purposes of keeping the mask consistent while advancing
+              ! the front without having to call pass_var - if cell is empty and cell to left
+              ! is ice-covered then this cell will become partly covered
 !              hmask(i,j) = 2
 
 !            endif
@@ -6436,8 +6456,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 
 end subroutine ice_shelf_advect_temp_x
 
-subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux, flux_enter)
-  type(ice_shelf_CS),         pointer    :: CS
+subroutine ice_shelf_advect_temp_y(CS, time_step, h_after_uflux, h_after_vflux, flux_enter)
+  type(ice_shelf_CS),         pointer    :: CS !< A pointer to the ice shelf control structure
   real,                       intent(in) :: time_step
   real, dimension(:,:), intent(in) :: h_after_uflux
   real, dimension(:,:), intent(inout) :: h_after_vflux
@@ -6449,10 +6469,10 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
   ! flux_enter(isd:ied,jsd:jed,1:4): if cell is not ice-covered, gives flux of ice into cell from kth boundary
   !
-  !   from left neighbor:   flux_enter (:,:,1)
-  !   from right neighbor:  flux_enter (:,:,2)
-  !   from bottom neighbor: flux_enter (:,:,3)
-  !   from top neighbor:    flux_enter (:,:,4)
+  !   from left neighbor:   flux_enter(:,:,1)
+  !   from right neighbor:  flux_enter(:,:,2)
+  !   from bottom neighbor: flux_enter(:,:,3)
+  !   from top neighbor:    flux_enter(:,:,4)
   !
   !        o--- (4) ---o
   !        |           |
@@ -6464,7 +6484,7 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
   integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
-  type(ocean_grid_type), pointer :: G
+  type(ocean_grid_type), pointer :: G => NULL()
   real, dimension(-2:2) :: stencil
   real, dimension(:,:), pointer  :: hmask, v_face_mask, v_flux_boundary_values,t_boundary,v_boundary_values
   real :: v_face, &  ! positive if out
@@ -6489,56 +6509,57 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
   do i=isd+2,ied-2
-    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+       ((i+i_off) >= G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-             ((j+j_off) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+             ((j+j_off) >= G%domain%njhalo+1)) then
 
-          if (j+j_off .eq. G%domain%njhalo+1) then
+          if (j+j_off == G%domain%njhalo+1) then
             at_south_bdry=.true.
           else
             at_south_bdry=.false.
           endif
-          if (j+j_off .eq. G%domain%njglobal+G%domain%njhalo) then
+          if (j+j_off == G%domain%njglobal+G%domain%njhalo) then
             at_north_bdry=.true.
           else
             at_north_bdry=.false.
           endif
 
-          if (hmask(i,j) .eq. 1) then
+          if (hmask(i,j) == 1) then
             dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
-            h_after_vflux (i,j) = h_after_uflux (i,j)
+            h_after_vflux(i,j) = h_after_uflux(i,j)
 
-            stencil (:) = h_after_uflux (i,j-2:j+2)  ! fine as long has ny_halo >= 2
+            stencil(:) = h_after_uflux(i,j-2:j+2)  ! fine as long has ny_halo >= 2
             flux_diff_cell = 0
 
             ! 1ST DO south FACE
 
-            if (v_face_mask (i,j-1) .eq. 4.) then
+            if (v_face_mask(i,j-1) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values (i,j-1) * t_boundary(i,j-1)/ dxdyh
+              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values(i,j-1) * &
+                                 t_boundary(i,j-1)/ dxdyh
 ! assume no flux bc for temp
-!              flux_diff_cell = flux_diff_cell + dxh * time_step *  CS%v_shelf(i,j)*t_boundary (i,j-1) / dxdyh
+!              flux_diff_cell = flux_diff_cell + dxh * time_step *  CS%v_shelf(i,j)*t_boundary(i,j-1) / dxdyh
 
             else
 
               ! get u-velocity at center of left face
               v_face = 0.5 * (CS%v_shelf(i-1,j-1) + CS%v_shelf(i,j-1))
 
-              if (v_face .gt. 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
+              if (v_face > 0) then !flux is into cell - we need info from h(j-2), h(j-1) if available
 
                 ! i may not cover all the cases.. but i cover the realistic ones
 
-                if (at_south_bdry .AND. (hmask(i,j-1).eq.3)) then ! at western bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_south_bdry .AND. (hmask(i,j-1) == 3)) then ! at western bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(-1) / dxdyh
 
-                elseif (hmask(i,j-1) * hmask(i,j-2) .eq. 1) then  ! h(j-2) and h(j-1) are valid
+                elseif (hmask(i,j-1) * hmask(i,j-2) == 1) then  ! h(j-2) and h(j-1) are valid
 
                   phi = slope_limiter (stencil(-1)-stencil(-2), stencil(0)-stencil(-1))
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * &
@@ -6550,16 +6571,16 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(-1)
                 endif
 
-              elseif (v_face .lt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face < 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
-                if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then  ! h(j-1) and h(j+1) are both valid
+                if (hmask(i,j-1) * hmask(i,j+1) == 1) then  ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(1), stencil(-1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * &
                       (stencil(0) - phi * (stencil(0)-stencil(-1))/2)
                 else
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * stencil(0)
 
-                  if ((hmask(i,j-1) .eq. 0) .OR. (hmask(i,j-1) .eq. 2)) then
+                  if ((hmask(i,j-1) == 0) .OR. (hmask(i,j-1) == 2)) then
                     flux_enter(i,j-1,4) = ABS(v_face) * dyh * time_step * stencil(0)
                   endif
 
@@ -6571,24 +6592,24 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
             ! NEXT DO north FACE
 
-            if (v_face_mask(i,j+1) .eq. 4.) then
+            if (v_face_mask(i,j+1) == 4.) then
 
-              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values (i,j+1) *&
+              flux_diff_cell = flux_diff_cell + dxh * time_step * v_flux_boundary_values(i,j+1) *&
                                t_boundary(i,j+1)/ dxdyh
 ! assume no flux bc for temp
-!              flux_diff_cell = flux_diff_cell + dxh * time_step *  CS%v_shelf(i,j)*t_boundary (i,j+1) / dxdyh
+!              flux_diff_cell = flux_diff_cell + dxh * time_step *  CS%v_shelf(i,j)*t_boundary(i,j+1) / dxdyh
 
             else
 
             ! get u-velocity at center of right face
               v_face = 0.5 * (CS%v_shelf(i-1,j) + CS%v_shelf(i,j))
 
-              if (v_face .lt. 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
+              if (v_face < 0) then !flux is into cell - we need info from h(j+2), h(j+1) if available
 
-                if (at_north_bdry .AND. (hmask(i,j+1).eq.3)) then ! at eastern bdry but there is a thickness bdry condition,
-                                            ! and the stencil contains it
+                if (at_north_bdry .AND. (hmask(i,j+1) == 3)) then ! at eastern bdry but there is a
+                                            ! thickness bdry condition, and the stencil contains it
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step * stencil(1) / dxdyh
-                elseif (hmask(i,j+1) * hmask(i,j+2) .eq. 1) then  ! h(j+2) and h(j+1) are valid
+                elseif (hmask(i,j+1) * hmask(i,j+2) == 1) then  ! h(j+2) and h(j+1) are valid
                   phi = slope_limiter (stencil(1)-stencil(2), stencil(0)-stencil(1))
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * &
                       (stencil(1) - phi * (stencil(1)-stencil(0))/2)
@@ -6598,9 +6619,9 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
                   flux_diff_cell = flux_diff_cell + ABS(v_face) * dxh * time_step / dxdyh * stencil(1)
                 endif
 
-              elseif (v_face .gt. 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
+              elseif (v_face > 0) then !flux is out of cell - we need info from h(j-1), h(j+1) if available
 
-                if (hmask(i,j-1) * hmask(i,j+1) .eq. 1) then         ! h(j-1) and h(j+1) are both valid
+                if (hmask(i,j-1) * hmask(i,j+1) == 1) then         ! h(j-1) and h(j+1) are both valid
                   phi = slope_limiter (stencil(0)-stencil(-1), stencil(1)-stencil(0))
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * &
                       (stencil(0) - phi * (stencil(0)-stencil(1))/2)
@@ -6608,7 +6629,7 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
                        ! (o.w. flux would most likely be out of cell)
                        !  but h(j+2) is not
                   flux_diff_cell = flux_diff_cell - ABS(v_face) * dxh * time_step / dxdyh * stencil(0)
-                  if ((hmask(i,j+1) .eq. 0) .OR. (hmask(i,j+1) .eq. 2)) then
+                  if ((hmask(i,j+1) == 0) .OR. (hmask(i,j+1) == 2)) then
                     flux_enter(i,j+1,3) = ABS(v_face) * dxh * time_step * stencil(0)
                   endif
                 endif
@@ -6617,37 +6638,41 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
 
             endif
 
-            h_after_vflux (i,j) = h_after_vflux (i,j) + flux_diff_cell
+            h_after_vflux(i,j) = h_after_vflux(i,j) + flux_diff_cell
 
-          elseif ((hmask(i,j) .eq. 0) .OR. (hmask(i,j) .eq. 2)) then
+          elseif ((hmask(i,j) == 0) .OR. (hmask(i,j) == 2)) then
 
-            if (at_south_bdry .AND. (hmask(i,j-1) .EQ. 3)) then
+            if (at_south_bdry .AND. (hmask(i,j-1) == 3)) then
               v_face = 0.5 * (CS%v_shelf(i-1,j-1) + CS%v_shelf(i,j-1))
-              flux_enter (i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j-1)*CS%thickness_boundary_values(i,j-1)
-            elseif (v_face_mask(i,j-1) .eq. 4.) then
-              flux_enter (i,j,3) = G%dxT(i,j) * time_step * v_flux_boundary_values (i,j-1)*t_boundary(i,j-1)
+              flux_enter(i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j-1)* &
+                                   CS%thickness_boundary_values(i,j-1)
+            elseif (v_face_mask(i,j-1) == 4.) then
+              flux_enter(i,j,3) = G%dxT(i,j) * time_step * v_flux_boundary_values(i,j-1)*t_boundary(i,j-1)
 ! assume no flux bc for temp
-!              flux_enter (i,j,3) = G%dxh(i,j) * time_step *  CS%v_shelf(i,j)*t_boundary (i,j-1)
+!              flux_enter(i,j,3) = G%dxh(i,j) * time_step *  CS%v_shelf(i,j)*t_boundary(i,j-1)
 
             endif
 
-            if (at_north_bdry .AND. (hmask(i,j+1) .EQ. 3)) then
+            if (at_north_bdry .AND. (hmask(i,j+1) == 3)) then
               v_face = 0.5 * (CS%v_shelf(i-1,j) + CS%v_shelf(i,j))
-              flux_enter (i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j+1)*CS%thickness_boundary_values(i,j+1)
-            elseif (v_face_mask(i,j+1) .eq. 4.) then
-              flux_enter (i,j,4) = G%dxT(i,j) * time_step * v_flux_boundary_values (i,j+1)*t_boundary(i,j+1)
+              flux_enter(i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * t_boundary(i,j+1)* &
+                                   CS%thickness_boundary_values(i,j+1)
+            elseif (v_face_mask(i,j+1) == 4.) then
+              flux_enter(i,j,4) = G%dxT(i,j) * time_step * v_flux_boundary_values(i,j+1)*t_boundary(i,j+1)
 ! assume no flux bc for temp
-!              flux_enter (i,j,4) = G%dxh(i,j) * time_step * CS%v_shelf(i,j)*t_boundary (i,j+1)
+!              flux_enter(i,j,4) = G%dxh(i,j) * time_step * CS%v_shelf(i,j)*t_boundary(i,j+1)
             endif
 
-!            if ((j .eq. js) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j-1) .eq. 1)) then
- ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
- !             hmask (i,j) = 2
- !           elseif ((j .eq. je) .AND. (hmask(i,j) .eq. 0) .AND. (hmask(i,j+1) .eq. 1)) then
-                ! this is solely for the purposes of keeping the mask consistent while advancing the front without having
-                ! to call pass_var - if cell is empty and cell to left is ice-covered then this cell will become partly covered
-!              hmask (i,j) = 2
+!            if ((j == js) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j-1) == 1)) then
+               ! this is solely for the purposes of keeping the mask consistent while advancing
+               ! the front without having to call pass_var - if cell is empty and cell to left
+               ! is ice-covered then this cell will become partly covered
+ !             hmask(i,j) = 2
+ !           elseif ((j == je) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j+1) == 1)) then
+                ! this is solely for the purposes of keeping the mask consistent while advancing the
+                ! front without having to call pass_var - if cell is empty and cell to left is
+                ! ice-covered then this cell will become partly covered
+!              hmask(i,j) = 2
 !            endif
 
           endif
@@ -6695,7 +6720,8 @@ end subroutine ice_shelf_advect_temp_y
 !!    calc_shelf_driving_stress - Determine the driving stresses using h_shelf, (water) column thickness, bathymetry
 !!            - does not modify any permanent arrays
 !!    init_boundary_values -
-!!    bilinear_shape_functions - shape function for FEM solve using (convex) quadrilateral elements and bilinear nodal basis
+!!    bilinear_shape_functions - shape function for FEM solve using (convex) quadrilateral elements and
+!!                               bilinear nodal basis
 !!    calc_shelf_visc_bilinear - Glen's law viscosity and nonlinear sliding law (called by ice_shelf_solve_outer)
 !!    calc_shelf_visc_triangular - LET'S TAKE THIS OUT
 !!    apply_boundary_values_bilinear - same as CG_action_bilinear, but input is zero except for dirichlet bdry conds

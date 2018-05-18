@@ -663,14 +663,14 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
         ! where the layers are located.
         if ( use_ALE ) then
           if ( CS%Recon_Scheme == 1 ) then
-            call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
+            call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                       rho_ref, CS%Rho0, GV%g_Earth,    &
                       dz_neglect, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( CS%Recon_Scheme == 2 ) then
-            call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
+            call int_density_dz_generic_ppm( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                       tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                       rho_ref, CS%Rho0, GV%g_Earth, &
                       G%HI, G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk,    &

@@ -83,7 +83,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         do k = 1, nz
           h(i,j,k) = h0 * GV%m_to_H
         enddo
-      end do ; end do
+      enddo ; enddo
 
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
@@ -94,7 +94,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         do k = 1, nz
           h(i,j,k) = h0 * GV%m_to_H
         enddo
-      end do ; end do
+      enddo ; enddo
 
     case default
       call MOM_error(FATAL,"Rossby_front_initialize: "// &
@@ -153,7 +153,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
       zc = min( zc, -Hml(G, G%geoLatT(i,j)) ) ! Bound by depth of mixed layer
       T(i,j,k) = T_ref + dTdz * zc ! Linear temperature profile
     enddo
-  end do ; end do
+  enddo ; enddo
 
 end subroutine Rossby_front_initialize_temperature_salinity
 

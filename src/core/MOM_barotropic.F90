@@ -2427,8 +2427,10 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! in determining the transport.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                   !! transports.
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu    !< A fixed estimate of the face areas at u points, in H m.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at v points, in H m.
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu    !< A fixed estimate of the face areas at u points,
+                                                                  !! in H m.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at v points,
+                                                                  !! in H m.
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u !< Structure of information used
                                                                   !! for a dynamic estimate of the face areas at
                                                                   !! u-points.
@@ -2485,23 +2487,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I-1,J-1) = (ubt(I-1,j) - ubt(I-1,j-1)) * G%mask2dBu(I-1,J-1)
           dhdt = ubt_old(I-1,j)-ubt(I-1,j) !old-new
           dhdx = ubt(I-1,j)-ubt(I-2,j) !in new time backward sasha for I-1
-!         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
-            if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
-              dhdy = grad(I-1,J-1)
-            elseif (dhdt*(grad(I-1,J) + grad(I-1,J-1)) == 0.0) then
-              dhdy = 0.0
-            else
-              dhdy = grad(I-1,J)
-            endif
-!         endif
+          if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
+            dhdy = grad(I-1,J-1)
+          elseif (dhdt*(grad(I-1,J) + grad(I-1,J-1)) == 0.0) then
+            dhdy = 0.0
+          else
+            dhdy = grad(I-1,J)
+          endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
           Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
-!         Cy = 0
-          cff = max(dhdx*dhdx, eps)
-!         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
-            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            Cy = min(cff, max(dhdt*dhdy, -cff))
-!         endif
+          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+          Cy = min(cff, max(dhdt*dhdy, -cff))
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I-1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
           vel_trans = ubt(I,j)
@@ -2529,23 +2525,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I+1,J-1) = (ubt(I+1,j) - ubt(I+1,j-1)) * G%mask2dBu(I+1,J-1)
           dhdt = ubt_old(I+1,j)-ubt(I+1,j) !old-new
           dhdx = ubt(I+1,j)-ubt(I+2,j) !in new time backward sasha for I+1
-!         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
-            if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
-              dhdy = grad(I+1,J-1)
-            elseif (dhdt*(grad(I+1,J) + grad(I+1,J-1)) == 0.0) then
-              dhdy = 0.0
-            else
-              dhdy = grad(I+1,J)
-            endif
-!         endif
+          if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
+            dhdy = grad(I+1,J-1)
+          elseif (dhdt*(grad(I+1,J) + grad(I+1,J-1)) == 0.0) then
+            dhdy = 0.0
+          else
+            dhdy = grad(I+1,J)
+          endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
           Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
-!         Cy = 0
-          cff = max(dhdx*dhdx, eps)
-!         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
-            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            Cy = min(cff,max(dhdt*dhdy,-cff))
-!         endif
+          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+          Cy = min(cff,max(dhdt*dhdy,-cff))
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I+1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
 !         vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
@@ -2594,23 +2584,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I-1,J-1) = (vbt(i,J-1) - vbt(i-1,J-1)) * G%mask2dBu(I-1,J-1)
           dhdt = vbt_old(i,J-1)-vbt(i,J-1) !old-new
           dhdy = vbt(i,J-1)-vbt(i,J-2) !in new time backward sasha for J-1
-!         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
-            if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
-              dhdx = grad(I-1,J-1)
-            elseif (dhdt*(grad(I,J-1) + grad(I-1,J-1)) == 0.0) then
-              dhdx = 0.0
-            else
-              dhdx = grad(I,J-1)
-            endif
-!         endif
+          if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
+            dhdx = grad(I-1,J-1)
+          elseif (dhdt*(grad(I,J-1) + grad(I-1,J-1)) == 0.0) then
+            dhdx = 0.0
+          else
+            dhdx = grad(I,J-1)
+          endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
-!         Cx = 0
-          cff = max(dhdy*dhdy, eps)
-!         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
-            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            Cx = min(cff,max(dhdt*dhdx,-cff))
-!         endif
+          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+          Cx = min(cff,max(dhdt*dhdx,-cff))
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J-1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
 !         vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
@@ -2639,23 +2623,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I-1,J+1) = (vbt(i,J+1) - vbt(i-1,J+1)) * G%mask2dBu(I-1,J+1)
           dhdt = vbt_old(i,J+1)-vbt(i,J+1) !old-new
           dhdy = vbt(i,J+1)-vbt(i,J+2) !in new time backward sasha for J+1
-!         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
-            if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
-              dhdx = grad(I-1,J+1)
-            elseif (dhdt*(grad(I,J+1) + grad(I-1,J+1)) == 0.0) then
-              dhdx = 0.0
-            else
-              dhdx = grad(I,J+1)
-            endif
-!         endif
+          if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
+            dhdx = grad(I-1,J+1)
+          elseif (dhdt*(grad(I,J+1) + grad(I-1,J+1)) == 0.0) then
+            dhdx = 0.0
+          else
+            dhdx = grad(I,J+1)
+          endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
-!         Cx = 0
-          cff = max(dhdy*dhdy, eps)
-!         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
-            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            Cx = min(cff,max(dhdt*dhdx,-cff))
-!         endif
+          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+          Cx = min(cff,max(dhdt*dhdx,-cff))
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J+1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
 !         vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
@@ -2697,8 +2675,10 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
   integer,                               intent(in)    :: halo   !< The extra halo size to use here.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                  !! transports.
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu   !< A fixed estimate of the face areas at u points, in H m.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv   !< A fixed estimate of the face areas at v points, in H m.
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu   !< A fixed estimate of the face areas at u points,
+                                                                 !! in H m.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv   !< A fixed estimate of the face areas at v points,
+                                                                 !! in H m.
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u !< Structure of information used
                                                                  !! for a dynamic estimate of the face areas at
                                                                  !! u-points.
