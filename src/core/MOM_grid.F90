@@ -434,9 +434,10 @@ logical function isPointInCell(G, i, j, x, y)
   endif
 end function isPointInCell
 
+!> Store an integer indicating which direction to work on first.
 subroutine set_first_direction(G, y_first)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  integer,               intent(in) :: y_first
+  integer,               intent(in) :: y_first !< The first direction to store
 
   G%first_direction = y_first
 end subroutine set_first_direction

@@ -38,7 +38,7 @@ use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
-use MOM_marine_ice, only : add_berg_flux_to_shelf, marine_ice_init, marine_ice_CS
+use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
@@ -142,27 +142,20 @@ end type ocean_public_type
 type, public :: ocean_state_type ; private
   ! This type is private, and can therefore vary between different ocean models.
   logical :: is_ocean_PE = .false.  !< True if this is an ocean PE.
-  type(time_type) :: Time    !< The ocean model's time and master clock.
-  integer :: Restart_control !< An integer that is bit-tested to determine whether
-                             !! incremental restart files are saved and whether they
-                             !! have a time stamped name.  +1 (bit 0) for generic
-                             !! files and +2 (bit 1) for time-stamped files.  A
-                             !! restart file is saved at the end of a run segment
-                             !! unless Restart_control is negative.
+  type(time_type) :: Time     !< The ocean model's time and master clock.
+  integer :: Restart_control  !< An integer that is bit-tested to determine whether
+                              !! incremental restart files are saved and whether they
+                              !! have a time stamped name.  +1 (bit 0) for generic
+                              !! files and +2 (bit 1) for time-stamped files.  A
+                              !! restart file is saved at the end of a run segment
+                              !! unless Restart_control is negative.
 
   integer :: nstep = 0        !< The number of calls to update_ocean.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
-  logical :: use_waves = .false.! If true use wave coupling.
+  logical :: use_waves        !< If true use wave coupling.
 
-  ! Many of the following variables do not appear to belong here. -RWH
-  logical :: icebergs_apply_rigid_boundary  ! If true, the icebergs can change ocean bd condition.
-  real :: kv_iceberg          ! The viscosity of the icebergs in m2/s (for ice rigidity)
-  real :: berg_area_threshold ! Fraction of grid cell which iceberg must occupy
-                              !so that fluxes below are set to zero. (0.5 is a
-                              !good value to use. Not applied for negative values.
-  real :: latent_heat_fusion  ! Latent heat of fusion
-  real :: density_iceberg     ! A typical density of icebergs in kg/m3 (for ice rigidity)
-
+  logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
+                              !! ocean dynamics and forcing fluxes.
   logical :: restore_salinity !< If true, the coupled MOM driver adds a term to
                               !! restore salinity to a specified value.
   logical :: restore_temp     !< If true, the coupled MOM driver adds a term to
@@ -361,21 +354,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call get_param(param_file, mdl, "ICE_SHELF",  OS%use_ice_shelf, &
                  "If true, enables the ice shelf model.", default=.false.)
 
-  call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_apply_rigid_boundary, &
+  call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_alter_ocean, &
                  "If true, allows icebergs to change boundary condition felt by ocean", default=.false.)
-
-  if (OS%icebergs_apply_rigid_boundary) then
-    call get_param(param_file, mdl, "KV_ICEBERG",  OS%kv_iceberg, &
-                 "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
-    call get_param(param_file, mdl, "DENSITY_ICEBERGS",  OS%density_iceberg, &
-                 "A typical density of icebergs.", units="kg m-3", default=917.0)
-    call get_param(param_file, mdl, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
-                 "The latent heat of fusion.", units="J/kg", default=hlf)
-    call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
-                 "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
-                 "below berg are set to zero. Not applied for negative \n"//&
-                 " values.", units="non-dim", default=-1.0)
-  endif
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
@@ -391,15 +371,16 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
                               OS%diag, OS%forces, OS%fluxes)
   endif
-  if (OS%icebergs_apply_rigid_boundary)  then
+  if (OS%icebergs_alter_ocean)  then
+    call marine_ice_init(OS%Time, OS%grid, param_file, OS%diag, OS%marine_ice_CSp)
     if (.not. OS%use_ice_shelf) &
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
 
-  call get_param(param_file,mdl,"USE_WAVES",OS%Use_Waves,&
-       "If true, enables surface wave modules.",default=.false.)
+  call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
+       "If true, enables surface wave modules.", default=.false.)
   if (OS%use_waves) then
-    call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%Waves,OS%diag)
+    call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, param_file, OS%Waves, OS%diag)
   else
     call MOM_wave_interface_init_lite(param_file)
   endif
@@ -541,10 +522,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
-    if (OS%icebergs_apply_rigid_boundary)  then
-      call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%fluxes, OS%use_ice_shelf, &
-                    OS%density_iceberg, OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, &
-                    dt_coupling, OS%berg_area_threshold)
+    if (OS%icebergs_alter_ocean)  then
+      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
@@ -565,9 +547,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
-    if (OS%icebergs_apply_rigid_boundary)  then
-      call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf, OS%density_iceberg, &
-            OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, dt_coupling, OS%berg_area_threshold)
+    if (OS%icebergs_alter_ocean)  then
+      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
