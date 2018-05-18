@@ -250,6 +250,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
     if (CS%id_R_rho > 0.0)  then
       do k=1,G%ke
         CS%R_rho(i,j,k) = alpha_dT(k)/beta_dS(k)
+        ! avoid NaN's
+        if(CS%R_rho(i,j,k) /= CS%R_rho(i,j,k)) CS%R_rho(i,j,k) = 0.0
       enddo
     endif
 
