@@ -465,8 +465,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%useKappaShear) call hchksum(visc%Kd_shear,"Turbulent Kd",G%HI,haloshift=0)
 
     if (CS%use_CVMix_ddiff) then
-    call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T",G%HI,haloshift=0)
-    call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S",G%HI,haloshift=0)
+      call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T",G%HI,haloshift=0)
+      call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S",G%HI,haloshift=0)
     endif
 
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
