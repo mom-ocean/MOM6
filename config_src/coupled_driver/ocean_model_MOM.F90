@@ -727,6 +727,8 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
   ! This section sets or augments the values of fields in forces.
   if (.not. use_ice_shelf) then
     forces%frac_shelf_u(:,:) = 0.0 ; forces%frac_shelf_v(:,:) = 0.0
+  endif
+  if (.not. forces%accumulate_rigidity) then
     forces%rigidity_ice_u(:,:) = 0.0 ; forces%rigidity_ice_v(:,:) = 0.0
   endif
 
