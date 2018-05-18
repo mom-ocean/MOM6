@@ -978,13 +978,16 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   endif
 
   ! For various reasons, forces%rigidity_ice_[uv] is always updated here, and
-  ! it has been zeroed out where IOB is translated to forces.
+  ! it may have been zeroed out where IOB is translated to forces and
+  ! contributions from icebergs added subsequently.
   kv_rho_ice = CS%kv_ice / CS%density_ice
   do j=js,je ; do I=is-1,ie
+    if (.not.forces%accumulate_rigidity) forces%rigidity_ice_u(I,j) = 0.0
     forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
             kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
   enddo ; enddo
   do J=js-1,je ; do i=is,ie
+    if (.not.forces%accumulate_rigidity) forces%rigidity_ice_v(i,J) = 0.0
     forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + &
             kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
   enddo ; enddo
@@ -1799,6 +1802,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
       if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
         forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
                       (G%areaT(i,j) + G%areaT(i+1,j)))
+      if (.not.forces%accumulate_rigidity) forces%rigidity_ice_u(I,j) = 0.0
       forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
               kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
@@ -1807,6 +1811,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
       if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
         forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
                       (G%areaT(i,j) + G%areaT(i,j+1)))
+      if (.not.forces%accumulate_rigidity) forces%rigidity_ice_v(i,J) = 0.0
       forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + &
               kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
     enddo ; enddo
