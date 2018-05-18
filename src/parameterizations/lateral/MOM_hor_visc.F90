@@ -237,7 +237,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                                        !! specify the spatially variable viscosities
   type(hor_visc_CS),             pointer     :: CS     !< Pontrol structure returned by a previous
                                                        !! call to hor_visc_init.
-  type(ocean_OBC_type), pointer, optional    :: OBC    !< Pointer to an open boundary condition type
+  type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)
@@ -433,7 +433,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     else
       do j=js-2,je+2 ; do I=Isq-1,Ieq+1
         h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
-      enddo; enddo
+      enddo ; enddo
       do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo
@@ -443,13 +443,25 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     ! thicknesses on open boundaries.
     if (apply_OBC) then ; do n=1,OBC%number_of_segments
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
-      if (OBC%zero_strain .or. OBC%freeslip_strain) then
+      if (OBC%zero_strain .or. OBC%freeslip_strain .or. OBC%computed_strain) then
         if (OBC%segment(n)%is_N_or_S .and. (J >= js-2) .and. (J <= Jeq+1)) then
           do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
             if (OBC%zero_strain) then
               dvdx(I,J) = 0. ; dudy(I,J) = 0.
             elseif (OBC%freeslip_strain) then
               dudy(I,J) = 0.
+            elseif (OBC%computed_strain) then
+              if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%IdxCu(I,j)
+              else
+                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdxCu(I,j+1)
+              endif
+            elseif (OBC%specified_strain) then
+              if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
+              else
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
+              endif
             endif
           enddo
         elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-2) .and. (I <= Ieq+1)) then
@@ -458,6 +470,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               dvdx(I,J) = 0. ; dudy(I,J) = 0.
             elseif (OBC%freeslip_strain) then
               dvdx(I,J) = 0.
+            elseif (OBC%computed_strain) then
+              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%IdyCv(i,J)
+              else
+                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdyCv(i+1,J)
+              endif
+            elseif (OBC%specified_strain) then
+              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
+              else
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
+              endif
             endif
           enddo
         endif

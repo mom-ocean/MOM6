@@ -67,8 +67,8 @@ type, public :: ice_shelf_CS ; private
     v_boundary_values => NULL(), &
 
 
-    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress - exact form depends on basal law exponent
-                ! and/or whether flow is "hybridized" a la Goldberg 2011
+    taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress - exact form depends on basal
+                ! law exponent and/or whether flow is "hybridized" a la Goldberg 2011
     taub_beta_eff_lower_tri => NULL(), &
     taub_beta_eff_upper_tri => NULL(), &
 
@@ -124,7 +124,8 @@ type, public :: ice_shelf_CS ; private
                     ! ~ once a day (maybe longer) because it will depend on ocean values
                     ! that are averaged over this time interval, and the solve will begin
                     ! to lose meaning if it is done too frequently
-  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve; the counter will have to be stored
+  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve
+                    ! the counter will have to be stored
   integer :: velocity_update_counter ! the "outer" timestep number
   integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)
 
@@ -191,12 +192,12 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
   nu_lower => CS%ice_visc_lower_tri ; nu_upper => CS%ice_visc_upper_tri
   beta_lower => CS%taub_beta_eff_lower_tri ; beta_upper => CS%taub_beta_eff_upper_tri
 
-  do i=isc-1,iec+1  ; do j=jsc-1,jec+1 ; if (hmask(i,j) .eq. 1) then
+  do i=isc-1,iec+1  ; do j=jsc-1,jec+1 ; if (hmask(i,j) == 1) then
     dxh = G%dxT(i,j)
     dyh = G%dyT(i,j)
     dxdyh = G%areaT(i,j)
 
-    if (umask (i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+    if (umask (i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
       ux = 1./dxh ; uy = 0./dyh
       vx = 0. ; vy = 0.
@@ -236,7 +237,7 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
 
     endif
 
-    if (umask (i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+    if (umask (i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
       ux = 0./dxh ; uy = 1./dyh
       vx = 0. ; vy = 0.
@@ -276,7 +277,7 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
 
     endif
 
-    if (umask (i-1,j-1) .eq. 1) then ! this (bot left) is a degree of freedom node
+    if (umask (i-1,j-1) == 1) then ! this (bot left) is a degree of freedom node
 
       ux = -1./dxh ; uy = -1./dyh
       vx = 0. ; vy = 0.
@@ -297,7 +298,7 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
           beta_lower(i,j) * dxdyh * 1./24
     endif
 
-    if (umask (i,j) .eq. 1) then ! this (top right) is a degree of freedom node
+    if (umask (i,j) == 1) then ! this (top right) is a degree of freedom node
 
       ux = 1./ dxh ; uy = 1./dyh
       vx = 0. ; vy = 0.
@@ -359,9 +360,9 @@ end subroutine matrix_diagonal_triangle
 
   !~ domain_width = CS%len_lat
 
-  !~ do i=isc-1,iec+1 ; do j=jsc-1,jec+1 ; if (hmask(i,j) .eq. 1) then
+  !~ do i=isc-1,iec+1 ; do j=jsc-1,jec+1 ; if (hmask(i,j) == 1) then
 
-    !~ if ((umask(i-1,j-1) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then
+    !~ if ((umask(i-1,j-1) == 3) .OR. (umask(i,j-1) == 3) .OR. (umask(i-1,j) == 3)) then
 
       !~ dxh = G%dxh(i,j)
       !~ dyh = G%dyh(i,j)
@@ -372,7 +373,7 @@ end subroutine matrix_diagonal_triangle
       !~ uy = (u_boundary_values(i-1,j)-u_boundary_values(i-1,j-1))/dyh
       !~ vy = (v_boundary_values(i-1,j)-v_boundary_values(i-1,j-1))/dyh
 
-      !~ if (umask (i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+      !~ if (umask (i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
         !~ u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
             !~ .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (0./dyh))
@@ -389,7 +390,7 @@ end subroutine matrix_diagonal_triangle
                          !~ v_boundary_values(i-1,j) + v_boundary_values(i,j-1))
       !~ endif
 
-      !~ if (umask (i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+      !~ if (umask (i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
         !~ u_boundary_contr (i-1,j) = u_boundary_contr (i-1,j) + &
             !~ .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (1./dyh))
@@ -406,7 +407,7 @@ end subroutine matrix_diagonal_triangle
                             !~ v_boundary_values(i-1,j) + v_boundary_values(i,j-1))
       !~ endif
 
-      !~ if (umask (i-1,j-1) .eq. 1) then ! this (bot left) is a degree of freedom node
+      !~ if (umask (i-1,j-1) == 1) then ! this (bot left) is a degree of freedom node
 
         !~ u_boundary_contr (i-1,j-1) = u_boundary_contr (i-1,j-1) + &
             !~ .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (-1./dyh))
@@ -425,7 +426,7 @@ end subroutine matrix_diagonal_triangle
 
     !~ endif
 
-    !~ if ((umask(i,j) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then
+    !~ if ((umask(i,j) == 3) .OR. (umask(i,j-1) == 3) .OR. (umask(i-1,j) == 3)) then
 
       !~ dxh = G%dxh(i,j)
       !~ dyh = G%dyh(i,j)
@@ -436,7 +437,7 @@ end subroutine matrix_diagonal_triangle
       !~ uy = (u_boundary_values(i,j)-u_boundary_values(i,j-1))/dyh
       !~ vy = (v_boundary_values(i,j)-v_boundary_values(i,j-1))/dyh
 
-      !~ if (umask (i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+      !~ if (umask (i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
           !~ u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
               !~ .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (-1./dyh))
@@ -455,7 +456,7 @@ end subroutine matrix_diagonal_triangle
                                 !~ u_boundary_values(i,j-1))
       !~ endif
 
-      !~ if (umask (i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+      !~ if (umask (i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
         !~ u_boundary_contr (i-1,j) = u_boundary_contr (i-1,j) + &
             !~ .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (0./dyh))
@@ -474,7 +475,7 @@ end subroutine matrix_diagonal_triangle
                               !~ u_boundary_values(i,j-1))
       !~ endif
 
-      !~ if (umask (i,j) .eq. 1) then ! this (top right) is a degree of freedom node
+      !~ if (umask (i,j) == 1) then ! this (top right) is a degree of freedom node
 
         !~ u_boundary_contr (i,j) = u_boundary_contr (i,j) + &
             !~ .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (1./dyh))
@@ -518,7 +519,8 @@ end subroutine matrix_diagonal_triangle
                        !~ hmask
 
   !~ type(ocean_grid_type), pointer :: G
-  !~ integer :: 0, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  !~ integer :: 0, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
+  !~ integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   !~ real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   !~ G => CS%grid
@@ -549,7 +551,7 @@ end subroutine matrix_diagonal_triangle
       !~ dyh = G%dyh(i,j)
       !~ dxdyh = G%dxdyh(i,j)
 
-      !~ if (hmask (i,j) .eq. 1) then
+      !~ if (hmask (i,j) == 1) then
         !~ ux = (u(i,j-1)-u(i-1,j-1)) / dxh
         !~ vx = (v(i,j-1)-v(i-1,j-1)) / dxh
         !~ uy = (u(i-1,j)-u(i-1,j-1)) / dyh
@@ -558,7 +560,8 @@ end subroutine matrix_diagonal_triangle
         !~ nu_lower(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         !~ umid = 1./3 * (u(i-1,j-1)+u(i-1,j)+u(i,j-1))
         !~ vmid = 1./3 * (v(i-1,j-1)+v(i-1,j)+v(i,j-1))
-        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        !~ beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
         !~ ux = (u(i,j)-u(i-1,j)) / dxh
         !~ vx = (v(i,j)-v(i-1,j)) / dxh
@@ -568,7 +571,8 @@ end subroutine matrix_diagonal_triangle
         !~ nu_upper(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         !~ umid = 1./3 * (u(i,j)+u(i-1,j)+u(i,j-1))
         !~ vmid = 1./3 * (v(i,j)+v(i-1,j)+v(i,j-1))
-        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_upper (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
+        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2)
+        !~ beta_eff_upper (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
       !~ endif
     !~ enddo
@@ -601,14 +605,14 @@ end subroutine matrix_diagonal_triangle
   !~ do i=is,ie
     !~ do j=js,je
 
-      !~ if (hmask(i,j) .eq. 1) then ! this cell's vertices contain degrees of freedom
+      !~ if (hmask(i,j) == 1) then ! this cell's vertices contain degrees of freedom
 
         !~ ux = (u(i,j-1)-u(i-1,j-1))/dxh(i,j)
         !~ vx = (v(i,j-1)-v(i-1,j-1))/dxh(i,j)
         !~ uy = (u(i-1,j)-u(i-1,j-1))/dyh(i,j)
         !~ vy = (v(i-1,j)-v(i-1,j-1))/dyh(i,j)
 
-        !~ if (umask(i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+        !~ if (umask(i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
           !~ uret(i,j-1) = uret(i,j-1) + &
               !~ .5 * dxdyh(i,j) * nu_lower (i,j) * ((4*ux+2*vy) * (1./dxh(i,j)) + (uy+vy) * (0./dyh(i,j)))
@@ -625,7 +629,7 @@ end subroutine matrix_diagonal_triangle
                                       !~ v(i-1,j) + v(i,j-1))
         !~ endif
 
-        !~ if (umask(i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+        !~ if (umask(i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
           !~ uret(i-1,j) = uret(i-1,j) + &
               !~ .5 * dxdyh(i,j) * nu_lower (i,j) * ((4*ux+2*vy) * (0./dxh(i,j)) + (uy+vy) * (1./dyh(i,j)))
@@ -642,7 +646,7 @@ end subroutine matrix_diagonal_triangle
                                       !~ v(i-1,j) + v(i,j-1))
         !~ endif
 
-        !~ if (umask(i-1,j-1) .eq. 1) then ! this (bot left) is a degree of freedom node
+        !~ if (umask(i-1,j-1) == 1) then ! this (bot left) is a degree of freedom node
 
           !~ uret(i-1,j-1) = uret(i-1,j-1) + &
               !~ .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh(i,j)) + (uy+vy) * (-1./dyh(i,j)))
@@ -665,7 +669,7 @@ end subroutine matrix_diagonal_triangle
         !~ uy = (u(i,j)-u(i,j-1))/dyh(i,j)
         !~ vy = (v(i,j)-v(i,j-1))/dyh(i,j)
 
-        !~ if (umask(i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
+        !~ if (umask(i,j-1) == 1) then ! this (bot right) is a degree of freedom node
 
           !~ uret(i,j-1) = uret(i,j-1) + &
               !~ .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (0./dxh(i,j)) + (uy+vy) * (-1./dyh(i,j)))
@@ -682,7 +686,7 @@ end subroutine matrix_diagonal_triangle
                                       !~ u(i-1,j) + u(i,j-1))
         !~ endif
 
-        !~ if (umask(i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
+        !~ if (umask(i-1,j) == 1) then ! this (top left) is a degree of freedom node
 
           !~ uret(i-1,j) = uret(i-1,j) + &
               !~ .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh(i,j)) + (uy+vy) * (0./dyh(i,j)))
@@ -699,7 +703,7 @@ end subroutine matrix_diagonal_triangle
                                       !~ u(i-1,j) + u(i,j-1))
         !~ endif
 
-        !~ if (umask(i,j) .eq. 1) then ! this (top right) is a degree of freedom node
+        !~ if (umask(i,j) == 1) then ! this (top right) is a degree of freedom node
 
           !~ uret(i,j) = uret(i,j) + &
               !~ .5 * dxdyh(i,j) * nu_upper (i,j) * ((4*ux+2*vy) * (1./dxh(i,j)) + (uy+vy) * (1./dyh(i,j)))

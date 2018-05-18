@@ -644,7 +644,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
           if (oldfn >= ustarsq) then
             cycle
-          else if ((oldfn + Dfn) <= ustarsq) then
+          elseif ((oldfn + Dfn) <= ustarsq) then
             Dh = h_at_vel(i,k)
           else
             Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
@@ -660,7 +660,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
             if (oldfn >= ustarsq) then
               cycle
-            else if ((oldfn + Dfn) <= ustarsq) then
+            elseif ((oldfn + Dfn) <= ustarsq) then
               Dh = h_at_vel(i,k)
             else
               Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
@@ -1618,12 +1618,12 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
 
     do_any_shelf = .false.
     if (associated(forces%frac_shelf_v)) then
-      do I=Is,Ie
+      do i=is,ie
         if (forces%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
-          do_i(I) = .false.
+          do_i(i) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
         else
-          do_i(I) = .true. ; do_any_shelf = .true.
+          do_i(i) = .true. ; do_any_shelf = .true.
         endif
       enddo
     endif
@@ -1785,21 +1785,23 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
   logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
-  logical :: use_cvmix_shear, MLE_use_PBL_MLD, use_cvmix_conv
+  logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_cvmix_shear = .false.
-  useKPP = .false. ; useEPBL = .false. ; use_cvmix_conv = .false. ;
+
+  use_kappa_shear = .false. ; use_CVMix_shear = .false.
+  useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false.
+
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
-    use_cvmix_shear = cvmix_shear_is_used(param_file)
-    use_cvmix_conv = cvmix_conv_is_used(param_file)
+    use_CVMix_shear = CVMix_shear_is_used(param_file)
+    use_CVMix_conv = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
-                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  default=.false., do_not_log=.true.)
     call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, &
@@ -1808,7 +1810,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                  "in the surface boundary layer.", default=.false., do_not_log=.true.)
   endif
 
-  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_cvmix_shear .or. use_cvmix_conv) then
+  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
     allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0

@@ -17,7 +17,7 @@ use MOM_debugging,       only : hchksum
 use MOM_grid,            only : ocean_grid_type
 use MOM_verticalGrid,    only : verticalGrid_type
 use MOM_file_parser,     only : get_param, log_version, param_file_type
-use cvmix_background,    only : cvmix_init_bkgnd, cvmix_coeffs_bkgnd
+use CVMix_background,    only : CVMix_init_bkgnd, CVMix_coeffs_bkgnd
 use MOM_variables,       only : vertvisc_type
 use MOM_intrinsic_functions, only : invcosh
 
@@ -272,7 +272,7 @@ subroutine sfc_bkgnd_mixing(G, CS)
 
 
   if (.not. CS%Bryan_Lewis_diffusivity) then
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS)
     do j=js,je ; do i=is,ie
       CS%Kd_sfc(i,j) = CS%Kd
     enddo ; enddo
@@ -280,16 +280,16 @@ subroutine sfc_bkgnd_mixing(G, CS)
 
   if (CS%Henyey_IGW_background) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-!$OMP parallel do default(none)
-!shared(is,ie,js,je,Kd_sfc,CS,G,deg_to_rad,epsilon,I_x30) &
-!$OMP                          private(abs_sin)
+!$OMP parallel do default(none) &
+!$OMP shared(is,ie,js,je,CS,G,deg_to_rad,epsilon,I_x30) &
+!$OMP private(abs_sin)
     do j=js,je ; do i=is,ie
       abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
       CS%Kd_sfc(i,j) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
   elseif (CS%Kd_tanh_lat_fn) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G)
     do j=js,je ; do i=is,ie
       !   The transition latitude and latitude range are hard-scaled here, since
       ! this is not really intended for wide-spread use, but rather for
@@ -351,7 +351,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
       enddo
       ! if (is_root_pe()) write(*,*)'depth_3d(i,j,:)',depth_3d(i,j,:)
 
-      call cvmix_init_bkgnd(max_nlev=nz, &
+      call CVMix_init_bkgnd(max_nlev=nz, &
                             zw = depth_2d(i,:), &  !< interface depth, must bepositive.
                             bl1 = CS%Bryan_Lewis_c1, &
                             bl2 = CS%Bryan_Lewis_c2, &
@@ -359,7 +359,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
                             bl4 = CS%Bryan_Lewis_c4, &
                             prandtl = CS%prandtl_bkgnd)
 
-      call cvmix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
+      call CVMix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
                               Tdiff_out=CS%kd_bkgnd(i,j,:), &
                               nlev=nz, &
                               max_nlev=nz)
@@ -425,15 +425,15 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
 
 end subroutine calculate_bkgnd_mixing
 
-!> Reads the parameter "USE_CVMIX_BACKGROUND" and returns state.
+!> Reads the parameter "USE_CVMix_BACKGROUND" and returns state.
 !! This function allows other modules to know whether this parameterization will
 !! be used without needing to duplicate the log entry.
-logical function cvmix_bkgnd_is_used(param_file)
+logical function CVMix_bkgnd_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  call get_param(param_file, mdl, "USE_CVMIX_BACKGROUND", cvmix_bkgnd_is_used, &
+  call get_param(param_file, mdl, "USE_CVMix_BACKGROUND", CVMix_bkgnd_is_used, &
                  default=.false., do_not_log = .true.)
 
-end function cvmix_bkgnd_is_used
+end function CVMix_bkgnd_is_used
 
 !> Clear pointers and dealocate memory
 subroutine bkgnd_mixing_end(CS)
