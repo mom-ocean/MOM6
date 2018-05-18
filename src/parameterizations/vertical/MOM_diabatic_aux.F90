@@ -2,53 +2,6 @@ module MOM_diabatic_aux
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - July 2000                         *
-!*     Alistair Adcroft, and Stephen Griffies                          *
-!*                                                                     *
-!*    This program contains the subroutine that, along with the        *
-!*  subroutines that it calls, implements diapycnal mass and momentum  *
-!*  fluxes and a bulk mixed layer.  The diapycnal diffusion can be     *
-!*  used without the bulk mixed layer.                                 *
-!*                                                                     *
-!*    diabatic first determines the (diffusive) diapycnal mass fluxes  *
-!*  based on the convergence of the buoyancy fluxes within each layer. *
-!*  The dual-stream entrainment scheme of MacDougall and Dewar (JPO,   *
-!*  1997) is used for combined diapycnal advection and diffusion,      *
-!*  calculated implicitly and potentially with the Richardson number   *
-!*  dependent mixing, as described by Hallberg (MWR, 2000). Diapycnal  *
-!*  advection is fundamentally the residual of diapycnal diffusion,    *
-!*  so the fully implicit upwind differencing scheme that is used is   *
-!*  entirely appropriate.  The downward buoyancy flux in each layer    *
-!*  is determined from an implicit calculation based on the previously *
-!*  calculated flux of the layer above and an estimated flux in the    *
-!*  layer below.  This flux is subject to the following conditions:    *
-!*  (1) the flux in the top and bottom layers are set by the boundary  *
-!*  conditions, and (2) no layer may be driven below an Angstrom thick-*
-!*  ness.  If there is a bulk mixed layer, the buffer layer is treat-  *
-!*  ed as a fixed density layer with vanishingly small diffusivity.    *
-!*                                                                     *
-!*    diabatic takes 5 arguments:  the two velocities (u and v), the   *
-!*  thicknesses (h), a structure containing the forcing fields, and    *
-!*  the length of time over which to act (dt).  The velocities and     *
-!*  thickness are taken as inputs and modified within the subroutine.  *
-!*  There is no limit on the time step.                                *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, T, S, buoy, ustar, ea, eb, etc.       *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,     only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -251,6 +204,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
                                                                !! layer properies, and related fields.
   real,                                  intent(in)    :: dt   !< Time increment, in s.
 
+  ! local variables
   real, dimension(SZI_(G)) :: &
     b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S, in H.
     d1_T, d1_S     !  Variables used by the tridiagonal solvers, nondim.
@@ -337,7 +291,6 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
       S(i,j,k) = S(i,j,k) + c1_S(i,k+1)*S(i,j,k+1)
     enddo ; enddo
   enddo
-
 end subroutine differential_diffuse_T_S
 
 !> Keep salinity from falling below a small but positive threshold
@@ -1419,5 +1372,49 @@ subroutine diabatic_aux_end(CS)
   if (associated(CS)) deallocate(CS)
 
 end subroutine diabatic_aux_end
+
+!> \namespace MOM_diabatic_aux
+!!
+!!    This module contains the subroutines that, along with the        *
+!!  subroutines that it calls, implements diapycnal mass and momentum  *
+!!  fluxes and a bulk mixed layer.  The diapycnal diffusion can be     *
+!!  used without the bulk mixed layer.                                 *
+!!                                                                     *
+!!    diabatic first determines the (diffusive) diapycnal mass fluxes  *
+!!  based on the convergence of the buoyancy fluxes within each layer. *
+!!  The dual-stream entrainment scheme of MacDougall and Dewar (JPO,   *
+!!  1997) is used for combined diapycnal advection and diffusion,      *
+!!  calculated implicitly and potentially with the Richardson number   *
+!!  dependent mixing, as described by Hallberg (MWR, 2000). Diapycnal  *
+!!  advection is fundamentally the residual of diapycnal diffusion,    *
+!!  so the fully implicit upwind differencing scheme that is used is   *
+!!  entirely appropriate.  The downward buoyancy flux in each layer    *
+!!  is determined from an implicit calculation based on the previously *
+!!  calculated flux of the layer above and an estimated flux in the    *
+!!  layer below.  This flux is subject to the following conditions:    *
+!!  (1) the flux in the top and bottom layers are set by the boundary  *
+!!  conditions, and (2) no layer may be driven below an Angstrom thick-*
+!!  ness.  If there is a bulk mixed layer, the buffer layer is treat-  *
+!!  ed as a fixed density layer with vanishingly small diffusivity.    *
+!!                                                                     *
+!!    diabatic takes 5 arguments:  the two velocities (u and v), the   *
+!!  thicknesses (h), a structure containing the forcing fields, and    *
+!!  the length of time over which to act (dt).  The velocities and     *
+!!  thickness are taken as inputs and modified within the subroutine.  *
+!!  There is no limit on the time step.                                *
+!!                                                                     *
+!!     A small fragment of the grid is shown below:                    *
+!!                                                                     *
+!!    j+1  x ^ x ^ x   At x:  q                                        *
+!!    j+1  > o > o >   At ^:  v                                        *
+!!    j    x ^ x ^ x   At >:  u                                        *
+!!    j    > o > o >   At o:  h, T, S, buoy, ustar, ea, eb, etc.       *
+!!    j-1  x ^ x ^ x                                                   *
+!!        i-1  i  i+1  At x & ^:                                       *
+!!           i  i+1    At > & o:                                       *
+!!                                                                     *
+!!  The boundaries always run through q grid points (x).               *
+!!                                                                     *
+!!********+*********+*********+*********+*********+*********+*********+**
 
 end module MOM_diabatic_aux
