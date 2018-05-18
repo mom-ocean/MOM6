@@ -63,10 +63,14 @@ program MOM_main
   use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
   use ensemble_manager_mod, only : ensemble_pelist_setup
   use mpp_mod, only : set_current_pelist => mpp_set_current_pelist
+  use time_interp_external_mod, only : time_interp_external_init
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
+
+  use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+  use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
   implicit none
 
@@ -88,6 +92,9 @@ program MOM_main
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
 
+  ! If .true., use surface wave coupling
+  logical :: use_waves = .false.
+
   ! This is .true. if incremental restart files may be saved.
   logical :: permit_incr_restart = .true.
 
@@ -97,7 +104,7 @@ program MOM_main
   ! simulation does not exceed its CPU time limit.  nmax is determined by
   ! evaluating the CPU time used between successive calls to write_cputime.
   ! Initially it is set to be very large.
-  integer :: nmax=2000000000;
+  integer :: nmax=2000000000
 
   ! A structure containing several relevant directory paths.
   type(directories) :: dirs
@@ -179,6 +186,7 @@ program MOM_main
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
+  type(wave_parameters_cs),  pointer :: waves_CSp => NULL()
   type(MOM_restart_CS),      pointer :: &
     restart_CSp => NULL()     !< A pointer to the restart control structure
                               !! that will be used for MOM restart files.
@@ -265,11 +273,11 @@ program MOM_main
   else
     calendar = uppercase(calendar)
     if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
-    else if (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
-    else if (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
-    else if (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
-    else if (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
-    else if (calendar(1:1) /= ' ') then
+    elseif (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
+    elseif (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
+    elseif (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
+    elseif (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
+    elseif (calendar(1:1) /= ' ') then
       call MOM_error(FATAL,'MOM_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
       call MOM_error(FATAL,'MOM_driver: No namelist value for calendar')
@@ -284,6 +292,8 @@ program MOM_main
   else
     Start_time = set_time(0,days=0)
   endif
+
+  call time_interp_external_init
 
   if (sum(date) >= 0) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
@@ -319,6 +329,14 @@ program MOM_main
     ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
                               diag, forces, fluxes)
+  endif
+
+  call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
+       "If true, enables surface wave modules.",default=.false.)
+  if (use_waves) then
+    call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
+  else
+    call MOM_wave_interface_init_lite(param_file)
   endif
 
   segment_start_time = Time
@@ -405,7 +423,8 @@ program MOM_main
                  "the segment run-length can not be set via an elapsed CPU time.", &
                  default=1000)
   call get_param(param_file, "MOM", "DEBUG", debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   call log_param(param_file, mod_name, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
@@ -472,8 +491,12 @@ program MOM_main
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = dt_forcing
 
+    if (use_waves) then
+      call Update_Surface_Waves(grid,GV,time,time_step_ocean,waves_csp)
+    endif
+
     if (ns==1) then
-      call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes, restart_CSp)
+      call finish_MOM_initialization(Time, dirs, MOM_CSp, restart_CSp)
     endif
 
     ! This call steps the model over a time dt_forcing.
@@ -481,7 +504,7 @@ program MOM_main
     if (offline_tracer_mode) then
       call step_offline(forces, fluxes, sfc_state, Time1, dt_forcing, MOM_CSp)
     elseif (single_step_call) then
-      call step_MOM(forces, fluxes, sfc_state, Time1, dt_forcing, MOM_CSp)
+      call step_MOM(forces, fluxes, sfc_state, Time1, dt_forcing, MOM_CSp, Waves=Waves_CSP)
     else
       n_max = 1 ; if (dt_forcing > dt) n_max = ceiling(dt_forcing/dt - 0.001)
       dt_dyn = dt_forcing / real(n_max)
@@ -618,7 +641,7 @@ program MOM_main
         call get_date(Time, yr, mon, day, hr, mins, sec)
         write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
              'Current model time: year, month, day, hour, minute, second'
-    end if
+    endif
     call close_file(unit)
   endif
 

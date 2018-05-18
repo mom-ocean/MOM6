@@ -26,9 +26,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
@@ -45,10 +42,11 @@ logical :: first_call = .true.
 
 contains
 
+!> This subroutine specifies the vertical coordinate in terms of temperature at the surface and at the bottom.
+!! This case is set up in such a way that the temperature of the topmost layer is equal to the SST at the
+!! southern edge of the domain. The temperatures are then converted to densities of the top and bottom layers
+!! and linearly interpolated for the intermediate layers.
 subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
-! This subroutine specifies the vertical coordinate in terms of temperature at the surface and at the bottom. This case is set up in
-! such a way that the temperature of the topmost layer is equal to the SST at the southern edge of the domain. The temperatures are
-! then converted to densities of the top and bottom layers and linearly interpolated for the intermediate layers.
   real, dimension(NKMEM_), intent(out) :: Rlay, g_prime
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
@@ -77,18 +75,18 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
       g_prime(k) = (Rlay(k) - Rlay(k-1))*GV%g_earth/GV%rho0
     else
       g_prime(k) = GV%g_earth
-    end if
+    endif
     !Rlay(:) = 0.0
     !g_prime(:) = 0.0
-  end do
+  enddo
 
   if (first_call) call write_BFB_log(param_file)
 
 end subroutine BFB_set_coord
 
+!> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
+!! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
 subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
-! This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs within 2 degrees lat of the
-! boundary. The damping linearly decreases northward over the next 2 degrees.
   type(ocean_grid_type), intent(in)                   :: G    !< The ocean's grid structure
   logical,               intent(in)                   :: use_temperature
   type(thermo_var_ptrs), intent(in)                   :: tv   !< A structure pointing to various thermodynamic variables
@@ -132,7 +130,10 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
                  "The longitudinal length of the domain.", units="degrees")
   nlat = slat + lenlat
   do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz) ; enddo
-!  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz-1) ; enddo ! Use for meridional thickness profile initialization
+
+  ! Use for meridional thickness profile initialization
+!  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz-1) ; enddo
+
   do i=is,ie; do j=js,je
     if (G%geoLatT(i,j) < slat+2.0) then ; damp = 1.0
     elseif (G%geoLatT(i,j) < slat+4.0) then

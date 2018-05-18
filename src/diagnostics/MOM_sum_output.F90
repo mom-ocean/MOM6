@@ -38,15 +38,15 @@ module MOM_sum_output
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
-use MOM_coms, only : reproducing_sum
-use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_to_real, real_to_EFP
+use MOM_coms, only : reproducing_sum, EFP_to_real, real_to_EFP
+use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=)
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, get_filename_appendix
-use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
+use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
+use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
@@ -136,7 +136,7 @@ type, public :: sum_output_CS ; private
                                 ! Start_time is set in MOM_initialization.F90
   integer, pointer :: ntrunc    ! The number of times the velocity has been
                                 ! truncated since the last call to write_energy.
-  real    :: max_Energy         ! The maximum permitted energy per unit mass;
+  real    :: max_Energy         ! The maximum permitted energy per unit mass
                                 ! If there is more energy than this, the model
                                 ! should stop, in m2 s-2.
   integer :: maxtrunc           ! The number of truncations per energy save
@@ -223,7 +223,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8)
     CS%max_Energy = 10.0 * maxvel**2
-    call log_param (param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
+    call log_param(param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
   endif
 
   call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
@@ -232,9 +232,9 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
   call get_filename_appendix(filename_appendix)
-  if(len_trim(filename_appendix) > 0) then
+  if (len_trim(filename_appendix) > 0) then
      energyfile = trim(energyfile) //'.'//trim(filename_appendix)
-  end if
+  endif
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mdl, "output_path/ENERGYFILE", CS%energyfile)
@@ -606,11 +606,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
         else
           if ((CS%timeunit >= 0.99) .and. (CS%timeunit < 1.01)) then
             time_units = "           [seconds]     "
-          else if ((CS%timeunit >= 3599.0) .and. (CS%timeunit < 3601.0)) then
+          elseif ((CS%timeunit >= 3599.0) .and. (CS%timeunit < 3601.0)) then
             time_units = "            [hours]      "
-          else if ((CS%timeunit >= 86399.0) .and. (CS%timeunit < 86401.0)) then
+          elseif ((CS%timeunit >= 86399.0) .and. (CS%timeunit < 86401.0)) then
             time_units = "             [days]      "
-          else if ((CS%timeunit >= 3.0e7) .and. (CS%timeunit < 3.2e7)) then
+          elseif ((CS%timeunit >= 3.0e7) .and. (CS%timeunit < 3.2e7)) then
             time_units = "            [years]      "
           else
             write(time_units,'(9x,"[",es8.2," s]    ")') CS%timeunit
@@ -881,7 +881,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
          write(*,'("      Total ",a,": ",ES24.16,X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
 
-         if(Tr_minmax_got(m)) then
+         if (Tr_minmax_got(m)) then
            write(*,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
                 Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
            write(*,'(64X,"Global Max:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
@@ -949,24 +949,18 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
   endif
 end subroutine write_energy
 
-!> This subroutine accumates the net input of volume, and perhaps later salt and
-!! heat, through the ocean surface for use in diagnosing conservation.
+!> This subroutine accumates the net input of volume, salt and heat, through
+!! the ocean surface for use in diagnosing conservation.
 subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
-  type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible forcing fields.  Unused fields are unallocated.
+  type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible
+                                              !! forcing fields.  Unused fields are unallocated.
   type(surface),         intent(in) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real,                  intent(in) :: dt     !< The amount of time over which to average, in s.
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
-  type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call to MOM_sum_output_init.
+  type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
+                                              !! to MOM_sum_output_init.
 
-! This subroutine accumates the net input of volume, and perhaps later salt and
-! heat, through the ocean surface for use in diagnosing conservation.
-! Arguments: fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields are unallocated.
-!  (in)      dt - The amount of time over which to average.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 MOM_sum_output_init.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     FW_in, &   ! The net fresh water input, integrated over a timestep in kg.
     salt_in, & ! The total salt added by surface fluxes, integrated
@@ -993,8 +987,8 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   C_p = fluxes%C_p
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0
-  if (ASSOCIATED(fluxes%evap)) then
-    if (ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
+  if (associated(fluxes%evap)) then
+    if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
         FW_in(i,j) = dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
             (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
@@ -1009,14 +1003,14 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0
   if (CS%use_temperature) then
 
-    if (ASSOCIATED(fluxes%sw)) then ; do j=js,je ; do i=is,ie
+    if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
     ! smg: new code
     ! include heat content from water transport across ocean surface
-!    if (ASSOCIATED(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
+!    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) *                          &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
@@ -1025,11 +1019,11 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 !    enddo ; enddo ; endif
 
     ! smg: old code
-    if (ASSOCIATED(sfc_state%TempxPmE)) then
+    if (associated(sfc_state%TempxPmE)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * sfc_state%TempxPmE(i,j)
       enddo ; enddo
-    elseif (ASSOCIATED(fluxes%evap)) then
+    elseif (associated(fluxes%evap)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (C_p * sfc_state%SST(i,j)) * FW_in(i,j)
       enddo ; enddo
@@ -1037,30 +1031,30 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 
 
     ! The following heat sources may or may not be used.
-    if (ASSOCIATED(sfc_state%internal_heat)) then
+    if (associated(sfc_state%internal_heat)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * &
                      sfc_state%internal_heat(i,j)
       enddo ; enddo
     endif
-    if (ASSOCIATED(sfc_state%frazil)) then ; do j=js,je ; do i=is,ie
+    if (associated(sfc_state%frazil)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * sfc_state%frazil(i,j)
     enddo ; enddo ; endif
-    if (ASSOCIATED(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
+    if (associated(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
-!    if (ASSOCIATED(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
+!    if (associated(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * sfc_state%sw_lost(i,j)
 !    enddo ; enddo ; endif
 
-    if (ASSOCIATED(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
+    if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
       ! convert salt_flux from kg (salt)/(m^2 s) to ppt * (m/s).
       salt_in(i,j) = dt*G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif
 
-  if ((CS%use_temperature) .or. ASSOCIATED(fluxes%lprec) .or. &
-      ASSOCIATED(fluxes%evap)) then
+  if ((CS%use_temperature) .or. associated(fluxes%lprec) .or. &
+      associated(fluxes%evap)) then
     FW_input   = reproducing_sum(FW_in,   EFP_sum=FW_in_EFP)
     heat_input = reproducing_sum(heat_in, EFP_sum=heat_in_EFP)
     salt_input = reproducing_sum(salt_in, EFP_sum=salt_in_EFP)
@@ -1082,7 +1076,8 @@ end subroutine accumulate_net_input
 !! or it might be created anew.  (For now only new creation occurs.
 subroutine depth_list_setup(G, CS)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  type(Sum_output_CS),   pointer    :: CS
+  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
+                                           !! previous call to MOM_sum_output_init.
 !  This subroutine sets up an ordered list of depths, along with the
 ! cross sectional areas at each depth and the volume of fluid deeper
 ! than each depth.  This might be read from a previously created file
@@ -1238,10 +1233,11 @@ end subroutine create_depth_list
 
 !> This subroutine writes out the depth list to the specified file.
 subroutine write_depth_list(G, CS, filename, list_size)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
-  type(Sum_output_CS),   pointer    :: CS
-  character(len=*),      intent(in) :: filename
-  integer,               intent(in) :: list_size
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure.
+  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
+                                           !! previous call to MOM_sum_output_init.
+  character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
+  integer,               intent(in) :: list_size !< The size of the depth list.
 
 ! This subroutine writes out the depth list to the specified file.
 
@@ -1320,9 +1316,10 @@ end subroutine write_depth_list
 !> This subroutine reads in the depth list to the specified file
 !! and allocates and sets up CS%DL and CS%list_size .
 subroutine read_depth_list(G, CS, filename)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  type(Sum_output_CS),   pointer    :: CS
-  character(len=*),      intent(in) :: filename
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
+  type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
+                                           !! previous call to MOM_sum_output_init.
+  character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
 
 ! This subroutine reads in the depth list to the specified file
 ! and allocates and sets up CS%DL and CS%list_size .
@@ -1334,7 +1331,7 @@ subroutine read_depth_list(G, CS, filename)
 
   mdl = "MOM_sum_output read_depth_list:"
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
+  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
     call MOM_error(FATAL,mdl//" Difficulties opening "//trim(filename)// &
         " - "//trim(NF90_STRERROR(status)))

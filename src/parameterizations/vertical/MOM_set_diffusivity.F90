@@ -129,7 +129,7 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff ! If true, call user-defined code to change diffusivity.
   logical :: useKappaShear    ! If true, use the kappa_shear module to find the
                               ! shear-driven diapycnal diffusivity.
-  logical :: use_cvmix_shear  ! If true, use one of the CVMix modules to find
+  logical :: use_CVMix_shear  ! If true, use one of the CVMix modules to find
                               ! shear-driven diapycnal diffusivity.
   logical :: use_CVMix_ddiff  ! If true, enable double-diffusive mixing via CVMix.
   logical :: simple_TKE_to_Kd ! If true, uses a simple estimate of Kd/TKE that
@@ -214,7 +214,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   type(diffusivity_diags)  :: dd ! structure w/ arrays of pointers to avail diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_f, S_f      ! temperature and salinity (deg C and ppt);
+    T_f, S_f      ! temperature and salinity (deg C and ppt)
                   ! massless layers filled vertically by diffusion.
 
   real, dimension(SZI_(G),SZK_(G)) :: &
@@ -328,9 +328,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
-  elseif (CS%use_cvmix_shear) then
+  elseif (CS%use_CVMix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
-    call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%cvmix_shear_csp)
+    call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%CVMix_shear_csp)
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
@@ -345,11 +345,11 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 ! GMM, fix OMP calls below
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
-!$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc,    &
+!$OMP                                  Kd,visc,    &
 !$OMP                                  Kd_int,dt,u,v,Omega2)   &
-!$OMP                          private(dRho_int,I_trans,atan_fn_sfc,I_atan_fn,atan_fn_lay, &
-!$OMP                                  I_Hmix,depth_c,depth,N2_lay, N2_int, N2_bot,        &
-!$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra, KS_extra,   &
+!$OMP                          private(dRho_int, &
+!$OMP                                  N2_lay, N2_int, N2_bot,        &
+!$OMP                                  KT_extra, KS_extra,   &
 !$OMP                                  TKE_to_Kd,maxTKE,dissip,kb)
   do j=js,je
 
@@ -370,7 +370,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
   ! Add the input turbulent diffusivity.
-    if (CS%useKappaShear .or. CS%use_cvmix_shear) then
+    if (CS%useKappaShear .or. CS%use_CVMix_shear) then
       if (present(Kd_int)) then
         do K=2,nz ; do i=is,ie
           Kd_int(i,j,K) = visc%Kd_shear(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
@@ -851,7 +851,8 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
     z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
 
-    if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation) then
+    if ( (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation) .and. &
+          .not. CS%tm_csp%use_CVMix_tidal ) then
       h_amp(i) = sqrt(CS%tm_csp%h2(i,j)) ! for computing Nb
     else
       h_amp(i) = 0.0
@@ -990,7 +991,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   ! to be relatively small and is discarded.
   do i=is,ie
     ustar_h = visc%ustar_BBL(i,j)
-    if (ASSOCIATED(fluxes%ustar_tidal)) &
+    if (associated(fluxes%ustar_tidal)) &
       ustar_h = ustar_h + fluxes%ustar_tidal(i,j)
     absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                  (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))))
@@ -1005,7 +1006,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
               exp(-I2decay(i)*(GV%H_to_m*h(i,j,nz))) ) * &
              visc%TKE_BBL(i,j)
 
-    if (ASSOCIATED(fluxes%TKE_tidal)) &
+    if (associated(fluxes%TKE_tidal)) &
       TKE(i) = TKE(i) + fluxes%TKE_tidal(i,j) * I_Rho0 * &
            (CS%BBL_effic * exp(-I2decay(i)*(GV%H_to_m*h(i,j,nz))))
 
@@ -1205,7 +1206,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
     ! since ustar_BBL should already include all contributions to u*? -AJA
-    if (ASSOCIATED(fluxes%ustar_tidal)) ustar = ustar + fluxes%ustar_tidal(i,j)
+    if (associated(fluxes%ustar_tidal)) ustar = ustar + fluxes%ustar_tidal(i,j)
 
     ! The maximum decay scale should be something of order 200 m. We use the smaller of u*/f and
     ! (IMax_decay)^-1 as the decay scale. If ustar = 0, this is land so this value doesn't matter.
@@ -1218,7 +1219,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     TKE_column = cdrag_sqrt * visc%TKE_BBL(i,j)
     ! Add in tidal dissipation energy at the bottom, in m3 s-3.
     ! Note that TKE_tidal is in W m-2.
-    if (ASSOCIATED(fluxes%TKE_tidal)) TKE_column = TKE_column + fluxes%TKE_tidal(i,j) * I_Rho0
+    if (associated(fluxes%TKE_tidal)) TKE_column = TKE_column + fluxes%TKE_tidal(i,j) * I_Rho0
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column
@@ -1702,7 +1703,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   ! These default values always need to be set.
   CS%BBL_mixing_as_max = .true.
-  CS%Kdml = 0.0 ; CS%cdrag = 0.003 ; CS%BBL_effic = 0.0 ;
+  CS%Kdml = 0.0 ; CS%cdrag = 0.003 ; CS%BBL_effic = 0.0
   CS%bulkmixedlayer = (GV%nkml > 0)
 
 
@@ -1866,7 +1867,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "mixed layer is not used.", units="m", fail_if_missing=.true.)
   endif
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   call get_param(param_file, mdl, "USER_CHANGE_DIFFUSIVITY", CS%user_change_diff, &
                  "If true, call user-defined code to change the diffusivity.", &

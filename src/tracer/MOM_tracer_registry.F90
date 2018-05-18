@@ -32,6 +32,7 @@ public MOM_tracer_chksum, MOM_tracer_chkinv
 public register_tracer_diagnostics, post_tracer_diagnostics, post_tracer_transport_diagnostics
 public preALE_tracer_diagnostics, postALE_tracer_diagnostics
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
+public tracer_name_lookup
 
 !> The tracer type
 type, public :: tracer_type
@@ -157,10 +158,14 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   real, dimension(:,:,:), optional, pointer     :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:,:), optional, pointer     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:,:), optional, pointer     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   optional, pointer     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: ad_2d_x      !< vert sum of diagnostic x-advect flux
+                                                                !! (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: ad_2d_y      !< vert sum of diagnostic y-advect flux
+                                                                !! (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux
+                                                                !! (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux
+                                                                !! (CONC m3/s or CONC*kg/s)
 
   real, dimension(:,:,:), optional, pointer     :: advection_xy !< convergence of lateral advective tracer fluxes
   logical,              optional, intent(in)    :: registry_diags !< If present and true, use the registry for
@@ -172,13 +177,16 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   character(len=*),     optional, intent(in)    :: flux_units   !< The units for the fluxes of this tracer.
   real,                 optional, intent(in)    :: flux_scale   !< A scaling factor used to convert the fluxes
                                                                 !! of this tracer to its desired units.
-  character(len=*),     optional, intent(in)    :: convergence_units   !< The units for the flux convergence of this tracer.
+  character(len=*),     optional, intent(in)    :: convergence_units !< The units for the flux convergence of
+                                                                !! this tracer.
   real,                 optional, intent(in)    :: convergence_scale !< A scaling factor used to convert the flux
                                                                 !! convergence of this tracer to its desired units.
-  character(len=*),     optional, intent(in)    :: cmor_tendprefix !< The CMOR name for the layer-integrated tendencies of this tracer.
-  integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the character
-                                                                !! string template to use in labeling diagnostics
-  type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure;
+  character(len=*),     optional, intent(in)    :: cmor_tendprefix !< The CMOR name for the layer-integrated
+                                                                !! tendencies of this tracer.
+  integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the
+                                                                !! character string template to use in
+                                                                !! labeling diagnostics
+  type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure
                                                                 !! this tracer will be registered for
                                                                 !! restarts if this argument is present
   logical,              optional, intent(in)    :: mandatory    !< If true, this tracer must be read
@@ -740,6 +748,19 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
   enddo
 
 end subroutine MOM_tracer_chkinv
+
+!> Find a tracer in the tracer registry by name.
+subroutine tracer_name_lookup(Reg, tr_ptr, name)
+  type(tracer_registry_type), pointer    :: Reg     !< pointer to tracer registry
+  type(tracer_type), pointer             :: tr_ptr  !< target or pointer to the tracer array
+  character(len=32), intent(in)          :: name    !< tracer name
+
+  integer n
+  do n=1,Reg%ntr
+    if (lowercase(Reg%Tr(n)%name) == lowercase(name)) tr_ptr => Reg%Tr(n)
+  enddo
+
+end subroutine tracer_name_lookup
 
 !> Initialize the tracer registry.
 subroutine tracer_registry_init(param_file, Reg)
