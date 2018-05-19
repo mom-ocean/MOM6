@@ -207,6 +207,9 @@ type, public :: mech_forcing
                                  !< enabled, and is exactly 0 away from shelves or on land.
     rigidity_ice_u => NULL(), &  !< Depth-integrated lateral viscosity of ice
     rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
+  logical :: accumulate_rigidity = .false. !< If true, the rigidity due to various types of
+                                 !! ice needs to be accumulated, and the rigidity explicitly
+                                 !! reset to zero at the driver level when appropriate.
 
   logical :: initialized = .false. !< This indicates whether the appropriate
                                  !! arrays have been initialized.
