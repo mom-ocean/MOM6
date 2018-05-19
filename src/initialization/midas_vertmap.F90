@@ -79,11 +79,11 @@ function wright_eos_2d(T,S,p) result(rho)
   real(kind=8) :: al0,lam,p0,I_denom
   integer :: i,k
 
-  a0 = 7.057924e-4; a1 = 3.480336e-7; a2 = -1.112733e-7;
-  b0 = 5.790749e8;  b1 = 3.516535e6;  b2 = -4.002714e4;
-  b3 = 2.084372e2;  b4 = 5.944068e5;  b5 = -9.643486e3;
-  c0 = 1.704853e5;  c1 = 7.904722e2;  c2 = -7.984422;
-  c3 = 5.140652e-2; c4 = -2.302158e2; c5 = -3.079464;
+  a0 = 7.057924e-4; a1 = 3.480336e-7; a2 = -1.112733e-7
+  b0 = 5.790749e8;  b1 = 3.516535e6;  b2 = -4.002714e4
+  b3 = 2.084372e2;  b4 = 5.944068e5;  b5 = -9.643486e3
+  c0 = 1.704853e5;  c1 = 7.904722e2;  c2 = -7.984422
+  c3 = 5.140652e-2; c4 = -2.302158e2; c5 = -3.079464
 
   do k=1,size(T,2)
     do i=1,size(T,1)
@@ -120,11 +120,11 @@ real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
 real(kind=8) :: al0,lam,p0,I_denom,I_denom2
 integer :: i,k
 
-a0 = 7.057924e-4; a1 = 3.480336e-7; a2 = -1.112733e-7;
-b0 = 5.790749e8;  b1 = 3.516535e6;  b2 = -4.002714e4;
-b3 = 2.084372e2;  b4 = 5.944068e5;  b5 = -9.643486e3;
-c0 = 1.704853e5;  c1 = 7.904722e2;  c2 = -7.984422;
-c3 = 5.140652e-2; c4 = -2.302158e2; c5 = -3.079464;
+a0 = 7.057924e-4; a1 = 3.480336e-7; a2 = -1.112733e-7
+b0 = 5.790749e8;  b1 = 3.516535e6;  b2 = -4.002714e4
+b3 = 2.084372e2;  b4 = 5.944068e5;  b5 = -9.643486e3
+c0 = 1.704853e5;  c1 = 7.904722e2;  c2 = -7.984422
+c3 = 5.140652e-2; c4 = -2.302158e2; c5 = -3.079464
 
 do k=1,size(T,2)
   do i=1,size(T,1)
@@ -167,11 +167,11 @@ real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
 real(kind=8) :: al0,lam,p0,I_denom,I_denom2
 integer :: i,k
 
-a0 = 7.057924e-4; a1 = 3.480336e-7; a2 = -1.112733e-7;
-b0 = 5.790749e8;  b1 = 3.516535e6;  b2 = -4.002714e4;
-b3 = 2.084372e2;  b4 = 5.944068e5;  b5 = -9.643486e3;
-c0 = 1.704853e5;  c1 = 7.904722e2;  c2 = -7.984422;
-c3 = 5.140652e-2; c4 = -2.302158e2; c5 = -3.079464;
+a0 = 7.057924e-4; a1 = 3.480336e-7; a2 = -1.112733e-7
+b0 = 5.790749e8;  b1 = 3.516535e6;  b2 = -4.002714e4
+b3 = 2.084372e2;  b4 = 5.944068e5;  b5 = -9.643486e3
+c0 = 1.704853e5;  c1 = 7.904722e2;  c2 = -7.984422
+c3 = 5.140652e-2; c4 = -2.302158e2; c5 = -3.079464
 
 do k=1,size(T,2)
   do i=1,size(T,1)
@@ -227,8 +227,8 @@ integer, intent(in)                          :: nkml,nkbl
 real, intent(in)                             :: land_fill
 real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet
 real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs
-logical, intent(in), optional                :: debug
-integer, intent(in), optional                :: i_debug, j_debug
+logical, optional, intent(in)                :: debug
+integer, optional, intent(in)                :: i_debug, j_debug
 
 real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr
 real, dimension(size(tr_in,3)) :: tr_1d
@@ -262,7 +262,7 @@ endif
 
 do j=1,ny
   i_loop: do i=1,nx
-    if (nlevs_data(i,j) .eq. 0 .or. wet(i,j) .eq. 0.) then
+    if (nlevs_data(i,j) == 0 .or. wet(i,j) == 0.) then
       tr(i,j,:) = land_fill
       cycle i_loop
     endif
@@ -297,7 +297,7 @@ do j=1,ny
 
         if (debug_) then
            if (PRESENT(i_debug)) then
-             if (i.eq.i_debug.and.j.eq.j_debug) then
+             if (i == i_debug.and.j == j_debug) then
                 print *,'0001 k,k_top,k_bot,sum(wt),sum(z2-z1) = ',k,k_top,k_bot,sum(wt),sum(z2-z1)
              endif
            endif
@@ -321,7 +321,7 @@ do j=1,ny
 !        endif
         if (debug_) then
            if (PRESENT(i_debug)) then
-             if (i.eq.i_debug.and.j.eq.j_debug) then
+             if (i == i_debug.and.j == j_debug) then
                 print *,'0002 k,k_top,k_bot,k_bot_prev,sl_tr = ',k,k_top,k_bot,k_bot_prev,sl_tr
              endif
            endif
@@ -333,7 +333,7 @@ do j=1,ny
 
         if (debug_) then
            if (PRESENT(i_debug)) then
-             if (i.eq.i_debug.and.j.eq.j_debug) then
+             if (i == i_debug.and.j == j_debug) then
                 print *,'0003 k,tr = ',k,tr(i,j,k)
              endif
            endif
@@ -357,7 +357,7 @@ do j=1,ny
 
           if (debug_) then
              if (PRESENT(i_debug)) then
-               if (i.eq.i_debug.and.j.eq.j_debug) then
+               if (i == i_debug.and.j == j_debug) then
                   print *,'0004 k,kz,nlevs,sl_tr,tr = ',k,kz,nlevs_data(i,j),sl_tr,tr(i,j,k)
                   print *,'0005 k,kz,tr(kz),tr(kz-1),tr(kz+1) = ',k,kz,tr_1d(kz),tr_1d(kz-1),tr_1d(kz+1),z_edges(kz+2)
                endif
@@ -371,7 +371,7 @@ do j=1,ny
     enddo ! k-loop
 
     do k=2,nlay  ! simply fill vanished layers with adjacent value
-      if (e_1d(k)-e_1d(k+1) .le. epsln) tr(i,j,k)=tr(i,j,k-1)
+      if (e_1d(k)-e_1d(k+1) <= epsln) tr(i,j,k)=tr(i,j,k-1)
     enddo
 
   enddo i_loop
@@ -397,7 +397,7 @@ function bisect_fast(a, x, lo, hi) result(bi_r)
 
 real, dimension(:,:), intent(in) :: a
 real, dimension(:), intent(in) :: x
-integer, dimension(size(a,1)), intent(in), optional  :: lo,hi
+integer, dimension(size(a,1)), optional, intent(in) :: lo,hi
 integer, dimension(size(a,1),size(x,1))  :: bi_r
 
 integer :: mid,num_x,num_a,i
@@ -408,7 +408,7 @@ lo_=1;hi_=size(a,2);num_x=size(x,1);bi_r=-1;nprofs=size(a,1)
 
 if (PRESENT(lo)) then
   where (lo>0) lo_=lo
-end if
+endif
 if (PRESENT(hi)) then
   where (hi>0) hi_=hi
 endif
@@ -494,7 +494,7 @@ integer, intent(in) :: niter
 integer, intent(in) :: k_start
 real, intent(in) :: land_fill
 real, dimension(:,:,:), intent(in) :: h
-type(eos_type), pointer, intent(in) :: eos
+type(eos_type), pointer :: eos
 
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
@@ -689,7 +689,8 @@ function find_limited_slope(val, e, k) result(slope)
 real, dimension(:), intent(in) :: val
 real, dimension(:), intent(in) :: e
 integer, intent(in) :: k
-real :: slope,amx,bmx,amn,bmn,cmn,dmn
+real :: slope
+real :: amx,bmx,amn,bmn,cmn,dmn
 
 real :: d1, d2
 
@@ -719,8 +720,6 @@ return
 
 end function find_limited_slope
 
-
-
 function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
 !  (in)      rho : potential density in z-space (kg m-3)
 !  (in)      zin : levels (m)
@@ -731,15 +730,20 @@ function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
 !  (in)     nkbl : number of buffer layer pieces
 !  (in)      hml : mixed layer depth
 
-real, dimension(:,:,:), intent(in) :: rho
-real, dimension(size(rho,3)), intent(in) :: zin
+real, dimension(:,:,:), &
+                    intent(in) :: rho
+real, dimension(size(rho,3)), &
+                    intent(in) :: zin
 real, dimension(:), intent(in) :: Rb
-real, dimension(size(rho,1),size(rho,2)), intent(in) :: depth
-real, dimension(size(rho,1),size(rho,2)), optional, intent(in) ::nlevs
-logical, optional, intent(in) :: debug
+real, dimension(size(rho,1),size(rho,2)), &
+                    intent(in) :: depth
+real, dimension(size(rho,1),size(rho,2)), &
+          optional, intent(in) ::nlevs
+logical,  optional, intent(in) :: debug
+integer,  optional, intent(in) :: nkml
+integer,  optional, intent(in) :: nkbl
+real,     optional, intent(in) :: hml
 real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi
-integer, intent(in), optional :: nkml, nkbl
-real, intent(in), optional    :: hml
 
 real, dimension(size(rho,1),size(rho,3)) :: rho_
 real, dimension(size(rho,1)) :: depth_
@@ -758,8 +762,7 @@ real, parameter :: zoff=0.999
 
 nlay=size(Rb)-1
 
-zi=0.0
-
+zi(:,:,:) = 0.0
 
 if (PRESENT(debug)) debug_=debug
 
@@ -789,7 +792,7 @@ do j=1,ny
       if (dir == 1) then
         do k=2,nlevs_data(i,j)-1
           if (rho_(i,k) - rho_(i,k-1) < 0.0 ) then
-            if (k.eq.2) then
+            if (k == 2) then
               rho_(i,k-1)=rho_(i,k)-epsln
             else
               drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
@@ -804,7 +807,7 @@ do j=1,ny
       else
         do k=nlevs_data(i,j)-1,2,-1
           if (rho_(i,k+1) - rho_(i,k) < 0.0) then
-            if (k .eq. nlevs_data(i,j)-1) then
+            if (k == nlevs_data(i,j)-1) then
               rho_(i,k+1)=rho_(i,k-1)+epsln
             else
               drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
@@ -919,7 +922,7 @@ nm=fill_boundaries(bad,cyclic_x,tripolar_n)
 
 do j=1,nj
   do i=1,ni
-    if (fill(i,j) .eq. 1) then
+    if (fill(i,j) == 1) then
       B(i,j,1)=1-nm(i+1,j);B(i,j,2)=1-nm(i-1,j)
       B(i,j,3)=1-nm(i,j+1);B(i,j,4)=1-nm(i,j-1)
     endif
@@ -929,7 +932,7 @@ enddo
 do n=1,niter
   do j=1,nj
     do i=1,ni
-      if (fill(i,j) .eq. 1) then
+      if (fill(i,j) == 1) then
         bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
         Isum = 1.0/bsum
         res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&
@@ -947,9 +950,7 @@ do n=1,niter
 
   zi(:,:)=mp(1:ni,1:nj)
   mp = fill_boundaries(zi,cyclic_x,tripolar_n)
-end do
-
-
+enddo
 
 return
 
@@ -1009,7 +1010,5 @@ endif
 return
 
 end function fill_boundaries_real
-
-
 
 end module midas_vertmap

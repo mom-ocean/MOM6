@@ -188,7 +188,7 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
   if (use_JHL) NumberTrue = NumberTrue + 1
   ! After testing for interior schemes, make sure only 0 or 1 are enabled.
   ! Otherwise, warn user and kill job.
-  if ((NumberTrue).gt.1) then
+  if ((NumberTrue) > 1) then
      call MOM_error(FATAL, 'MOM_CVMix_shear_init: '// &
            'Multiple shear driven internal mixing schemes selected,'//&
            ' please disable all but one scheme to proceed.')

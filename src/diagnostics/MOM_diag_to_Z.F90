@@ -106,7 +106,7 @@ function global_z_mean(var,G,CS,tracer)
   real, dimension(CS%nk_zspace)                    :: global_z_mean, scalarij, weightij
   real, dimension(CS%nk_zspace)                    :: global_temp_scalar, global_weight_scalar
   integer :: i, j, k, is, ie, js, je, nz, tracer
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ;
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   nz = CS%nk_zspace
 
   ! Initialize local arrays
@@ -1153,7 +1153,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
 
   nk_out = -1
 
-  status = NF90_OPEN(depth_file, NF90_NOWRITE, ncid);
+  status = NF90_OPEN(depth_file, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
         " Difficulties opening "//trim(depth_file)//" - "//&
@@ -1257,9 +1257,9 @@ subroutine MOM_diag_to_Z_end(CS)
   type(diag_to_Z_CS), pointer :: CS
   integer :: m
 
-  if (ASSOCIATED(CS%u_z))   deallocate(CS%u_z)
-  if (ASSOCIATED(CS%v_z))   deallocate(CS%v_z)
-  if (ASSOCIATED(CS%Z_int)) deallocate(CS%Z_int)
+  if (associated(CS%u_z))   deallocate(CS%u_z)
+  if (associated(CS%v_z))   deallocate(CS%v_z)
+  if (associated(CS%Z_int)) deallocate(CS%Z_int)
   do m=1,CS%num_tr_used ;   deallocate(CS%tr_z(m)%p) ; enddo
 
   deallocate(CS)
@@ -1302,7 +1302,7 @@ function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
   ! register the layer tracer
   ocean_register_diag_with_z = ocean_register_diag(vardesc_tr, G, CS%diag, Time)
 
-  ! copy layer tracer variable descriptor to a z-tracer descriptor;
+  ! copy layer tracer variable descriptor to a z-tracer descriptor
   ! change the name and layer information.
   vardesc_z = vardesc_tr
   call modify_vardesc(vardesc_z, z_grid="z", caller="ocean_register_diag_with_z")
