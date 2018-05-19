@@ -52,7 +52,7 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
   PI = 4.0*atan(1.0)
-  D0 = max_depth / 0.5;
+  D0 = max_depth / 0.5
 
 !  Calculate the depth of the bottom.
   do i=is,ie ; do j=js,je

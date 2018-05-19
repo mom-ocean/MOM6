@@ -19,9 +19,10 @@ public PCM_reconstruction
 contains
 
 !------------------------------------------------------------------------------
-! pcm_reconstruction
-!------------------------------------------------------------------------------
-subroutine PCM_reconstruction( N, u, ppoly_E, ppoly_coefficients )
+!> Reconstruction by constant polynomials within each cell. There is nothing to
+!! do but this routine is provided to ensure a homogeneous interface
+!! throughout the regridding toolbox.
+subroutine PCM_reconstruction( N, u, ppoly_E, ppoly_coef )
 !------------------------------------------------------------------------------
 ! Reconstruction by constant polynomials within each cell. There is nothing to
 ! do but this routine is provided to ensure a homogeneous interface
@@ -31,29 +32,31 @@ subroutine PCM_reconstruction( N, u, ppoly_E, ppoly_coefficients )
 ! h:     thicknesses of grid cells
 ! u:     cell averages to use in constructing piecewise polynomials
 ! ppoly_E : edge values of piecewise polynomials
-! ppoly_coefficients : coefficients of piecewise polynomials
+! ppoly_coef : coefficients of piecewise polynomials
 !
 ! It is assumed that the dimension of 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed.
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: u ! cell averages
-  real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: u !< cell averages
+  real, dimension(:,:), intent(inout) :: ppoly_E    !< Edge value of polynomial,
+                                           !! with the same units as u.
+  real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial,
+                                           !! with the same units as u.
 
   ! Local variables
   integer :: k
 
   ! The coefficients of the piecewise constant polynomial are simply
   ! the cell averages.
-  ppoly_coefficients(:,1) = u(:)
+  ppoly_coef(:,1) = u(:)
 
   ! The edge values are equal to the cell average
   do k = 1,N
     ppoly_E(k,:) = u(k)
-  end do
+  enddo
 
 end subroutine PCM_reconstruction
 
