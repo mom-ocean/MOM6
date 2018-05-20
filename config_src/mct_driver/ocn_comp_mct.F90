@@ -2143,6 +2143,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       else
         forces%p_surf_SSH => forces%p_surf_full
       endif
+      forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
     endif
 
