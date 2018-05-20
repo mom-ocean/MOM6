@@ -41,7 +41,7 @@ use user_shelf_init, only : user_ice_shelf_CS
 use constants_mod,      only: GRAV
 use mpp_mod, only : mpp_sum, mpp_max, mpp_min, mpp_pe, mpp_npes, mpp_sync
 use MOM_coms, only : reproducing_sum
-use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum
+use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 use time_manager_mod, only : print_time, time_type_to_real, real_to_time_type
@@ -64,6 +64,7 @@ implicit none ; private
 
 public shelf_calc_flux, add_shelf_flux, initialize_ice_shelf, ice_shelf_end
 public ice_shelf_save_restart, solo_time_step
+public add_shelf_forces
 
 !> Control structure that contains ice shelf parameters and diagnostics handles
 type, public :: ice_shelf_CS ; private
@@ -923,7 +924,80 @@ subroutine change_thickness_using_melt(CS,G,time_step, fluxes)
 
 end subroutine change_thickness_using_melt
 
-!> Updates suface fluxes that are influenced by sub-ice-shelf melting
+!> This subroutine adds the mechanical forcing fields and perhaps shelf areas, based on
+!! the ice state in ice_shelf_CS.
+subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
+  type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
+  logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
+
+  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
+  real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) in Pa.
+  logical :: find_area ! If true find the shelf areas at u & v points.
+
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
+
+  find_area = .true. ; if (present(do_shelf_area)) find_area = do_shelf_area
+
+  if (find_area) then
+    ! The frac-_shelf is set over the widest possible area. Could it be smaller?
+    do j=jsd,jed ; do I=isd,ied-1
+      forces%frac_shelf_u(I,j) = 0.0
+      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
+        forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
+                                    (G%areaT(i,j) + G%areaT(i+1,j)))
+    enddo ; enddo
+    do J=jsd,jed-1 ; do i=isd,ied
+      forces%frac_shelf_v(i,J) = 0.0
+      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
+        forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
+                                    (G%areaT(i,j) + G%areaT(i,j+1)))
+    enddo ; enddo
+    call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
+  endif
+
+  !### Consider working over a smaller array range.
+  do j=jsd,jed ; do i=isd,ied
+    press_ice = (CS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * CS%mass_shelf(i,j))
+    if (associated(forces%p_surf)) then
+      if (.not.forces%accumulate_p_surf) forces%p_surf(i,j) = 0.0
+      forces%p_surf(i,j) = forces%p_surf(i,j) + press_ice
+    endif
+    if (associated(forces%p_surf_full)) then
+      if (.not.forces%accumulate_p_surf) forces%p_surf_full(i,j) = 0.0
+      forces%p_surf_full(i,j) = forces%p_surf_full(i,j) + press_ice
+    endif
+  enddo ; enddo
+
+  ! For various reasons, forces%rigidity_ice_[uv] is always updated here. Note
+  ! that it may have been zeroed out where IOB is translated to forces and
+  ! contributions from icebergs and the sea-ice pack added subsequently.
+  !### THE RIGIDITY SHOULD ALSO INCORPORATE AREAL-COVERAGE INFORMATION.
+  kv_rho_ice = CS%kv_ice / CS%density_ice
+  do j=js,je ; do I=is-1,ie
+    if (.not.forces%accumulate_rigidity) forces%rigidity_ice_u(I,j) = 0.0
+    forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
+            kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
+  enddo ; enddo
+  do J=js-1,je ; do i=is,ie
+    if (.not.forces%accumulate_rigidity) forces%rigidity_ice_v(i,J) = 0.0
+    forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + &
+            kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
+  enddo ; enddo
+
+  if (CS%debug) then
+    call uvchksum("rigidity_ice_[uv]", forces%rigidity_ice_u, forces%rigidity_ice_v, &
+                  G%HI, symmetric=.true.)
+    call uvchksum("frac_shelf_[uv]", forces%frac_shelf_u, forces%frac_shelf_v, &
+                  G%HI, symmetric=.true.)
+  endif
+
+end subroutine add_shelf_forces
+
+!> Updates surface fluxes that are influenced by sub-ice-shelf melting
 subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   type(ocean_grid_type),     intent(inout)    :: G    !< The ocean's grid structure.
   type(ice_shelf_CS),        pointer          :: CS   !< This module's control structure.
@@ -960,51 +1034,17 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-  Irho0 = 1.0 / CS%Rho0
+
+  call add_shelf_forces(G, CS, forces, do_shelf_area=CS%shelf_mass_is_dynamic)
+
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
   ! vertical decay scale.
-  if (CS%shelf_mass_is_dynamic) then
-    do j=jsd,jed ; do I=isd,ied-1
-      forces%frac_shelf_u(I,j) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
-        forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
-                                    (G%areaT(i,j) + G%areaT(i+1,j)))
-    enddo ; enddo
-    do J=jsd,jed-1 ; do i=isd,ied
-      forces%frac_shelf_v(i,J) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
-        forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
-                                    (G%areaT(i,j) + G%areaT(i,j+1)))
-    enddo ; enddo
-    call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
-  endif
-
-  ! For various reasons, forces%rigidity_ice_[uv] is always updated here, and
-  ! it may have been zeroed out where IOB is translated to forces and
-  ! contributions from icebergs added subsequently.
-  kv_rho_ice = CS%kv_ice / CS%density_ice
-  do j=js,je ; do I=is-1,ie
-    if (.not.forces%accumulate_rigidity) forces%rigidity_ice_u(I,j) = 0.0
-    forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
-            kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
-  enddo ; enddo
-  do J=js-1,je ; do i=is,ie
-    if (.not.forces%accumulate_rigidity) forces%rigidity_ice_v(i,J) = 0.0
-    forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + &
-            kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
-  enddo ; enddo
 
   if (CS%debug) then
-    if (associated(state%taux_shelf)) then
-      call uchksum(state%taux_shelf, "taux_shelf", G%HI, haloshift=0)
-    endif
-    if (associated(state%tauy_shelf)) then
-      call vchksum(state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
-      call vchksum(forces%rigidity_ice_u, "rigidity_ice_u", G%HI, haloshift=0)
-      call vchksum(forces%rigidity_ice_v, "rigidity_ice_v", G%HI, haloshift=0)
-      call vchksum(forces%frac_shelf_u, "frac_shelf_u", G%HI, haloshift=0)
-      call vchksum(forces%frac_shelf_v, "frac_shelf_v", G%HI, haloshift=0)
+    if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
+      call uvchksum("tau[xy]_shelf", state%taux_shelf, state%tauy_shelf, &
+                    G%HI, haloshift=0)
     endif
   endif
 
@@ -1013,6 +1053,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   endif
   ! GMM: melting is computed using ustar_shelf (and not ustar), which has already
   ! been passed, I so believe we do not need to update fluxes%ustar.
+!  Irho0 = 1.0 / CS%Rho0
 !  do j=js,je ; do i=is,ie ; if (fluxes%frac_shelf_h(i,j) > 0.0) then
     ! ### THIS SHOULD BE AN AREA WEIGHTED AVERAGE OF THE ustar_shelf POINTS.
     ! taux2 = 0.0 ; tauy2 = 0.0
@@ -1037,8 +1078,8 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     enddo ; enddo
   endif
 
-  do j=js,je ; do i=is,ie ; if (fluxes%frac_shelf_h(i,j) > 0.0) then
-    frac_area = fluxes%frac_shelf_h(i,j)
+  do j=js,je ; do i=is,ie ; if (CS%area_shelf_h(i,j) > 0.0) then
+    frac_area = fluxes%frac_shelf_h(i,j)  !### Should this be 1-frac_shelf_h?
     if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
     if (associated(fluxes%sw_vis_dir)) fluxes%sw_vis_dir(i,j) = 0.0
     if (associated(fluxes%sw_vis_dif)) fluxes%sw_vis_dif(i,j) = 0.0
@@ -1060,11 +1101,6 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
       fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
     if (associated(fluxes%salt_flux)) &
       fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
-    if (associated(forces%p_surf)) &
-      forces%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
-    if (associated(forces%p_surf_full)) &
-      forces%p_surf_full(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
-
   endif ; enddo ; enddo
 
   ! keep sea level constant by removing mass in the sponge
@@ -1075,7 +1111,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 
   if (CS%constant_sea_level) then
     !### This code has lots of problems with hard coded constants and the use of
-    !### of non-reproducing sums.  I needs to be refactored. -RWH
+    !### of non-reproducing sums.  It needs to be refactored. -RWH
 
     if (.not. associated(fluxes%salt_flux)) allocate(fluxes%salt_flux(ie,je))
     if (.not. associated(fluxes%vprec)) allocate(fluxes%vprec(ie,je))
@@ -1779,54 +1815,21 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
       call MOM_error(WARNING,"Initialize_ice_shelf: area_shelf_h exceeds G%areaT.")
       CS%area_shelf_h(i,j) = G%areaT(i,j)
     endif
-    if (present(fluxes)) then
-      if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
-    endif
-    if (present(forces)) then
-      if (associated(forces%p_surf)) &
-        forces%p_surf(i,j) = forces%p_surf(i,j) + &
-          fluxes%frac_shelf_h(i,j) * (CS%g_Earth * CS%mass_shelf(i,j))
-      if (associated(forces%p_surf_full)) &
-        forces%p_surf_full(i,j) = forces%p_surf_full(i,j) + &
-          fluxes%frac_shelf_h(i,j) * (CS%g_Earth * CS%mass_shelf(i,j))
-    endif
   enddo ; enddo
-  if (present(fluxes) .and. present(forces)) &
-    call copy_common_forcing_fields(forces, fluxes, G)
+  if (present(fluxes)) then ; do j=jsd,jed ; do i=isd,ied
+    if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
+  enddo ; enddo ; endif
 
   if (CS%DEBUG) then
     call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
   endif
 
-  if (present(forces) .and. .not. CS%solo_ice_sheet) then
-    kv_rho_ice = CS%kv_ice / CS%density_ice
-    do j=js,je ; do i=is-1,ie
-      forces%frac_shelf_u(I,j) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
-        forces%frac_shelf_u(I,j) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i+1,j)) / &
-                      (G%areaT(i,j) + G%areaT(i+1,j)))
-      if (.not.forces%accumulate_rigidity) forces%rigidity_ice_u(I,j) = 0.0
-      forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
-              kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
-    enddo ; enddo
-    do j=js-1,je ; do i=is,ie
-      forces%frac_shelf_v(i,J) = 0.0
-      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
-        forces%frac_shelf_v(i,J) = ((CS%area_shelf_h(i,j) + CS%area_shelf_h(i,j+1)) / &
-                      (G%areaT(i,j) + G%areaT(i,j+1)))
-      if (.not.forces%accumulate_rigidity) forces%rigidity_ice_v(i,J) = 0.0
-      forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + &
-              kv_rho_ice * min(CS%mass_shelf(i,j), CS%mass_shelf(i,j+1))
-    enddo ; enddo
+  if (present(forces)) then
+    call add_shelf_forces(G, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
   endif
 
-  if (present(forces) .and. .not.CS%solo_ice_sheet) then
-    call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
-  endif
- ! call savearray2 ('frac_shelf_u'//procnum,forces%frac_shelf_u,CS%write_output_to_file)
- ! call savearray2 ('frac_shelf_v'//procnum,forces%frac_shelf_v,CS%write_output_to_file)
- ! call savearray2 ('frac_shelf_h'//procnum,fluxes%frac_shelf_h,CS%write_output_to_file)
- ! call savearray2 ('area_shelf_h'//procnum,CS%area_shelf_h,CS%write_output_to_file)
+  if (present(fluxes) .and. present(forces)) &
+    call copy_common_forcing_fields(forces, fluxes, G)
 
   ! if we are calving to a mask, i.e. if a mask exists where a shelf cannot, then we read
   ! the mask from a file
@@ -2070,7 +2073,6 @@ subroutine update_shelf_mass(G, CS, Time, fluxes, forces)
         if (associated(fluxes%lprec)) fluxes%lprec(i,j) = 0.0
         if (associated(fluxes%sens)) fluxes%sens(i,j) = 0.0
         if (associated(fluxes%frac_shelf_h)) fluxes%frac_shelf_h(i,j) = 0.0
-        if (associated(forces%p_surf)) forces%p_surf(i,j) = 0.0
         if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
      endif
      CS%area_shelf_h(i,j) = 0.0
@@ -2093,19 +2095,6 @@ subroutine update_shelf_mass(G, CS, Time, fluxes, forces)
   call pass_var(CS%h_shelf, G%domain)
   call pass_var(CS%hmask, G%domain)
   call pass_var(CS%mass_shelf, G%domain)
-
-
-  ! update psurf in forces and frac_shelf_h in fluxes
-  do j=js,je ; do i=is,ie
-    if (associated(forces%p_surf)) &
-      forces%p_surf(i,j) = (CS%g_Earth * CS%mass_shelf(i,j))
-    if (associated(forces%p_surf_full)) &
-      forces%p_surf_full(i,j) = (CS%g_Earth * CS%mass_shelf(i,j))
-    if (G%areaT(i,j) > 0.0) &
-        fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
-  enddo ; enddo
-
-  call copy_common_forcing_fields(forces, fluxes, G)
 
 end subroutine update_shelf_mass
 
