@@ -2,38 +2,6 @@ module MOM_set_visc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - October 2006                      *
-!*  Quadratic Bottom Drag by James Stephens and R. Hallberg.           *
-!*                                                                     *
-!*    This file contains the subroutine that calculates various values *
-!*  related to the bottom boundary layer, such as the viscosity and    *
-!*  thickness of the BBL (set_viscous_BBL).  This would also be the    *
-!*  module in which other viscous quantities that are flow-independent *
-!*  might be set.  This information is transmitted to other modules    *
-!*  via a vertvisc type structure.                                     *
-!*                                                                     *
-!*    The same code is used for the two velocity components, by        *
-!*  indirectly referencing the velocities and defining a handful of    *
-!*  direction-specific defined variables.                              *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, frhatv, tauy                          *
-!*    j    x ^ x ^ x   At >:  u, frhatu, taux                          *
-!*    j    > o > o >   At o:  h                                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_debugging, only : uvchksum, hchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -1859,16 +1827,8 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
   type(ocean_OBC_type),    pointer       :: OBC
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (out)     visc - A structure containing vertical viscosities and related
-!                   fields.  Allocated here.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+
+  ! local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
   real    :: omega_frac_dflt
@@ -2020,6 +1980,15 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
+
+  call get_param(param_file, mdl, "ADD_KV_SLOW", visc%add_Kv_slow, &
+                 "If true, the background vertical viscosity in the interior \n"//&
+                 "(i.e., tidal + background + shear + convenction) is addded \n"// &
+                 "when computing the coupling coefficient. The purpose of this \n"// &
+                 "flag is to be able to recover previous answers and it will likely \n"// &
+                 "be removed in the future since this option should always be true.", &
+                  default=.false.)
+
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
                  units="m2 s-1", default=Kv_background)
@@ -2116,5 +2085,38 @@ subroutine set_visc_end(visc, CS)
 
   deallocate(CS)
 end subroutine set_visc_end
+
+!> \namespace MOM_set_visc
+!!********+*********+*********+*********+*********+*********+*********+**
+!!*                                                                     *
+!!*  By Robert Hallberg, April 1994 - October 2006                      *
+!!*  Quadratic Bottom Drag by James Stephens and R. Hallberg.           *
+!!*                                                                     *
+!!*    This file contains the subroutine that calculates various values *
+!!*  related to the bottom boundary layer, such as the viscosity and    *
+!!*  thickness of the BBL (set_viscous_BBL).  This would also be the    *
+!!*  module in which other viscous quantities that are flow-independent *
+!!*  might be set.  This information is transmitted to other modules    *
+!!*  via a vertvisc type structure.                                     *
+!!*                                                                     *
+!!*    The same code is used for the two velocity components, by        *
+!!*  indirectly referencing the velocities and defining a handful of    *
+!!*  direction-specific defined variables.                              *
+!!*                                                                     *
+!!*  Macros written all in capital letters are defined in MOM_memory.h. *
+!!*                                                                     *
+!!*     A small fragment of the grid is shown below:                    *
+!!*                                                                     *
+!!*    j+1  x ^ x ^ x   At x:  q                                        *
+!!*    j+1  > o > o >   At ^:  v, frhatv, tauy                          *
+!!*    j    x ^ x ^ x   At >:  u, frhatu, taux                          *
+!!*    j    > o > o >   At o:  h                                        *
+!!*    j-1  x ^ x ^ x                                                   *
+!!*        i-1  i  i+1  At x & ^:                                       *
+!!*           i  i+1    At > & o:                                       *
+!!*                                                                     *
+!!*  The boundaries always run through q grid points (x).               *
+!!*                                                                     *
+!!********+*********+*********+*********+*********+*********+*********+**
 
 end module MOM_set_visc

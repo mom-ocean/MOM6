@@ -1195,7 +1195,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
   endif
 
   ! add "slow" varying vertical viscosity (e.g., from background, tidal etc)
-  if (associated(visc%Kv_slow)) then
+  if (associated(visc%Kv_slow) .and. (visc%add_Kv_slow)) then
     ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
