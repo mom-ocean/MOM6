@@ -74,19 +74,7 @@ type, public :: ice_shelf_CS ; private
                                           !! the ice-shelf state
 
   real, pointer, dimension(:,:) :: &
-    t_flux => NULL(), &                   !< The UPWARD sensible ocean heat flux at the
-                                          !! ocean-ice interface, in W m-2.
-    salt_flux => NULL(), &                !< The downward salt flux at the ocean-ice
-                                          !! interface, in kg m-2 s-1.
-    lprec => NULL(), &                    !< The downward liquid water flux at the
-                                          !! ocean-ice interface, in kg m-2 s-1.
-    exch_vel_t => NULL(), &               !< Sub-shelf thermal exchange velocity, in m/s
-    exch_vel_s => NULL(), &               !< Sub-shelf salt exchange velocity, in m/s
     utide   => NULL(), &                  !< tidal velocity, in m/s
-    tfreeze => NULL(), &                  !< The freezing point potential temperature
-                                          !! an the ice-ocean interface, in deg C.
-    tflux_shelf => NULL(), &              !< The UPWARD diffusive heat flux in the ice
-                                          !! shelf at the ice-ocean interface, in W m-2.
     !!! DNG !!!
     u_shelf => NULL(), &                  !< the zonal (?) velocity of the ice shelf/sheet,
                                           ! in meters per second??? on q-points (B grid)
@@ -269,8 +257,7 @@ type, public :: ice_shelf_CS ; private
   integer :: id_read_area !< An integer handle used in time interpolation of
                           !! the ice shelf mass read from a file
 
-  type(diag_ctrl), pointer :: diag     !< A structure that is used to control diagnostic
-                                       !! output.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to control diagnostic output.
   type(user_ice_shelf_CS), pointer :: user_CS => NULL()
 
   logical :: write_output_to_file !< this is for seeing arrays w/out netcdf capability
@@ -345,6 +332,10 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
     dR0_dS, &  !< Partial derivative of the mixed layer density
                !< with salinity, in units of kg m-3 psu-1.
     p_int      !< The pressure at the ice-ocean interface, in Pa.
+
+  real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
+    exch_vel_t, &  !< Sub-shelf thermal exchange velocity, in m/s
+    exch_vel_s     !< Sub-shelf salt exchange velocity, in m/s
 
   real, dimension(:,:), allocatable :: mass_flux  !< total mass flux of freshwater across
   real, dimension(:,:), allocatable :: haline_driving !< (SSS - S_boundary) ice-ocean
@@ -425,10 +416,10 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   ! these fields are already set to zero during initialization
   ! However, they seem to be changed somewhere and, for diagnostic
   ! reasons, it is better to set them to zero again.
-  CS%tflux_shelf(:,:) = 0.0; CS%exch_vel_t(:,:) = 0.0
-  CS%lprec(:,:) = 0.0; CS%exch_vel_s(:,:) = 0.0
-  CS%salt_flux(:,:) = 0.0; CS%t_flux(:,:) = 0.0
-  CS%tfreeze(:,:) = 0.0
+  exch_vel_t(:,:) = 0.0 ; exch_vel_s(:,:) = 0.0
+  ISS%tflux_shelf(:,:) = 0.0 ; ISS%water_flux(:,:) = 0.0
+  ISS%salt_flux(:,:) = 0.0; ISS%tflux_ocn(:,:) = 0.0
+  ISS%tfreeze(:,:) = 0.0
   ! define Sbdry to avoid Run-Time Check Failure, when melt is not computed.
   allocate( haline_driving(G%ied,G%jed) ); haline_driving(:,:) = 0.0
   allocate( Sbdry(G%ied,G%jed) ); Sbdry(:,:) = state%sss(:,:)
@@ -538,9 +529,9 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
 
           do it1 = 1,20
             ! Determine the potential temperature at the ice-ocean interface.
-            call calculate_TFreeze(Sbdry(i,j), p_int(i), CS%tfreeze(i,j), CS%eqn_of_state)
+            call calculate_TFreeze(Sbdry(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state)
 
-            dT_ustar = (state%sst(i,j) - CS%tfreeze(i,j)) * ustar_h
+            dT_ustar = (state%sst(i,j) - ISS%tfreeze(i,j)) * ustar_h
             dS_ustar = (state%sss(i,j) - Sbdry(i,j)) * ustar_h
 
             ! First, determine the buoyancy flux assuming no effects of stability
@@ -607,9 +598,9 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
               enddo !it3
             endif
 
-            CS%t_flux(i,j)  = RhoCp * wT_flux
-            CS%exch_vel_t(i,j) = ustar_h * I_Gam_T
-            CS%exch_vel_s(i,j) = ustar_h * I_Gam_S
+            ISS%tflux_ocn(i,j)  = RhoCp * wT_flux
+            exch_vel_t(i,j) = ustar_h * I_Gam_T
+            exch_vel_s(i,j) = ustar_h * I_Gam_S
 
     !Calculate the heat flux inside the ice shelf.
 
@@ -619,39 +610,39 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
     !  dT/dz ~= min( (lprec/(rho_ice*K_ice))*(CS%Temp_Ice-T_freeze) , 0.0 )
     !If this approximation is not made, iterations are required... See H+J Fig 3.
 
-            if (CS%t_flux(i,j) <= 0.0) then  ! Freezing occurs, so zero ice heat flux.
-              CS%lprec(i,j) = I_LF * CS%t_flux(i,j)
-              CS%tflux_shelf(i,j) = 0.0
+            if (ISS%tflux_ocn(i,j) <= 0.0) then  ! Freezing occurs, so zero ice heat flux.
+              ISS%water_flux(i,j) = I_LF * ISS%tflux_ocn(i,j)
+              ISS%tflux_shelf(i,j) = 0.0
             else
               if (CS%insulator) then
                  !no conduction/perfect insulator
-                 CS%tflux_shelf(i,j) = 0.0
-                 CS%lprec(i,j) = I_LF * (- CS%tflux_shelf(i,j) + CS%t_flux(i,j))
+                 ISS%tflux_shelf(i,j) = 0.0
+                 ISS%water_flux(i,j) = I_LF * (- ISS%tflux_shelf(i,j) + ISS%tflux_ocn(i,j))
 
               else
                  ! With melting, from H&J 1999, eqs (31) & (26)...
                  !   Q_ice ~= cp_ice * (CS%Temp_Ice-T_freeze) * lprec
-                 !   RhoLF*lprec = Q_ice + CS%t_flux(i,j)
-                 !   lprec = (CS%t_flux(i,j)) / (LF + cp_ice * (T_freeze-CS%Temp_Ice))
-                 CS%lprec(i,j) = CS%t_flux(i,j) / &
-                       (LF + CS%CP_Ice * (CS%Tfreeze(i,j) - CS%Temp_Ice))
+                 !   RhoLF*lprec = Q_ice + ISS%tflux_ocn(i,j)
+                 !   lprec = (ISS%tflux_ocn(i,j)) / (LF + cp_ice * (T_freeze-CS%Temp_Ice))
+                 ISS%water_flux(i,j) = ISS%tflux_ocn(i,j) / &
+                       (LF + CS%CP_Ice * (ISS%tfreeze(i,j) - CS%Temp_Ice))
 
-                CS%tflux_shelf(i,j) = CS%t_flux(i,j) - LF*CS%lprec(i,j)
+                ISS%tflux_shelf(i,j) = ISS%tflux_ocn(i,j) - LF*ISS%water_flux(i,j)
               endif
 
             endif
             !other options: dTi/dz linear through shelf
-            !    dTi_dz = (CS%Temp_Ice - CS%tfreeze(i,j))/G%draft(i,j)
-            !    CS%tflux_shelf(i,j) = - Rho_Ice * CS%CP_Ice * KTI * dTi_dz
+            !    dTi_dz = (CS%Temp_Ice - ISS%tfreeze(i,j))/G%draft(i,j)
+            !    ISS%tflux_shelf(i,j) = - Rho_Ice * CS%CP_Ice * KTI * dTi_dz
 
 
             if (CS%find_salt_root) then
               exit ! no need to do interaction, so exit loop
             else
 
-              mass_exch = CS%exch_vel_s(i,j) * CS%Rho0
+              mass_exch = exch_vel_s(i,j) * CS%Rho0
               Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * &
-                          CS%lprec(i,j)) / (mass_exch + CS%lprec(i,j))
+                          ISS%water_flux(i,j)) / (mass_exch + ISS%water_flux(i,j))
               dS_it = Sbdry_it - Sbdry(i,j)
               if (abs(dS_it) < 1e-4*(0.5*(state%sss(i,j) + Sbdry(i,j) + 1.e-10))) exit
 
@@ -686,16 +677,16 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
           ! is specified and large enough that the ocean salinity at the interface
           ! is about the same as the boundary layer salinity.
 
-          call calculate_TFreeze(state%sss(i,j), p_int(i), CS%tfreeze(i,j), CS%eqn_of_state)
+          call calculate_TFreeze(state%sss(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state)
 
-          CS%exch_vel_t(i,j) = CS%gamma_t
-          CS%t_flux(i,j) = RhoCp * CS%exch_vel_t(i,j) * (state%sst(i,j) - CS%tfreeze(i,j))
-          CS%tflux_shelf(i,j) = 0.0
-          CS%lprec(i,j) = I_LF * CS%t_flux(i,j)
+          exch_vel_t(i,j) = CS%gamma_t
+          ISS%tflux_ocn(i,j) = RhoCp * exch_vel_t(i,j) * (state%sst(i,j) - ISS%tfreeze(i,j))
+          ISS%tflux_shelf(i,j) = 0.0
+          ISS%water_flux(i,j) = I_LF * ISS%tflux_ocn(i,j)
           Sbdry(i,j) = 0.0
         endif
       else !not shelf
-        CS%t_flux(i,j) = 0.0
+        ISS%tflux_ocn(i,j) = 0.0
       endif
 
 !      haline_driving(:,:) = state%sss(i,j) - Sbdry(i,j)
@@ -703,12 +694,12 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
     enddo ! i-loop
   enddo ! j-loop
 
-  ! CS%lprec = precipitating liquid water into the ocean ( kg/(m^2 s) )
+  ! ISS%water_flux = net liquid water into the ocean ( kg/(m^2 s) )
   ! We want melt in m/year
   if (CS%const_gamma) then ! use ISOMIP+ eq. with rho_fw
-    fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/rho_fw) * CS%flux_factor
+    fluxes%iceshelf_melt = ISS%water_flux  * (86400.0*365.0/rho_fw) * CS%flux_factor
   else ! use original eq.
-    fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice) * CS%flux_factor
+    fluxes%iceshelf_melt = ISS%water_flux  * (86400.0*365.0/CS%density_ice) * CS%flux_factor
   endif
 
   do j=js,je
@@ -722,12 +713,12 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
          ! test case.
          if ((CS%g_Earth * ISS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
             CS%g_Earth) then
-              CS%lprec(i,j) = 0.0
+              ISS%water_flux(i,j) = 0.0
               fluxes%iceshelf_melt(i,j) = 0.0
          endif
          ! Compute haline driving, which is one of the diags. used in ISOMIP
-         haline_driving(i,j) = (CS%lprec(i,j) * Sbdry(i,j)) / &
-                               (CS%Rho0 * CS%exch_vel_s(i,j))
+         haline_driving(i,j) = (ISS%water_flux(i,j) * Sbdry(i,j)) / &
+                               (CS%Rho0 * exch_vel_s(i,j))
 
          !!!!!!!!!!!!!!!!!!!!!!!!!!!!Safety checks !!!!!!!!!!!!!!!!!!!!!!!!!
          !1)Check if haline_driving computed above is consistent with
@@ -758,7 +749,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
 
   ! mass flux (kg/s), part of ISOMIP diags.
   allocate( mass_flux(G%ied,G%jed) ); mass_flux(:,:) = 0.0
-  mass_flux = (CS%lprec) * ISS%area_shelf_h
+  mass_flux = (ISS%water_flux) * ISS%area_shelf_h
 
   if (CS%shelf_mass_is_dynamic) then
     call cpu_clock_begin(id_clock_pass)
@@ -791,7 +782,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
 
     ! note time_step is [s] and lprec is [kg / m^2 / s]
 
-    call ice_shelf_advect(CS, ISS, G, time_step, CS%lprec, Time)
+    call ice_shelf_advect(CS, ISS, G, time_step, ISS%water_flux, Time)
 
     CS%velocity_update_sub_counter = CS%velocity_update_sub_counter+1
 
@@ -818,16 +809,16 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
    if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
    if (CS%id_ustar_shelf > 0) call post_data(CS%id_ustar_shelf, fluxes%ustar_shelf, CS%diag)
    if (CS%id_melt > 0) call post_data(CS%id_melt, fluxes%iceshelf_melt, CS%diag)
-   if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-CS%tfreeze), CS%diag)
+   if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-ISS%tfreeze), CS%diag)
    if (CS%id_Sbdry > 0) call post_data(CS%id_Sbdry, Sbdry, CS%diag)
    if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, haline_driving, CS%diag)
    if (CS%id_mass_flux > 0) call post_data(CS%id_mass_flux, mass_flux, CS%diag)
    if (CS%id_u_ml > 0) call post_data(CS%id_u_ml,state%u,CS%diag)
    if (CS%id_v_ml > 0) call post_data(CS%id_v_ml,state%v,CS%diag)
-   if (CS%id_tfreeze > 0) call post_data(CS%id_tfreeze, CS%tfreeze, CS%diag)
-   if (CS%id_tfl_shelf > 0) call post_data(CS%id_tfl_shelf, CS%tflux_shelf, CS%diag)
-   if (CS%id_exch_vel_t > 0) call post_data(CS%id_exch_vel_t, CS%exch_vel_t, CS%diag)
-   if (CS%id_exch_vel_s > 0) call post_data(CS%id_exch_vel_s, CS%exch_vel_s, CS%diag)
+   if (CS%id_tfreeze > 0) call post_data(CS%id_tfreeze, ISS%tfreeze, CS%diag)
+   if (CS%id_tfl_shelf > 0) call post_data(CS%id_tfl_shelf, ISS%tflux_shelf, CS%diag)
+   if (CS%id_exch_vel_t > 0) call post_data(CS%id_exch_vel_t, exch_vel_t, CS%diag)
+   if (CS%id_exch_vel_s > 0) call post_data(CS%id_exch_vel_s, exch_vel_s, CS%diag)
    if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, CS%OD_av, CS%diag)
    if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
    if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
@@ -868,8 +859,8 @@ subroutine change_thickness_using_melt(CS, ISS, G,time_step, fluxes)
         if (associated(fluxes%frac_shelf_h)) fluxes%frac_shelf_h(i,j) = 0.0
         if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
 
-        if (CS%lprec(i,j) / CS%density_ice * time_step < ISS%h_shelf(i,j)) then
-           ISS%h_shelf(i,j) = ISS%h_shelf(i,j) - CS%lprec(i,j) / CS%density_ice * time_step
+        if (ISS%water_flux(i,j) / CS%density_ice * time_step < ISS%h_shelf(i,j)) then
+           ISS%h_shelf(i,j) = ISS%h_shelf(i,j) - ISS%water_flux(i,j) / CS%density_ice * time_step
         else
            ! the ice is about to melt away
            ! in this case set thickness, area, and mask to zero
@@ -945,7 +936,7 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
     call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   endif
 
-  !### Consider working over a smaller array range.
+   !### Consider working over a smaller array range.
   do j=jsd,jed ; do i=isd,ied
     press_ice = (ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * ISS%mass_shelf(i,j))
     if (associated(forces%p_surf)) then
@@ -965,7 +956,7 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
   kv_rho_ice = CS%kv_ice / CS%density_ice
   do j=js,je ; do I=is-1,ie
     if (.not.forces%accumulate_rigidity) forces%rigidity_ice_u(I,j) = 0.0
-    forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
+     forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
             kv_rho_ice * min(ISS%mass_shelf(i,j), ISS%mass_shelf(i+1,j))
   enddo ; enddo
   do J=js-1,je ; do i=is,ie
@@ -1078,18 +1069,18 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
     if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
     if (associated(fluxes%lprec)) then
-      if (CS%lprec(i,j) > 0.0) then
-        fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
+      if (ISS%water_flux(i,j) > 0.0) then
+        fluxes%lprec(i,j) =  frac_area*ISS%water_flux(i,j)*CS%flux_factor
       else
         fluxes%lprec(i,j) = 0.0
-        fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
+        fluxes%evap(i,j) = frac_area*ISS%water_flux(i,j)*CS%flux_factor
       endif
     endif
 
     if (associated(fluxes%sens)) &
-      fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
+      fluxes%sens(i,j) = -frac_area*ISS%tflux_ocn(i,j)*CS%flux_factor
     if (associated(fluxes%salt_flux)) &
-      fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
+      fluxes%salt_flux(i,j) = frac_area * ISS%salt_flux(i,j)*CS%flux_factor
   endif ; enddo ; enddo
 
   ! keep sea level constant by removing mass in the sponge
@@ -1110,7 +1101,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     do j=js,je ; do i=is,ie
        frac_area = fluxes%frac_shelf_h(i,j)
        if (frac_area > 0.0) then
-          mean_melt_flux = mean_melt_flux + (CS%lprec(i,j)) * ISS%area_shelf_h(i,j)
+          mean_melt_flux = mean_melt_flux + (ISS%water_flux(i,j)) * ISS%area_shelf_h(i,j)
        endif
 
        if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
@@ -1442,7 +1433,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "UTIDE", utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
                  units="m s-1", default=0.0)
-    CS%utide = utide
+    CS%utide(:,:) = utide
   endif
 
   call EOS_init(param_file, CS%eqn_of_state)
@@ -1545,15 +1536,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   ! Allocate  and initialize variables
   call ice_shelf_state_init(CS%ISS, CS%grid)
   ISS => CS%ISS
-
-  allocate( CS%t_flux(isd:ied,jsd:jed) )       ; CS%t_flux(:,:) = 0.0
-  allocate( CS%lprec(isd:ied,jsd:jed) )        ; CS%lprec(:,:) = 0.0
-  allocate( CS%salt_flux(isd:ied,jsd:jed) )    ; CS%salt_flux(:,:) = 0.0
-
-  allocate( CS%tflux_shelf(isd:ied,jsd:jed) ) ; CS%tflux_shelf(:,:) = 0.0
-  allocate( CS%tfreeze(isd:ied,jsd:jed) )     ; CS%tfreeze(:,:) = 0.0
-  allocate( CS%exch_vel_s(isd:ied,jsd:jed) )  ; CS%exch_vel_s(:,:) = 0.0
-  allocate( CS%exch_vel_t(isd:ied,jsd:jed) )  ; CS%exch_vel_t(:,:) = 0.0
 
   ! OVS vertically integrated Temperature
   allocate( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
@@ -1851,7 +1833,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 !    call init_boundary_values(CS, G, time, ISS%hmask, CS%input_flux, CS%input_thickness, new_sim)
 
     if (.not. CS%isthermo) then
-      CS%lprec(:,:) = 0.0
+      ISS%water_flux(:,:) = 0.0
     endif
 
 
@@ -2085,7 +2067,7 @@ subroutine initialize_diagnostic_fields(CS, ISS, G, Time)
   integer             :: i, j, iters, isd, ied, jsd, jed
   real                 :: rhoi, rhow, OD
   type(time_type)          :: dummy_time
-  real,dimension(:,:),pointer     :: OD_av, float_frac
+  real,dimension(:,:),pointer     :: OD_av => NULL(), float_frac => NULL()
 
   rhoi = CS%density_ice
   rhow = CS%density_ocean_avg
@@ -2263,8 +2245,8 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, melt_rate, Time)
 end subroutine ice_shelf_advect
 
 subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
-  type(ice_shelf_CS),                     pointer       :: CS !< A pointer to the ice shelf control structure
-  type(ice_shelf_state), pointer    :: ISS !< A structure with elements that describe
+  type(ice_shelf_CS),    pointer       :: CS !< A pointer to the ice shelf control structure
+  type(ice_shelf_state), pointer       :: ISS !< A structure with elements that describe
                                            !! the ice-shelf state
   type(ocean_grid_type), intent(inout) :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
@@ -2561,7 +2543,7 @@ subroutine ice_shelf_solve_inner(CS, G, u, v, taudx, taudy, H_node, float_cond, 
   integer, intent(out)         :: conv_flag, iters
   type(time_type)              :: time
   real, pointer, dimension(:,:,:,:)      :: Phi
-  real, dimension(:,:,:,:,:,:),pointer :: Phisub
+  real, dimension(:,:,:,:,:,:), pointer :: Phisub
 
 ! one linear solve (nonlinear iteration) of the solution for velocity
 
@@ -4979,13 +4961,6 @@ subroutine ice_shelf_end(CS)
 
   call ice_shelf_state_end(CS%ISS)
 
-  deallocate(CS%t_flux) ; deallocate(CS%lprec)
-  deallocate(CS%salt_flux)
-
-  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze)
-  deallocate(CS%exch_vel_t) ; deallocate(CS%exch_vel_s)
-
-
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     deallocate(CS%u_shelf) ; deallocate(CS%v_shelf)
 !!! OVS !!!
@@ -5177,7 +5152,7 @@ subroutine solo_time_step(CS, time_step, n, Time, min_time_step_in)
 
    write (stepnum,'(I4)') CS%velocity_update_sub_counter
 
-   call ice_shelf_advect(CS, ISS, G, time_step_int, CS%lprec, Time)
+   call ice_shelf_advect(CS, ISS, G, time_step_int, ISS%water_flux, Time)
 
    if (mpp_pe() == 7) then
       call savearray2 ("hmask",ISS%hmask,CS%write_output_to_file)
@@ -5198,7 +5173,7 @@ subroutine solo_time_step(CS, time_step, n, Time, min_time_step_in)
    endif
 
 !!! OVS!!!
-   call ice_shelf_temp(CS, ISS, G, time_step_int, CS%lprec, Time)
+   call ice_shelf_temp(CS, ISS, G, time_step_int, ISS%water_flux, Time)
 
   call enable_averaging(time_step,Time,CS%diag)
    if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
@@ -5276,7 +5251,7 @@ subroutine ice_shelf_temp(CS, ISS, G, time_step, melt_rate, Time)
   real, dimension(SZDI_(G),SZDJ_(G),4) :: flux_enter
   integer                           :: isd, ied, jsd, jed, i, j, isc, iec, jsc, jec
   real                              :: rho, spy, t_bd, Tsurf, adot
-  real, dimension(:,:), pointer     :: hmask, Tbot
+  real, dimension(:,:), pointer     :: hmask => NULL()
   character(len=2)                  :: procnum
 
   hmask => ISS%hmask
@@ -5284,7 +5259,6 @@ subroutine ice_shelf_temp(CS, ISS, G, time_step, melt_rate, Time)
   spy = 365 * 86400 ! seconds per year; is there a global constant for this?  No - it is dependent upon a calendar.
 
   adot = 0.1/spy ! for now adot and Tsurf are defined here adot=surf acc 0.1m/yr, Tsurf=-20oC, vary them later
-  Tbot =>CS%Tfreeze
   Tsurf = -20.0
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -5353,8 +5327,8 @@ subroutine ice_shelf_temp(CS, ISS, G, time_step, melt_rate, Time)
     do i=isc,iec
       if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2)) then
         if (ISS%h_shelf(i,j) > 0.0) then
-!          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf -melt_rate(i,j)*Tbot(i,j))/ISS%h_shelf(i,j)
-          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf -3/spy*Tbot(i,j))/ISS%h_shelf(i,j)
+!          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf -melt_rate(i,j)*ISS%tfreeze(i,j))/ISS%h_shelf(i,j)
+          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf -3/spy*ISS%tfreeze(i,j))/ISS%h_shelf(i,j)
         else
           ! the ice is about to melt away
           ! in this case set thickness, area, and mask to zero
