@@ -64,9 +64,6 @@ logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
   type(CVMix_ddiff_cs),    pointer        :: CS        !< This module's control structure.
 
-  ! Local variables
-!  real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
-
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -133,11 +130,6 @@ logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
 
   call closeParameterBlock(param_file)
 
-  ! allocate arrays and set them to zero
-  ! GMM, dont need the following
-  !allocate(CS%KT_extra(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%KT_extra(:,:,:) = 0.
-  !allocate(CS%KS_extra(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%KS_extra(:,:,:) = 0.
-
   ! Register diagnostics
   CS%diag => diag
 
@@ -173,8 +165,6 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
-!  real, dimension(:,:,:),                     pointer      :: Kd_T
-!  real, dimension(:,:,:),                     pointer      :: Kd_S
                                                                   !! diffusivity for temp (m2/sec).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_S !< Interface double diffusion diapycnal
                                                                   !! diffusivity for salt (m2/sec).
@@ -209,7 +199,9 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
   ! set Kd_T and Kd_S to zero to avoid passing values from previous call
   Kd_T(:,j,:) = 0.0; Kd_S(:,j,:) = 0.0
 
-  ! GMM, check this.
+  ! GMM, I am leaving some code commented below. We need to pass BLD to
+  ! this soubroutine to avoid adding diffusivity above that. This needs
+  ! to be done once we re-structure the order of the calls.
   !if (.not. associated(hbl)) then
   !  allocate(hbl(SZI_(G), SZJ_(G)));
   !  hbl(:,:) = 0.0
@@ -239,9 +231,9 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
 
     call calculate_density_derivs(temp_int(:), salt_int(:), pres_int(:), drho_dT(:), drho_dS(:), 1, G%ke, TV%EQN_OF_STATE)
 
-    ! GMM, explain need for -1 in front of alpha
-    ! if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then  ! salt finger case
-    ! if ((alpha_dT < 0.) .and. (beta_dS < 0.) .and. (alpha_dT > beta_dS)) then ! diffusive convection
+    ! The "-1.0" below is needed so that the following criteria is satisfied:
+    ! if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then "salt finger"
+    ! if ((alpha_dT < 0.) .and. (beta_dS < 0.) .and. (alpha_dT > beta_dS)) then "diffusive convection"
     do k=1,G%ke
       alpha_dT(k) = -1.0*drho_dT(k) * dT(k)
       beta_dS(k)  = drho_dS(k) * dS(k)
@@ -276,13 +268,6 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
                             strat_param_denom=beta_dS(:), &
                             nlev=G%ke,    &
                             max_nlev=G%ke)
-
-    !if (is_root_pe()) then
-    ! write(*,*)'drho_dT, alpha_dT', &
-    !           drho_dT(:), alpha_dT(:)
-    ! write(*,*)'drho_dS, beta_dS', &
-    !           drho_dS(:), beta_dS(:)
-    !endif
 
     ! Do not apply mixing due to convection within the boundary layer
     !do k=1,kOBL
