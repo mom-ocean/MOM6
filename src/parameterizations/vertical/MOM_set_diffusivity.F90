@@ -45,95 +45,94 @@ public set_diffusivity_init
 public set_diffusivity_end
 
 type, public :: set_diffusivity_CS ; private
-  logical :: debug           ! If true, write verbose checksums for debugging.
+  logical :: debug           !< If true, write verbose checksums for debugging.
 
-  logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
-                             ! GV%nk_rho_varies variable density mixed & buffer
-                             ! layers.
-  real    :: FluxRi_max      ! The flux Richardson number where the stratification is
-                             ! large enough that N2 > omega2.  The full expression for
-                             ! the Flux Richardson number is usually
-                             ! FLUX_RI_MAX*N2/(N2+OMEGA2). The default is 0.2.
-  logical :: bottomdraglaw   ! If true, the  bottom stress is calculated with a
-                             ! drag law c_drag*|u|*u.
-  logical :: BBL_mixing_as_max !  If true, take the maximum of the diffusivity
-                             ! from the BBL mixing and the other diffusivities.
-                             ! Otherwise, diffusivities from the BBL_mixing is
-                             ! added.
-  logical :: use_LOTW_BBL_diffusivity ! If true, use simpler/less precise, BBL diffusivity.
-  logical :: LOTW_BBL_use_omega ! If true, use simpler/less precise, BBL diffusivity.
-  real    :: BBL_effic       ! efficiency with which the energy extracted
-                             ! by bottom drag drives BBL diffusion (nondim)
-  real    :: cdrag           ! quadratic drag coefficient (nondim)
-  real    :: IMax_decay      ! inverse of a maximum decay scale for
-                             ! bottom-drag driven turbulence, (1/m)
-
-  real    :: Kd              ! interior diapycnal diffusivity (m2/s)
-  real    :: Kd_min          ! minimum diapycnal diffusivity (m2/s)
-  real    :: Kd_max          ! maximum increment for diapycnal diffusivity (m2/s)
-                             ! Set to a negative value to have no limit.
-  real    :: Kd_add          ! uniform diffusivity added everywhere without
-                             ! filtering or scaling (m2/s)
-  real    :: Kv              ! interior vertical viscosity (m2/s)
-  real    :: Kdml            ! mixed layer diapycnal diffusivity (m2/s)
-                             ! when bulkmixedlayer==.false.
-  real    :: Hmix            ! mixed layer thickness (meter) when
-                             ! bulkmixedlayer==.false.
+  logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
+                             !! GV%nk_rho_varies variable density mixed & buffer
+                             !! layers.
+  real    :: FluxRi_max      !< The flux Richardson number where the stratification is
+                             !! large enough that N2 > omega2.  The full expression for
+                             !! the Flux Richardson number is usually
+                             !! FLUX_RI_MAX*N2/(N2+OMEGA2). The default is 0.2.
+  logical :: bottomdraglaw   !< If true, the  bottom stress is calculated with a
+                             !! drag law c_drag*|u|*u.
+  logical :: BBL_mixing_as_max !<  If true, take the maximum of the diffusivity
+                             !! from the BBL mixing and the other diffusivities.
+                             !! Otherwise, diffusivities from the BBL_mixing is
+                             !! added.
+  logical :: use_LOTW_BBL_diffusivity !< If true, use simpler/less precise, BBL diffusivity.
+  logical :: LOTW_BBL_use_omega !< If true, use simpler/less precise, BBL diffusivity.
+  real    :: BBL_effic       !< efficiency with which the energy extracted
+                             !! by bottom drag drives BBL diffusion (nondim)
+  real    :: cdrag           !< quadratic drag coefficient (nondim)
+  real    :: IMax_decay      !< inverse of a maximum decay scale for
+                             !! bottom-drag driven turbulence, (1/m)
+  real    :: Kv              !< The interior vertical viscosity (m2/s)
+  real    :: Kd              !< interior diapycnal diffusivity (m2/s)
+  real    :: Kd_min          !< minimum diapycnal diffusivity (m2/s)
+  real    :: Kd_max          !< maximum increment for diapycnal diffusivity (m2/s)
+                             !! Set to a negative value to have no limit.
+  real    :: Kd_add          !< uniform diffusivity added everywhere without
+                             !! filtering or scaling (m2/s)
+  real    :: Kdml            !< mixed layer diapycnal diffusivity (m2/s)
+                             !! when bulkmixedlayer==.false.
+  real    :: Hmix            !< mixed layer thickness (meter) when
+                             !! bulkmixedlayer==.false.
   type(diag_ctrl), pointer :: diag ! structure to regulate diagn output timing
 
-  logical :: limit_dissipation ! If enabled, dissipation is limited to be larger
-                               ! than the following:
-  real :: dissip_min    ! Minimum dissipation (W/m3)
-  real :: dissip_N0     ! Coefficient a in minimum dissipation = a+b*N (W/m3)
-  real :: dissip_N1     ! Coefficient b in minimum dissipation = a+b*N (J/m3)
-  real :: dissip_N2     ! Coefficient c in minimum dissipation = c*N2 (W m-3 s2)
-  real :: dissip_Kd_min ! Minimum Kd (m2/s) with dissipatio Rho0*Kd_min*N^2
+  logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
+                               !! than the following:
+  real :: dissip_min    !< Minimum dissipation (W/m3)
+  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N (W/m3)
+  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N (J/m3)
+  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 (W m-3 s2)
+  real :: dissip_Kd_min !< Minimum Kd (m2/s) with dissipatio Rho0*Kd_min*N^2
 
-  real :: TKE_itide_max       ! maximum internal tide conversion (W m-2)
-                              ! available to mix above the BBL
-  real :: omega               ! Earth's rotation frequency (s-1)
-  logical :: ML_radiation     ! allow a fraction of TKE available from wind work
-                              ! to penetrate below mixed layer base with a vertical
-                              ! decay scale determined by the minimum of
-                              ! (1) The depth of the mixed layer, or
-                              ! (2) An Ekman length scale.
-                              ! Energy availble to drive mixing below the mixed layer is
-                              ! given by E = ML_RAD_COEFF*MSTAR*USTAR**3.  Optionally, if
-                              ! ML_rad_TKE_decay is true, this is further reduced by a factor
-                              ! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
-                              ! calculated the same way as in the mixed layer code.
-                              ! The diapycnal diffusivity is KD(k) = E/(N2(k)+OMEGA2),
-                              ! where N2 is the squared buoyancy frequency (s-2) and OMEGA2
-                              ! is the rotation rate of the earth squared.
-  real :: ML_rad_kd_max       ! Maximum diapycnal diffusivity due to turbulence
-                              ! radiated from the base of the mixed layer (m2/s)
-  real :: ML_rad_efold_coeff  ! non-dim coefficient to scale penetration depth
-  real :: ML_rad_coeff        ! coefficient, which scales MSTAR*USTAR^3 to
-                              ! obtain energy available for mixing below
-                              ! mixed layer base (nondimensional)
-  logical :: ML_rad_TKE_decay ! If true, apply same exponential decay
-                              ! to ML_rad as applied to the other surface
-                              ! sources of TKE in the mixed layer code.
-  real    :: ustar_min        ! A minimum value of ustar to avoid numerical
-                              ! problems (m/s).  If the value is small enough,
-                              ! this parameter should not affect the solution.
-  real    :: TKE_decay        ! ratio of natural Ekman depth to TKE decay scale (nondim)
-  real    :: mstar            ! ratio of friction velocity cubed to
-                              ! TKE input to the mixed layer (nondim)
-  logical :: ML_use_omega     ! If true, use absolute rotation rate instead
-                              ! of the vertical component of rotation when
-                              ! setting the decay scale for mixed layer turbulence.
-  real    :: ML_omega_frac    !   When setting the decay scale for turbulence, use
-                              ! this fraction of the absolute rotation rate blended
-                              ! with the local value of f, as f^2 ~= (1-of)*f^2 + of*4*omega^2.
-  logical :: user_change_diff ! If true, call user-defined code to change diffusivity.
-  logical :: useKappaShear    ! If true, use the kappa_shear module to find the
-                              ! shear-driven diapycnal diffusivity.
-  logical :: use_CVMix_shear  ! If true, use one of the CVMix modules to find
-                              ! shear-driven diapycnal diffusivity.
-  logical :: use_CVMix_ddiff  ! If true, enable double-diffusive mixing via CVMix.
-  logical :: simple_TKE_to_Kd ! If true, uses a simple estimate of Kd/TKE that
-                              ! does not rely on a layer-formulation.
+  real :: TKE_itide_max !< maximum internal tide conversion (W m-2)
+                        !! available to mix above the BBL
+  real :: omega         !< Earth's rotation frequency (s-1)
+  logical :: ML_radiation !< allow a fraction of TKE available from wind work
+                          !! to penetrate below mixed layer base with a vertical
+                          !! decay scale determined by the minimum of
+                          !! (1) The depth of the mixed layer, or
+                          !! (2) An Ekman length scale.
+                          !! Energy availble to drive mixing below the mixed layer is
+                          !! given by E = ML_RAD_COEFF*MSTAR*USTAR**3.  Optionally, if
+                          !! ML_rad_TKE_decay is true, this is further reduced by a factor
+                          !! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
+                          !! calculated the same way as in the mixed layer code.
+                          !! The diapycnal diffusivity is KD(k) = E/(N2(k)+OMEGA2),
+                          !! where N2 is the squared buoyancy frequency (s-2) and OMEGA2
+                          !! is the rotation rate of the earth squared.
+  real :: ML_rad_kd_max   !< Maximum diapycnal diffusivity due to turbulence
+                          !! radiated from the base of the mixed layer (m2/s)
+  real :: ML_rad_efold_coeff  !< non-dim coefficient to scale penetration depth
+  real :: ML_rad_coeff        !< coefficient, which scales MSTAR*USTAR^3 to
+                              !! obtain energy available for mixing below
+                              !! mixed layer base (nondimensional)
+  logical :: ML_rad_TKE_decay !< If true, apply same exponential decay
+                              !! to ML_rad as applied to the other surface
+                              !! sources of TKE in the mixed layer code.
+  real    :: ustar_min        !< A minimum value of ustar to avoid numerical
+                              !! problems (m/s).  If the value is small enough,
+                              !! this parameter should not affect the solution.
+  real    :: TKE_decay        !< ratio of natural Ekman depth to TKE decay scale (nondim)
+  real    :: mstar            !! ratio of friction velocity cubed to
+                              !! TKE input to the mixed layer (nondim)
+  logical :: ML_use_omega     !< If true, use absolute rotation rate instead
+                              !! of the vertical component of rotation when
+                              !! setting the decay scale for mixed layer turbulence.
+  real    :: ML_omega_frac    !<   When setting the decay scale for turbulence, use
+                              !! this fraction of the absolute rotation rate blended
+                              !! with the local value of f, as f^2 ~= (1-of)*f^2 + of*4*omega^2.
+  logical :: user_change_diff !< If true, call user-defined code to change diffusivity.
+  logical :: useKappaShear    !< If true, use the kappa_shear module to find the
+                              !! shear-driven diapycnal diffusivity.
+  logical :: use_CVMix_shear  !< If true, use one of the CVMix modules to find
+                              !! shear-driven diapycnal diffusivity.
+  logical :: use_CVMix_ddiff  !< If true, enable double-diffusive mixing via CVMix.
+  logical :: simple_TKE_to_Kd !< If true, uses a simple estimate of Kd/TKE that
+                              !! does not rely on a layer-formulation.
 
   character(len=200)                 :: inputdir
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
@@ -177,6 +176,17 @@ integer :: id_clock_kappaShear
 
 contains
 
+!> Sets the interior vertical diffusion of scalars due to the following processes:
+!! 1) Shear-driven mixing: two options, Jackson et at. and KPP interior;
+!! 2) Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
+!! Harrison & Hallberg, JPO 2008;
+!! 3) Double-diffusion aplpied via CVMix;
+!! 4) Tidal mixing: many options available, see MOM_tidal_mixing.F90;
+!! In addition, this subroutine has the option to set the interior vertical
+!! viscosity associated with processes 2-4 listed above, which is stored in
+!! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
+!! visc%Kv_shear
+!! GMM, TODO: add contribution from tidal mixing into visc%Kv_slow
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, CS, Kd, Kd_int)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
@@ -188,9 +198,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                              intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: u_h
+                             intent(in)    :: u_h  !< zonal thickness transport m^2/s.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: v_h
+                             intent(in)    :: v_h  !< meridional thickness transport m^2/s.
   type(thermo_var_ptrs),     intent(inout) :: tv   !< Structure with pointers to thermodynamic
                                                    !! fields. Out is for tv%TempxPmE.
   type(forcing),             intent(in)    :: fluxes !< Structure of surface fluxes that may be
@@ -270,7 +280,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! If nothing else is specified, this will be the value used.
   Kd(:,:,:) = CS%Kd
   Kd_int(:,:,:) = CS%Kd
-  visc%Kv_slow(:,:,:) = CS%Kv
+  if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = CS%Kv
 
   ! Set up arrays for diagnostics.
 
@@ -331,6 +341,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   elseif (CS%use_CVMix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%CVMix_shear_csp)
+    if (CS%debug) then
+      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear",G%HI)
+      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear",G%HI)
+    endif
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
@@ -341,8 +355,6 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   ! set surface diffusivities (CS%bkgnd_mixing_csp%Kd_sfc)
   call sfc_bkgnd_mixing(G, CS%bkgnd_mixing_csp)
-
-! GMM, fix OMP calls below
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
 !$OMP                                  Kd,visc,    &
@@ -1825,6 +1837,11 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   ! set params releted to the background mixing
   call bkgnd_mixing_init(Time, G, GV, param_file, CS%diag, CS%bkgnd_mixing_csp)
+
+  call get_param(param_file, mdl, "KV", CS%Kv, &
+                 "The background kinematic viscosity in the interior. \n"//&
+                 "The molecular value, ~1e-6 m2 s-1, may be used.", &
+                 units="m2 s-1", fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the \n"//&
