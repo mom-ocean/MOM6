@@ -387,9 +387,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
 
-  ! visc%Kv_slow must be set to zero
-  visc%Kv_slow(:,:,:) = 0.0
-
   if (nz == 1) return
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic(), MOM_diabatic_driver.F90")
