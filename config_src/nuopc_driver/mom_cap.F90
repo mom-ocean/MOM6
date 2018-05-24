@@ -1410,11 +1410,15 @@ module mom_cap_mod
     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
     call get_ocean_grid(ocean_state, ocean_grid)
 
-!tcx ----------
-   return
-!tcx ----------
+    !tcx ----------
+    RETURN
+    !tcx ----------
 
-    call ocn_export(ocean_public, ocean_grid, exportState)
+    call ocn_export(ocean_public, ocean_grid, exportState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     call ESMF_StateGet(exportState, itemCount=fieldCount, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1501,7 +1505,6 @@ module mom_cap_mod
     integer :: nc
 #ifdef CESMCOUPLED
     ! in ocn_import, ocn_export
-
 #else
     real(ESMF_KIND_R8), allocatable        :: ofld(:,:), ocz(:,:), ocm(:,:)
     real(ESMF_KIND_R8), allocatable        :: mmmf(:,:), mzmf(:,:)
@@ -1629,7 +1632,11 @@ module mom_cap_mod
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call ocn_import(ocean_public, ocean_grid, importState, ice_ocean_boundary)
+    call ocn_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 #else
     call State_getFldPtr(exportState,'ocean_mask',dataPtr_mask,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1721,7 +1728,11 @@ module mom_cap_mod
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call ocn_export(ocean_public, ocean_grid, exportState)
+    call ocn_export(ocean_public, ocean_grid, exportState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 #else
     allocate(ofld(isc:iec,jsc:jec))
 
