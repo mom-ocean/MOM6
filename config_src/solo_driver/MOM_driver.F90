@@ -246,8 +246,8 @@ program MOM_main
   endif
 
 !$  call omp_set_num_threads(ocean_nthreads)
-!$OMP PARALLEL private(adder)
 !$  base_cpu = get_cpu_affinity()
+!$OMP PARALLEL private(adder)
 !$  if (use_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
 !$        adder = omp_get_thread_num()/2
@@ -258,7 +258,7 @@ program MOM_main
 !$     adder = omp_get_thread_num()
 !$  endif
 !$  call set_cpu_affinity (base_cpu + adder)
-!$  write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!$  write(6,*) " ocean ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 
