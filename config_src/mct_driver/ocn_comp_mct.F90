@@ -1947,6 +1947,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
     fluxes%heat_added(:,:)=0.0
     fluxes%salt_flux_added(:,:)=0.0
   endif
+  forces%accumulate_rigidity = .true. ! Multiple components may contribute to rigidity.
   if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
