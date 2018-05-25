@@ -23,8 +23,6 @@ use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_CVMix_shear,         only : calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_cs
 use MOM_CVMix_shear,         only : CVMix_shear_end
-use MOM_CVMix_ddiff,         only : CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddiff_cs
-use MOM_CVMix_ddiff,         only : compute_ddiff_coeffs
 use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
 use MOM_bkgnd_mixing,        only : bkgnd_mixing_end, sfc_bkgnd_mixing
 use MOM_string_functions,    only : uppercase
@@ -45,101 +43,104 @@ public set_diffusivity_init
 public set_diffusivity_end
 
 type, public :: set_diffusivity_CS ; private
-  logical :: debug           !< If true, write verbose checksums for debugging.
+  logical :: debug           ! If true, write verbose checksums for debugging.
 
-  logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
-                             !! GV%nk_rho_varies variable density mixed & buffer
-                             !! layers.
-  real    :: FluxRi_max      !< The flux Richardson number where the stratification is
-                             !! large enough that N2 > omega2.  The full expression for
-                             !! the Flux Richardson number is usually
-                             !! FLUX_RI_MAX*N2/(N2+OMEGA2). The default is 0.2.
-  logical :: bottomdraglaw   !< If true, the  bottom stress is calculated with a
-                             !! drag law c_drag*|u|*u.
-  logical :: BBL_mixing_as_max !<  If true, take the maximum of the diffusivity
-                             !! from the BBL mixing and the other diffusivities.
-                             !! Otherwise, diffusivities from the BBL_mixing is
-                             !! added.
-  logical :: use_LOTW_BBL_diffusivity !< If true, use simpler/less precise, BBL diffusivity.
-  logical :: LOTW_BBL_use_omega !< If true, use simpler/less precise, BBL diffusivity.
-  real    :: BBL_effic       !< efficiency with which the energy extracted
-                             !! by bottom drag drives BBL diffusion (nondim)
-  real    :: cdrag           !< quadratic drag coefficient (nondim)
-  real    :: IMax_decay      !< inverse of a maximum decay scale for
-                             !! bottom-drag driven turbulence, (1/m)
-  real    :: Kv              !< The interior vertical viscosity (m2/s)
-  real    :: Kd              !< interior diapycnal diffusivity (m2/s)
-  real    :: Kd_min          !< minimum diapycnal diffusivity (m2/s)
-  real    :: Kd_max          !< maximum increment for diapycnal diffusivity (m2/s)
-                             !! Set to a negative value to have no limit.
-  real    :: Kd_add          !< uniform diffusivity added everywhere without
-                             !! filtering or scaling (m2/s)
-  real    :: Kdml            !< mixed layer diapycnal diffusivity (m2/s)
-                             !! when bulkmixedlayer==.false.
-  real    :: Hmix            !< mixed layer thickness (meter) when
-                             !! bulkmixedlayer==.false.
+  logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
+                             ! GV%nk_rho_varies variable density mixed & buffer
+                             ! layers.
+  real    :: FluxRi_max      ! The flux Richardson number where the stratification is
+                             ! large enough that N2 > omega2.  The full expression for
+                             ! the Flux Richardson number is usually
+                             ! FLUX_RI_MAX*N2/(N2+OMEGA2). The default is 0.2.
+  logical :: bottomdraglaw   ! If true, the  bottom stress is calculated with a
+                             ! drag law c_drag*|u|*u.
+  logical :: BBL_mixing_as_max !  If true, take the maximum of the diffusivity
+                             ! from the BBL mixing and the other diffusivities.
+                             ! Otherwise, diffusivities from the BBL_mixing is
+                             ! added.
+  logical :: use_LOTW_BBL_diffusivity ! If true, use simpler/less precise, BBL diffusivity.
+  logical :: LOTW_BBL_use_omega ! If true, use simpler/less precise, BBL diffusivity.
+  real    :: BBL_effic       ! efficiency with which the energy extracted
+                             ! by bottom drag drives BBL diffusion (nondim)
+  real    :: cdrag           ! quadratic drag coefficient (nondim)
+  real    :: IMax_decay      ! inverse of a maximum decay scale for
+                             ! bottom-drag driven turbulence, (1/m)
+
+  real    :: Kd              ! interior diapycnal diffusivity (m2/s)
+  real    :: Kd_min          ! minimum diapycnal diffusivity (m2/s)
+  real    :: Kd_max          ! maximum increment for diapycnal diffusivity (m2/s)
+                             ! Set to a negative value to have no limit.
+  real    :: Kd_add          ! uniform diffusivity added everywhere without
+                             ! filtering or scaling (m2/s)
+  real    :: Kv              ! interior vertical viscosity (m2/s)
+  real    :: Kdml            ! mixed layer diapycnal diffusivity (m2/s)
+                             ! when bulkmixedlayer==.false.
+  real    :: Hmix            ! mixed layer thickness (meter) when
+                             ! bulkmixedlayer==.false.
   type(diag_ctrl), pointer :: diag ! structure to regulate diagn output timing
 
-  logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
-                               !! than the following:
-  real :: dissip_min    !< Minimum dissipation (W/m3)
-  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N (W/m3)
-  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N (J/m3)
-  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 (W m-3 s2)
-  real :: dissip_Kd_min !< Minimum Kd (m2/s) with dissipatio Rho0*Kd_min*N^2
+  logical :: limit_dissipation ! If enabled, dissipation is limited to be larger
+                               ! than the following:
+  real :: dissip_min    ! Minimum dissipation (W/m3)
+  real :: dissip_N0     ! Coefficient a in minimum dissipation = a+b*N (W/m3)
+  real :: dissip_N1     ! Coefficient b in minimum dissipation = a+b*N (J/m3)
+  real :: dissip_N2     ! Coefficient c in minimum dissipation = c*N2 (W m-3 s2)
+  real :: dissip_Kd_min ! Minimum Kd (m2/s) with dissipatio Rho0*Kd_min*N^2
 
-  real :: TKE_itide_max !< maximum internal tide conversion (W m-2)
-                        !! available to mix above the BBL
-  real :: omega         !< Earth's rotation frequency (s-1)
-  logical :: ML_radiation !< allow a fraction of TKE available from wind work
-                          !! to penetrate below mixed layer base with a vertical
-                          !! decay scale determined by the minimum of
-                          !! (1) The depth of the mixed layer, or
-                          !! (2) An Ekman length scale.
-                          !! Energy availble to drive mixing below the mixed layer is
-                          !! given by E = ML_RAD_COEFF*MSTAR*USTAR**3.  Optionally, if
-                          !! ML_rad_TKE_decay is true, this is further reduced by a factor
-                          !! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
-                          !! calculated the same way as in the mixed layer code.
-                          !! The diapycnal diffusivity is KD(k) = E/(N2(k)+OMEGA2),
-                          !! where N2 is the squared buoyancy frequency (s-2) and OMEGA2
-                          !! is the rotation rate of the earth squared.
-  real :: ML_rad_kd_max   !< Maximum diapycnal diffusivity due to turbulence
-                          !! radiated from the base of the mixed layer (m2/s)
-  real :: ML_rad_efold_coeff  !< non-dim coefficient to scale penetration depth
-  real :: ML_rad_coeff        !< coefficient, which scales MSTAR*USTAR^3 to
-                              !! obtain energy available for mixing below
-                              !! mixed layer base (nondimensional)
-  logical :: ML_rad_TKE_decay !< If true, apply same exponential decay
-                              !! to ML_rad as applied to the other surface
-                              !! sources of TKE in the mixed layer code.
-  real    :: ustar_min        !< A minimum value of ustar to avoid numerical
-                              !! problems (m/s).  If the value is small enough,
-                              !! this parameter should not affect the solution.
-  real    :: TKE_decay        !< ratio of natural Ekman depth to TKE decay scale (nondim)
-  real    :: mstar            !! ratio of friction velocity cubed to
-                              !! TKE input to the mixed layer (nondim)
-  logical :: ML_use_omega     !< If true, use absolute rotation rate instead
-                              !! of the vertical component of rotation when
-                              !! setting the decay scale for mixed layer turbulence.
-  real    :: ML_omega_frac    !<   When setting the decay scale for turbulence, use
-                              !! this fraction of the absolute rotation rate blended
-                              !! with the local value of f, as f^2 ~= (1-of)*f^2 + of*4*omega^2.
-  logical :: user_change_diff !< If true, call user-defined code to change diffusivity.
-  logical :: useKappaShear    !< If true, use the kappa_shear module to find the
-                              !! shear-driven diapycnal diffusivity.
-  logical :: use_CVMix_shear  !< If true, use one of the CVMix modules to find
-                              !! shear-driven diapycnal diffusivity.
-  logical :: use_CVMix_ddiff  !< If true, enable double-diffusive mixing via CVMix.
-  logical :: simple_TKE_to_Kd !< If true, uses a simple estimate of Kd/TKE that
-                              !! does not rely on a layer-formulation.
+  real :: TKE_itide_max       ! maximum internal tide conversion (W m-2)
+                              ! available to mix above the BBL
+  real :: omega               ! Earth's rotation frequency (s-1)
+  logical :: ML_radiation     ! allow a fraction of TKE available from wind work
+                              ! to penetrate below mixed layer base with a vertical
+                              ! decay scale determined by the minimum of
+                              ! (1) The depth of the mixed layer, or
+                              ! (2) An Ekman length scale.
+                              ! Energy availble to drive mixing below the mixed layer is
+                              ! given by E = ML_RAD_COEFF*MSTAR*USTAR**3.  Optionally, if
+                              ! ML_rad_TKE_decay is true, this is further reduced by a factor
+                              ! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
+                              ! calculated the same way as in the mixed layer code.
+                              ! The diapycnal diffusivity is KD(k) = E/(N2(k)+OMEGA2),
+                              ! where N2 is the squared buoyancy frequency (s-2) and OMEGA2
+                              ! is the rotation rate of the earth squared.
+  real :: ML_rad_kd_max       ! Maximum diapycnal diffusivity due to turbulence
+                              ! radiated from the base of the mixed layer (m2/s)
+  real :: ML_rad_efold_coeff  ! non-dim coefficient to scale penetration depth
+  real :: ML_rad_coeff        ! coefficient, which scales MSTAR*USTAR^3 to
+                              ! obtain energy available for mixing below
+                              ! mixed layer base (nondimensional)
+  logical :: ML_rad_TKE_decay ! If true, apply same exponential decay
+                              ! to ML_rad as applied to the other surface
+                              ! sources of TKE in the mixed layer code.
+  real    :: ustar_min        ! A minimum value of ustar to avoid numerical
+                              ! problems (m/s).  If the value is small enough,
+                              ! this parameter should not affect the solution.
+  real    :: TKE_decay        ! ratio of natural Ekman depth to TKE decay scale (nondim)
+  real    :: mstar            ! ratio of friction velocity cubed to
+                              ! TKE input to the mixed layer (nondim)
+  logical :: ML_use_omega     ! If true, use absolute rotation rate instead
+                              ! of the vertical component of rotation when
+                              ! setting the decay scale for mixed layer turbulence.
+  real    :: ML_omega_frac    !   When setting the decay scale for turbulence, use
+                              ! this fraction of the absolute rotation rate blended
+                              ! with the local value of f, as f^2 ~= (1-of)*f^2 + of*4*omega^2.
+  logical :: user_change_diff ! If true, call user-defined code to change diffusivity.
+  logical :: useKappaShear    ! If true, use the kappa_shear module to find the
+                              ! shear-driven diapycnal diffusivity.
+  logical :: use_CVMix_shear  ! If true, use one of the CVMix modules to find
+                              ! shear-driven diapycnal diffusivity.
+  logical :: double_diffusion ! If true, enable double-diffusive mixing.
+  logical :: simple_TKE_to_Kd ! If true, uses a simple estimate of Kd/TKE that
+                              ! does not rely on a layer-formulation.
+  real    :: Max_Rrho_salt_fingers      ! max density ratio for salt fingering
+  real    :: Max_salt_diff_salt_fingers ! max salt diffusivity for salt fingers (m2/s)
+  real    :: Kv_molecular               ! molecular visc for double diff convect (m2/s)
 
   character(len=200)                 :: inputdir
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
   type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
   type(CVMix_shear_cs),      pointer :: CVMix_shear_csp      => NULL()
-  type(CVMix_ddiff_cs),      pointer :: CVMix_ddiff_csp      => NULL()
   type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp     => NULL()
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
   type(tidal_mixing_cs),     pointer :: tm_csp               => NULL()
@@ -157,6 +158,11 @@ type, public :: set_diffusivity_CS ; private
   integer :: id_N2       = -1
   integer :: id_N2_z     = -1
 
+  integer :: id_KT_extra   = -1
+  integer :: id_KS_extra   = -1
+  integer :: id_KT_extra_z = -1
+  integer :: id_KS_extra_z = -1
+
 end type set_diffusivity_CS
 
 type diffusivity_diags
@@ -166,9 +172,12 @@ type diffusivity_diags
     Kd_BBL         => NULL(),& ! BBL diffusivity at interfaces (m2/s)
     Kd_work        => NULL(),& ! layer integrated work by diapycnal mixing (W/m2)
     maxTKE         => NULL(),& ! energy required to entrain to h_max (m3/s3)
-    TKE_to_Kd      => NULL()   ! conversion rate (~1.0 / (G_Earth + dRho_lay))
+    TKE_to_Kd      => NULL(),& ! conversion rate (~1.0 / (G_Earth + dRho_lay))
                                ! between TKE dissipated within a layer and Kd
                                ! in that layer, in m2 s-1 / m3 s-3 = s2 m-1
+    KT_extra       => NULL(),& ! double diffusion diffusivity for temp (m2/s)
+    KS_extra       => NULL()   ! double diffusion diffusivity for saln (m2/s)
+
 end type diffusivity_diags
 
 ! Clocks
@@ -176,17 +185,6 @@ integer :: id_clock_kappaShear
 
 contains
 
-!> Sets the interior vertical diffusion of scalars due to the following processes:
-!! 1) Shear-driven mixing: two options, Jackson et at. and KPP interior;
-!! 2) Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
-!! Harrison & Hallberg, JPO 2008;
-!! 3) Double-diffusion aplpied via CVMix;
-!! 4) Tidal mixing: many options available, see MOM_tidal_mixing.F90;
-!! In addition, this subroutine has the option to set the interior vertical
-!! viscosity associated with processes 2-4 listed above, which is stored in
-!! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
-!! visc%Kv_shear
-!! GMM, TODO: add contribution from tidal mixing into visc%Kv_slow
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, CS, Kd, Kd_int)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
@@ -198,9 +196,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                              intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: u_h  !< zonal thickness transport m^2/s.
+                             intent(in)    :: u_h
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: v_h  !< meridional thickness transport m^2/s.
+                             intent(in)    :: v_h
   type(thermo_var_ptrs),     intent(inout) :: tv   !< Structure with pointers to thermodynamic
                                                    !! fields. Out is for tv%TempxPmE.
   type(forcing),             intent(in)    :: fluxes !< Structure of surface fluxes that may be
@@ -228,15 +226,17 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                   ! massless layers filled vertically by diffusion.
 
   real, dimension(SZI_(G),SZK_(G)) :: &
-    N2_lay, &     !< squared buoyancy frequency associated with layers (1/s2)
-    maxTKE, &     !< energy required to entrain to h_max (m3/s3)
-    TKE_to_Kd     !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between
-                  !< TKE dissipated within a layer and Kd in that layer, in
-                  !< m2 s-1 / m3 s-3 = s2 m-1.
+    N2_lay, &     ! squared buoyancy frequency associated with layers (1/s2)
+    maxTKE, &     ! energy required to entrain to h_max (m3/s3)
+    TKE_to_Kd     ! conversion rate (~1.0 / (G_Earth + dRho_lay)) between
+                  ! TKE dissipated within a layer and Kd in that layer, in
+                  ! m2 s-1 / m3 s-3 = s2 m-1.
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    N2_int,   &   !< squared buoyancy frequency associated at interfaces (1/s2)
-    dRho_int      !< locally ref potential density difference across interfaces (in s-2) smg: or kg/m3?
+    N2_int,   &   ! squared buoyancy frequency associated at interfaces (1/s2)
+    dRho_int, &   ! locally ref potential density difference across interfaces (in s-2) smg: or kg/m3?
+    KT_extra, &   ! double difusion diffusivity on temperature (m2/sec)
+    KS_extra      ! double difusion diffusivity on salinity (m2/sec)
 
   real :: I_Rho0        ! inverse of Boussinesq density (m3/kg)
   real :: dissip        ! local variable for dissipation calculations (W/m3)
@@ -271,16 +271,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   use_EOS = associated(tv%eqn_of_state)
 
-  if ((CS%use_CVMix_ddiff) .and. &
+  if ((CS%double_diffusion) .and. &
       .not.(associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S)) ) &
     call MOM_error(FATAL, "set_diffusivity: visc%Kd_extra_T and "//&
-         "visc%Kd_extra_S must be associated when USE_CVMIX_DDIFF is true.")
-
-  ! Set Kd, Kd_int and Kv_slow to constant values.
-  ! If nothing else is specified, this will be the value used.
-  Kd(:,:,:) = CS%Kd
-  Kd_int(:,:,:) = CS%Kd
-  if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = CS%Kv
+         "visc%Kd_extra_S must be associated when DOUBLE_DIFFUSION is true.")
 
   ! Set up arrays for diagnostics.
 
@@ -298,6 +292,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
   if (CS%id_TKE_to_Kd > 0) then
     allocate(dd%TKE_to_Kd(isd:ied,jsd:jed,nz)) ; dd%TKE_to_Kd(:,:,:) = 0.0
+  endif
+  if ((CS%id_KT_extra > 0) .or. (CS%id_KT_extra_z > 0)) then
+    allocate(dd%KT_extra(isd:ied,jsd:jed,nz+1)) ; dd%KT_extra(:,:,:) = 0.0
+  endif
+  if ((CS%id_KS_extra > 0) .or. (CS%id_KS_extra_z > 0)) then
+    allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1)) ; dd%KS_extra(:,:,:) = 0.0
   endif
   if ((CS%id_Kd_BBL > 0) .or. (CS%id_Kd_BBL_z > 0)) then
     allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1)) ; dd%Kd_BBL(:,:,:) = 0.0
@@ -341,10 +341,6 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   elseif (CS%use_CVMix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%CVMix_shear_csp)
-    if (CS%debug) then
-      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear",G%HI)
-      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear",G%HI)
-    endif
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
@@ -355,6 +351,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   ! set surface diffusivities (CS%bkgnd_mixing_csp%Kd_sfc)
   call sfc_bkgnd_mixing(G, CS%bkgnd_mixing_csp)
+
+! GMM, fix OMP calls below
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
 !$OMP                                  Kd,visc,    &
@@ -372,13 +370,35 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = N2_int(i,K) ; enddo ; enddo
     endif
 
-    ! Add background mixing
+    ! add background mixing
     call calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc%Kv_slow, j, G, GV, CS%bkgnd_mixing_csp)
 
-    ! Apply double diffusion
-    ! GMM, we need to pass HBL to compute_ddiff_coeffs, but it is not yet available.
-    if (CS%use_CVMix_ddiff) then
-      call compute_ddiff_coeffs(h, tv, G, GV, j, visc%Kd_extra_T, visc%Kd_extra_S, CS%CVMix_ddiff_csp)
+    ! GMM, the following will go into the MOM_CVMix_double_diffusion module
+    if (CS%double_diffusion) then
+      call double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, KT_extra, KS_extra)
+      do K=2,nz ; do i=is,ie
+        if (KS_extra(i,K) > KT_extra(i,K)) then ! salt fingering
+          Kd(i,j,k-1) = Kd(i,j,k-1) + 0.5*KT_extra(i,K)
+          Kd(i,j,k)   = Kd(i,j,k)   + 0.5*KT_extra(i,K)
+          visc%Kd_extra_S(i,j,k) = KS_extra(i,K)-KT_extra(i,K)
+          visc%Kd_extra_T(i,j,k) = 0.0
+        elseif (KT_extra(i,K) > 0.0) then ! double-diffusive convection
+          Kd(i,j,k-1) = Kd(i,j,k-1) + 0.5*KS_extra(i,K)
+          Kd(i,j,k)   = Kd(i,j,k)   + 0.5*KS_extra(i,K)
+          visc%Kd_extra_T(i,j,k) = KT_extra(i,K)-KS_extra(i,K)
+          visc%Kd_extra_S(i,j,k) = 0.0
+        else ! There is no double diffusion at this interface.
+          visc%Kd_extra_T(i,j,k) = 0.0
+          visc%Kd_extra_S(i,j,k) = 0.0
+        endif
+      enddo ; enddo
+      if (associated(dd%KT_extra)) then ; do K=1,nz+1 ; do i=is,ie
+        dd%KT_extra(i,j,K) = KT_extra(i,K)
+      enddo ; enddo ; endif
+
+      if (associated(dd%KS_extra)) then ; do K=1,nz+1 ; do i=is,ie
+        dd%KS_extra(i,j,K) = KS_extra(i,K)
+      enddo ; enddo ; endif
     endif
 
   ! Add the input turbulent diffusivity.
@@ -476,11 +496,6 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
     if (CS%useKappaShear) call hchksum(visc%Kd_shear,"Turbulent Kd",G%HI,haloshift=0)
 
-    if (CS%use_CVMix_ddiff) then
-      call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T",G%HI,haloshift=0)
-      call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S",G%HI,haloshift=0)
-    endif
-
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &
                     G%HI, 0, symmetric=.true.)
@@ -496,6 +511,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
   endif
+
+  ! send bkgnd_mixing diagnostics to post_data
+  if (CS%bkgnd_mixing_csp%id_kd_bkgnd > 0) &
+    call post_data(CS%bkgnd_mixing_csp%id_kd_bkgnd, CS%bkgnd_mixing_csp%kd_bkgnd, CS%bkgnd_mixing_csp%diag)
+  if (CS%bkgnd_mixing_csp%id_kv_bkgnd > 0) &
+    call post_data(CS%bkgnd_mixing_csp%id_kv_bkgnd, CS%bkgnd_mixing_csp%kv_bkgnd, CS%bkgnd_mixing_csp%diag)
 
   if (CS%Kd_add > 0.0) then
     if (present(Kd_int)) then
@@ -517,28 +538,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                           T_f, S_f, dd%Kd_user)
   endif
 
-  ! post diagnostics
-
-  ! background mixing
-  if (CS%bkgnd_mixing_csp%id_kd_bkgnd > 0) &
-    call post_data(CS%bkgnd_mixing_csp%id_kd_bkgnd, CS%bkgnd_mixing_csp%kd_bkgnd, CS%bkgnd_mixing_csp%diag)
-  if (CS%bkgnd_mixing_csp%id_kv_bkgnd > 0) &
-    call post_data(CS%bkgnd_mixing_csp%id_kv_bkgnd, CS%bkgnd_mixing_csp%kv_bkgnd, CS%bkgnd_mixing_csp%diag)
-
-  ! double diffusive mixing
-  if (CS%CVMix_ddiff_csp%id_KT_extra > 0) &
-    call post_data(CS%CVMix_ddiff_csp%id_KT_extra, visc%Kd_extra_T, CS%CVMix_ddiff_csp%diag)
-  if (CS%CVMix_ddiff_csp%id_KS_extra > 0) &
-    call post_data(CS%CVMix_ddiff_csp%id_KS_extra, visc%Kd_extra_S, CS%CVMix_ddiff_csp%diag)
-  if (CS%CVMix_ddiff_csp%id_R_rho > 0) &
-    call post_data(CS%CVMix_ddiff_csp%id_R_rho, CS%CVMix_ddiff_csp%R_rho, CS%CVMix_ddiff_csp%diag)
-
+  ! GMM, post diags...
   if (CS%id_Kd_layer > 0) call post_data(CS%id_Kd_layer, Kd, CS%diag)
 
-  ! tidal mixing
+  num_z_diags = 0
+
   call post_tidal_diagnostics(G,GV,h,CS%tm_csp)
 
-  num_z_diags = 0
   if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation .or. &
       CS%tm_csp%Lowmode_itidal_dissipation) then
 
@@ -562,11 +568,26 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   endif
 
+  if (CS%id_KT_extra > 0) call post_data(CS%id_KT_extra, dd%KT_extra, CS%diag)
+  if (CS%id_KS_extra > 0) call post_data(CS%id_KS_extra, dd%KS_extra, CS%diag)
   if (CS%id_Kd_BBL > 0)   call post_data(CS%id_Kd_BBL, dd%Kd_BBL, CS%diag)
+
+  if (CS%id_KT_extra_z > 0) then
+      num_z_diags = num_z_diags + 1
+      z_ids(num_z_diags) = CS%id_KT_extra_z
+      z_ptrs(num_z_diags)%p => dd%KT_extra
+  endif
+
+  if (CS%id_KS_extra_z > 0) then
+      num_z_diags = num_z_diags + 1
+      z_ids(num_z_diags) = CS%id_KS_extra_z
+      z_ptrs(num_z_diags)%p => dd%KS_extra
+  endif
 
   if (CS%id_Kd_BBL_z > 0) then
       num_z_diags = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_Kd_BBL_z
+      z_ptrs(num_z_diags)%p => dd%KS_extra
   endif
 
   if (num_z_diags > 0) &
@@ -577,6 +598,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (associated(dd%Kd_user)) deallocate(dd%Kd_user)
   if (associated(dd%maxTKE)) deallocate(dd%maxTKE)
   if (associated(dd%TKE_to_Kd)) deallocate(dd%TKE_to_Kd)
+  if (associated(dd%KT_extra)) deallocate(dd%KT_extra)
+  if (associated(dd%KS_extra)) deallocate(dd%KS_extra)
   if (associated(dd%Kd_BBL)) deallocate(dd%Kd_BBL)
 
   if (showCallTree) call callTree_leave("set_diffusivity()")
@@ -929,6 +952,119 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
 
 end subroutine find_N2
 
+! GMM, the following will be moved to a new module
+
+!> This subroutine sets the additional diffusivities of temperature and
+!! salinity due to double diffusion, using the same functional form as is
+!! used in MOM4.1, and taken from an NCAR technical note (REF?) that updates
+!! what was in Large et al. (1994).  All the coefficients here should probably
+!! be made run-time variables rather than hard-coded constants.
+!!
+!! \todo Find reference for NCAR tech note above.
+subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, Kd_T_dd, Kd_S_dd)
+  type(ocean_grid_type),    intent(in)  :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)  :: GV  !< The ocean's vertical grid structure.
+  type(thermo_var_ptrs),    intent(in)  :: tv  !< Structure containing pointers to any available
+                                               !! thermodynamic fields; absent fields have NULL
+                                               !! ptrs.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)  :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)  :: T_f !< layer temp in C with the values in massless layers
+                                               !! filled vertically by diffusion.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)  :: S_f !< Layer salinities in PPT with values in massless
+                                               !! layers filled vertically by diffusion.
+  integer,                  intent(in)  :: j   !< Meridional index upon which to work.
+  type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
+  real, dimension(SZI_(G),SZK_(G)+1),       &
+                            intent(out) :: Kd_T_dd !< Interface double diffusion diapycnal
+                                               !! diffusivity for temp (m2/sec).
+  real, dimension(SZI_(G),SZK_(G)+1),       &
+                            intent(out) :: Kd_S_dd !< Interface double diffusion diapycnal
+                                               !! diffusivity for saln (m2/sec).
+
+! Arguments:
+!  (in)      tv      - structure containing pointers to any available
+!                      thermodynamic fields; absent fields have NULL ptrs
+!  (in)      h       - layer thickness (m or kg m-2)
+!  (in)      T_f     - layer temp in C with the values in massless layers
+!                      filled vertically by diffusion
+!  (in)      S_f     - layer salinities in PPT with values in massless layers
+!                      filled vertically by diffusion
+!  (in)      G       - ocean grid structure
+!  (in)      GV      - The ocean's vertical grid structure.
+!  (in)      CS      - module control structure
+!  (in)      j       - meridional index upon which to work
+!  (out)     Kd_T_dd - interface double diffusion diapycnal diffusivity for temp (m2/sec)
+!  (out)     Kd_S_dd - interface double diffusion diapycnal diffusivity for saln (m2/sec)
+
+! This subroutine sets the additional diffusivities of temperature and
+! salinity due to double diffusion, using the same functional form as is
+! used in MOM4.1, and taken from an NCAR technical note (###REF?) that updates
+! what was in Large et al. (1994).  All the coefficients here should probably
+! be made run-time variables rather than hard-coded constants.
+
+  real, dimension(SZI_(G)) :: &
+    dRho_dT,  &    ! partial derivatives of density wrt temp (kg m-3 degC-1)
+    dRho_dS,  &    ! partial derivatives of density wrt saln (kg m-3 PPT-1)
+    pres,     &    ! pressure at each interface (Pa)
+    Temp_int, &    ! temp and saln at interfaces
+    Salin_int
+
+  real ::  alpha_dT ! density difference between layers due to temp diffs (kg/m3)
+  real ::  beta_dS  ! density difference between layers due to saln diffs (kg/m3)
+
+  real  :: Rrho    ! vertical density ratio
+  real  :: diff_dd ! factor for double-diffusion
+  real  :: prandtl ! flux ratio for diffusive convection regime
+
+  real, parameter :: Rrho0  = 1.9          ! limit for double-diffusive density ratio
+  real, parameter :: dsfmax = 1.e-4        ! max diffusivity in case of salt fingering
+  real, parameter :: Kv_molecular = 1.5e-6 ! molecular viscosity  (m2/sec)
+
+  integer :: i, k, is, ie, nz
+  is = G%isc ; ie = G%iec ; nz = G%ke
+
+  if (associated(tv%eqn_of_state)) then
+    do i=is,ie
+      pres(i) = 0.0 ; Kd_T_dd(i,1) = 0.0 ; Kd_S_dd(i,1) = 0.0
+      Kd_T_dd(i,nz+1) = 0.0 ; Kd_S_dd(i,nz+1) = 0.0
+    enddo
+    do K=2,nz
+      do i=is,ie
+        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+        Temp_Int(i) = 0.5 * (T_f(i,j,k-1) + T_f(i,j,k))
+        Salin_Int(i) = 0.5 * (S_f(i,j,k-1) + S_f(i,j,k))
+      enddo
+      call calculate_density_derivs(Temp_int, Salin_int, pres, &
+             dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state)
+
+      do i=is,ie
+        alpha_dT = -1.0*dRho_dT(i) * (T_f(i,j,k-1) - T_f(i,j,k))
+        beta_dS  = dRho_dS(i) * (S_f(i,j,k-1) - S_f(i,j,k))
+
+        if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then  ! salt finger case
+          Rrho = min(alpha_dT/beta_dS,Rrho0)
+          diff_dd = 1.0 - ((RRho-1.0)/(RRho0-1.0))
+          diff_dd = dsfmax*diff_dd*diff_dd*diff_dd
+          Kd_T_dd(i,K) = 0.7*diff_dd
+          Kd_S_dd(i,K) = diff_dd
+        elseif ((alpha_dT < 0.) .and. (beta_dS < 0.) .and. (alpha_dT > beta_dS)) then ! diffusive convection
+          Rrho = alpha_dT/beta_dS
+          diff_dd = Kv_molecular*0.909*exp(4.6*exp(-0.54*(1/Rrho-1)))
+          prandtl = 0.15*Rrho
+          if (Rrho > 0.5) prandtl = (1.85-0.85/Rrho)*Rrho
+          Kd_T_dd(i,K) = diff_dd
+          Kd_S_dd(i,K) = prandtl*diff_dd
+        else
+          Kd_T_dd(i,K) = 0.0 ; Kd_S_dd(i,K) = 0.0
+        endif
+      enddo
+    enddo
+  endif
+
+end subroutine double_diffusion
 !> This routine adds diffusion sustained by flow energy extracted by bottom drag.
 subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                                 maxTKE, kb, G, GV, CS, Kd, Kd_int, Kd_BBL)
@@ -1838,11 +1974,6 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   ! set params releted to the background mixing
   call bkgnd_mixing_init(Time, G, GV, param_file, CS%diag, CS%bkgnd_mixing_csp)
 
-  call get_param(param_file, mdl, "KV", CS%Kv, &
-                 "The background kinematic viscosity in the interior. \n"//&
-                 "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", fail_if_missing=.true.)
-
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the \n"//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, \n"//&
@@ -1945,6 +2076,45 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     endif
   endif
 
+
+  ! GMM, the following should be moved to the DD module
+  call get_param(param_file, mdl, "DOUBLE_DIFFUSION", CS%double_diffusion, &
+                 "If true, increase diffusivitives for temperature or salt \n"//&
+                 "based on double-diffusive paramaterization from MOM4/KPP.", &
+                 default=.false.)
+  if (CS%double_diffusion) then
+    call get_param(param_file, mdl, "MAX_RRHO_SALT_FINGERS", CS%Max_Rrho_salt_fingers, &
+                 "Maximum density ratio for salt fingering regime.", &
+                 default=2.55, units="nondim")
+    call get_param(param_file, mdl, "MAX_SALT_DIFF_SALT_FINGERS", CS%Max_salt_diff_salt_fingers, &
+                 "Maximum salt diffusivity for salt fingering regime.", &
+                 default=1.e-4, units="m2 s-1")
+    call get_param(param_file, mdl, "KV_MOLECULAR", CS%Kv_molecular, &
+                 "Molecular viscosity for calculation of fluxes under \n"//&
+                 "double-diffusive convection.", default=1.5e-6, units="m2 s-1")
+    ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
+
+    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
+         'Double-diffusive diffusivity for temperature', 'm2 s-1')
+
+    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
+         'Double-diffusive diffusivity for salinity', 'm2 s-1')
+
+    if (associated(diag_to_Z_CSp)) then
+      vd = var_desc("KT_extra", "m2 s-1", &
+                    "Double-Diffusive Temperature Diffusivity, interpolated to z", &
+                    z_grid='z')
+      CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      vd = var_desc("KS_extra", "m2 s-1", &
+                    "Double-Diffusive Salinity Diffusivity, interpolated to z",&
+                    z_grid='z')
+      CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      vd = var_desc("Kd_BBL", "m2 s-1", &
+                    "Bottom Boundary Layer Diffusivity", z_grid='z')
+      CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+    endif
+  endif
+
   if (CS%user_change_diff) then
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
   endif
@@ -1959,9 +2129,6 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   ! CVMix shear-driven mixing
   CS%use_CVMix_shear = CVMix_shear_init(Time, G, GV, param_file, CS%diag, CS%CVMix_shear_csp)
-
-  ! CVMix double diffusion mixing
-  CS%use_CVMix_ddiff = CVMix_ddiff_init(Time, G, GV, param_file, CS%diag, CS%CVMix_ddiff_csp)
 
 end subroutine set_diffusivity_init
 
@@ -1978,9 +2145,6 @@ subroutine set_diffusivity_end(CS)
 
   if (CS%use_CVMix_shear) &
     call CVMix_shear_end(CS%CVMix_shear_csp)
-
-  if (CS%use_CVMix_ddiff) &
-    call CVMix_ddiff_end(CS%CVMix_ddiff_csp)
 
   if (associated(CS)) deallocate(CS)
 

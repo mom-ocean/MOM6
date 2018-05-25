@@ -30,14 +30,14 @@ public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear
 !> Control structure including parameters for CVMix interior shear schemes.
 type, public :: CVMix_shear_cs
   logical :: use_LMD94, use_PP81            !< Flags for various schemes
-  logical :: smooth_ri                      !< If true, smooth Ri using a 1-2-1 filter
   real    :: Ri_zero                        !< LMD94 critical Richardson number
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
-  real    :: KPP_exp                        !< Exponent of unitless factor of diff.
-                                            !! for KPP internal shear mixing scheme.
+  real    :: KPP_exp                        !<
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
+!  real, allocatable, dimension(:,:,:) :: kv !< vertical viscosity at interface (m2/s)
+!  real, allocatable, dimension(:,:,:) :: kd !< vertical diffusivity at interface (m2/s)
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
@@ -52,26 +52,25 @@ contains
 !> Subroutine for calculating (internal) vertical diffusivities/viscosities
 subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
                                  kv, G, GV, CS )
-  type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
-  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
+  type(ocean_grid_type),                      intent(in)  :: G !< Grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
-  type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
-                                                                 !! (not layer!) in m2 s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The vertical viscosity at each interface
-                                                                 !! (not layer!) in m2 s-1.
-  type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous call to
-                                                                 !! CVMix_shear_init.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness, in m or kg m-2.
+  type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd !< The vertical diffusivity at each interface
+                                                                !! (not layer!) in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv !< The vertical viscosity at each interface
+                                                                !! (not layer!) in m2 s-1.
+  type(CVMix_shear_cs),                       pointer     :: CS !< The control structure returned by a previous call to
+                                                                !! CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
-  real :: GoRho
-  real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
+  real :: gorho
+  real :: pref, DU, DV, DRHO, DZ, N2, S2
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) ::  Ri_Grad !< Gradient Richardson number
-  real, parameter         :: epsln = 1.e-10 !< Threshold to identify
-                                            !! vanished layers
+
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
 
@@ -121,29 +120,9 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
         ! fill 3d arrays, if user asks for diagsnostics
         if (CS%id_N2 > 0) CS%N2(i,j,k) = N2
         if (CS%id_S2 > 0) CS%S2(i,j,k) = S2
+        if (CS%id_ri_grad > 0) CS%ri_grad(i,j,k) = Ri_Grad(k)
 
       enddo
-
-      Ri_grad(G%ke+1) = Ri_grad(G%ke)
-
-      if (CS%smooth_ri) then
-        ! 1) fill Ri_grad in vanished layers with adjacent value
-        do k = 2, G%ke
-          if (h(i,j,k) .le. epsln) Ri_grad(k) = Ri_grad(k-1)
-        enddo
-
-        Ri_grad(G%ke+1) = Ri_grad(G%ke)
-
-        ! 2) vertically smooth Ri with 1-2-1 filter
-        dummy =  0.25 * Ri_grad(1)
-        Ri_grad(G%ke+1) = Ri_grad(G%ke)
-        do k = 1, G%ke
-          Ri_Grad(k) = dummy + 0.5 * Ri_Grad(k) + 0.25 * Ri_grad(k+1)
-          dummy = 0.25 * Ri_grad(k)
-        enddo
-      endif
-
-      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
       call  CVMix_coeffs_shear(Mdiff_out=kv(i,j,:), &
@@ -230,11 +209,7 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
                  "Exponent of unitless factor of diffusivities,"// &
                  " for KPP internal shear mixing scheme." &
                  ,units="nondim", default=3.0)
-  call get_param(param_file, mdl, "SMOOTH_RI", CS%smooth_ri, &
-                 "If true, vertically smooth the Richardson"// &
-                 "number by applying a 1-2-1 filter once.", &
-                 default = .false.)
-  call cvmix_init_shear(mix_scheme=CS%mix_scheme, &
+  call CVMix_init_shear(mix_scheme=CS%mix_scheme, &
                         KPP_nu_zero=CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)

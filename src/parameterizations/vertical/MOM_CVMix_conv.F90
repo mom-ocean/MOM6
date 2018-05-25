@@ -212,7 +212,6 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
-      ! gets index of the level and interface above hbl
       kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
       call CVMix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
