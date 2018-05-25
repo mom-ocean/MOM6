@@ -1814,10 +1814,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
          J=segment%HI%JsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           rx_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
-           rx_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
+           rx_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
+           rx_tangential(segment%HI%IedB,J,k) = segment%rx_normal(segment%HI%ied,J,k)
            do I=segment%HI%IsdB+1,segment%HI%IedB-1
-             rx_tangential(I,J,k) = 0.5*(segment%ry_normal(i,J,k) + segment%ry_normal(i+1,J,k))
+             rx_tangential(I,J,k) = 0.5*(segment%rx_normal(i,J,k) + segment%rx_normal(i+1,J,k))
            enddo
          enddo
          if (segment%radiation_tan) then
@@ -1925,10 +1925,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
          J=segment%HI%JsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           rx_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
-           rx_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
+           rx_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
+           rx_tangential(segment%HI%IedB,J,k) = segment%rx_normal(segment%HI%ied,J,k)
            do I=segment%HI%IsdB+1,segment%HI%IedB-1
-             rx_tangential(I,J,k) = 0.5*(segment%ry_normal(i,J,k) + segment%ry_normal(i+1,J,k))
+             rx_tangential(I,J,k) = 0.5*(segment%rx_normal(i,J,k) + segment%rx_normal(i+1,J,k))
            enddo
          enddo
          if (segment%radiation_tan) then
