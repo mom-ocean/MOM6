@@ -21,7 +21,7 @@ use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, MOM_read_data, write_version_number
-use MOM_io, only : slasher, vardesc, var_desc, fieldtype
+use MOM_io, only : slasher, fieldtype
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
@@ -162,14 +162,11 @@ type, public :: ice_shelf_CS ; private
              id_tfreeze = -1, id_tfl_shelf = -1, &
              id_thermal_driving = -1, id_haline_driving = -1, &
              id_u_ml = -1, id_v_ml = -1, id_sbdry = -1, &
-             id_u_shelf = -1, id_v_shelf = -1, id_h_shelf = -1, id_h_mask = -1, &
-             id_u_mask = -1, id_v_mask = -1, id_t_shelf = -1, id_t_mask = -1, &
-             id_surf_elev = -1, id_bathym = -1, id_float_frac = -1, id_col_thick = -1, &
-             id_area_shelf_h = -1, id_OD_av = -1, id_float_frac_rt = -1,&
+             id_h_shelf = -1, id_h_mask = -1, &
+!             id_surf_elev = -1, id_bathym = -1, &
+             id_area_shelf_h = -1, &
              id_ustar_shelf = -1, id_shelf_mass = -1, id_mass_flux = -1
   !>@}
-  ! ids for outputting intermediate thickness in advection subroutine (debugging)
-  !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
 
   integer :: id_read_mass !< An integer handle used in time interpolation of
                           !! the ice shelf mass read from a file
@@ -284,6 +281,21 @@ type, public :: ice_shelf_dyn_CS ; private
 
   logical :: debug                !< If true, write verbose checksums for debugging purposes
                                   !! and use reproducible sums
+
+  logical :: module_is_initialized = .false. !< True if this module has been initialized.
+
+  !>@{
+  ! Diagnostic handles
+  integer :: id_u_shelf = -1, id_v_shelf = -1, &
+             id_float_frac = -1, id_col_thick = -1, &
+             id_u_mask = -1, id_v_mask = -1, id_t_shelf = -1, id_t_mask = -1, &
+             id_OD_av = -1, id_float_frac_rt = -1
+  !>@}
+  ! ids for outputting intermediate thickness in advection subroutine (debugging)
+  !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
+
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to control diagnostic output.
+
 end type ice_shelf_dyn_CS
 
 integer :: id_clock_shelf, id_clock_pass !< Clock for group pass calls
@@ -723,50 +735,46 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
     fluxes%iceshelf_melt = ISS%water_flux  * (86400.0*365.0/CS%density_ice) * CS%flux_factor
   endif
 
-  do j=js,je
-    do i=is,ie
-      if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
-          (ISS%area_shelf_h(i,j) > 0.0) .and. &
-          (CS%isthermo) .and. (state%Hml(i,j) > 0.0) ) then
+  do j=js,je ; do i=is,ie
+    if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
+        (ISS%area_shelf_h(i,j) > 0.0) .and. &
+        (CS%isthermo) .and. (state%Hml(i,j) > 0.0) ) then
 
-         ! Set melt to zero above a cutoff pressure
-         ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip
-         ! test case.
-         if ((CS%g_Earth * ISS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
-            CS%g_Earth) then
-              ISS%water_flux(i,j) = 0.0
-              fluxes%iceshelf_melt(i,j) = 0.0
-         endif
-         ! Compute haline driving, which is one of the diags. used in ISOMIP
-         haline_driving(i,j) = (ISS%water_flux(i,j) * Sbdry(i,j)) / &
-                               (CS%Rho0 * exch_vel_s(i,j))
+      ! Set melt to zero above a cutoff pressure
+      ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip
+      ! test case.
+      if ((CS%g_Earth * ISS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
+         CS%g_Earth) then
+           ISS%water_flux(i,j) = 0.0
+           fluxes%iceshelf_melt(i,j) = 0.0
+      endif
+      ! Compute haline driving, which is one of the diags. used in ISOMIP
+      haline_driving(i,j) = (ISS%water_flux(i,j) * Sbdry(i,j)) / &
+                            (CS%Rho0 * exch_vel_s(i,j))
 
-         !!!!!!!!!!!!!!!!!!!!!!!!!!!!Safety checks !!!!!!!!!!!!!!!!!!!!!!!!!
-         !1)Check if haline_driving computed above is consistent with
-         ! haline_driving = state%sss - Sbdry
-         !if (fluxes%iceshelf_melt(i,j) /= 0.0) then
-         !   if (haline_driving(i,j) /= (state%sss(i,j) - Sbdry(i,j))) then
-         !      write(*,*)'Something is wrong at i,j',i,j
-         !      write(*,*)'haline_driving, sss-Sbdry',haline_driving(i,j), &
-         !                (state%sss(i,j) - Sbdry(i,j))
-         !     call MOM_error(FATAL, &
-         !            "shelf_calc_flux: Inconsistency in melt and haline_driving")
-         !   endif
-         !endif
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!Safety checks !!!!!!!!!!!!!!!!!!!!!!!!!
+      !1)Check if haline_driving computed above is consistent with
+      ! haline_driving = state%sss - Sbdry
+      !if (fluxes%iceshelf_melt(i,j) /= 0.0) then
+      !   if (haline_driving(i,j) /= (state%sss(i,j) - Sbdry(i,j))) then
+      !      write(*,*)'Something is wrong at i,j',i,j
+      !      write(*,*)'haline_driving, sss-Sbdry',haline_driving(i,j), &
+      !                (state%sss(i,j) - Sbdry(i,j))
+      !     call MOM_error(FATAL, &
+      !            "shelf_calc_flux: Inconsistency in melt and haline_driving")
+      !   endif
+      !endif
 
-         ! 2) check if |melt| > 0 when star_shelf = 0.
-         ! this should never happen
-         if (abs(fluxes%iceshelf_melt(i,j))>0.0) then
-             if (fluxes%ustar_shelf(i,j) == 0.0) then
-                write(*,*)'Something is wrong at i,j',i,j
-                call MOM_error(FATAL, &
-                     "shelf_calc_flux: |melt| > 0 and star_shelf = 0.")
-             endif
-          endif
-      endif ! area_shelf_h
-         !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!!
-     enddo ! i-loop
-   enddo ! j-loop
+      ! 2) check if |melt| > 0 when star_shelf = 0.
+      ! this should never happen
+      if ((abs(fluxes%iceshelf_melt(i,j))>0.0) .and. (fluxes%ustar_shelf(i,j) == 0.0)) then
+        write(*,*)'Something is wrong at i,j',i,j
+        call MOM_error(FATAL, &
+            "shelf_calc_flux: |melt| > 0 and star_shelf = 0.")
+      endif
+    endif ! area_shelf_h
+       !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!!
+  enddo ; enddo ! i- and j-loops
 
   ! mass flux (kg/s), part of ISOMIP diags.
   mass_flux(:,:) = 0.0
@@ -833,12 +841,12 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
     if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
     if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
 
-    if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, CS%dCS%OD_av, CS%diag)
-    if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf,CS%dCS%u_shelf,CS%diag)
-    if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf,CS%dCS%v_shelf,CS%diag)
-    if (CS%id_float_frac > 0) call post_data(CS%id_float_frac,CS%dCS%float_frac,CS%diag)
-    if (CS%id_OD_av >0) call post_data(CS%id_OD_av,CS%dCS%OD_av,CS%diag)
-    if (CS%id_float_frac_rt>0) call post_data(CS%id_float_frac_rt,CS%dCS%float_frac_rt,CS%diag)
+    if (CS%dCS%id_col_thick > 0) call post_data(CS%dCS%id_col_thick, CS%dCS%OD_av, CS%diag)
+    if (CS%dCS%id_u_shelf > 0) call post_data(CS%dCS%id_u_shelf,CS%dCS%u_shelf,CS%diag)
+    if (CS%dCS%id_v_shelf > 0) call post_data(CS%dCS%id_v_shelf,CS%dCS%v_shelf,CS%diag)
+    if (CS%dCS%id_float_frac > 0) call post_data(CS%dCS%id_float_frac,CS%dCS%float_frac,CS%diag)
+    if (CS%dCS%id_OD_av >0) call post_data(CS%dCS%id_OD_av,CS%dCS%OD_av,CS%diag)
+    if (CS%dCS%id_float_frac_rt>0) call post_data(CS%dCS%id_float_frac_rt,CS%dCS%float_frac_rt,CS%diag)
   call disable_averaging(CS%diag)
 
   call cpu_clock_end(id_clock_shelf)
@@ -1195,30 +1203,29 @@ end subroutine add_shelf_flux
 !> Initializes shelf model data, parameters and diagnostics
 subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fluxes, Time_in, solo_ice_sheet_in)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(ocean_grid_type), pointer    :: ocn_grid
-  type(time_type),    intent(inout)   :: Time !< The current model time
+  type(ocean_grid_type), pointer    :: ocn_grid   !< The calling ocean model's horizontal grid structure
+  type(time_type),    intent(inout)   :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS), pointer         :: CS !< A pointer to the ice shelf control structure
-  type(diag_ctrl), target, intent(in) :: diag
-  type(forcing),      optional, intent(inout) :: fluxes
-  type(mech_forcing), optional, intent(inout) :: forces
-  type(time_type),    optional, intent(in)    :: Time_in
-  logical,            optional, intent(in)    :: solo_ice_sheet_in
+  type(diag_ctrl), target, intent(in) :: diag  !< A structure that is used to regulate the diagnostic output.
+  type(forcing),      optional, intent(inout) :: fluxes !< A structure containing pointers to any possible
+                                                   !! thermodynamic or mass-flux forcing fields.
+  type(mech_forcing), optional, intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),    optional, intent(in)    :: Time_in !< The time at initialization.
+  logical,            optional, intent(in)    :: solo_ice_sheet_in !< If present, this indicates whether
+                                                   !! a solo ice-sheet driver.
 
   type(ocean_grid_type), pointer :: G  => NULL(), OG  => NULL() ! Pointers to grids for convenience.
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
-  type(ice_shelf_dyn_CS), pointer :: dCS => NULL()
+!  type(ice_shelf_dyn_CS), pointer :: dCS => NULL()
   type(directories)  :: dirs
-  type(vardesc) :: vd
   type(dyn_horgrid_type), pointer :: dG => NULL()
   real :: cdrag, drag_bg_vel
-  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
   logical :: new_sim, save_IC, var_force
   !This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
-  character(len=40)  :: var_name
   character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
@@ -1265,8 +1272,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   CS%Time = Time ! ### This might not be in the right place?
   CS%diag => diag
 
-  allocate(CS%dCS) ; dCS => CS%dCS
-
   ! Are we being called from the solo ice-sheet driver? When called by the ocean
   ! model solo_ice_sheet_in is not preset.
   CS%solo_ice_sheet = .false.
@@ -1286,9 +1291,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call get_param(param_file, mdl, "DEBUG_IS", CS%debug, &
                  "If true, write verbose debugging messages for the ice shelf.", &
                  default=debug)
-  call get_param(param_file, mdl, "DEBUG_IS", dCS%debug, &
-                 "If true, write verbose debugging messages for the ice shelf.", &
-                 default=debug)
   call get_param(param_file, mdl, "DYNAMIC_SHELF_MASS", shelf_mass_is_dynamic, &
                  "If true, the ice sheet mass can evolve with time.", &
                  default=.false.)
@@ -1297,19 +1299,17 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "If true, user provided code specifies the ice-shelf \n"//&
                  "movement instead of the dynamic ice model.", default=.false.)
     CS%active_shelf_dynamics = .not.CS%override_shelf_movement
-    call get_param(param_file, mdl, "GROUNDING_LINE_INTERPOLATE", dCS%GL_regularize, &
-                 "THIS PARAMETER NEEDS A DESCRIPTION.", default=.false.)
-    CS%GL_regularize = dCS%GL_regularize
-    call get_param(param_file, mdl, "GROUNDING_LINE_INTERP_SUBGRID_N", dCS%n_sub_regularize, &
-                 "THIS PARAMETER NEEDS A DESCRIPTION.", default=0)
+    call get_param(param_file, mdl, "GROUNDING_LINE_INTERPOLATE", CS%GL_regularize, &
+                 "If true, regularize the floatation condition at the \n"//&
+                 "grounding line as in Goldberg Holland Schoof 2009.", default=.false.)
     call get_param(param_file, mdl, "GROUNDING_LINE_COUPLE", CS%GL_couple, &
-                 "THIS PARAMETER NEEDS A DESCRIPTION.", default=.false.)
+                 "If true, let the floatation condition be determined by \n"//&
+                 "ocean column thickness. This means that update_OD_ffrac \n"//&
+                 "will be called.  GL_REGULARIZE and GL_COUPLE are exclusive.", &
+                 default=.false., do_not_log=CS%GL_regularize)
     if (CS%GL_regularize) CS%GL_couple = .false.
-    dCS%GL_couple =  CS%GL_couple
-    if (dCS%GL_regularize) dCS%GL_couple = .false.
-    if (dCS%GL_regularize .and. (dCS%n_sub_regularize == 0)) call MOM_error (FATAL, &
-      "GROUNDING_LINE_INTERP_SUBGRID_N must be a positive integer if GL regularization is used")
   endif
+
   call get_param(param_file, mdl, "SHELF_THERMO", CS%isthermo, &
                  "If true, use a thermodynamically interactive ice shelf.", &
                  default=.false.)
@@ -1417,10 +1417,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call get_param(param_file, mdl, "KD_TEMP_MOLECULAR", CS%kd_molec_temp, &
                  "The molecular diffusivity of heat in sea water at the \n"//&
                  "freezing point.", units="m2 s-1", default=1.41e-7)
-  call get_param(param_file, mdl, "RHO_0", dCS%density_ocean_avg, &
+  call get_param(param_file, mdl, "RHO_0", CS%density_ocean_avg, &
                  "avg ocean density used in floatation cond", &
                  units="kg m-3", default=1035.)
-  CS%density_ocean_avg = dCS%density_ocean_avg
   call get_param(param_file, mdl, "DT_FORCING", CS%time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
@@ -1460,24 +1459,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   if (CS%active_shelf_dynamics) then
 
-    call get_param(param_file, mdl, "A_GLEN_ISOTHERM", dCS%A_glen_isothermal, &
-                 "Ice viscosity parameter in Glen's Law", &
-                 units="Pa -1/3 a", default=9.461e-18)
-    call get_param(param_file, mdl, "GLEN_EXPONENT", dCS%n_glen, &
-                 "nonlinearity exponent in Glen's Law", &
-                  units="none", default=3.)
-    call get_param(param_file, mdl, "MIN_STRAIN_RATE_GLEN", dCS%eps_glen_min, &
-                 "min. strain rate to avoid infinite Glen's law viscosity", &
-                 units="a-1", default=1.e-12)
-    call get_param(param_file, mdl, "BASAL_FRICTION_COEFF", dCS%C_basal_friction, &
-                 "ceofficient in sliding law \tau_b = C u^(n_basal_friction)", &
-                 units="Pa (m-a)-(n_basal_friction)", fail_if_missing=.true.)
-    call get_param(param_file, mdl, "BASAL_FRICTION_EXP", dCS%n_basal_friction, &
-                 "exponent in sliding law \tau_b = C u^(m_slide)", &
-                 units="none", fail_if_missing=.true.)
     call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &
                  "A typical density of ice.", units="kg m-3", default=917.0)
-    dCS%density_ice = CS%density_ice
 
     call get_param(param_file, mdl, "INPUT_FLUX_ICE_SHELF", CS%input_flux, &
                  "volume flux at upstream boundary", &
@@ -1489,32 +1472,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "seconds between ice velocity calcs", units="s", &
                  fail_if_missing=.true.)
 
-    call get_param(param_file, mdl, "CONJUGATE_GRADIENT_TOLERANCE", dCS%cg_tolerance, &
-        "tolerance in CG solver, relative to initial residual", default=1.e-6)
-    call get_param(param_file, mdl, "ICE_NONLINEAR_TOLERANCE", dCS%nonlinear_tolerance, &
-        "nonlin tolerance in iterative velocity solve",default=1.e-6)
-    call get_param(param_file, mdl, "CONJUGATE_GRADIENT_MAXIT", dCS%cg_max_iterations, &
-        "max iteratiions in CG solver", default=2000)
-    call get_param(param_file, mdl, "THRESH_FLOAT_COL_DEPTH", dCS%thresh_float_col_depth, &
-        "min ocean thickness to consider ice *floating*; \n"// &
-        "will only be important with use of tides", &
-        units="m",default=1.e-3)
-
-    call get_param(param_file, mdl, "SHELF_MOVING_FRONT", dCS%moving_shelf_front, &
-                 "whether or not to advance shelf front (and calve..)")
-    call get_param(param_file, mdl, "CALVE_TO_MASK", dCS%calve_to_mask, &
-                 "if true, do not allow an ice shelf where prohibited by a mask")
     call get_param(param_file, mdl, "ICE_SHELF_CFL_FACTOR", CS%CFL_factor, &
         "limit timestep as a factor of min (\Delta x / u); \n"// &
         "only important for ice-only model", &
         default=0.25)
-    call get_param(param_file, mdl, "NONLIN_SOLVE_ERR_MODE", dCS%nonlin_solve_err_mode, &
-        "choose whether nonlin error in vel solve is based on nonlinear residual (1) \n"// &
-        "or relative change since last iteration (2)", &
-        default=1)
-    call get_param(param_file, mdl, "SHELF_DYN_REPRODUCING_SUMS", dCS%use_reproducing_sums, &
-        "If true, use the reproducing extended-fixed-point sums in the ice \n"//&
-        "shelf dynamics solvers.", default=.true.)
 
     CS%nstep_velocity = FLOOR (CS%velocity_update_time_step / CS%time_step)
     CS%velocity_update_counter = 0
@@ -1525,12 +1486,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &
                  "A typical density of ice.", units="kg m-3", default=900.0)
   endif
-
   call get_param(param_file, mdl, "MIN_THICKNESS_SIMPLE_CALVE", &
                 CS%min_thickness_simple_calve, &
-                 "min thickness rule for VERY simple calving law",&
+                 "Min thickness rule for the very simple calving law",&
                  units="m", default=0.0)  
-  dCS%min_thickness_simple_calve = CS%min_thickness_simple_calve
 
   call get_param(param_file, mdl, "USTAR_SHELF_BG", CS%ustar_bg, &
                  "The minimum value of ustar under ice sheves.", units="m s-1", &
@@ -1550,44 +1509,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   endif
 
-  ! Allocate  and initialize variables
+  ! Allocate and initialize state variables to default values
   call ice_shelf_state_init(CS%ISS, CS%grid)
   ISS => CS%ISS
-
-  ! OVS vertically integrated Temperature
-  allocate( dCS%t_shelf(isd:ied,jsd:jed) )   ; dCS%t_shelf(:,:) = -10.0
-  allocate( dCS%t_bdry_val(isd:ied,jsd:jed) )   ; dCS%t_bdry_val(:,:) = -15.0
-  allocate( dCS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; dCS%tmask(:,:) = -1.0
-
-  if (CS%active_shelf_dynamics) then
-    ! DNG
-    allocate( dCS%u_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; dCS%u_shelf(:,:) = 0.0
-    allocate( dCS%v_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; dCS%v_shelf(:,:) = 0.0
-    allocate( dCS%u_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; dCS%u_bdry_val(:,:) = 0.0
-    allocate( dCS%v_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; dCS%v_bdry_val(:,:) = 0.0
-    allocate( dCS%h_bdry_val(isd:ied,jsd:jed) ) ; dCS%h_bdry_val(:,:) = 0.0
-    allocate( dCS%thickness_bdry_val(isd:ied,jsd:jed) ) ; dCS%thickness_bdry_val(:,:) = 0.0
-    allocate( dCS%ice_visc(isd:ied,jsd:jed) ) ; dCS%ice_visc(:,:) = 0.0
-    allocate( dCS%u_face_mask(Isdq:Iedq,jsd:jed) ) ; dCS%u_face_mask(:,:) = 0.0
-    allocate( dCS%v_face_mask(isd:ied,Jsdq:Jedq) ) ; dCS%v_face_mask(:,:) = 0.0
-    allocate( dCS%u_face_mask_bdry(Isdq:Iedq,jsd:jed) ) ; dCS%u_face_mask_bdry(:,:) = -2.0
-    allocate( dCS%v_face_mask_bdry(isd:ied,Jsdq:Jedq) ) ; dCS%v_face_mask_bdry(:,:) = -2.0
-    allocate( dCS%u_flux_bdry_val(Isdq:Iedq,jsd:jed) ) ; dCS%u_flux_bdry_val(:,:) = 0.0
-    allocate( dCS%v_flux_bdry_val(isd:ied,Jsdq:Jedq) ) ; dCS%v_flux_bdry_val(:,:) = 0.0
-    allocate( dCS%umask(Isdq:Iedq,Jsdq:Jedq) ) ; dCS%umask(:,:) = -1.0
-    allocate( dCS%vmask(Isdq:Iedq,Jsdq:Jedq) ) ; dCS%vmask(:,:) = -1.0
-
-    allocate( dCS%taub_beta_eff(isd:ied,jsd:jed) ) ; dCS%taub_beta_eff(:,:) = 0.0
-    allocate( dCS%OD_rt(isd:ied,jsd:jed) ) ; dCS%OD_rt(:,:) = 0.0
-    allocate( dCS%OD_av(isd:ied,jsd:jed) ) ; dCS%OD_av(:,:) = 0.0
-    allocate( dCS%float_frac(isd:ied,jsd:jed) ) ; dCS%float_frac(:,:) = 0.0
-    allocate( dCS%float_frac_rt(isd:ied,jsd:jed) ) ; dCS%float_frac_rt(:,:) = 0.0
-
-    if (dCS%calve_to_mask) then
-      allocate( dCS%calve_mask(isd:ied,jsd:jed) ) ; dCS%calve_mask(:,:) = 0.0
-    endif
-
-  endif
 
   ! Allocate the arrays for passing ice-shelf data through the forcing type.
   if (.not. CS%solo_ice_sheet) then
@@ -1618,57 +1542,28 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   ! Set up the restarts.
   call restart_init(param_file, CS%restart_CSp, "Shelf.res")
-  vd = var_desc("shelf_mass","kg m-2","Ice shelf mass",z_grid='1')
-  call register_restart_field(ISS%mass_shelf, vd, .true., CS%restart_CSp)
-  vd = var_desc("shelf_area","m2","Ice shelf area in cell",z_grid='1')
-  call register_restart_field(ISS%area_shelf_h, vd, .true., CS%restart_CSp)
-  vd = var_desc("h_shelf","m","ice sheet/shelf thickness",z_grid='1')
-  call register_restart_field(ISS%h_shelf, vd, .true., CS%restart_CSp)
-
+  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &
+                              "Ice shelf mass", "kg m-2")
+  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
+                              "Ice shelf area in cell", "m2")
+  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
+                              "ice sheet/shelf thickness", "m")
   if (CS%active_shelf_dynamics) then
-    ! additional restarts for ice shelf state
-    vd = var_desc("u_shelf","m s-1","ice sheet/shelf velocity",'q',z_grid='1')
-    call register_restart_field(dCS%u_shelf, vd, .true., CS%restart_CSp)
-    vd = var_desc("v_shelf","m s-1","ice sheet/shelf velocity",'q',z_grid='1')
-    call register_restart_field(dCS%v_shelf, vd, .true., CS%restart_CSp)
-    !vd = var_desc("h_shelf","m","ice sheet/shelf thickness",z_grid='1')
-    !call register_restart_field(ISS%h_shelf, vd, .true., CS%restart_CSp)
-
-    vd = var_desc("h_mask","none","ice sheet/shelf thickness mask",z_grid='1')
-    call register_restart_field(ISS%hmask, vd, .true., CS%restart_CSp)
-
-    ! OVS vertically integrated stream/shelf temperature
-    vd = var_desc("t_shelf","deg C","ice sheet/shelf temperature",z_grid='1')
-    call register_restart_field(dCS%t_shelf, vd, .true., CS%restart_CSp)
-
-
-  !  vd = var_desc("area_shelf_h","m-2","ice-covered area of a cell",z_grid='1')
-  !  call register_restart_field(ISS%area_shelf_h, vd, .true., CS%restart_CSp)
-
-    vd = var_desc("OD_av","m","avg ocean depth in a cell",z_grid='1')
-    call register_restart_field(dCS%OD_av, vd, .true., CS%restart_CSp)
-
-  !  vd = var_desc("OD_av_rt","m","avg ocean depth in a cell, intermed",z_grid='1')
-  !  call register_restart_field(dCS%OD_av_rt, CS%OD_av_rt, vd, .true., CS%restart_CSp)
-
-    vd = var_desc("float_frac","m","degree of grounding",z_grid='1')
-    call register_restart_field(dCS%float_frac, vd, .true., CS%restart_CSp)
-
-  !  vd = var_desc("float_frac_rt","m","degree of grounding, intermed",z_grid='1')
-  !  call register_restart_field(dCS%float_frac_rt, CS%float_frac_rt, vd, .true., CS%restart_CSp)
-
-    vd = var_desc("viscosity","m","glens law ice visc",z_grid='1')
-    call register_restart_field(dCS%ice_visc, vd, .true., CS%restart_CSp)
-    vd = var_desc("tau_b_beta","m","coefficient of basal traction",z_grid='1')
-    call register_restart_field(dCS%taub_beta_eff, vd, .true., CS%restart_CSp)
+    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
+                                "ice sheet/shelf thickness mask" ,"none")
   endif
 
+  ! if (CS%active_shelf_dynamics) then  !### Consider adding an ice shelf dynamics switch.
+    ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
+    call register_ice_shelf_dyn_restarts(G, param_file, CS%dCS, CS%restart_CSp)
+  ! endif
+
   !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
-  ! if (.not. CS%solo_ice_sheet) then
-  !  vd = var_desc("ustar_shelf","m s-1","Friction velocity under ice shelves",z_grid='1')
-  !  call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
-  !  vd = var_desc("iceshelf_melt","m year-1","Ice Shelf Melt Rate",z_grid='1')
-  !  call register_restart_field(fluxes%iceshelf_melt, vd, .true., CS%restart_CSp)
+  !if (.not. CS%solo_ice_sheet) then
+  !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
+  !                              "Friction velocity under ice shelves", "m s-1")
+  !  call register_restart_field(fluxes%iceshelf_melt, "iceshelf_melt", .false., CS%restart_CSp, &
+  !                              "Ice Shelf Melt Rate", "m year-1")
   !endif
 
   CS%restart_output_dir = dirs%restart_output_dir
@@ -1726,61 +1621,25 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   elseif (.not.new_sim) then
     !  This line calls a subroutine that reads the initial conditions
     !  from a restart file.
-      call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
+    call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
+    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
                        G, CS%restart_CSp)
 
     ! i think this call isnt necessary - all it does is set hmask to 3 at
     ! the dirichlet boundary, and now this is done elsewhere
     !  call initialize_shelf_mass(G, param_file, CS, ISS, .false.)
 
-    if (CS%active_shelf_dynamics) then
-
-      ! this is unfortunately necessary; if grid is not symmetric the boundary values
-      !  of u and v are otherwise not set till the end of the first linear solve, and so
-      !  viscosity is not calculated correctly
-      if (.not. G%symmetric) then
-        do j=G%jsd,G%jed
-          do i=G%isd,G%ied
-            if (((i+G%idg_offset) == (G%domain%nihalo+1)).and.(dCS%u_face_mask(i-1,j) == 3)) then
-              dCS%u_shelf(i-1,j-1) = dCS%u_bdry_val(i-1,j-1)
-              dCS%u_shelf(i-1,j) = dCS%u_bdry_val(i-1,j)
-            endif
-            if (((j+G%jdg_offset) == (G%domain%njhalo+1)).and.(dCS%v_face_mask(i,j-1) == 3)) then
-              dCS%u_shelf(i-1,j-1) = dCS%u_bdry_val(i-1,j-1)
-              dCS%u_shelf(i,j-1) = dCS%u_bdry_val(i,j-1)
-            endif
-          enddo
-        enddo
-      endif
-
-      call pass_var(dCS%OD_av,G%domain)
-      call pass_var(dCS%float_frac,G%domain)
-      call pass_var(dCS%ice_visc,G%domain)
-      call pass_var(dCS%taub_beta_eff,G%domain)
-      call pass_vector(dCS%u_shelf, dCS%v_shelf, G%domain, TO_ALL, BGRID_NE)
-      call pass_var(ISS%area_shelf_h,G%domain)
-      call pass_var(ISS%h_shelf,G%domain)
-      call pass_var(ISS%hmask,G%domain)
-
-      call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
-    endif
-
   endif ! .not. new_sim
 
   CS%Time = Time
 
+  call cpu_clock_begin(id_clock_pass)
   call pass_var(ISS%area_shelf_h, G%domain)
   call pass_var(ISS%h_shelf, G%domain)
   call pass_var(ISS%mass_shelf, G%domain)
-
-  ! Transfer the appropriate fields to the forcing type.
-  if (CS%active_shelf_dynamics) then
-    call cpu_clock_begin(id_clock_pass)
-    call pass_var(G%bathyT, G%domain)
-    call pass_var(ISS%hmask, G%domain)
-    call update_velocity_masks(dCS, G, ISS%hmask, dCS%umask, dCS%vmask, dCS%u_face_mask, dCS%v_face_mask)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  call pass_var(ISS%hmask, G%domain)
+  call pass_var(G%bathyT, G%domain)
+  call cpu_clock_end(id_clock_pass)
 
   do j=jsd,jed ; do i=isd,ied
     if (ISS%area_shelf_h(i,j) > G%areaT(i,j)) then
@@ -1803,53 +1662,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   if (present(fluxes) .and. present(forces)) &
     call copy_common_forcing_fields(forces, fluxes, G)
 
-  ! if we are calving to a mask, i.e. if a mask exists where a shelf cannot, then we read
-  ! the mask from a file
-
-  if (CS%active_shelf_dynamics) then
-    if (dCS%calve_to_mask) then
-
-      call MOM_mesg("  MOM_ice_shelf.F90, initialize_ice_shelf: reading calving_mask")
-
-      call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
-      inputdir = slasher(inputdir)
-      call get_param(param_file, mdl, "CALVING_MASK_FILE", IC_file, &
-                   "The file with a mask for where calving might occur.", &
-                   default="ice_shelf_h.nc")
-      call get_param(param_file, mdl, "CALVING_MASK_VARNAME", var_name, &
-                   "The variable to use in masking calving.", &
-                   default="area_shelf_h")
-
-      filename = trim(inputdir)//trim(IC_file)
-      call log_param(param_file, mdl, "INPUTDIR/CALVING_MASK_FILE", filename)
-      if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-         " calving mask file: Unable to open "//trim(filename))
-
-      call MOM_read_data(filename,trim(var_name),dCS%calve_mask,G%Domain)
-      do j=G%jsc,G%jec
-        do i=G%isc,G%iec
-          if (dCS%calve_mask(i,j) > 0.0) dCS%calve_mask(i,j) = 1.0
-        enddo
-      enddo
-
-      call pass_var(dCS%calve_mask,G%domain)
-    endif
-
-!    call init_boundary_values(CS, G, time, ISS%hmask, CS%input_flux, CS%input_thickness, new_sim)
-
-    if (.not. CS%isthermo) then
-      ISS%water_flux(:,:) = 0.0
-    endif
-
-    if (new_sim) then
-      call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: initialize ice velocity.")
-      call update_OD_ffrac_uncoupled(dCS, G, ISS%h_shelf)
-      call ice_shelf_solve_outer(dCS, ISS, G, dCS%u_shelf, dCS%v_shelf, iters, Time)
-
-      if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf,dCS%u_shelf,CS%diag)
-      if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf,dCS%v_shelf,CS%diag)
-    endif
+  if (CS%active_shelf_dynamics .and. .not.CS%isthermo) then
+    ISS%water_flux(:,:) = 0.0
   endif
+
+  if (shelf_mass_is_dynamic) &
+    call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, diag, new_sim, solo_ice_sheet_in)
 
   call get_param(param_file, mdl, "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, save the ice shelf initial conditions.", &
@@ -1869,6 +1687,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
      'Ice Shelf Area in cell', 'meter-2')
   CS%id_shelf_mass = register_diag_field('ocean_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
      'mass of shelf', 'kg/m^2')
+  CS%id_h_shelf = register_diag_field('ocean_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
+       'ice shelf thickness', 'm')
   CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1,&
      CS%Time,'Total mass flux of freshwater across the ice-ocean interface.', 'kg/s')
   CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
@@ -1893,46 +1713,336 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
      'Heat conduction into ice shelf', 'W m-2')
   CS%id_ustar_shelf = register_diag_field('ocean_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
      'Fric vel under shelf', 'm/s')
-
   if (CS%active_shelf_dynamics) then
-    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesCu1,CS%Time, &
-       'x-velocity of ice', 'm yr-1')
-    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesCv1,CS%Time, &
-       'y-velocity of ice', 'm yr-1')
-    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesCu1,CS%Time, &
-       'mask for u-nodes', 'none')
-    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesCv1,CS%Time, &
-       'mask for v-nodes', 'none')
-    CS%id_h_mask = register_diag_field('ocean_model','h_mask',CS%diag%axesT1,CS%Time, &
-       'ice shelf thickness', 'none')
-    CS%id_surf_elev = register_diag_field('ocean_model','ice_surf',CS%diag%axesT1,CS%Time, &
-       'ice surf elev', 'm')
-    CS%id_float_frac = register_diag_field('ocean_model','ice_float_frac',CS%diag%axesT1,CS%Time, &
-       'fraction of cell that is floating (sort of)', 'none')
-    CS%id_col_thick = register_diag_field('ocean_model','col_thick',CS%diag%axesT1,CS%Time, &
-       'ocean column thickness passed to ice model', 'm')
-    CS%id_OD_av = register_diag_field('ocean_model','OD_av',CS%diag%axesT1,CS%Time, &
-       'intermediate ocean column thickness passed to ice model', 'm')
-    CS%id_float_frac_rt = register_diag_field('ocean_model','float_frac_rt',CS%diag%axesT1,CS%Time, &
-       'timesteps where cell is floating ', 'none')
-    !CS%id_h_after_uflux = register_diag_field('ocean_model','h_after_uflux',CS%diag%axesh1,CS%Time, &
-    !   'thickness after u flux ', 'none')
-    !CS%id_h_after_vflux = register_diag_field('ocean_model','h_after_vflux',CS%diag%axesh1,CS%Time, &
-    !   'thickness after v flux ', 'none')
-    !CS%id_h_after_adv = register_diag_field('ocean_model','h_after_adv',CS%diag%axesh1,CS%Time, &
-    !   'thickness after front adv ', 'none')
-
-!!! OVS vertically integrated temperature
-    CS%id_t_shelf = register_diag_field('ocean_model','t_shelf',CS%diag%axesT1,CS%Time, &
-       'T of ice', 'oC')
-    CS%id_t_mask = register_diag_field('ocean_model','tmask',CS%diag%axesT1,CS%Time, &
-       'mask for T-nodes', 'none')
+    CS%id_h_mask = register_diag_field('ocean_model', 'h_mask', CS%diag%axesT1, CS%Time, &
+       'ice shelf thickness mask', 'none')
   endif
 
   id_clock_shelf = cpu_clock_id('Ice shelf', grain=CLOCK_COMPONENT)
   id_clock_pass = cpu_clock_id(' Ice shelf halo updates', grain=CLOCK_ROUTINE)
 
 end subroutine initialize_ice_shelf
+
+!> This subroutine is used to register any fields related to the ice shelf
+!! dynamics that should be written to or read from the restart file.
+subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
+  type(ocean_grid_type),  intent(inout) :: G    !< The grid type describing the ice shelf grid.
+  type(param_file_type),  intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(ice_shelf_dyn_CS), pointer    :: CS !< A pointer to the ice shelf dynamics control structure
+  type(MOM_restart_CS),   pointer    :: restart_CS !< A pointer to the restart control structure.
+
+  logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
+  character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (associated(CS)) then
+    call MOM_error(FATAL, "MOM_ice_shelf_dyn.F90, register_ice_shelf_dyn_restarts: "// &
+                          "called with an associated control structure.")
+    return
+  endif
+  allocate(CS)
+
+  override_shelf_movement = .false. ; active_shelf_dynamics = .false.
+  call get_param(param_file, mdl, "DYNAMIC_SHELF_MASS", shelf_mass_is_dynamic, &
+                 "If true, the ice sheet mass can evolve with time.", &
+                 default=.false., do_not_log=.true.)
+  if (shelf_mass_is_dynamic) then
+    call get_param(param_file, mdl, "OVERRIDE_SHELF_MOVEMENT", override_shelf_movement, &
+                 "If true, user provided code specifies the ice-shelf \n"//&
+                 "movement instead of the dynamic ice model.", default=.false., do_not_log=.true.)
+    active_shelf_dynamics = .not.override_shelf_movement
+  endif
+
+  allocate( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
+
+  if (active_shelf_dynamics) then
+    allocate( CS%u_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%u_shelf(:,:) = 0.0
+    allocate( CS%v_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%v_shelf(:,:) = 0.0
+    allocate( CS%ice_visc(isd:ied,jsd:jed) )    ; CS%ice_visc(:,:) = 0.0
+    allocate( CS%taub_beta_eff(isd:ied,jsd:jed) ) ; CS%taub_beta_eff(:,:) = 0.0
+    allocate( CS%OD_av(isd:ied,jsd:jed) )       ; CS%OD_av(:,:) = 0.0
+    allocate( CS%float_frac(isd:ied,jsd:jed) )  ; CS%float_frac(:,:) = 0.0
+
+    ! additional restarts for ice shelf state
+    call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
+                                "ice sheet/shelf u-velocity", "m s-1", hor_grid='Bu')
+    call register_restart_field(CS%v_shelf, "v_shelf", .false., restart_CS, &
+                                "ice sheet/shelf v-velocity", "m s-1", hor_grid='Bu')
+    call register_restart_field(CS%t_shelf, "t_shelf", .true., restart_CS, &
+                                "ice sheet/shelf vertically averaged temperature", "deg C")
+    call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, &
+                                "Average open ocean depth in a cell","m")
+    call register_restart_field(CS%float_frac, "float_frac", .true., restart_CS, &
+                                "fractional degree of grounding", "nondim")
+    call register_restart_field(CS%ice_visc, "viscosity", .true., restart_CS, &
+                                "Glens law ice viscosity", "m (seems wrong)")
+    call register_restart_field(CS%taub_beta_eff, "tau_b_beta", .true., restart_CS, &
+                                "Coefficient of basal traction", "m (seems wrong)")
+  endif
+
+end subroutine register_ice_shelf_dyn_restarts
+
+!> Initializes shelf model data, parameters and diagnostics
+subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim, solo_ice_sheet_in)
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
+  type(ocean_grid_type),   pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
+  type(time_type),         intent(inout) :: Time !< The clock that that will indicate the model time
+  type(ice_shelf_state),   intent(in)    :: ISS  !< A structure with elements that describe
+                                                 !! the ice-shelf state
+  type(ice_shelf_dyn_CS),  pointer       :: CS   !< A pointer to the ice shelf dynamics control structure
+  type(ocean_grid_type),   intent(inout) :: G    !< The grid type describing the ice shelf grid.
+  type(diag_ctrl), target, intent(in)    :: diag !< A structure that is used to regulate the diagnostic output.
+  logical,                 intent(in)    :: new_sim !< If true this is a new simulation, otherwise
+                                                 !! has been started from a restart file.
+  logical,       optional, intent(in)    :: solo_ice_sheet_in !< If present, this indicates whether
+                                                 !! a solo ice-sheet driver.
+
+  !This include declares and sets the variable "version".
+#include "version_variable.h"
+  character(len=200) :: config
+  character(len=200) :: IC_file,filename,inputdir
+  character(len=40)  :: var_name
+  character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
+  logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
+  logical :: debug
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
+
+  if (.not.associated(CS)) then
+    call MOM_error(FATAL, "MOM_ice_shelf_dyn.F90, initialize_ice_shelf_dyn: "// &
+                          "called with an associated control structure.")
+    return
+  endif
+  if (CS%module_is_initialized) then
+    call MOM_error(WARNING, "MOM_ice_shelf_dyn.F90, initialize_ice_shelf_dyn was "//&
+             "called with a control structure that has already been initialized.")
+  endif
+  CS%module_is_initialized = .true.
+
+  CS%diag => diag ! ; CS%Time => Time
+
+  ! Read all relevant parameters and write them to the model log.
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "DEBUG", debug, default=.false.)
+  call get_param(param_file, mdl, "DEBUG_IS", CS%debug, &
+                 "If true, write verbose debugging messages for the ice shelf.", &
+                 default=debug)
+  call get_param(param_file, mdl, "DYNAMIC_SHELF_MASS", shelf_mass_is_dynamic, &
+                 "If true, the ice sheet mass can evolve with time.", &
+                 default=.false.)
+  override_shelf_movement = .false. ; active_shelf_dynamics = .false.
+  if (shelf_mass_is_dynamic) then
+    call get_param(param_file, mdl, "OVERRIDE_SHELF_MOVEMENT", override_shelf_movement, &
+                 "If true, user provided code specifies the ice-shelf \n"//&
+                 "movement instead of the dynamic ice model.", default=.false., do_not_log=.true.)
+    active_shelf_dynamics = .not.override_shelf_movement
+
+    call get_param(param_file, mdl, "GROUNDING_LINE_INTERPOLATE", CS%GL_regularize, &
+                 "If true, regularize the floatation condition at the \n"//&
+                 "grounding line as in Goldberg Holland Schoof 2009.", default=.false.)
+    call get_param(param_file, mdl, "GROUNDING_LINE_INTERP_SUBGRID_N", CS%n_sub_regularize, &
+                 "The number of sub-partitions of each cell over which to \n"//&
+                 "integrate for the interpolated grounding line. Each cell \n"//&
+                 "is divided into NxN equally-sized rectangles, over which the \n"//&
+                 "basal contribution is integrated by iterative quadrature.", &
+                 default=0)
+    call get_param(param_file, mdl, "GROUNDING_LINE_COUPLE", CS%GL_couple, &
+                 "If true, let the floatation condition be determined by \n"//&
+                 "ocean column thickness. This means that update_OD_ffrac \n"//&
+                 "will be called.  GL_REGULARIZE and GL_COUPLE are exclusive.", &
+                 default=.false., do_not_log=CS%GL_regularize)
+    if (CS%GL_regularize) CS%GL_couple = .false.
+    if (CS%GL_regularize .and. (CS%n_sub_regularize == 0)) call MOM_error (FATAL, &
+      "GROUNDING_LINE_INTERP_SUBGRID_N must be a positive integer if GL regularization is used")
+  endif
+  call get_param(param_file, mdl, "RHO_0", CS%density_ocean_avg, &
+                 "avg ocean density used in floatation cond", &
+                 units="kg m-3", default=1035.)
+  if (active_shelf_dynamics) then
+
+    call get_param(param_file, mdl, "A_GLEN_ISOTHERM", CS%A_glen_isothermal, &
+                 "Ice viscosity parameter in Glen's Law", &
+                 units="Pa -1/3 a", default=9.461e-18)
+    call get_param(param_file, mdl, "GLEN_EXPONENT", CS%n_glen, &
+                 "nonlinearity exponent in Glen's Law", &
+                  units="none", default=3.)
+    call get_param(param_file, mdl, "MIN_STRAIN_RATE_GLEN", CS%eps_glen_min, &
+                 "min. strain rate to avoid infinite Glen's law viscosity", &
+                 units="a-1", default=1.e-12)
+    call get_param(param_file, mdl, "BASAL_FRICTION_COEFF", CS%C_basal_friction, &
+                 "ceofficient in sliding law \tau_b = C u^(n_basal_friction)", &
+                 units="Pa (m-a)-(n_basal_friction)", fail_if_missing=.true.)
+    call get_param(param_file, mdl, "BASAL_FRICTION_EXP", CS%n_basal_friction, &
+                 "exponent in sliding law \tau_b = C u^(m_slide)", &
+                 units="none", fail_if_missing=.true.)
+    call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &
+                 "A typical density of ice.", units="kg m-3", default=917.0)
+    call get_param(param_file, mdl, "CONJUGATE_GRADIENT_TOLERANCE", CS%cg_tolerance, &
+                "tolerance in CG solver, relative to initial residual", default=1.e-6)
+    call get_param(param_file, mdl, "ICE_NONLINEAR_TOLERANCE", CS%nonlinear_tolerance, &
+                "nonlin tolerance in iterative velocity solve",default=1.e-6)
+    call get_param(param_file, mdl, "CONJUGATE_GRADIENT_MAXIT", CS%cg_max_iterations, &
+                "max iteratiions in CG solver", default=2000)
+    call get_param(param_file, mdl, "THRESH_FLOAT_COL_DEPTH", CS%thresh_float_col_depth, &
+                "min ocean thickness to consider ice *floating*; \n"// &
+                "will only be important with use of tides", &
+                units="m", default=1.e-3)
+    call get_param(param_file, mdl, "NONLIN_SOLVE_ERR_MODE", CS%nonlin_solve_err_mode, &
+                "Choose whether nonlin error in vel solve is based on nonlinear \n"// &
+                "residual (1) or relative change since last iteration (2)", default=1)
+    call get_param(param_file, mdl, "SHELF_DYN_REPRODUCING_SUMS", CS%use_reproducing_sums, &
+                "If true, use the reproducing extended-fixed-point sums in \n"//&
+                "the ice shelf dynamics solvers.", default=.true.)
+
+    call get_param(param_file, mdl, "SHELF_MOVING_FRONT", CS%moving_shelf_front, &
+                 "Specify whether to advance shelf front (and calve).", &
+                 default=.true.)
+    call get_param(param_file, mdl, "CALVE_TO_MASK", CS%calve_to_mask, &
+                 "If true, do not allow an ice shelf where prohibited by a mask.", &
+                 default=.false.)
+  endif
+  call get_param(param_file, mdl, "MIN_THICKNESS_SIMPLE_CALVE", &
+                 CS%min_thickness_simple_calve, &
+                 "Min thickness rule for the VERY simple calving law",&
+                 units="m", default=0.0)  
+
+  ! Allocate memory in the ice shelf dynamics control structure that was not
+  ! previously allocated for registration for restarts.
+  ! OVS vertically integrated Temperature
+  allocate( CS%t_bdry_val(isd:ied,jsd:jed) )   ; CS%t_bdry_val(:,:) = -15.0
+  allocate( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
+
+  if (active_shelf_dynamics) then
+    ! DNG
+    allocate( CS%u_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_bdry_val(:,:) = 0.0
+    allocate( CS%v_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_bdry_val(:,:) = 0.0
+    allocate( CS%h_bdry_val(isd:ied,jsd:jed) ) ; CS%h_bdry_val(:,:) = 0.0
+    allocate( CS%thickness_bdry_val(isd:ied,jsd:jed) ) ; CS%thickness_bdry_val(:,:) = 0.0
+    allocate( CS%u_face_mask(Isdq:Iedq,jsd:jed) ) ; CS%u_face_mask(:,:) = 0.0
+    allocate( CS%v_face_mask(isd:ied,Jsdq:Jedq) ) ; CS%v_face_mask(:,:) = 0.0
+    allocate( CS%u_face_mask_bdry(Isdq:Iedq,jsd:jed) ) ; CS%u_face_mask_bdry(:,:) = -2.0
+    allocate( CS%v_face_mask_bdry(isd:ied,Jsdq:Jedq) ) ; CS%v_face_mask_bdry(:,:) = -2.0
+    allocate( CS%u_flux_bdry_val(Isdq:Iedq,jsd:jed) ) ; CS%u_flux_bdry_val(:,:) = 0.0
+    allocate( CS%v_flux_bdry_val(isd:ied,Jsdq:Jedq) ) ; CS%v_flux_bdry_val(:,:) = 0.0
+    allocate( CS%umask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%umask(:,:) = -1.0
+    allocate( CS%vmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%vmask(:,:) = -1.0
+
+    allocate( CS%OD_rt(isd:ied,jsd:jed) ) ; CS%OD_rt(:,:) = 0.0
+    allocate( CS%float_frac_rt(isd:ied,jsd:jed) ) ; CS%float_frac_rt(:,:) = 0.0
+
+    if (CS%calve_to_mask) then
+      allocate( CS%calve_mask(isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
+    endif
+
+  endif
+
+  if (active_shelf_dynamics) then
+    call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
+  endif
+
+  ! Take additional initialization steps, for example of dependent variables.
+  if (active_shelf_dynamics .and. .not.new_sim) then
+    ! this is unfortunately necessary; if grid is not symmetric the boundary values
+    !  of u and v are otherwise not set till the end of the first linear solve, and so
+    !  viscosity is not calculated correctly.
+    ! This has to occur after init_boundary_values or some of the arrays on the
+    ! right hand side have not been set up yet.
+    if (.not. G%symmetric) then
+      do j=G%jsd,G%jed ; do i=G%isd,G%ied
+        if (((i+G%idg_offset) == (G%domain%nihalo+1)).and.(CS%u_face_mask(i-1,j) == 3)) then
+          CS%u_shelf(i-1,j-1) = CS%u_bdry_val(i-1,j-1)
+          CS%u_shelf(i-1,j) = CS%u_bdry_val(i-1,j)
+        endif
+        if (((j+G%jdg_offset) == (G%domain%njhalo+1)).and.(CS%v_face_mask(i,j-1) == 3)) then
+          CS%u_shelf(i-1,j-1) = CS%u_bdry_val(i-1,j-1)
+          CS%u_shelf(i,j-1) = CS%u_bdry_val(i,j-1)
+        endif
+      enddo ; enddo
+    endif
+
+    call pass_var(CS%OD_av,G%domain)
+    call pass_var(CS%float_frac,G%domain)
+    call pass_var(CS%ice_visc,G%domain)
+    call pass_var(CS%taub_beta_eff,G%domain)
+    call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
+  endif
+
+  if (active_shelf_dynamics) then
+    ! If we are calving to a mask, i.e. if a mask exists where a shelf cannot, read the mask from a file.
+    if (CS%calve_to_mask) then
+      call MOM_mesg("  MOM_ice_shelf.F90, initialize_ice_shelf: reading calving_mask")
+
+      call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+      inputdir = slasher(inputdir)
+      call get_param(param_file, mdl, "CALVING_MASK_FILE", IC_file, &
+                   "The file with a mask for where calving might occur.", &
+                   default="ice_shelf_h.nc")
+      call get_param(param_file, mdl, "CALVING_MASK_VARNAME", var_name, &
+                   "The variable to use in masking calving.", &
+                   default="area_shelf_h")
+
+      filename = trim(inputdir)//trim(IC_file)
+      call log_param(param_file, mdl, "INPUTDIR/CALVING_MASK_FILE", filename)
+      if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+         " calving mask file: Unable to open "//trim(filename))
+
+      call MOM_read_data(filename,trim(var_name),CS%calve_mask,G%Domain)
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        if (CS%calve_mask(i,j) > 0.0) CS%calve_mask(i,j) = 1.0
+      enddo ; enddo
+      call pass_var(CS%calve_mask,G%domain)
+    endif
+
+!    call init_boundary_values(CS, G, time, ISS%hmask, CS%input_flux, CS%input_thickness, new_sim)
+
+    if (new_sim) then
+      call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: initialize ice velocity.")
+      call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf)
+      call ice_shelf_solve_outer(CS, ISS, G, CS%u_shelf, CS%v_shelf, iters, Time)
+
+      if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf,CS%u_shelf,CS%diag)
+      if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf,CS%v_shelf,CS%diag)
+    endif
+
+  endif
+
+  ! Register diagnostics.
+  if (active_shelf_dynamics) then
+    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesCu1, Time, &
+       'x-velocity of ice', 'm yr-1')
+    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesCv1, Time, &
+       'y-velocity of ice', 'm yr-1')
+    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesCu1, Time, &
+       'mask for u-nodes', 'none')
+    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesCv1, Time, &
+       'mask for v-nodes', 'none')
+!    CS%id_surf_elev = register_diag_field('ocean_model','ice_surf',CS%diag%axesT1, Time, &
+!       'ice surf elev', 'm')
+    CS%id_float_frac = register_diag_field('ocean_model','ice_float_frac',CS%diag%axesT1, Time, &
+       'fraction of cell that is floating (sort of)', 'none')
+    CS%id_col_thick = register_diag_field('ocean_model','col_thick',CS%diag%axesT1, Time, &
+       'ocean column thickness passed to ice model', 'm')
+    CS%id_OD_av = register_diag_field('ocean_model','OD_av',CS%diag%axesT1, Time, &
+       'intermediate ocean column thickness passed to ice model', 'm')
+    CS%id_float_frac_rt = register_diag_field('ocean_model','float_frac_rt',CS%diag%axesT1, Time, &
+       'timesteps where cell is floating ', 'none')
+    !CS%id_h_after_uflux = register_diag_field('ocean_model','h_after_uflux',CS%diag%axesh1, Time, &
+    !   'thickness after u flux ', 'none')
+    !CS%id_h_after_vflux = register_diag_field('ocean_model','h_after_vflux',CS%diag%axesh1, Time, &
+    !   'thickness after v flux ', 'none')
+    !CS%id_h_after_adv = register_diag_field('ocean_model','h_after_adv',CS%diag%axesh1, Time, &
+    !   'thickness after front adv ', 'none')
+
+!!! OVS vertically integrated temperature
+    CS%id_t_shelf = register_diag_field('ocean_model','t_shelf',CS%diag%axesT1, Time, &
+       'T of ice', 'oC')
+    CS%id_t_mask = register_diag_field('ocean_model','tmask',CS%diag%axesT1, Time, &
+       'mask for T-nodes', 'none')
+  endif
+
+end subroutine initialize_ice_shelf_dyn
 
 !> Initializes shelf mass based on three options (file, zero and user)
 subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
@@ -4949,16 +5059,16 @@ subroutine solo_time_step(CS, time_step, n, Time, min_time_step_in)
     if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
     if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
 
-    if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, dCS%OD_av, CS%diag)
-    if (CS%id_u_mask > 0) call post_data(CS%id_u_mask,dCS%umask,CS%diag)
-    if (CS%id_v_mask > 0) call post_data(CS%id_v_mask,dCS%vmask,CS%diag)
-    if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf,dCS%u_shelf,CS%diag)
-    if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf,dCS%v_shelf,CS%diag)
-    if (CS%id_float_frac > 0) call post_data(CS%id_float_frac,dCS%float_frac,CS%diag)
-    if (CS%id_OD_av >0) call post_data(CS%id_OD_av,dCS%OD_av,CS%diag)
-    if (CS%id_float_frac_rt>0) call post_data(CS%id_float_frac_rt,dCS%float_frac_rt,CS%diag)
-    if (CS%id_t_mask > 0) call post_data(CS%id_t_mask,dCS%tmask,CS%diag)
-    if (CS%id_t_shelf > 0) call post_data(CS%id_t_shelf,dCS%t_shelf,CS%diag)
+    if (dCS%id_col_thick > 0) call post_data(dCS%id_col_thick, dCS%OD_av, CS%diag)
+    if (dCS%id_u_mask > 0) call post_data(dCS%id_u_mask,dCS%umask,CS%diag)
+    if (dCS%id_v_mask > 0) call post_data(dCS%id_v_mask,dCS%vmask,CS%diag)
+    if (dCS%id_u_shelf > 0) call post_data(dCS%id_u_shelf,dCS%u_shelf,CS%diag)
+    if (dCS%id_v_shelf > 0) call post_data(dCS%id_v_shelf,dCS%v_shelf,CS%diag)
+    if (dCS%id_float_frac > 0) call post_data(dCS%id_float_frac,dCS%float_frac,CS%diag)
+    if (dCS%id_OD_av >0) call post_data(dCS%id_OD_av,dCS%OD_av,CS%diag)
+    if (dCS%id_float_frac_rt>0) call post_data(dCS%id_float_frac_rt,dCS%float_frac_rt,CS%diag)
+    if (dCS%id_t_mask > 0) call post_data(dCS%id_t_mask,dCS%tmask,CS%diag)
+    if (dCS%id_t_shelf > 0) call post_data(dCS%id_t_shelf,dCS%t_shelf,CS%diag)
 
     call disable_averaging(CS%diag)
 
