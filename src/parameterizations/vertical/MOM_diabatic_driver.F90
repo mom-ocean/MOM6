@@ -3768,8 +3768,7 @@ subroutine diabatic_driver_end(CS)
 
   !call diag_grid_storage_end(CS%diag_grids_prev)
 
-  if (associated(CS)) deallocate(CS)
-
+  deallocate(CS)
 
 end subroutine diabatic_driver_end
 
