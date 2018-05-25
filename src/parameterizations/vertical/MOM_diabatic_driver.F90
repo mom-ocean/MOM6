@@ -10,6 +10,7 @@ use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_CVMix_shear,         only : CVMix_shear_is_used
+use MOM_CVMix_ddiff,         only : CVMix_ddiff_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
@@ -97,6 +98,7 @@ type, public:: diabatic_CS
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_CVMix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
+  logical :: use_CVMix_ddiff         !< If true, use the CVMix double diffusion module.
   logical :: use_tidal_mixing        !< If true, activate tidal mixing diffusivity.
   logical :: use_CVMix_conv          !< If true, use the CVMix module to get enhanced
                                      !! mixing due to convection.
@@ -249,7 +251,7 @@ end type diabatic_CS
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
-integer :: id_clock_kpp
+integer :: id_clock_kpp, id_clock_CVMix_ddiff
 
 contains
 
@@ -385,7 +387,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
 
-
   if (nz == 1) return
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic(), MOM_diabatic_driver.F90")
@@ -487,13 +488,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     endif
 
     if (CS%ML_mix_first > 0.0) then
-!  This subroutine
-!    (1) Cools the mixed layer.
-!    (2) Performs convective adjustment by mixed layer entrainment.
-!    (3) Heats the mixed layer and causes it to detrain to
-!        Monin-Obukhov depth or minimum mixed layer depth.
-!    (4) Uses any remaining TKE to drive mixed layer entrainment.
-!    (5) Possibly splits buffer layer into two isopycnal layers (when using isopycnal coordinate)
+    ! This subroutine:
+    ! (1) Cools the mixed layer.
+    ! (2) Performs convective adjustment by mixed layer entrainment.
+    ! (3) Heats the mixed layer and causes it to detrain to
+    !     Monin-Obukhov depth or minimum mixed layer depth.
+    ! (4) Uses any remaining TKE to drive mixed layer entrainment.
+    ! (5) Possibly splits buffer layer into two isopycnal layers (when using isopycnal coordinate)
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
 
       call cpu_clock_begin(id_clock_mixedlayer)
@@ -528,11 +529,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       if (showCallTree) call callTree_waypoint("done with 1st bulkmixedlayer (diabatic)")
       if (CS%debugConservation) call MOM_state_stats('1st bulkmixedlayer', u, v, h, tv%T, tv%S, G)
     endif
-  endif
+  endif ! end CS%bulkmixedlayer
 
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
+
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
@@ -589,7 +591,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                               CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, GV, CS%int_tide_CSp)
     endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
-  endif
+  endif ! end CS%use_int_tides
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
@@ -730,10 +732,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! a diffusivity and happen before KPP.  But generally in MOM, we do not match
   ! KPP boundary layer to interior, so this diffusivity can be computed when convenient.
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
-    call cpu_clock_begin(id_clock_differential_diff)
+    call cpu_clock_begin(id_clock_CVMix_ddiff)
 
     call differential_diffuse_T_S(h, tv, visc, dt, G, GV)
-    call cpu_clock_end(id_clock_differential_diff)
+    call cpu_clock_end(id_clock_CVMix_ddiff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
 
@@ -745,7 +747,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
         Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K)
       enddo ; enddo ; enddo
     endif
-
 
   endif
 
@@ -1381,6 +1382,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! visc%Kv_shear is not in the group pass because it has larger vertical extent.
   if (associated(visc%Kv_shear)) &
     call pass_var(visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
+  if (associated(visc%Kv_slow)) &
+    call pass_var(visc%Kv_slow, G%Domain, To_All+Omit_Corners, halo=1)
+
   call cpu_clock_end(id_clock_pass)
 
   if (.not. CS%useALEalgorithm) then
@@ -1885,7 +1889,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   real    :: Kd
   integer :: num_mode
-  logical :: use_temperature, differentialDiffusion
+  logical :: use_temperature
   type(vardesc) :: vd
 
 ! This "include" declares and sets the variable "version".
@@ -1936,11 +1940,10 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, the diffusivity from ePBL is added to all\n"//&
                  "other diffusivities. Otherwise, the larger of kappa-\n"//&
                  "shear and ePBL diffusivities are used.", default=.true.)
-  call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
-                 "If true, apply parameterization of double-diffusion.", &
-                 default=.false. )
+  CS%use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
   CS%use_CVMix_shear = CVMix_shear_is_used(param_file)
+
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
@@ -2399,8 +2402,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     id_clock_sponge = cpu_clock_id('(Ocean sponges)', grain=CLOCK_MODULE)
   id_clock_tridiag = cpu_clock_id('(Ocean diabatic tridiag)', grain=CLOCK_ROUTINE)
   id_clock_pass = cpu_clock_id('(Ocean diabatic message passing)', grain=CLOCK_ROUTINE)
-  id_clock_differential_diff = -1 ; if (differentialDiffusion) &
-    id_clock_differential_diff = cpu_clock_id('(Ocean differential diffusion)', grain=CLOCK_ROUTINE)
+  id_clock_CVMix_ddiff = -1 ; if (CS%use_CVMix_ddiff) &
+    id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion)', grain=CLOCK_ROUTINE)
 
   ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, GV, param_file, diag, CS%diabatic_aux_CSp, &
