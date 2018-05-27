@@ -646,22 +646,22 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   endif
 
   call enable_averaging(time_step,Time,CS%diag)
-    if (CS%id_shelf_mass > 0) call post_data(CS%id_shelf_mass, ISS%mass_shelf, CS%diag)
-    if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
-    if (CS%id_ustar_shelf > 0) call post_data(CS%id_ustar_shelf, fluxes%ustar_shelf, CS%diag)
-    if (CS%id_melt > 0) call post_data(CS%id_melt, fluxes%iceshelf_melt, CS%diag)
-    if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-ISS%tfreeze), CS%diag)
-    if (CS%id_Sbdry > 0) call post_data(CS%id_Sbdry, Sbdry, CS%diag)
-    if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, haline_driving, CS%diag)
-    if (CS%id_mass_flux > 0) call post_data(CS%id_mass_flux, mass_flux, CS%diag)
-    if (CS%id_u_ml > 0) call post_data(CS%id_u_ml, state%u, CS%diag)
-    if (CS%id_v_ml > 0) call post_data(CS%id_v_ml, state%v, CS%diag)
-    if (CS%id_tfreeze > 0) call post_data(CS%id_tfreeze, ISS%tfreeze, CS%diag)
-    if (CS%id_tfl_shelf > 0) call post_data(CS%id_tfl_shelf, ISS%tflux_shelf, CS%diag)
-    if (CS%id_exch_vel_t > 0) call post_data(CS%id_exch_vel_t, exch_vel_t, CS%diag)
-    if (CS%id_exch_vel_s > 0) call post_data(CS%id_exch_vel_s, exch_vel_s, CS%diag)
-    if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
-    if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
+  if (CS%id_shelf_mass > 0) call post_data(CS%id_shelf_mass, ISS%mass_shelf, CS%diag)
+  if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
+  if (CS%id_ustar_shelf > 0) call post_data(CS%id_ustar_shelf, fluxes%ustar_shelf, CS%diag)
+  if (CS%id_melt > 0) call post_data(CS%id_melt, fluxes%iceshelf_melt, CS%diag)
+  if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-ISS%tfreeze), CS%diag)
+  if (CS%id_Sbdry > 0) call post_data(CS%id_Sbdry, Sbdry, CS%diag)
+  if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, haline_driving, CS%diag)
+  if (CS%id_mass_flux > 0) call post_data(CS%id_mass_flux, mass_flux, CS%diag)
+  if (CS%id_u_ml > 0) call post_data(CS%id_u_ml, state%u, CS%diag)
+  if (CS%id_v_ml > 0) call post_data(CS%id_v_ml, state%v, CS%diag)
+  if (CS%id_tfreeze > 0) call post_data(CS%id_tfreeze, ISS%tfreeze, CS%diag)
+  if (CS%id_tfl_shelf > 0) call post_data(CS%id_tfl_shelf, ISS%tflux_shelf, CS%diag)
+  if (CS%id_exch_vel_t > 0) call post_data(CS%id_exch_vel_t, exch_vel_t, CS%diag)
+  if (CS%id_exch_vel_s > 0) call post_data(CS%id_exch_vel_s, exch_vel_s, CS%diag)
+  if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
+  if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
   call disable_averaging(CS%diag)
 
   call cpu_clock_end(id_clock_shelf)
@@ -696,16 +696,13 @@ subroutine change_thickness_using_melt(ISS, G, time_step, fluxes, rho_ice, debug
       if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
 
       if (ISS%water_flux(i,j) / rho_ice * time_step < ISS%h_shelf(i,j)) then
-         ISS%h_shelf(i,j) = ISS%h_shelf(i,j) - ISS%water_flux(i,j) / rho_ice * time_step
+        ISS%h_shelf(i,j) = ISS%h_shelf(i,j) - ISS%water_flux(i,j) / rho_ice * time_step
       else
-         ! the ice is about to melt away
-         ! in this case set thickness, area, and mask to zero
-         ! NOTE: not mass conservative
-         ! should maybe scale salt & heat flux for this cell
-
-         ISS%h_shelf(i,j) = 0.0
-         ISS%hmask(i,j) = 0.0
-         ISS%area_shelf_h(i,j) = 0.0
+        ! the ice is about to melt away, so set thickness, area, and mask to zero
+        ! NOTE: this is not mass conservative should maybe scale salt & heat flux for this cell
+        ISS%h_shelf(i,j) = 0.0
+        ISS%hmask(i,j) = 0.0
+        ISS%area_shelf_h(i,j) = 0.0
       endif
     endif
   enddo ; enddo
@@ -934,55 +931,53 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 
     mean_melt_flux = 0.0; sponge_area = 0.0
     do j=js,je ; do i=is,ie
-       frac_area = fluxes%frac_shelf_h(i,j)
-       if (frac_area > 0.0) then
-          mean_melt_flux = mean_melt_flux + (ISS%water_flux(i,j)) * ISS%area_shelf_h(i,j)
-       endif
+      frac_area = fluxes%frac_shelf_h(i,j)
+      if (frac_area > 0.0) &
+        mean_melt_flux = mean_melt_flux + (ISS%water_flux(i,j)) * ISS%area_shelf_h(i,j)
 
-       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
-         sponge_area = sponge_area + G%areaT(i,j)
-       endif
+      !### These hard-coded limits need to be corrected.  They are inappropriate here.
+      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+        sponge_area = sponge_area + G%areaT(i,j)
+      endif
     enddo ; enddo
 
     ! take into account changes in mass (or thickness) when imposing ice shelf mass
     if (CS%override_shelf_movement .and. CS%mass_from_file) then
-       t0 = time_type_to_real(CS%Time) - CS%time_step
+      t0 = time_type_to_real(CS%Time) - CS%time_step
 
-       ! just compute changes in mass after first time step
-       if (t0>0.0) then
-          Time0 = real_to_time_type(t0)
-          last_hmask(:,:) = ISS%hmask(:,:) ; last_area_shelf_h(:,:) = ISS%area_shelf_h(:,:)
-          call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
-          last_h_shelf = last_mass_shelf/CS%density_ice
+      ! just compute changes in mass after first time step
+      if (t0>0.0) then
+        Time0 = real_to_time_type(t0)
+        last_hmask(:,:) = ISS%hmask(:,:) ; last_area_shelf_h(:,:) = ISS%area_shelf_h(:,:)
+        call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
+        last_h_shelf = last_mass_shelf/CS%density_ice
 
-          ! apply calving
-          if (CS%min_thickness_simple_calve > 0.0) then
-             call ice_shelf_min_thickness_calve(G, last_h_shelf, last_area_shelf_h, last_hmask, &
-                                         CS%min_thickness_simple_calve)
-             ! convert to mass again
-             last_mass_shelf = last_h_shelf * CS%density_ice
+        ! apply calving
+        if (CS%min_thickness_simple_calve > 0.0) then
+          call ice_shelf_min_thickness_calve(G, last_h_shelf, last_area_shelf_h, last_hmask, &
+                                       CS%min_thickness_simple_calve)
+          ! convert to mass again
+          last_mass_shelf = last_h_shelf * CS%density_ice
+        endif
+
+        shelf_mass0 = 0.0; shelf_mass1 = 0.0
+        ! get total ice shelf mass at (Time-dt) and (Time), in kg
+        do j=js,je ; do i=is,ie
+          ! just floating shelf (0.1 is a threshold for min ocean thickness)
+          if (((1.0/CS%density_ocean_avg)*state%ocean_mass(i,j) > 0.1) .and. &
+              (ISS%area_shelf_h(i,j) > 0.0)) then
+            shelf_mass0 = shelf_mass0 + (last_mass_shelf(i,j) * ISS%area_shelf_h(i,j))
+            shelf_mass1 = shelf_mass1 + (ISS%mass_shelf(i,j) * ISS%area_shelf_h(i,j))
           endif
-
-          shelf_mass0 = 0.0; shelf_mass1 = 0.0
-          ! get total ice shelf mass at (Time-dt) and (Time), in kg
-          do j=js,je ; do i=is,ie
-             ! just floating shelf (0.1 is a threshold for min ocean thickness)
-             if (((1.0/CS%density_ocean_avg)*state%ocean_mass(i,j) > 0.1) .and. &
-                 (ISS%area_shelf_h(i,j) > 0.0)) then
-
-                shelf_mass0 = shelf_mass0 + (last_mass_shelf(i,j) * ISS%area_shelf_h(i,j))
-                shelf_mass1 = shelf_mass1 + (ISS%mass_shelf(i,j) * ISS%area_shelf_h(i,j))
-
-             endif
-          enddo ; enddo
-          call sum_across_PEs(shelf_mass0); call sum_across_PEs(shelf_mass1)
-          delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
+        enddo ; enddo
+        call sum_across_PEs(shelf_mass0); call sum_across_PEs(shelf_mass1)
+        delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
 !          delta_mass_shelf = (shelf_mass1 - shelf_mass0)* &
 !                         (rho_fw/CS%density_ice)/CS%time_step
 !          if (is_root_pe()) write(*,*)'delta_mass_shelf',delta_mass_shelf
-       else! first time step
-          delta_mass_shelf = 0.0
-       endif
+      else! first time step
+        delta_mass_shelf = 0.0
+      endif
     else ! ice shelf mass does not change
       delta_mass_shelf = 0.0
     endif
@@ -995,12 +990,12 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 
     ! apply fluxes
     do j=js,je ; do i=is,ie
-       ! Note the following is hard coded for ISOMIP
-       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
-          fluxes%vprec(i,j) = -mean_melt_flux * CS%density_ice/1000. ! evap is negative
-          fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! W /m^2
-          fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! kg (salt)/(m^2 s)
-       endif
+      ! Note the following is hard coded for ISOMIP
+      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+        fluxes%vprec(i,j) = -mean_melt_flux * CS%density_ice/1000. ! evap is negative
+        fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! W /m^2
+        fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! kg (salt)/(m^2 s)
+      endif
     enddo ; enddo
 
     if (CS%DEBUG) then
@@ -1139,7 +1134,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "Depth above which the melt is set to zero (it must be >= 0) \n"//&
                  "Default value won't affect the solution.", default=0.0)
   if (CS%cutoff_depth < 0.) &
-     call MOM_error(WARNING,"Initialize_ice_shelf: MELTING_CUTOFF_DEPTH must be >= 0.")
+    call MOM_error(WARNING,"Initialize_ice_shelf: MELTING_CUTOFF_DEPTH must be >= 0.")
 
   call get_param(param_file, mdl, "CONST_SEA_LEVEL", CS%constant_sea_level, &
                  "If true, apply evaporative, heat and salt fluxes in \n"//&
@@ -1289,7 +1284,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call get_param(param_file, mdl, "MIN_THICKNESS_SIMPLE_CALVE", &
                 CS%min_thickness_simple_calve, &
                  "Min thickness rule for the very simple calving law",&
-                 units="m", default=0.0)  
+                 units="m", default=0.0)
 
   call get_param(param_file, mdl, "USTAR_SHELF_BG", CS%ustar_bg, &
                  "The minimum value of ustar under ice sheves.", units="m s-1", &
@@ -1391,7 +1386,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
       if (CS%min_thickness_simple_calve > 0.0) &
         call ice_shelf_min_thickness_calve(G, ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, &
                                            CS%min_thickness_simple_calve)
-
     endif
   endif
 
@@ -1573,14 +1567,8 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
       filename = trim(slasher(inputdir))//trim(shelf_file)
       call log_param(param_file, mdl, "INPUTDIR/SHELF_FILE", filename)
 
-      if (CS%DEBUG) then
-         CS%id_read_mass = init_external_field(filename,shelf_mass_var, &
-                           domain=G%Domain%mpp_domain,verbose=.true.)
-      else
-         CS%id_read_mass = init_external_field(filename,shelf_mass_var, &
-                           domain=G%Domain%mpp_domain)
-
-      endif
+      CS%id_read_mass = init_external_field(filename, shelf_mass_var, &
+                          domain=G%Domain%mpp_domain, verbose=CS%debug)
 
       if (read_shelf_area) then
          call get_param(param_file, mdl, "SHELF_AREA_VAR", shelf_area_var, &
@@ -1588,7 +1576,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
                   default="shelf_area")
 
          CS%id_read_area = init_external_field(filename,shelf_area_var, &
-                          domain=G%Domain%mpp_domain)
+                             domain=G%Domain%mpp_domain)
       endif
 
       if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
@@ -1624,13 +1612,13 @@ subroutine update_shelf_mass(G, CS, ISS, Time)
   call time_interp_external(CS%id_read_mass, Time, ISS%mass_shelf)
 
   do j=js,je ; do i=is,ie
-     ISS%area_shelf_h(i,j) = 0.0
-     ISS%hmask(i,j) = 0.
-     if (ISS%mass_shelf(i,j) > 0.0) then
-        ISS%area_shelf_h(i,j) = G%areaT(i,j)
-        ISS%h_shelf(i,j) = ISS%mass_shelf(i,j)/CS%density_ice
-        ISS%hmask(i,j) = 1.
-     endif
+    ISS%area_shelf_h(i,j) = 0.0
+    ISS%hmask(i,j) = 0.
+    if (ISS%mass_shelf(i,j) > 0.0) then
+      ISS%area_shelf_h(i,j) = G%areaT(i,j)
+      ISS%h_shelf(i,j) = ISS%mass_shelf(i,j)/CS%density_ice
+      ISS%hmask(i,j) = 1.
+    endif
   enddo ; enddo
 
   !call USER_update_shelf_mass(ISS%mass_shelf, ISS%area_shelf_h, ISS%h_shelf, &
@@ -1679,8 +1667,7 @@ subroutine ice_shelf_end(CS)
 
   call ice_shelf_state_end(CS%ISS)
 
-  if (CS%active_shelf_dynamics) &
-    call ice_shelf_dyn_end(CS%dCS)
+  if (CS%active_shelf_dynamics) call ice_shelf_dyn_end(CS%dCS)
 
   deallocate(CS)
 
@@ -1751,7 +1738,7 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
     coupled_GL = .false.
 
     call update_ice_shelf(dCS, ISS, G, time_step_int, Time, must_update_vel=update_ice_vel)
- 
+
     call enable_averaging(time_step,Time,CS%diag)
     if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
     if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
@@ -1779,43 +1766,9 @@ end subroutine solo_time_step
 !!             h_shelf and density_ice immediately afterwards. Possibly subroutine should be renamed
 !!  update_shelf_mass - updates ice shelf mass via netCDF file
 !!                      USER_update_shelf_mass (TODO).
-!!  ice_shelf_solve_outer - Orchestrates the calls to calculate the shelf
-!!      - outer loop calls ice_shelf_solve_inner
-!!         stresses and checks for error tolerances.
-!!         Max iteration count for outer loop currently fixed at 100 iteration
-!!      - tolerance (and error evaluation) can be set through input file
-!!      - updates u_shelf, v_shelf, ice_visc, taub_beta_eff
-!!  ice_shelf_solve_inner - Conjugate Gradient solve of matrix solve for ice_shelf_solve_outer
-!!      - Jacobi Preconditioner - basically diagonal of matrix (not sure if it is effective at all)
-!!      - modifies u_shelf and v_shelf only
-!!      - max iteration count can be set through input file
-!!      - tolerance (and error evaluation) can be set through input file
-!!                  (ISSUE:  Too many sum_across_PEs calls?)
-!!    calc_shelf_driving_stress - Determine the driving stresses using h_shelf, (water) column thickness, bathymetry
-!!            - does not modify any permanent arrays
-!!    init_boundary_values -
-!!    bilinear_shape_functions - shape function for FEM solve using (convex) quadrilateral elements and
-!!                               bilinear nodal basis
-!!    calc_shelf_visc - Glen's law viscosity and nonlinear sliding law (called by ice_shelf_solve_outer)
-!!    apply_boundary_values - same as CG_action, but input is zero except for dirichlet bdry conds
-!!    CG_action - Effect of matrix (that is never explicitly constructed)
-!!        on vector space of Degrees of Freedom (DoFs) in velocity solve
-!!  ice_shelf_advect - Given the melt rate and velocities, it advects the ice shelf THICKNESS
-!!      - modified h_shelf, area_shelf_h, hmask
-!!        (maybe should updater mass_shelf as well ???)
-!!    ice_shelf_advect_thickness_x, ice_shelf_advect_thickness_y - These
-!!        subroutines determine the mass fluxes through the faces.
-!!                  (ISSUE: duplicative flux calls for shared faces?)
-!!    ice_shelf_advance_front - Iteratively determine the ice-shelf front location.
-!!           - IF ice_shelf_advect_thickness_x,y are modified to avoid
-!!       dupe face processing, THIS NEEDS TO BE MODIFIED TOO
-!!       as it depends on arrays modified in those functions
-!!       (if in doubt consult DNG)
-!!    update_velocity_masks - Controls which elements of u_shelf and v_shelf are considered DoFs in linear solve
 !!    solo_time_step - called only in ice-only mode.
 !!    shelf_calc_flux - after melt rate & fluxes are calculated, ice dynamics are done. currently mass_shelf is
-!! updated immediately after ice_shelf_advect.
-!!
+!! updated immediately after ice_shelf_advect in fully dynamic mode.
 !!
 !!   NOTES: be aware that hmask(:,:) has a number of functions; it is used for front advancement,
 !! for subroutines in the velocity solve, and for thickness boundary conditions (this last one may be removed).
