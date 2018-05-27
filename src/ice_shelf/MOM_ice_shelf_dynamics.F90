@@ -384,7 +384,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim,
   call get_param(param_file, mdl, "MIN_THICKNESS_SIMPLE_CALVE", &
                  CS%min_thickness_simple_calve, &
                  "Min thickness rule for the VERY simple calving law",&
-                 units="m", default=0.0)  
+                 units="m", default=0.0)
 
   ! Allocate memory in the ice shelf dynamics control structure that was not
   ! previously allocated for registration for restarts.
@@ -601,7 +601,7 @@ subroutine update_ice_shelf(CS, ISS, G, time_step, Time, ocean_mass, coupled_gro
 
   integer :: iters
   logical :: update_ice_vel, coupled_GL
-  
+
   update_ice_vel = .false.
   if (present(must_update_vel)) update_ice_vel = must_update_vel
 
