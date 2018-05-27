@@ -34,8 +34,8 @@ use MOM_forcing_type, only : copy_common_forcing_fields
 use MOM_get_input, only : directories, Get_MOM_input
 use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze
 use MOM_EOS, only : EOS_type, EOS_init
-!MJH use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary, initialize_ice_thickness
 use MOM_ice_shelf_initialize, only : initialize_ice_thickness
+!MJH use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary
 use MOM_ice_shelf_state, only : ice_shelf_state, ice_shelf_state_end, ice_shelf_state_init
 use user_shelf_init, only : USER_initialize_shelf_mass, USER_update_shelf_mass
 use user_shelf_init, only : user_ice_shelf_CS
@@ -124,19 +124,6 @@ type, public :: ice_shelf_CS ; private
   real :: input_flux
   real :: input_thickness
 
-  real :: velocity_update_time_step ! the time to update the velocity through the nonlinear
-                    ! elliptic equation. i think this should be done no more often than
-                    ! ~ once a day (maybe longer) because it will depend on ocean values
-                    ! that are averaged over this time interval, and the solve will begin
-                    ! to lose meaning if it is done too frequently
-  integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve
-                                         ! the counter will have to be stored
-  integer :: velocity_update_counter ! the "outer" timestep number
-  integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)
-
-  real    :: CFL_factor            ! in uncoupled run, how to limit subcycled advective timestep
-                      ! i.e. dt = CFL_factor * min(dx / u)
-
   type(time_type) :: Time                !< The component's time.
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
                                          !! equation of state to use.
@@ -212,9 +199,8 @@ type, public :: ice_shelf_dyn_CS ; private
     calve_mask => NULL(), &               !< a mask to prevent the ice shelf front from
                                           !! advancing past its initial position (but it may
                                           !!  retreat)
-    !!! OVS !!!
-    t_shelf => NULL(), & ! veritcally integrated temperature the ice shelf/stream... oC
-          ! on q-points (B grid)
+    t_shelf => NULL(), & !< Veritcally integrated temperature in the ice shelf/stream, in degC
+                         !< on corner-points (B grid)
     tmask => NULL(), &
   ! masks for temperature boundary conditions ???
     ice_visc => NULL(), &
@@ -228,14 +214,21 @@ type, public :: ice_shelf_dyn_CS ; private
                 ! exact form depends on basal law exponent
                 ! and/or whether flow is "hybridized" a la Goldberg 2011
 
-    OD_rt => NULL(), float_frac_rt => NULL(), & !< two arrays that represent averages
-    OD_av => NULL(), float_frac => NULL()       !! of ocean values that are maintained
-                  !! within the ice shelf module and updated based on the "ocean state".
-                  !! OD_av is ocean depth, and float_frac is the average amount of time
-                  !! a cell is "exposed", i.e. the column thickness is below a threshold.
-                  !! both are averaged over the time of a diagnostic (ice velocity)
-
+    OD_rt => NULL(), &         !< A running total for calulating OD_av.
+    float_frac_rt => NULL(), & !< A running total for calculating float_frac.
+    OD_av => NULL(), &         !< The time average open ocean depth, in m.
+    float_frac => NULL()       !< Fraction of the time a cell is "exposed", i.e. the column
+                               !! thickness is below a threshold.
                        !! [if float_frac = 1 ==> grounded; obv. counterintuitive; might fix]
+  integer :: OD_rt_counter = 0 !< A counter of the number of contributions to OD_rt.
+
+  real :: velocity_update_time_step !< The time in s to update the ice shelf velocity through the
+                    !! nonlinear elliptic equation, or 0 to update every timestep.
+                    ! DNGoldberg thinks this should be done no more often than about once a day
+                    ! (maybe longer) because it will depend on ocean values  that are averaged over
+                    ! this time interval, and solving for the equiliabrated flow will begin to lose
+                    ! meaning if it is done too frequently.
+  real :: elapsed_velocity_time  !< The elapsed time since the ice velocies were last udated, in s.
 
   real :: density_ice  !< A typical density of ice, in kg m-3.
 
@@ -251,6 +244,8 @@ type, public :: ice_shelf_dyn_CS ; private
                             !! will be called (note: GL_regularize and GL_couple
                             !! should be exclusive)
 
+  real    :: CFL_factor     !< A factor used to limit subcycled advective timestep in uncoupled runs
+                            !! i.e. dt <= CFL_factor * min(dx / u)
 
   real :: A_glen_isothermal
   real :: n_glen
@@ -286,10 +281,9 @@ type, public :: ice_shelf_dyn_CS ; private
 
   !>@{
   ! Diagnostic handles
-  integer :: id_u_shelf = -1, id_v_shelf = -1, &
-             id_float_frac = -1, id_col_thick = -1, &
-             id_u_mask = -1, id_v_mask = -1, id_t_shelf = -1, id_t_mask = -1, &
-             id_OD_av = -1, id_float_frac_rt = -1
+  integer :: id_u_shelf = -1, id_v_shelf = -1, id_t_shelf = -1, &
+             id_float_frac = -1, id_col_thick = -1, id_OD_av = -1, &
+             id_u_mask = -1, id_v_mask = -1, id_t_mask = -1
   !>@}
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
   !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
@@ -415,7 +409,9 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   real :: I_Gam_T, I_Gam_S, dG_dwB, iDens
   real :: u_at_h, v_at_h, Isqrt2
   logical :: Sb_min_set, Sb_max_set
-  character(4) :: stepnum
+  logical :: update_ice_vel ! If true, it is time to update the ice shelf velocities.
+  logical :: coupled_GL     ! If true, the grouding line position is determined based on
+                            ! coupled ice-ocean dynamics.
 
   real, parameter :: c2_3 = 2.0/3.0
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3, iters_vel_solve
@@ -799,28 +795,13 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   ! now the thermodynamic data is passed on... time to update the ice dynamic quantities
 
   if (CS%active_shelf_dynamics) then
+    update_ice_vel = .false.
+    coupled_GL = (CS%GL_couple .and. .not.CS%solo_ice_sheet)
 
     ! advect the ice shelf, and advance the front. Calving will be in here somewhere as well..
     ! when we decide on how to do it
+    call update_ice_shelf(CS%dCS, ISS, G, time_step, Time, state%ocean_mass, coupled_GL)
 
-    ! note time_step is [s] and lprec is [kg / m^2 / s]
-
-    call ice_shelf_advect(CS%dCS, ISS, G, time_step, Time)
-
-    CS%velocity_update_sub_counter = CS%velocity_update_sub_counter+1
-
-    if (CS%GL_couple .and. .not. CS%solo_ice_sheet) then
-      call update_OD_ffrac(CS%dCS, G, state%ocean_mass, CS%velocity_update_sub_counter, CS%nstep_velocity, &
-                           CS%time_step, CS%velocity_update_time_step)
-    else
-      call update_OD_ffrac_uncoupled(CS%dCS, G, ISS%h_shelf)
-    endif
-
-    if (CS%velocity_update_sub_counter == CS%nstep_velocity) then
-      call MOM_mesg("MOM_ice_shelf.F90, shelf_calc_flux: About to call velocity solver")
-      call ice_shelf_solve_outer(CS%dCS, ISS, G, CS%dCS%u_shelf, CS%dCS%v_shelf, iters_vel_solve, Time)
-      CS%velocity_update_sub_counter = 0
-    endif
   endif
 
   call enable_averaging(time_step,Time,CS%diag)
@@ -840,13 +821,6 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
     if (CS%id_exch_vel_s > 0) call post_data(CS%id_exch_vel_s, exch_vel_s, CS%diag)
     if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
     if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
-
-    if (CS%dCS%id_col_thick > 0) call post_data(CS%dCS%id_col_thick, CS%dCS%OD_av, CS%diag)
-    if (CS%dCS%id_u_shelf > 0) call post_data(CS%dCS%id_u_shelf,CS%dCS%u_shelf,CS%diag)
-    if (CS%dCS%id_v_shelf > 0) call post_data(CS%dCS%id_v_shelf,CS%dCS%v_shelf,CS%diag)
-    if (CS%dCS%id_float_frac > 0) call post_data(CS%dCS%id_float_frac,CS%dCS%float_frac,CS%diag)
-    if (CS%dCS%id_OD_av >0) call post_data(CS%dCS%id_OD_av,CS%dCS%OD_av,CS%diag)
-    if (CS%dCS%id_float_frac_rt>0) call post_data(CS%dCS%id_float_frac_rt,CS%dCS%float_frac_rt,CS%diag)
   call disable_averaging(CS%diag)
 
   call cpu_clock_end(id_clock_shelf)
@@ -1424,8 +1398,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
                  "The default value is given by DT.", units="s", default=0.0)
-  call get_param(param_file, mdl, "SHELF_DIAG_TIMESTEP", CS%velocity_update_time_step, &
-                 "A timestep to use for diagnostics of the shelf.", default=0.0)
 
   call get_param(param_file, mdl, "COL_THICK_MELT_THRESHOLD", CS%col_thick_melt_threshold, &
                  "The minimum ML thickness where melting is allowed.", units="m", &
@@ -1468,20 +1440,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "INPUT_THICK_ICE_SHELF", CS%input_thickness, &
                  "flux thickness at upstream boundary", &
                  units="m", default=1000.)
-    call get_param(param_file, mdl, "ICE_VELOCITY_TIMESTEP", CS%velocity_update_time_step, &
-                 "seconds between ice velocity calcs", units="s", &
-                 fail_if_missing=.true.)
-
-    call get_param(param_file, mdl, "ICE_SHELF_CFL_FACTOR", CS%CFL_factor, &
-        "limit timestep as a factor of min (\Delta x / u); \n"// &
-        "only important for ice-only model", &
-        default=0.25)
-
-    CS%nstep_velocity = FLOOR (CS%velocity_update_time_step / CS%time_step)
-    CS%velocity_update_counter = 0
-    CS%velocity_update_sub_counter = 0
   else
-    CS%nstep_velocity = 0
     ! This is here because of inconsistent defaults.  I don't know why.  RWH
     call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &
                  "A typical density of ice.", units="kg m-3", default=900.0)
@@ -1756,11 +1715,10 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     active_shelf_dynamics = .not.override_shelf_movement
   endif
 
-  allocate( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
-
   if (active_shelf_dynamics) then
     allocate( CS%u_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%u_shelf(:,:) = 0.0
     allocate( CS%v_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%v_shelf(:,:) = 0.0
+    allocate( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
     allocate( CS%ice_visc(isd:ied,jsd:jed) )    ; CS%ice_visc(:,:) = 0.0
     allocate( CS%taub_beta_eff(isd:ied,jsd:jed) ) ; CS%taub_beta_eff(:,:) = 0.0
     allocate( CS%OD_av(isd:ied,jsd:jed) )       ; CS%OD_av(:,:) = 0.0
@@ -1856,11 +1814,17 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim,
     if (CS%GL_regularize) CS%GL_couple = .false.
     if (CS%GL_regularize .and. (CS%n_sub_regularize == 0)) call MOM_error (FATAL, &
       "GROUNDING_LINE_INTERP_SUBGRID_N must be a positive integer if GL regularization is used")
+    call get_param(param_file, mdl, "ICE_SHELF_CFL_FACTOR", CS%CFL_factor, &
+                 "A factor used to limit timestep as CFL_FACTOR * min (\Delta x / u). \n"// &
+                 "This is only used with an ice-only model.", default=0.25)
   endif
   call get_param(param_file, mdl, "RHO_0", CS%density_ocean_avg, &
                  "avg ocean density used in floatation cond", &
                  units="kg m-3", default=1035.)
   if (active_shelf_dynamics) then
+    call get_param(param_file, mdl, "ICE_VELOCITY_TIMESTEP", CS%velocity_update_time_step, &
+                 "seconds between ice velocity calcs", units="s", &
+                 fail_if_missing=.true.)
 
     call get_param(param_file, mdl, "A_GLEN_ISOTHERM", CS%A_glen_isothermal, &
                  "Ice viscosity parameter in Glen's Law", &
@@ -1911,13 +1875,12 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim,
   ! Allocate memory in the ice shelf dynamics control structure that was not
   ! previously allocated for registration for restarts.
   ! OVS vertically integrated Temperature
-  allocate( CS%t_bdry_val(isd:ied,jsd:jed) )   ; CS%t_bdry_val(:,:) = -15.0
-  allocate( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
 
   if (active_shelf_dynamics) then
     ! DNG
     allocate( CS%u_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_bdry_val(:,:) = 0.0
     allocate( CS%v_bdry_val(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_bdry_val(:,:) = 0.0
+    allocate( CS%t_bdry_val(isd:ied,jsd:jed) )   ; CS%t_bdry_val(:,:) = -15.0
     allocate( CS%h_bdry_val(isd:ied,jsd:jed) ) ; CS%h_bdry_val(:,:) = 0.0
     allocate( CS%thickness_bdry_val(isd:ied,jsd:jed) ) ; CS%thickness_bdry_val(:,:) = 0.0
     allocate( CS%u_face_mask(Isdq:Iedq,jsd:jed) ) ; CS%u_face_mask(:,:) = 0.0
@@ -1928,7 +1891,9 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim,
     allocate( CS%v_flux_bdry_val(isd:ied,Jsdq:Jedq) ) ; CS%v_flux_bdry_val(:,:) = 0.0
     allocate( CS%umask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%umask(:,:) = -1.0
     allocate( CS%vmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%vmask(:,:) = -1.0
+    allocate( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
 
+    CS%OD_rt_counter = 0
     allocate( CS%OD_rt(isd:ied,jsd:jed) ) ; CS%OD_rt(:,:) = 0.0
     allocate( CS%float_frac_rt(isd:ied,jsd:jed) ) ; CS%float_frac_rt(:,:) = 0.0
 
@@ -1936,9 +1901,8 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim,
       allocate( CS%calve_mask(isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
     endif
 
-  endif
+    CS%elapsed_velocity_time = 0.0
 
-  if (active_shelf_dynamics) then
     call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
   endif
 
@@ -2006,10 +1970,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim,
       if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf,CS%v_shelf,CS%diag)
     endif
 
-  endif
-
   ! Register diagnostics.
-  if (active_shelf_dynamics) then
     CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesCu1, Time, &
        'x-velocity of ice', 'm yr-1')
     CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesCv1, Time, &
@@ -2026,8 +1987,6 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, diag, new_sim,
        'ocean column thickness passed to ice model', 'm')
     CS%id_OD_av = register_diag_field('ocean_model','OD_av',CS%diag%axesT1, Time, &
        'intermediate ocean column thickness passed to ice model', 'm')
-    CS%id_float_frac_rt = register_diag_field('ocean_model','float_frac_rt',CS%diag%axesT1, Time, &
-       'timesteps where cell is floating ', 'none')
     !CS%id_h_after_uflux = register_diag_field('ocean_model','h_after_uflux',CS%diag%axesh1, Time, &
     !   'thickness after u flux ', 'none')
     !CS%id_h_after_vflux = register_diag_field('ocean_model','h_after_vflux',CS%diag%axesh1, Time, &
@@ -2226,6 +2185,97 @@ subroutine ice_shelf_save_restart(CS, Time, directory, time_stamped, filename_su
 
 end subroutine ice_shelf_save_restart
 
+!> This function returns the global maximum timestep that can be taken based on the current
+!! ice velocities.  Because it involves finding a global minimum, it can be suprisingly expensive.
+function ice_time_step_CFL(CS, ISS, G)
+  type(ice_shelf_dyn_CS), intent(inout) :: CS !< The ice shelf dynamics control structure
+  type(ice_shelf_state),  intent(inout) :: ISS !< A structure with elements that describe
+                                           !! the ice-shelf state
+  type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
+  real :: ice_time_step_CFL !< The maximum permitted timestep, in s, based on the ice velocities.
+
+  real :: ratio, min_ratio
+  real :: local_u_max, local_v_max
+  integer :: i, j
+
+  min_ratio = 1.0e16 ! This is just an arbitrary large value.
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (ISS%hmask(i,j) == 1.0) then
+    local_u_max = max(abs(CS%u_shelf(i,j)), abs(CS%u_shelf(i+1,j+1)), &
+                      abs(CS%u_shelf(i+1,j)), abs(CS%u_shelf(i,j+1)))
+    local_v_max = max(abs(CS%v_shelf(i,j)), abs(CS%v_shelf(i+1,j+1)), &
+                      abs(CS%v_shelf(i+1,j)), abs(CS%v_shelf(i,j+1)))
+
+    ratio = min(G%areaT(i,j) / (local_u_max+1.0e-12), G%areaT(i,j) / (local_v_max+1.0e-12))
+    min_ratio = min(min_ratio, ratio)
+  endif ; enddo ; enddo ! i- and j- loops
+
+  call mpp_min(min_ratio)
+
+  ! solved velocities are in m/yr; we want time_step_int in seconds
+  ice_time_step_CFL = CS%CFL_factor * min_ratio * (365*86400)
+
+end function ice_time_step_CFL
+
+!> This subroutine updates the ice shelf velocities, mass, stresses and properties due to the
+!! ice shelf dynamics.
+subroutine update_ice_shelf(CS, ISS, G, time_step, Time, ocean_mass, coupled_grounding, must_update_vel)
+  type(ice_shelf_dyn_CS), intent(inout) :: CS !< The ice shelf dynamics control structure
+  type(ice_shelf_state),  intent(inout) :: ISS !< A structure with elements that describe
+                                              !! the ice-shelf state
+  type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
+  real,                   intent(in)    :: time_step !< time step in sec
+  type(time_type),        intent(in)    :: Time !< The current model time
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                optional, intent(in)    :: ocean_mass !< If present this is the mass puer unit area
+                                              !! of the ocean in kg m-2.
+  logical,      optional, intent(in)    :: coupled_grounding !< If true, the grounding line is
+                                              !! determined by coupled ice-ocean dynamics
+  logical,      optional, intent(in)    :: must_update_vel !< Always update the ice velocities if true.
+
+  integer :: iters
+  logical :: update_ice_vel, coupled_GL
+  
+  update_ice_vel = .false.
+  if (present(must_update_vel)) update_ice_vel = must_update_vel
+
+  coupled_GL = .false.
+  if (present(ocean_mass) .and. present(coupled_grounding)) coupled_GL = coupled_grounding
+
+  call ice_shelf_advect(CS, ISS, G, time_step, Time)
+  CS%elapsed_velocity_time = CS%elapsed_velocity_time + time_step
+  if (CS%elapsed_velocity_time >= CS%velocity_update_time_step) update_ice_vel = .true.
+
+  if (coupled_GL) then
+    call update_OD_ffrac(CS, G, ocean_mass, update_ice_vel)
+  elseif (update_ice_vel) then
+    call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf)
+  endif
+
+  if (update_ice_vel) then
+    call ice_shelf_solve_outer(CS, ISS, G, CS%u_shelf, CS%v_shelf, iters, Time)
+  endif
+
+  call ice_shelf_temp(CS, ISS, G, time_step, ISS%water_flux, Time)
+
+  if (update_ice_vel) then
+    call enable_averaging(CS%elapsed_velocity_time, Time, CS%diag)
+    if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, CS%OD_av, CS%diag)
+    if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf,CS%u_shelf,CS%diag)
+    if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf,CS%v_shelf,CS%diag)
+    if (CS%id_t_shelf > 0) call post_data(CS%id_t_shelf,CS%t_shelf,CS%diag)
+    if (CS%id_float_frac > 0) call post_data(CS%id_float_frac,CS%float_frac,CS%diag)
+    if (CS%id_OD_av >0) call post_data(CS%id_OD_av,CS%OD_av,CS%diag)
+
+    if (CS%id_u_mask > 0) call post_data(CS%id_u_mask,CS%umask,CS%diag)
+    if (CS%id_v_mask > 0) call post_data(CS%id_v_mask,CS%vmask,CS%diag)
+    if (CS%id_t_mask > 0) call post_data(CS%id_t_mask,CS%tmask,CS%diag)
+
+    call disable_averaging(CS%diag)
+
+    CS%elapsed_velocity_time = 0.0
+  endif
+
+end subroutine update_ice_shelf
 
 !> This subroutine takes the velocity (on the Bgrid) and timesteps h_t = - div (uh) once.
 !! Additionally, it will update the volume of ice in partially-filled cells, and update
@@ -2345,7 +2395,7 @@ end subroutine ice_shelf_advect
 subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
   type(ice_shelf_dyn_CS), intent(inout) :: CS !< The ice shelf dynamics control structure
   type(ice_shelf_state), intent(in)    :: ISS !< A structure with elements that describe
-                                           !! the ice-shelf state
+                                              !! the ice-shelf state
   type(ocean_grid_type), intent(inout) :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(inout) :: u, v
@@ -4514,48 +4564,41 @@ subroutine calc_shelf_visc(CS, ISS, G, u, v)
 
 end subroutine calc_shelf_visc
 
-subroutine update_OD_ffrac(CS, G, ocean_mass, counter, nstep_velocity, time_step, velocity_update_time_step)
-  type(ice_shelf_dyn_CS), intent(inout):: CS !< A pointer to the ice shelf control structure
-  type(ocean_grid_type), intent(in) :: G  !< The grid structure used by the ice shelf.
-  real, dimension(G%isd:,G%jsd:) :: ocean_mass
-  integer,intent(in)            :: counter
-  integer,intent(in)            :: nstep_velocity
-  real,intent(in)            :: time_step !< The time step for this update, in s.
-  real,intent(in)            :: velocity_update_time_step
+subroutine update_OD_ffrac(CS, G, ocean_mass, find_avg)
+  type(ice_shelf_dyn_CS), intent(inout) :: CS !< A pointer to the ice shelf control structure
+  type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: ocean_mass !< The mass per unit area of the ocean in kg m-2.
+  logical,                intent(in)    :: find_avg !< If true, find the average of OD and ffrac, and
+                                              !! reset the underlying running sums to 0.
 
   integer :: isc, iec, jsc, jec, i, j
-  real    :: threshold_col_depth, rho_ocean, inv_rho_ocean
+  real    :: I_rho_ocean
+  real    :: I_counter
 
-  threshold_col_depth = CS%thresh_float_col_depth
-
-  rho_ocean = CS%density_ocean_avg
-  inv_rho_ocean = 1./rho_ocean
+  I_rho_ocean = 1.0/CS%density_ocean_avg
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
-  do j=jsc,jec
-    do i=isc,iec
-      CS%OD_rt(i,j) = CS%OD_rt(i,j) +  ocean_mass(i,j)*inv_rho_ocean
-      if (ocean_mass(i,j) > threshold_col_depth*rho_ocean) then
-        CS%float_frac_rt(i,j) = CS%float_frac_rt(i,j) + 1.0
-      endif
-    enddo
-  enddo
+  do j=jsc,jec ; do i=isc,iec
+    CS%OD_rt(i,j) = CS%OD_rt(i,j) +  ocean_mass(i,j)*I_rho_ocean
+    if (ocean_mass(i,j)*I_rho_ocean > CS%thresh_float_col_depth) then
+      CS%float_frac_rt(i,j) = CS%float_frac_rt(i,j) + 1.0
+    endif
+  enddo ; enddo
+  CS%OD_rt_counter = CS%OD_rt_counter + 1
 
-  if (counter == nstep_velocity) then
+  if (find_avg) then
+    I_counter = 1.0 / real(CS%OD_rt_counter)
+    do j=jsc,jec ; do i=isc,iec
+      CS%float_frac(i,j) = 1.0 - (CS%float_frac_rt(i,j) * I_counter)
+      CS%OD_av(i,j) = CS%OD_rt(i,j) * I_counter
 
-    do j=jsc,jec
-      do i=isc,iec
-        CS%float_frac(i,j) = 1.0 - (CS%float_frac_rt(i,j) / real(nstep_velocity))
-        CS%OD_av(i,j) = CS%OD_rt(i,j) / real(nstep_velocity)
-
-        CS%OD_rt(i,j) = 0.0 ; CS%float_frac_rt(i,j) = 0.0
-      enddo
-    enddo
+      CS%OD_rt(i,j) = 0.0 ; CS%float_frac_rt(i,j) = 0.0
+    enddo ; enddo
 
     call pass_var(CS%float_frac, G%domain)
     call pass_var(CS%OD_av, G%domain)
-
   endif
 
 end subroutine update_OD_ffrac
@@ -4568,11 +4611,9 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
 
   integer             :: i, j, iters, isd, ied, jsd, jed
   real                 :: rhoi, rhow, OD
-  type(time_type)          :: dummy_time
 
   rhoi = CS%density_ice
   rhow = CS%density_ocean_avg
-  dummy_time = set_time (0,0)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   do j=jsd,jed
@@ -4955,121 +4996,75 @@ subroutine ice_shelf_end(CS)
 end subroutine ice_shelf_end
 
 
-subroutine solo_time_step(CS, time_step, n, Time, min_time_step_in)
+subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
   type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
-  real,intent(in)      :: time_step !< The time step for this update, in s.
-  integer, intent(inout)      :: n
-  type(time_type)      :: Time !< The current model time
-  real,optional,intent(in)   :: min_time_step_in
+  real,            intent(in)    :: time_step !< The time interval for this update, in s.
+  integer,         intent(inout) :: nsteps  !< The running number of ice shelf steps.
+  type(time_type), intent(inout) :: Time !< The current model time
+  real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step in s.
 
   type(ocean_grid_type), pointer :: G => NULL()
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
   type(ice_shelf_dyn_CS), pointer :: dCS => NULL()
-  integer          :: is, iec, js, jec, i, j, ki, kj, iters
-  real             :: ratio, min_ratio, time_step_remain, local_u_max, &
-               local_v_max, time_step_int, min_time_step,spy,dumtimeprint
-  logical         :: flag
-  type (time_type)      :: dummy
-  character(4)         :: stepnum
+  integer :: is, iec, js, jec, i, j, ki, kj, iters
+  real :: ratio, min_ratio, time_step_remain, local_u_max
+  real :: local_v_max, time_step_int, min_time_step, spy, dumtimeprint
+  character(len=240) :: mesg
+  logical :: update_ice_vel ! If true, it is time to update the ice shelf velocities.
+  logical :: coupled_GL     ! If true the grouding line position is determined based on
+                            ! coupled ice-ocean dynamics.
+  logical :: flag
 
-  CS%velocity_update_sub_counter = CS%velocity_update_sub_counter + 1
   spy = 365 * 86400
   G => CS%grid
   ISS => CS%ISS
   dCS => CS%dCS
+  is = G%isc ; iec = G%iec ; js = G%jsc ; jec = G%jec
 
   time_step_remain = time_step
-  if (.not. (present (min_time_step_in))) then
-   min_time_step = 1000 ! i think this is in seconds - this would imply ice is moving at ~1 meter per second
+  if (present (min_time_step_in)) then
+    min_time_step = min_time_step_in
   else
-   min_time_step=min_time_step_in
+    min_time_step = 1000.0 ! This is in seconds - at 1 km resolution it would imply ice is moving at ~1 meter per second
   endif
-  is = G%isc ; iec = G%iec ; js = G%jsc ; jec = G%jec
 
   ! NOTE: this relies on NE grid indexing
   ! dumtimeprint=time_type_to_real(Time)/spy
-  if (is_root_pe()) print *, "TIME in ice shelf call, yrs: ", time_type_to_real(Time)/spy
+  write (mesg,*) "TIME in ice shelf call, yrs: ", time_type_to_real(Time)/spy
+  call MOM_mesg("solo_time_step: "//mesg)
 
   do while (time_step_remain > 0.0)
+    nsteps = nsteps+1
 
-  min_ratio = 1.0e16
-  n=n+1
-  do j=js,jec
-    do i=is,iec
+    ! If time_step is not too long, this is unnecessary.
+    time_step_int = min(ice_time_step_CFL(dCS, ISS, G), time_step)
 
-       local_u_max = 0 ; local_v_max = 0
+    write (mesg,*) "Ice model timestep = ", time_step_int, " seconds"
+    if (time_step_int < min_time_step) then
+      call MOM_error(FATAL, "MOM_ice_shelf:solo_time_step: abnormally small timestep "//mesg)
+    else
+      call MOM_mesg("solo_time_step: "//mesg)
+    endif
 
-       if (ISS%hmask(i,j) == 1.0) then
-         ! all 4 corners of the cell should have valid velocity values; otherwise something is wrong
-        ! this is done by checking that umask and vmask are nonzero at all 4 corners
-        do ki=1,2 ; do kj = 1,2
+    if (time_step_int >= time_step_remain) then
+      time_step_int = time_step_remain
+      time_step_remain = 0.0
+    else
+      time_step_remain = time_step_remain - time_step_int
+    endif
 
-          local_u_max = max(local_u_max, abs(dCS%u_shelf(i-1+ki,j-1+kj)))
-          local_v_max = max(local_v_max, abs(dCS%v_shelf(i-1+ki,j-1+kj)))
+    ! If the last mini-timestep is a day or less, we cannot expect velocities to change by much.
+    ! Do not update the velocities if the last step is very short.
+    update_ice_vel = ((time_step_int > min_time_step) .or. (time_step_int >= time_step))
+    coupled_GL = .false.
 
-        enddo ; enddo
-
-        ratio = min(G%areaT(i,j) / (local_u_max+1.0e-12), G%areaT(i,j) / (local_v_max+1.0e-12))
-        min_ratio = min(min_ratio, ratio)
-
-       endif
-     enddo ! j loop
-   enddo ! i loop
-
-   ! solved velocities are in m/yr; we want m/s
-
-   call mpp_min(min_ratio)
-
-   time_step_int = min(CS%CFL_factor * min_ratio * (365*86400), time_step)
-
-   if (time_step_int < min_time_step) then
-     call MOM_error(FATAL, "MOM_ice_shelf:solo_time_step: abnormally small timestep")
-   else
-     if (is_root_pe()) then
-   write(*,*) "Ice model timestep: ", time_step_int, " seconds"
-     endif
-   endif
-
-   if (time_step_int >= time_step_remain) then
-     time_step_int = time_step_remain
-     time_step_remain = 0.0
-   else
-     time_step_remain = time_step_remain - time_step_int
-   endif
-
-   write (stepnum,'(I4)') CS%velocity_update_sub_counter
-
-   call ice_shelf_advect(dCS, ISS, G, time_step_int, Time)
-
-   ! if the last mini-timestep is a day or less, we cannot expect velocities to change by much.
-   ! do not update them
-   if (time_step_int > 1000) then
-     call update_velocity_masks(dCS, G, ISS%hmask, dCS%umask, dCS%vmask, dCS%u_face_mask, dCS%v_face_mask)
-
-     call update_OD_ffrac_uncoupled(dCS, G, ISS%h_shelf)
-     call ice_shelf_solve_outer(dCS, ISS, G, dCS%u_shelf, dCS%v_shelf, iters, dummy)
-   endif
-
-!!! OVS!!!
-    call ice_shelf_temp(dCS, ISS, G, time_step_int, ISS%water_flux, Time)
-
+    call update_ice_shelf(dCS, ISS, G, time_step_int, Time, must_update_vel=update_ice_vel)
+ 
     call enable_averaging(time_step,Time,CS%diag)
     if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
     if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
     if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
-
-    if (dCS%id_col_thick > 0) call post_data(dCS%id_col_thick, dCS%OD_av, CS%diag)
-    if (dCS%id_u_mask > 0) call post_data(dCS%id_u_mask,dCS%umask,CS%diag)
-    if (dCS%id_v_mask > 0) call post_data(dCS%id_v_mask,dCS%vmask,CS%diag)
-    if (dCS%id_u_shelf > 0) call post_data(dCS%id_u_shelf,dCS%u_shelf,CS%diag)
-    if (dCS%id_v_shelf > 0) call post_data(dCS%id_v_shelf,dCS%v_shelf,CS%diag)
-    if (dCS%id_float_frac > 0) call post_data(dCS%id_float_frac,dCS%float_frac,CS%diag)
-    if (dCS%id_OD_av >0) call post_data(dCS%id_OD_av,dCS%OD_av,CS%diag)
-    if (dCS%id_float_frac_rt>0) call post_data(dCS%id_float_frac_rt,dCS%float_frac_rt,CS%diag)
-    if (dCS%id_t_mask > 0) call post_data(dCS%id_t_mask,dCS%tmask,CS%diag)
-    if (dCS%id_t_shelf > 0) call post_data(dCS%id_t_shelf,dCS%t_shelf,CS%diag)
-
     call disable_averaging(CS%diag)
 
   enddo
@@ -5161,17 +5156,11 @@ subroutine ice_shelf_temp(CS, ISS, G, time_step, melt_rate, Time)
 
 
 !  call enable_averaging(time_step,Time,CS%diag)
- ! call pass_var(h_after_uflux, G%domain)
-!  if (CS%id_h_after_uflux > 0) call post_data(CS%id_h_after_uflux, h_after_uflux, CS%diag)
-!  call disable_averaging(CS%diag)
-
-
-!  call enable_averaging(time_step,Time,CS%diag)
+!  call pass_var(h_after_uflux, G%domain)
 !  call pass_var(h_after_vflux, G%domain)
+!  if (CS%id_h_after_uflux > 0) call post_data(CS%id_h_after_uflux, h_after_uflux, CS%diag)
 !  if (CS%id_h_after_vflux > 0) call post_data(CS%id_h_after_vflux, h_after_vflux, CS%diag)
 !  call disable_averaging(CS%diag)
-
-
 
   call ice_shelf_advect_temp_x(CS, G, time_step/spy, ISS%hmask, TH, th_after_uflux, flux_enter)
   call ice_shelf_advect_temp_y(CS, G, time_step/spy, ISS%hmask, th_after_uflux, th_after_vflux, flux_enter)
@@ -5182,7 +5171,7 @@ subroutine ice_shelf_temp(CS, ISS, G, time_step, melt_rate, Time)
       if (ISS%h_shelf(i,j) > 0.0) then
         CS%t_shelf(i,j) = th_after_vflux(i,j)/ISS%h_shelf(i,j)
       else
-          CS%t_shelf(i,j) = -10.0
+        CS%t_shelf(i,j) = -10.0
       endif
     enddo
   enddo
