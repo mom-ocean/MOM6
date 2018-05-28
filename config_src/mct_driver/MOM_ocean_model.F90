@@ -94,11 +94,9 @@ public get_ocean_grid ! add by Jiande
 public ocean_model_save_restart, Ocean_stock_pe
 public ocean_model_init_sfc, ocean_model_flux_init
 public ocean_model_restart
-public ice_ocean_boundary_type
-public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
-public ocn_export
+public ice_ocn_bnd_type_chksum
 
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
@@ -394,8 +392,7 @@ end subroutine ocean_model_init
 !! of Ocean_coupling_time_step, returning the publicly visible ocean surface properties in
 !! Ocean_sfc and storing the new ocean properties in Ocean_state.
 subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
-                              time_start_update, Ocean_coupling_time_step, &
-                              x2o_o, ind)
+                              time_start_update, Ocean_coupling_time_step)
 
   type(ice_ocean_boundary_type), &
                      intent(in)    :: Ice_ocean_boundary !< A structure containing the
@@ -414,9 +411,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   type(time_type),   intent(in)    :: time_start_update  !< The time at the beginning of the update step.
   type(time_type),   intent(in)    :: Ocean_coupling_time_step !< The amount of time over
                                               !! which to advance the ocean.
-
-  real(kind=8),           intent(in)    :: x2o_o(:,:)     !< Fluxes from coupler to ocean, computed by ocean
-  type(cpl_indices_type), intent(inout) :: ind            !< Structure with MCT attribute vectors and indices
 
   ! local variables
   type(time_type) :: Master_time !< This allows step_MOM to temporarily change
@@ -459,8 +453,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
     call convert_IOB_to_fluxes_and_forces(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
-                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, &
-                                          forces=OS%forces, x2o=x2o_o, ind=ind)
+                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, forces=OS%forces)
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
     call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
@@ -491,8 +484,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
     call convert_IOB_to_fluxes_and_forces(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
-                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, &
-                                          forces=OS%forces, x2o=x2o_o, ind=ind)
+                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, forces=OS%forces)
 
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
@@ -1036,110 +1028,5 @@ end subroutine ocean_public_type_chksum
 
   end subroutine get_ocean_grid
 ! </SUBROUTINE> NAME="get_ocean_grid"
-
-!=======================================================================
-! Routines that are specific to MCT driver
-!=======================================================================
-
-
-!=======================================================================
-
-  !> Maps outgoing ocean data to MCT buffer.
-  !! See \ref section_ocn_export for a summary of the data
-  !! that is transferred from MOM6 to MCT.
-  subroutine ocn_export(ind, ocn_public, grid, o2x)
-    type(cpl_indices_type),  intent(inout) :: ind        !< Structure with coupler indices and vectors
-    type(ocean_public_type), intent(in)    :: ocn_public !< Ocean surface state
-    type(ocean_grid_type),   intent(in)    :: grid       !< Ocean model grid
-    real(kind=8),            intent(inout) :: o2x(:,:)   !< MCT outgoing bugger
-
-    ! Local variables
-    real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
-    integer :: i, j, n, ig, jg  !< Grid indices
-    real :: slp_L, slp_R, slp_C, slope, u_min, u_max
-
-    ! Copy from ocn_public to o2x. ocn_public uses global indexing with no halos.
-    ! The mask comes from "grid" that uses the usual MOM domain that has halos
-    ! and does not use global indexing.
-    n = 0
-    do j=grid%jsc, grid%jec
-       jg = j + grid%jdg_offset
-       do i=grid%isc,grid%iec
-          n = n+1
-          ig = i + grid%idg_offset
-          ! surface temperature in Kelvin
-          o2x(ind%o2x_So_t, n) = ocn_public%t_surf(ig,jg)  * grid%mask2dT(i,j)
-          o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
-          o2x(ind%o2x_So_u, n) = ocn_public%u_surf(ig,jg) * grid%mask2dT(i,j)
-          o2x(ind%o2x_So_v, n) = ocn_public%v_surf(ig,jg) * grid%mask2dT(i,j)
-          ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
-          ! in order to update halos. i.e. does not use global indexing.
-          ssh(i,j) = ocn_public%sea_lev(ig,jg)
-       end do
-    end do
-
-    ! Update halo of ssh so we can calculate gradients
-    call pass_var(ssh, grid%domain)
-
-    ! d/dx ssh
-    n = 0
-    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
-       n = n+1
-       ! This is a simple second-order difference
-       !o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
-       ! This is a PLM slope which might be less prone to the A-grid null mode
-       slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
-       if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
-       slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(I,j)
-       if (grid%mask2dCu(I+1,j)==0.) slp_R = 0.
-       slp_C = 0.5 * (slp_L + slp_R)
-       if ( (slp_L * slp_R) > 0.0 ) then
-          ! This limits the slope so that the edge values are bounded by the
-          ! two cell averages spanning the edge.
-          u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-          u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-       else
-          ! Extrema in the mean values require a PCM reconstruction avoid generating
-          ! larger extreme values.
-          slope = 0.0
-       end if
-       o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
-       if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdx, n) = 0.0
-    end do; end do
-
-    ! d/dy ssh
-    n = 0
-    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
-       n = n+1
-       ! This is a simple second-order difference
-       ! o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
-       ! This is a PLM slope which might be less prone to the A-grid null mode
-       slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
-       if (grid%mask2dCv(i,J-1)==0.) slp_L = 0.
-
-       slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,J)
-       if (grid%mask2dCv(i,J+1)==0.) slp_R = 0.
-
-       slp_C = 0.5 * (slp_L + slp_R)
-       !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
-       if ((slp_L * slp_R) > 0.0) then
-          ! This limits the slope so that the edge values are bounded by the
-          ! two cell averages spanning the edge.
-          u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-          u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-       else
-          ! Extrema in the mean values require a PCM reconstruction avoid generating
-          ! larger extreme values.
-          slope = 0.0
-       end if
-       o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
-       if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdy, n) = 0.0
-    end do; end do
-
-  end subroutine ocn_export
-
-!=======================================================================
 
 end module MOM_ocean_model
