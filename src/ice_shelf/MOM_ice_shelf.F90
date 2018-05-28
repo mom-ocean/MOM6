@@ -189,7 +189,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
                                              !! returned by a previous call to
                                              !! initialize_ice_shelf.
 
-  type(ocean_grid_type), pointer       :: G => NULL() ! The grid structure used by the ice shelf.
+  type(ocean_grid_type), pointer :: G => NULL() ! The grid structure used by the ice shelf.
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
 
@@ -255,7 +255,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
                             ! coupled ice-ocean dynamics.
 
   real, parameter :: c2_3 = 2.0/3.0
-  integer :: i, j, is, ie, js, je, ied, jed, it1, it3, iters_vel_solve
+  integer :: i, j, is, ie, js, je, ied, jed, it1, it3
   real, parameter :: rho_fw = 1000.0 ! fresh water density
 
   if (.not. associated(CS)) call MOM_error(FATAL, "shelf_calc_flux: "// &
@@ -631,7 +631,11 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
 
   if (CS%DEBUG) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, haloshift=0)
 
-  call add_shelf_flux(G, CS, state, forces, fluxes)
+  call add_shelf_forces(G, CS, forces, do_shelf_area=(CS%active_shelf_dynamics .or. &
+                                                      CS%override_shelf_movement))
+  call add_shelf_flux(G, CS, state, fluxes)
+
+  call copy_common_forcing_fields(forces, fluxes, G)
 
   ! now the thermodynamic data is passed on... time to update the ice dynamic quantities
 
@@ -805,12 +809,11 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
 end subroutine add_shelf_forces
 
 !> Updates surface fluxes that are influenced by sub-ice-shelf melting
-subroutine add_shelf_flux(G, CS, state, forces, fluxes)
-  type(ocean_grid_type),     intent(inout)    :: G    !< The ocean's grid structure.
-  type(ice_shelf_CS),        pointer          :: CS   !< This module's control structure.
-  type(surface),             intent(inout)    :: state!< Surface ocean state
-  type(mech_forcing),        intent(inout)    :: forces !< A structure with the driving mechanical forces
-  type(forcing),             intent(inout)    :: fluxes  !< A structure of surface fluxes that may be used/updated.
+subroutine add_shelf_flux(G, CS, state, fluxes)
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
+  type(surface),         intent(inout) :: state!< Surface ocean state
+  type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be used/updated.
 
   ! local variables
   real :: Irho0           !< The inverse of the mean density in m3 kg-1.
@@ -847,7 +850,6 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
   ISS => CS%ISS
 
   find_shelf_area = (CS%active_shelf_dynamics .or. CS%override_shelf_movement)
-  call add_shelf_forces(G, CS, forces, do_shelf_area=find_shelf_area)
 
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
@@ -869,10 +871,10 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 !  do j=js,je ; do i=is,ie ; if (fluxes%frac_shelf_h(i,j) > 0.0) then
     ! ### THIS SHOULD BE AN AREA WEIGHTED AVERAGE OF THE ustar_shelf POINTS.
     ! taux2 = 0.0 ; tauy2 = 0.0
-    ! asu1 = forces%frac_shelf_u(I-1,j) * G%areaCu(I-1,j)
-    ! asu2 = forces%frac_shelf_u(I,j) * G%areaCu(I,j)
-    ! asv1 = forces%frac_shelf_v(i,J-1) * G%areaCv(i,J-1)
-    ! asv2 = forces%frac_shelf_v(i,J) * G%areaCv(i,J)
+    ! asu1 = (ISS%area_shelf_h(i-1,j) + ISS%area_shelf_h(i,j))
+    ! asu2 = (ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i+1,j))
+    ! asv1 = (ISS%area_shelf_h(i,j-1) + ISS%area_shelf_h(i,j))
+    ! asv2 = (ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i,j+1))
     ! if ((asu1 + asu2 > 0.0) .and. associated(state%taux_shelf)) &
     !   taux2 = (asu1 * state%taux_shelf(I-1,j)**2 + &
     !            asu2 * state%taux_shelf(I,j)**2  ) / (asu1 + asu2)
@@ -883,7 +885,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
     !fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
 !  endif ; enddo ; enddo
 
-  if (find_shelf_area) then
+  if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
         fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) * G%IareaT(i,j)
@@ -927,7 +929,7 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 
     if (.not. associated(fluxes%salt_flux)) allocate(fluxes%salt_flux(ie,je))
     if (.not. associated(fluxes%vprec)) allocate(fluxes%vprec(ie,je))
-    fluxes%salt_flux(:,:) = 0.0; fluxes%vprec(:,:) = 0.0
+    fluxes%salt_flux(:,:) = 0.0 ; fluxes%vprec(:,:) = 0.0
 
     mean_melt_flux = 0.0; sponge_area = 0.0
     do j=js,je ; do i=is,ie
@@ -1005,18 +1007,16 @@ subroutine add_shelf_flux(G, CS, state, forces, fluxes)
 
   endif !constant_sea_level
 
-  call copy_common_forcing_fields(forces, fluxes, G)
-
 end subroutine add_shelf_flux
 
 
 !> Initializes shelf model data, parameters and diagnostics
 subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fluxes, Time_in, solo_ice_sheet_in)
-  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(ocean_grid_type), pointer    :: ocn_grid   !< The calling ocean model's horizontal grid structure
-  type(time_type),    intent(inout)   :: Time !< The clock that that will indicate the model time
-  type(ice_shelf_CS), pointer         :: CS !< A pointer to the ice shelf control structure
-  type(diag_ctrl), target, intent(in) :: diag  !< A structure that is used to regulate the diagnostic output.
+  type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
+  type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
+  type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
+  type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
+  type(diag_ctrl),    target,   intent(in)    :: diag !< A structure that is used to regulate the diagnostic output.
   type(forcing),      optional, intent(inout) :: fluxes !< A structure containing pointers to any possible
                                                    !! thermodynamic or mass-flux forcing fields.
   type(mech_forcing), optional, intent(inout) :: forces !< A structure with the driving mechanical forces
@@ -1027,7 +1027,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   type(ocean_grid_type), pointer :: G  => NULL(), OG  => NULL() ! Pointers to grids for convenience.
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
-!  type(ice_shelf_dyn_CS), pointer :: dCS => NULL()
   type(directories)  :: dirs
   type(dyn_horgrid_type), pointer :: dG => NULL()
   real :: cdrag, drag_bg_vel
@@ -1037,7 +1036,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
   character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
   integer :: wd_halos(2)
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug
   character(len=240) :: Tideamp_file
@@ -1413,16 +1412,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   ! else ! Previous block for new_sim=.T., this block restores the state.
   elseif (.not.new_sim) then
-    !  This line calls a subroutine that reads the initial conditions
-    !  from a restart file.
+    ! This line calls a subroutine that reads the initial conditions from a restart file.
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
                        G, CS%restart_CSp)
-
-    ! i think this call isnt necessary - all it does is set hmask to 3 at
-    ! the dirichlet boundary, and now this is done elsewhere
-    !  call initialize_shelf_mass(G, param_file, CS, ISS, .false.)
-
   endif ! .not. new_sim
 
   CS%Time = Time
@@ -1673,7 +1666,7 @@ subroutine ice_shelf_end(CS)
 
 end subroutine ice_shelf_end
 
-
+!> This routine is for stepping a stand-alone ice shelf model without an ocean.
 subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
   type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
   real,            intent(in)    :: time_step !< The time interval for this update, in s.
@@ -1684,20 +1677,16 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
   type(ocean_grid_type), pointer :: G => NULL()
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
-  type(ice_shelf_dyn_CS), pointer :: dCS => NULL()
-  integer :: is, iec, js, jec, i, j, ki, kj, iters
-  real :: ratio, min_ratio, time_step_remain, local_u_max
-  real :: local_v_max, time_step_int, min_time_step, spy, dumtimeprint
+  integer :: is, iec, js, jec, i, j
+  real :: time_step_remain
+  real :: time_step_int, min_time_step
   character(len=240) :: mesg
   logical :: update_ice_vel ! If true, it is time to update the ice shelf velocities.
   logical :: coupled_GL     ! If true the grouding line position is determined based on
                             ! coupled ice-ocean dynamics.
-  logical :: flag
 
-  spy = 365 * 86400
   G => CS%grid
   ISS => CS%ISS
-  dCS => CS%dCS
   is = G%isc ; iec = G%iec ; js = G%jsc ; jec = G%jec
 
   time_step_remain = time_step
@@ -1707,16 +1696,14 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
     min_time_step = 1000.0 ! This is in seconds - at 1 km resolution it would imply ice is moving at ~1 meter per second
   endif
 
-  ! NOTE: this relies on NE grid indexing
-  ! dumtimeprint=time_type_to_real(Time)/spy
-  write (mesg,*) "TIME in ice shelf call, yrs: ", time_type_to_real(Time)/spy
+  write (mesg,*) "TIME in ice shelf call, yrs: ", time_type_to_real(Time)/(365. * 86400.)
   call MOM_mesg("solo_time_step: "//mesg)
 
   do while (time_step_remain > 0.0)
     nsteps = nsteps+1
 
     ! If time_step is not too long, this is unnecessary.
-    time_step_int = min(ice_time_step_CFL(dCS, ISS, G), time_step)
+    time_step_int = min(ice_time_step_CFL(CS%dCS, ISS, G), time_step)
 
     write (mesg,*) "Ice model timestep = ", time_step_int, " seconds"
     if (time_step_int < min_time_step) then
@@ -1737,18 +1724,17 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
     update_ice_vel = ((time_step_int > min_time_step) .or. (time_step_int >= time_step))
     coupled_GL = .false.
 
-    call update_ice_shelf(dCS, ISS, G, time_step_int, Time, must_update_vel=update_ice_vel)
+    call update_ice_shelf(CS%dCS, ISS, G, time_step_int, Time, must_update_vel=update_ice_vel)
 
     call enable_averaging(time_step,Time,CS%diag)
     if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
-    if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
-    if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
+    if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf, ISS%h_shelf, CS%diag)
+    if (CS%id_h_mask > 0) call post_data(CS%id_h_mask, ISS%hmask, CS%diag)
     call disable_averaging(CS%diag)
 
   enddo
 
 end subroutine solo_time_step
-
 
 !> \namespace mom_ice_shelf
 !!
