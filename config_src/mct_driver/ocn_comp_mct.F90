@@ -71,6 +71,15 @@ public :: ocn_init_mct
 public :: ocn_run_mct
 public :: ocn_final_mct
 
+! Private member functions
+private :: get_state_pointers
+private :: ocn_SetGSMap_mct
+private :: ocn_domain_mct
+private :: get_runtype
+private :: ocean_model_init_sfc
+private :: convert_state_to_ocean_type
+private :: forcing_save_restart
+
 ! Flag for debugging
 logical, parameter :: debug=.true.
 
