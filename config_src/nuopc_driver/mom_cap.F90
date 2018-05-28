@@ -378,18 +378,7 @@ module mom_cap_mod
   use time_manager_mod,         only: date_to_string
   use time_manager_mod,         only: fms_get_calendar_type => get_calendar_type
   use MOM_domains,              only: MOM_infra_init, num_pes, root_pe, pe_here
-
-!#ifdef CESMCOUPLED
-!  use ocn_comp_nuopc,           only: ocean_public_type, ocean_state_type
-!  use ocn_comp_nuopc,           only: update_ocean_model, ocean_model_init
-!  use ocn_comp_nuopc,           only: ocn_export, get_ocean_grid, ocean_model_data_get
-!  use ocn_comp_nuopc,           only: ocean_model_end, ocean_model_init_sfc
-!#else
-  use ocean_model_mod,          only: ocean_model_restart, ocean_public_type, ocean_state_type
-  use ocean_model_mod,          only: ocean_model_data_get
-  use ocean_model_mod,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
   use MOM_surface_forcing,      only: IOB_allocate
-!#endif
   use MOM_file_parser,          only: get_param, log_version, param_file_type, close_param_file
   use MOM_get_input,            only: Get_MOM_Input, directories
   use MOM_domains,              only: pass_var
@@ -410,6 +399,13 @@ module mom_cap_mod
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_SetScalar
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_GetScalar
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_Diagnose
+  use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
+  use MOM_ocean_model,          only: ocean_model_data_get
+  use MOM_ocean_model,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
+#else
+  use ocean_model_mod,          only: ocean_model_restart, ocean_public_type, ocean_state_type
+  use ocean_model_mod,          only: ocean_model_data_get
+  use ocean_model_mod,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
 #endif
 
   use ESMF
@@ -472,6 +468,7 @@ module mom_cap_mod
        __FILE__
 
   contains
+
   !-----------------------------------------------------------------------
   !------------------- Solo Ocean code starts here -----------------------
   !-----------------------------------------------------------------------
