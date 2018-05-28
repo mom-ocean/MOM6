@@ -38,6 +38,12 @@ contains
           ig = i + grid%jsc - isc
           k = k + 1 ! Increment position within gindex
 
+          ! taux
+          ice_ocean_boundary%u_flux(i,j) = x2o(ind%x2o_Foxx_taux,k) 
+
+          ! tauy
+          ice_ocean_boundary%v_flux(i,j) = x2o(ind%x2o_Foxx_tauy,k) 
+
           ! liquid precipitation (rain)
           ice_ocean_boundary%lprec(i,j) = x2o(ind%x2o_Faxa_rain,k) * GRID%mask2dT(ig,jg)
 
@@ -47,11 +53,26 @@ contains
           ! longwave radiation, sum up and down (W/m2)
           ice_ocean_boundary%lw_flux(i,j) = (x2o(ind%x2o_Faxa_lwdn,k) + x2o(ind%x2o_Foxx_lwup,k)) * GRID%mask2dT(i,j)
 
+          ! specific humitidy flux
+          ice_ocean_boundary%q_flux(i,j) = x2o(ind%x2o_Foxx_evap,k) !???TODO: should this be a minus sign
+
           ! sensible heat flux (W/m2)
           ice_ocean_boundary%t_flux(i,j) = x2o(ind%x2o_Foxx_sen,k) * GRID%mask2dT(i,j)
 
           ! latent heat flux (W/m^2)
           ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k) * GRID%mask2dT(i,j)
+
+          ! liquid runoff
+          ice_ocean_boundary%rofl_flux(i,j) = x2o(ind%x2o_Foxx_rofl,k) * GRID%mask2dT(i,j)
+
+          ! ice runoff
+          ice_ocean_boundary%rofi_flux(i,j) = x2o(ind%x2o_Foxx_rofi,k) * GRID%mask2dT(i,j)
+
+          ! surface pressure
+          ice_ocean_boundary%p(i,j) = x2o(ind%x2o_Sa_pslv,k) * GRID%mask2dT(i,j)
+
+          ! salt flux
+          ice_ocean_boundary%salt_flux(i,j) = x2o(ind%x2o_Fioi_salt,k)
 
           ! 1) visible, direct shortwave  (W/m2)
           ! 2) visible, diffuse shortwave (W/m2)
@@ -77,19 +98,99 @@ contains
 !=======================================================================
 
   !> Maps outgoing ocean data to MCT attribute vector real array
-  subroutine ocn_export(ocean_public, grid, o2x, rc)
-    type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
-    type(ocean_grid_type)   , intent(in)    :: grid         !< Ocean model grid
-    real(kind=8)            , intent(out)   :: o2x(:,:)     !< outgoing data
-    integer                 , intent(inout) :: rc 
+  subroutine ocn_export(ind, ocn_public, grid, o2x)
+    type(cpl_indices_type),  intent(inout) :: ind        !< Structure with coupler indices and vectors
+    type(ocean_public_type), intent(in)    :: ocn_public !< Ocean surface state
+    type(ocean_grid_type),   intent(in)    :: grid       !< Ocean model grid
+    real(kind=8),            intent(inout) :: o2x(:,:)   !< MCT outgoing bugger
 
     ! Local variables
     real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
-    integer :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec         !< Grid indices
-    integer :: lbnd1, lbnd2, ubnd1, ubnd2
-    real :: slp_L, slp_R, slp_C, slope, u_min, u_max
+    integer :: i, j, n, ig, jg  !< Grid indices
+    real    :: slp_L, slp_R, slp_C, slope, u_min, u_max
     !-----------------------------------------------------------------------
-    ! Nothing for now
+
+    ! Copy from ocn_public to o2x. ocn_public uses global indexing with no halos.
+    ! The mask comes from "grid" that uses the usual MOM domain that has halos
+    ! and does not use global indexing.
+
+    n = 0
+    do j=grid%jsc, grid%jec
+       jg = j + grid%jdg_offset
+       do i=grid%isc,grid%iec
+          n = n+1
+          ig = i + grid%idg_offset
+          ! surface temperature in Kelvin
+          o2x(ind%o2x_So_t, n) = ocn_public%t_surf(ig,jg) * grid%mask2dT(i,j)
+          o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
+          o2x(ind%o2x_So_u, n) = ocn_public%u_surf(ig,jg) * grid%mask2dT(i,j)
+          o2x(ind%o2x_So_v, n) = ocn_public%v_surf(ig,jg) * grid%mask2dT(i,j)
+          ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
+          ! in order to update halos. i.e. does not use global indexing.
+          ssh(i,j) = ocn_public%sea_lev(ig,jg)
+       end do
+    end do
+
+    ! Update halo of ssh so we can calculate gradients
+    call pass_var(ssh, grid%domain)
+
+    ! d/dx ssh
+    n = 0
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+       n = n+1
+       ! This is a simple second-order difference
+       ! o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+       ! This is a PLM slope which might be less prone to the A-grid null mode
+       slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
+       if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
+       slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(I,j)
+       if (grid%mask2dCu(I+1,j)==0.) slp_R = 0.
+       slp_C = 0.5 * (slp_L + slp_R)
+       if ( (slp_L * slp_R) > 0.0 ) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+       else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+       end if
+       o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+       if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdx, n) = 0.0
+    end do; end do
+
+    ! d/dy ssh
+    n = 0
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+       n = n+1
+       ! This is a simple second-order difference
+       ! o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
+       ! This is a PLM slope which might be less prone to the A-grid null mode
+       slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
+       if (grid%mask2dCv(i,J-1)==0.) slp_L = 0.
+
+       slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,J)
+       if (grid%mask2dCv(i,J+1)==0.) slp_R = 0.
+
+       slp_C = 0.5 * (slp_L + slp_R)
+       !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
+       if ((slp_L * slp_R) > 0.0) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+       else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+       end if
+       o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+       if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdy, n) = 0.0
+    end do; end do
+
   end subroutine ocn_export
 
 end module ocn_cap_methods

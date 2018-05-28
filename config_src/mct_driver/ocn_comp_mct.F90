@@ -49,9 +49,8 @@ use mpp_domains_mod,      only: mpp_get_compute_domain
 ! Previously inlined - now in separate modules
 use MOM_ocean_model,      only: ocean_public_type, ocean_state_type
 use MOM_ocean_model,      only: ocean_model_init , update_ocean_model, ocean_model_end
-use MOM_ocean_model,      only: ocn_export
 use MOM_surface_forcing,  only: surface_forcing_CS
-use ocn_cap_methods,      only: ocn_import
+use ocn_cap_methods,      only: ocn_import, ocn_export
 
 ! FMS modules
 use time_interp_external_mod, only : time_interp_external
@@ -493,17 +492,15 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
 
   ! Translate import fields to ice_ocean_boundary
   if (glb%sw_decomp) then
-     write(6,*)'DEBUG: using sw_decomp'
      call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, c1=glb%c1, c2=glb%c2, c3=glb%c3, c4=glb%c4)
   else
      call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary)
   end if
 
   ! Update internal ocean
-  call update_ocean_model(ice_ocean_boundary, glb%ocn_state, glb%ocn_public, time_start, coupling_timestep, &
-                          x2o_o%rattr, glb%ind)
+  call update_ocean_model(ice_ocean_boundary, glb%ocn_state, glb%ocn_public, time_start, coupling_timestep)
 
-  ! return export state to driver
+  ! Return export state to driver
   call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
 
   !--- write out intermediate restart file when needed.
@@ -537,6 +534,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     ! Is this needed?
     call forcing_save_restart(glb%ocn_state%forcing_CSp, glb%grid, glb%ocn_state%Time, &
                               glb%ocn_state%dirs%restart_output_dir, .true.)
+
     ! Once we start using the ice shelf module, the following will be needed
     if (glb%ocn_state%use_ice_shelf) then
       call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, &

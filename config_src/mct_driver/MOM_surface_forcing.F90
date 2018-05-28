@@ -150,10 +150,12 @@ end type surface_forcing_CS
 ! the elements, units, and conventions that exactly conform to the use for
 ! MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
+  real, pointer, dimension(:,:) :: latent_flux     =>NULL() !< latent flux (W/m2)
+  real, pointer, dimension(:,:) :: rofl_flux       =>NULL() !< liquid runoff (W/m2)
+  real, pointer, dimension(:,:) :: rofi_flux       =>NULL() !< ice runoff (W/m2)
   real, pointer, dimension(:,:) :: u_flux          =>NULL() !< i-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: v_flux          =>NULL() !< j-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux (W/m2)
-  real, pointer, dimension(:,:) :: latent_flux     =>NULL() !< latent flux (W/m2)
   real, pointer, dimension(:,:) :: q_flux          =>NULL() !< specific humidity flux (kg/m2/s)
   real, pointer, dimension(:,:) :: salt_flux       =>NULL() !< salt flux (kg/m2/s)
   real, pointer, dimension(:,:) :: lw_flux         =>NULL() !< long wave radiation (W/m2)
@@ -200,8 +202,7 @@ contains
   !! passed from MCT to MOM6, including fluxes that need to be included in
   !! the future.
   subroutine convert_IOB_to_fluxes_and_forces(IOB, fluxes, Time, G, CS, &
-       sfc_state, restore_salt, restore_temp, &
-       forces, x2o, ind)
+       sfc_state, restore_salt, restore_temp, forces)
 
     type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
@@ -222,8 +223,6 @@ contains
     logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
     type(mech_forcing),     intent(inout) :: forces         !<  Driving mechanical forces
-    real(kind=8),           intent(in)    :: x2o(:,:)       !< Fluxes from coupler to ocean, computed by ocean
-    type(cpl_indices_type), intent(inout) :: ind            !< Structure with MCT attribute vectors and indices
 
     ! local variables
     real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -268,8 +267,6 @@ contains
     real :: delta_sst           ! temporary storage for sst diff from restoring value
 
     real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
-
-    real :: sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif
 
     call cpu_clock_begin(id_clock_forcing)
 
@@ -447,20 +444,16 @@ contains
        k = k + 1 ! Increment position within gindex
 
        if (wind_stagger == BGRID_NE) then
-          taux_at_q(I,J) = x2o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
-          tauy_at_q(I,J) = x2o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
+          taux_at_q(I,J) = IOB%u_flux(i,j) * CS%wind_stress_multiplier
+          tauy_at_q(I,J) = IOB%v_flux(i,j) * CS%wind_stress_multiplier
           ! GMM, cime uses AGRID
        elseif (wind_stagger == AGRID) then
-          taux_at_h(i,j) = x2o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
-          tauy_at_h(i,j) = x2o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
+          taux_at_h(i,j) = IOB%u_flux(i,j) * CS%wind_stress_multiplier
+          tauy_at_h(i,j) = IOB%v_flux(i,j) * CS%wind_stress_multiplier
        else ! C-grid wind stresses.
-          forces%taux(I,j) = x2o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
-          forces%tauy(i,J) = x2o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
+          forces%taux(I,j) = IOB%u_flux(i,j) * CS%wind_stress_multiplier
+          forces%tauy(i,J) = IOB%v_flux(i,j) * CS%wind_stress_multiplier
        endif
-
-       ! NOTE: in convert_IOB_to_fluxes x2o below is replace by
-       ! IOB%flux_quantity where flux_quantity is what we use to
-       ! compute fluxes%flux_quantity
 
        ! liquid precipitation (rain)
        if (associated(fluxes%lprec)) &
@@ -472,15 +465,15 @@ contains
 
        ! evaporation
        if (associated(fluxes%evap)) &
-            fluxes%evap(i,j) = x2o(ind%x2o_Foxx_evap,k) * G%mask2dT(i,j)
+            fluxes%evap(i,j) = G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)
 
        ! river runoff flux
        if (associated(fluxes%lrunoff)) &
-            fluxes%lrunoff(i,j) = x2o(ind%x2o_Foxx_rofl,k) * G%mask2dT(i,j)
+            fluxes%lrunoff(i,j) = G%mask2dT(i,j) * IOB%rofl_flux(i-i0,j-j0)
 
        ! ice runoff flux
        if (associated(fluxes%frunoff)) &
-            fluxes%frunoff(i,j) = x2o(ind%x2o_Foxx_rofi,k) * G%mask2dT(i,j)
+            fluxes%frunoff(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)
 
        ! GMM, we don't have an icebergs yet so the following is not needed
        !if (((associated(IOB%ustar_berg) .and. (.not. associated(fluxes%ustar_berg)))   &
@@ -529,7 +522,8 @@ contains
        ! applied surface pressure from atmosphere and cryosphere
        ! sea-level pressure (Pa)
        if (associated(forces%p_surf_full) .and. associated(forces%p_surf)) then
-          forces%p_surf_full(i,j) = G%mask2dT(i,j) * x2o(ind%x2o_Sa_pslv,k)
+          forces%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+
           if (CS%max_p_surf >= 0.0) then
              forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
           else
@@ -541,16 +535,15 @@ contains
           else
              forces%p_surf_SSH => forces%p_surf_full
           endif
-
        endif
 
        ! salt flux
        ! more salt restoring logic
        if (associated(fluxes%salt_flux)) &
-            fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(x2o(ind%x2o_Fioi_salt,k) + fluxes%salt_flux(i,j))
+            fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(IOB%salt_flux(i-i0,j-j0) + fluxes%salt_flux(i,j))
 
        if (associated(fluxes%salt_flux_in)) &
-            fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*x2o(ind%x2o_Fioi_salt,k)
+            fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*IOB%salt_flux(i-i0,j-j0)
 
     enddo; enddo
     ! ############################ END OF MCT to MOM ##############################
@@ -1006,10 +999,12 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
   type(ice_ocean_boundary_type), intent(inout)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
   integer, intent(in) :: isc, iec, jsc, jec                 !< The ocean's local grid size
 
-    allocate ( IOB% u_flux (isc:iec,jsc:jec),          &
+    allocate ( IOB% latent_flux (isc:iec,jsc:jec),     &
+               IOB% rofl_flux (isc:iec,jsc:jec),       &
+               IOB% rofi_flux (isc:iec,jsc:jec),       &
+               IOB% u_flux (isc:iec,jsc:jec),          &
                IOB% v_flux (isc:iec,jsc:jec),          &
                IOB% t_flux (isc:iec,jsc:jec),          &
-               IOB% latent_flux (isc:iec,jsc:jec),     &
                IOB% q_flux (isc:iec,jsc:jec),          &
                IOB% salt_flux (isc:iec,jsc:jec),       &
                IOB% lw_flux (isc:iec,jsc:jec),         &
@@ -1029,10 +1024,12 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
                IOB% mi (isc:iec,jsc:jec),              &
                IOB% p (isc:iec,jsc:jec))
 
+    IOB%latent_flux     = 0.0
+    IOB%rofl_flux       = 0.0
+    IOB%rofi_flux       = 0.0
     IOB%u_flux          = 0.0
     IOB%v_flux          = 0.0
     IOB%t_flux          = 0.0
-    IOB%latent_flux     = 0.0
     IOB%q_flux          = 0.0
     IOB%salt_flux       = 0.0
     IOB%lw_flux         = 0.0
