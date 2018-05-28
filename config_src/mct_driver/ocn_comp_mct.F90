@@ -25,6 +25,8 @@ use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_set
                                shr_file_getLogUnit, shr_file_getLogLevel, &
                                shr_file_setLogUnit, shr_file_setLogLevel
 
+use MOM_surface_forcing, only: IOB_allocate, ice_ocean_boundary_type
+
 ! MOM6 modules
 use MOM,                  only: extract_surface_state
 use MOM_variables,        only: surface
@@ -49,6 +51,7 @@ use MOM_ocean_model,      only: ocean_public_type, ocean_state_type
 use MOM_ocean_model,      only: ocean_model_init , update_ocean_model, ocean_model_end
 use MOM_ocean_model,      only: ocn_export
 use MOM_surface_forcing,  only: surface_forcing_CS
+use ocn_cap_methods,      only: ocn_import
 
 ! FMS modules
 use time_interp_external_mod, only : time_interp_external
@@ -72,7 +75,6 @@ public :: ocn_run_mct
 public :: ocn_final_mct
 
 ! Private member functions
-private :: get_state_pointers
 private :: ocn_SetGSMap_mct
 private :: ocn_domain_mct
 private :: get_runtype
@@ -97,7 +99,8 @@ type MCT_MOM_Data
                                                            !! and filename of the latest restart file.
 end type MCT_MOM_Data
 
-type(MCT_MOM_Data) :: glb !< global structure
+type(MCT_MOM_Data)            :: glb !< global structure
+type(ice_ocean_boundary_type) :: ice_ocean_boundary
 
 !=======================================================================
 contains
@@ -236,6 +239,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   allocate(glb%ocn_public)
   glb%ocn_public%is_ocean_PE = .true.
+
   allocate(glb%ocn_public%pelist(npes))
   glb%ocn_public%pelist(:) = (/(i,i=pe0,pe0+npes)/)
   ! \todo Set other bits of glb$ocn_public
@@ -244,9 +248,11 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! read useful runtime params
   call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
   !call log_version(param_file, mdl, version, "")
+
   call get_param(param_file, mdl, "POINTER_FILENAME", glb%pointer_filename, &
                  "Name of the ascii file that contains the path and filename of" // &
                  " the latest restart file.", default='rpointer.ocn')
+
   call get_param(param_file, mdl, "SW_DECOMP", glb%sw_decomp, &
                  "If True, read coeffs c1, c2, c3 and c4 and decompose" // &
                  "the net shortwave radiation (SW) into four components:\n" // &
@@ -254,6 +260,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
                  "visible, diffuse shortwave = c2 * SW \n" // &
                  "near-IR, direct shortwave  = c3 * SW \n" // &
                  "near-IR, diffuse shortwave = c4 * SW", default=.true.)
+
   if (glb%sw_decomp) then
     call get_param(param_file, mdl, "SW_c1", glb%c1, &
                   "Coeff. used to convert net shortwave rad. into \n"//&
@@ -266,6 +273,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     call get_param(param_file, mdl, "SW_c3", glb%c3, &
                   "Coeff. used to convert net shortwave rad. into \n"//&
                   "near-IR, direct shortwave.", units="nondim", default=0.215)
+
     call get_param(param_file, mdl, "SW_c4", glb%c4, &
                   "Coeff. used to convert net shortwave rad. into \n"//&
                   "near-IR, diffuse shortwave.", units="nondim", default=0.215)
@@ -276,27 +284,24 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! Initialize the MOM6 model
   runtype = get_runtype()
   if (runtype == "initial") then 
-
      ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
-
-  else                           ! hybrid or branch or continuos runs
-
-    ! output path root
-    call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
-    ! read name of restart file in the pointer file
-    nu = shr_file_getUnit()
-    restart_pointer_file = trim(glb%pointer_filename)
-    if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
-    open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-    read(nu,'(a)') restartfile
-    close(nu)
-    !restartfile = trim(restartpath) // trim(restartfile)
-    if (is_root_pe()) write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
-    !endif
-    call shr_file_freeUnit(nu)
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
-
+     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
+  else  ! hybrid or branch or continuos runs
+     ! get output path root
+     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
+     ! read name of restart file in the pointer file
+     nu = shr_file_getUnit()
+     restart_pointer_file = trim(glb%pointer_filename)
+     if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
+     open(nu, file=restart_pointer_file, form='formatted', status='unknown')
+     read(nu,'(a)') restartfile
+     close(nu)
+     !restartfile = trim(restartpath) // trim(restartfile)
+     if (is_root_pe()) then
+        write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
+     end if
+     call shr_file_freeUnit(nu)
+     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
   endif
   if (is_root_pe()) then
      write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
@@ -305,8 +310,11 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! Initialize ocn_state%sfc_state out of sight
   call ocean_model_init_sfc(glb%ocn_state, glb%ocn_public)
 
-  ! store pointers to components inside MOM
-  call get_state_pointers(glb%ocn_state, grid=glb%grid)
+  ! Store pointers to components inside MOM
+  glb%grid => glb%ocn_state%grid
+
+  ! Allocate IOB data type (needs to be called after glb%grid is set)
+  call IOB_allocate(ice_ocean_boundary, glb%grid%isc, glb%grid%iec, glb%grid%jsc, glb%grid%jec)
 
   call t_stopf('MOM_init')
 
@@ -373,8 +381,6 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   call t_stopf('MOM_mct_init')
 
-  if (debug .and. root_pe().eq.pe_here()) print *, "calling get_state_pointers"
-
   ! Size of global domain
   call get_global_grid_size(glb%grid, ni, nj)
 
@@ -394,17 +400,6 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   end if
 
 end subroutine ocn_init_mct
-
-!=======================================================================
-
-!> Returns pointers to objects within ocean_state_type
-subroutine get_state_pointers(OS, grid)
-  type(ocean_state_type),          pointer :: OS !< Ocean state type
-  type(ocean_grid_type), optional, pointer :: grid !< Ocean grid
-
-  if (present(grid)) grid => OS%grid
-
-end subroutine get_state_pointers
 
 !=======================================================================
 
@@ -496,9 +491,17 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   ! GMM, check if  this is needed!
   call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
 
-  ! Note that update_ocean_model calls ocn_import
-  call update_ocean_model(glb%ocn_state, glb%ocn_public, time_start, coupling_timestep, &
-                          x2o_o%rattr, glb%ind, glb%sw_decomp, glb%c1, glb%c2, glb%c3, glb%c4)
+  ! Translate import fields to ice_ocean_boundary
+  if (glb%sw_decomp) then
+     write(6,*)'DEBUG: using sw_decomp'
+     call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, c1=glb%c1, c2=glb%c2, c3=glb%c3, c4=glb%c4)
+  else
+     call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary)
+  end if
+
+  ! Update internal ocean
+  call update_ocean_model(ice_ocean_boundary, glb%ocn_state, glb%ocn_public, time_start, coupling_timestep, &
+                          x2o_o%rattr, glb%ind)
 
   ! return export state to driver
   call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
@@ -575,17 +578,18 @@ subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
   integer,         intent(in)    :: MOM_MCT_ID  !< MCT component ID
   type(mct_gsMap), intent(inout) :: gsMap_ocn   !< MCT global segment map for 2d data
   type(mct_gsMap), intent(inout) :: gsMap3d_ocn !< MCT global segment map for 3d data
+
   ! Local variables
-  integer :: lsize   !< Local size of indirect indexing array
-  integer :: i, j, k !< Local indices
-  integer :: ni, nj  !< Declared sizes of h-point arrays
-  integer :: ig, jg  !< Global indices
+  integer                        :: lsize          !< Local size of indirect indexing array
+  integer                        :: i, j, k        !< Local indices
+  integer                        :: ni, nj         !< Declared sizes of h-point arrays
+  integer                        :: ig, jg         !< Global indices
   type(ocean_grid_type), pointer :: grid => NULL() !< A pointer to a grid structure
   integer, allocatable           :: gindex(:)      !< Indirect indices
 
   grid => glb%grid ! for convenience
   if (.not. associated(grid)) call MOM_error(FATAL, 'ocn_comp_mct.F90, ocn_SetGSMap_mct():' // &
-      'grid returned from get_state_pointers() was not associated!')
+       'grid is not associated!')
 
   ! Size of computational domain
   lsize = ( grid%iec - grid%isc + 1 ) * ( grid%jec - grid%jsc + 1 )

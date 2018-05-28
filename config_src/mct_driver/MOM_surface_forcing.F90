@@ -50,7 +50,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public IOB_allocate
-public convert_x2o_to_fluxes_and_forces
+public convert_IOB_to_fluxes_and_forces
 public surface_forcing_init
 public ice_ocn_bnd_type_chksum
 public forcing_save_restart
@@ -70,8 +70,8 @@ type, public :: surface_forcing_CS ;
   logical :: bulkmixedlayer     !< If true, model based on bulk mixed layer code
   real :: Rho0                  !< Boussinesq reference density (kg/m^3)
   real :: area_surf = -1.0      !< total ocean surface area (m^2)
-  real :: latent_heat_fusion    !< latent heat of fusion (J/kg)
-  real :: latent_heat_vapor     !< latent heat of vaporization (J/kg)
+  real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
+  real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
   real :: max_p_surf            !< maximum surface pressure that can be
                                 !! exerted by the atmosphere and floating sea-ice,
                                 !! in Pa.  This is needed because the FMS coupling
@@ -153,6 +153,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: u_flux          =>NULL() !< i-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: v_flux          =>NULL() !< j-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux (W/m2)
+  real, pointer, dimension(:,:) :: latent_flux     =>NULL() !< latent flux (W/m2)
   real, pointer, dimension(:,:) :: q_flux          =>NULL() !< specific humidity flux (kg/m2/s)
   real, pointer, dimension(:,:) :: salt_flux       =>NULL() !< salt flux (kg/m2/s)
   real, pointer, dimension(:,:) :: lw_flux         =>NULL() !< long wave radiation (W/m2)
@@ -198,21 +199,31 @@ contains
   !! See \ref section_ocn_import for a summary of the surface fluxes that are
   !! passed from MCT to MOM6, including fluxes that need to be included in
   !! the future.
-  subroutine convert_x2o_to_fluxes_and_forces(forces, fluxes, Time, G, CS, sfc_state, x2o, ind, sw_decomp, &
-       c1, c2, c3, c4, restore_salt, restore_temp)
+  subroutine convert_IOB_to_fluxes_and_forces(IOB, fluxes, Time, G, CS, &
+       sfc_state, restore_salt, restore_temp, &
+       forces, x2o, ind)
+
+    type(ice_ocean_boundary_type), &
+                   target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
+                                                   !! the ocean in a coupled model
+
+    type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to
+                                                     !! all possible mass, heat or salt flux forcing fields.
+                                                     !!  Unused fields have NULL ptrs.
+
+    type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
+                                                     !! salinity to the right time, when it is being restored.
+    type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
+    type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
+                                                     !! previous call to surface_forcing_init.
+    type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
+                                                        !! surface state of the ocean.
+    logical,       optional, intent(in)    :: restore_salt !< If true, salinity is restored to a target value.
+    logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
     type(mech_forcing),     intent(inout) :: forces         !<  Driving mechanical forces
-    type(forcing),          intent(inout) :: fluxes         !< Surface fluxes
-    type(time_type),        intent(in)    :: Time           !< Model time
-    type(ocean_grid_type),  intent(inout) :: G              !< The ocean's grid
-    type(surface_forcing_CS), pointer     :: CS             !< control structure returned by a previous call to surface_forcing_init
-    type(surface),          intent(in)    :: sfc_state      !< control structure to ocean surface state fields.
     real(kind=8),           intent(in)    :: x2o(:,:)       !< Fluxes from coupler to ocean, computed by ocean
     type(cpl_indices_type), intent(inout) :: ind            !< Structure with MCT attribute vectors and indices
-    logical,                intent(in)    :: sw_decomp      !< controls if shortwave is decomposed into four components
-    real(kind=8), optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-    logical, optional,      intent(in)    :: restore_salt   !< Controls if salt is restored
-    logical, optional,      intent(in)    :: restore_temp   !< Controls if temp is restored
 
     ! local variables
     real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -257,6 +268,8 @@ contains
     real :: delta_sst           ! temporary storage for sst diff from restoring value
 
     real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
+
+    real :: sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif
 
     call cpu_clock_begin(id_clock_forcing)
 
@@ -426,6 +439,9 @@ contains
        taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
     endif
 
+    !i0 = is - isc_bnd ; j0 = js - jsc_bnd ???
+    i0 = 0; j0 = 0 ! TODO: is this right?
+
     k = 0
     do j=js,je ; do i=is,ie
        k = k + 1 ! Increment position within gindex
@@ -448,11 +464,11 @@ contains
 
        ! liquid precipitation (rain)
        if (associated(fluxes%lprec)) &
-            fluxes%lprec(i,j) = x2o(ind%x2o_Faxa_rain,k) * G%mask2dT(i,j)
+            fluxes%lprec(i,j) = G%mask2dT(i,j) * IOB%lprec(i-i0,j-j0)
 
        ! frozen precipitation (snow)
        if (associated(fluxes%fprec)) &
-            fluxes%fprec(i,j) = x2o(ind%x2o_Faxa_snow,k) * G%mask2dT(i,j)
+            fluxes%fprec(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)
 
        ! evaporation
        if (associated(fluxes%evap)) &
@@ -488,37 +504,27 @@ contains
 
        ! longwave radiation, sum up and down (W/m2)
        if (associated(fluxes%LW)) &
-            fluxes%LW(i,j) = (x2o(ind%x2o_Faxa_lwdn,k) + x2o(ind%x2o_Foxx_lwup,k)) * G%mask2dT(i,j)
+            fluxes%LW(i,j) = G%mask2dT(i,j) * IOB%lw_flux(i-i0,j-j0)
 
        ! sensible heat flux (W/m2)
        if (associated(fluxes%sens)) &
-            fluxes%sens(i,j) =  x2o(ind%x2o_Foxx_sen,k) * G%mask2dT(i,j)
+            fluxes%sens(i,j) = G%mask2dT(i,j) * IOB%t_flux(i-i0,j-j0)
 
        ! latent heat flux (W/m^2)
        if (associated(fluxes%latent)) &
-            fluxes%latent(i,j) = x2o(ind%x2o_Foxx_lat,k) * G%mask2dT(i,j)
+            fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
 
-       if (sw_decomp) then
-          ! Use runtime coefficients to decompose net short-wave heat flux into 4 components
-          ! 1) visible, direct shortwave (W/m2)
-          if (associated(fluxes%sw_vis_dir)) &
-               fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * x2o(ind%x2o_Foxx_swnet,k)*c1
-          ! 2) visible, diffuse shortwave (W/m2)
-          if (associated(fluxes%sw_vis_dif)) &
-               fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * x2o(ind%x2o_Foxx_swnet,k)*c2
-          ! 3) near-IR, direct shortwave (W/m2)
-          if (associated(fluxes%sw_nir_dir)) &
-               fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * x2o(ind%x2o_Foxx_swnet,k)*c3
-          ! 4) near-IR, diffuse shortwave (W/m2)
-          if (associated(fluxes%sw_nir_dif)) &
-               fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * x2o(ind%x2o_Foxx_swnet,k)*c4
+       if (associated(IOB%sw_flux_vis_dir)) &
+            fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
+       if (associated(IOB%sw_flux_vis_dif)) &
+            fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
+       if (associated(IOB%sw_flux_nir_dir)) &
+            fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
+       if (associated(IOB%sw_flux_nir_dif)) &
+            fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
 
-          fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
-               fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
-       else
-          call MOM_error(FATAL,"fill_ice_ocean_bnd: this option has not been implemented yet."// &
-               "Shortwave must be decomposed using coeffs. c1, c2, c3, c4.");
-       endif
+       fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
+                        fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
        ! applied surface pressure from atmosphere and cryosphere
        ! sea-level pressure (Pa)
@@ -713,7 +719,7 @@ contains
 
     call cpu_clock_end(id_clock_forcing)
 
-  end subroutine convert_x2o_to_fluxes_and_forces
+  end subroutine convert_IOB_to_fluxes_and_forces
 
 !=======================================================================
 
@@ -1003,6 +1009,7 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
     allocate ( IOB% u_flux (isc:iec,jsc:jec),          &
                IOB% v_flux (isc:iec,jsc:jec),          &
                IOB% t_flux (isc:iec,jsc:jec),          &
+               IOB% latent_flux (isc:iec,jsc:jec),     &
                IOB% q_flux (isc:iec,jsc:jec),          &
                IOB% salt_flux (isc:iec,jsc:jec),       &
                IOB% lw_flux (isc:iec,jsc:jec),         &
@@ -1025,6 +1032,7 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
     IOB%u_flux          = 0.0
     IOB%v_flux          = 0.0
     IOB%t_flux          = 0.0
+    IOB%latent_flux     = 0.0
     IOB%q_flux          = 0.0
     IOB%salt_flux       = 0.0
     IOB%lw_flux         = 0.0

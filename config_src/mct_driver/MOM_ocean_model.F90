@@ -43,7 +43,7 @@ use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_i
 use MOM_restart,             only : MOM_restart_CS, save_restart
 use MOM_string_functions,    only : uppercase
 use MOM_surface_forcing,     only : surface_forcing_init 
-use MOM_surface_forcing,     only : convert_x2o_to_fluxes_and_forces, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing,     only : convert_IOB_to_fluxes_and_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing,     only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing,     only : forcing_save_restart
 use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
@@ -393,21 +393,30 @@ end subroutine ocean_model_init
 !! input value of Ocean_state (which must be for time time_start_update) for a time interval
 !! of Ocean_coupling_time_step, returning the publicly visible ocean surface properties in
 !! Ocean_sfc and storing the new ocean properties in Ocean_state.
-subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
-                              Ocean_coupling_time_step, x2o_o, ind, sw_decomp,      &
-                              c1, c2, c3, c4)
+subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
+                              time_start_update, Ocean_coupling_time_step, &
+                              x2o_o, ind)
 
-  type(ocean_state_type),        pointer       :: OS !< Structure containing the internal ocean state
-  type(ocean_public_type),       intent(inout) :: Ocean_sfc !< Structure containing all the publicly
-                                               !! visible ocean surface fields after a coupling time step
-  type(time_type), intent(in)                  :: time_start_update !< Time at the beginning of the update step
-  type(time_type), intent(in)                  :: Ocean_coupling_time_step !< Amount of time over which to
-                                               !! advance the ocean
-  real(kind=8),           intent(in)    :: x2o_o(:,:) !< Fluxes from coupler to ocean, computed by ocean
-  type(cpl_indices_type), intent(inout) :: ind !< Structure with MCT attribute vectors and indices
-  logical,                intent(in)    :: sw_decomp !< controls if shortwave is
-                                                     !!decomposed into four components
-  real(kind=8), optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  type(ice_ocean_boundary_type), &
+                     intent(in)    :: Ice_ocean_boundary !< A structure containing the
+                                              !! various forcing fields coming from the ice.
+
+  type(ocean_state_type), &
+                     pointer       :: OS      !< A pointer to a private structure containing
+                                              !! the internal ocean state.
+
+  type(ocean_public_type), &
+                     intent(inout) :: Ocean_sfc !< A structure containing all the
+                                              !! publicly visible ocean surface fields after
+                                              !! a coupling time step.  The data in this type is
+                                              !! intent out.
+
+  type(time_type),   intent(in)    :: time_start_update  !< The time at the beginning of the update step.
+  type(time_type),   intent(in)    :: Ocean_coupling_time_step !< The amount of time over
+                                              !! which to advance the ocean.
+
+  real(kind=8),           intent(in)    :: x2o_o(:,:)     !< Fluxes from coupler to ocean, computed by ocean
+  type(cpl_indices_type), intent(inout) :: ind            !< Structure with MCT attribute vectors and indices
 
   ! local variables
   type(time_type) :: Master_time !< This allows step_MOM to temporarily change
@@ -419,7 +428,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   integer :: secs, days
   integer :: is, ie, js, je
 
-  call callTree_enter("update_ocean_model(), ocn_comp_mct.F90")
+  call callTree_enter("update_ocean_model(), MOM_ocean_model.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   time_step = 86400.0*real(days) + real(secs)
 
@@ -449,9 +458,9 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%diag)
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_x2o_to_fluxes_and_forces(OS%forces, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
-                                           OS%sfc_state, x2o_o, ind, sw_decomp, c1, c2, c3, c4, &
-                                           OS%restore_salinity, OS%restore_temp)
+    call convert_IOB_to_fluxes_and_forces(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, &
+                                          forces=OS%forces, x2o=x2o_o, ind=ind)
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
     call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
@@ -481,9 +490,9 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     OS%flux_tmp%C_p = OS%fluxes%C_p
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_x2o_to_fluxes_and_forces(OS%forces, OS%flux_tmp, OS%Time, OS%grid, OS%forcing_CSp, &
-                                          OS%sfc_state, x2o_o, ind, sw_decomp, c1, c2, c3, c4, &
-                                          OS%restore_salinity, OS%restore_temp)
+    call convert_IOB_to_fluxes_and_forces(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, &
+                                          forces=OS%forces, x2o=x2o_o, ind=ind)
 
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)

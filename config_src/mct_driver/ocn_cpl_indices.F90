@@ -36,6 +36,10 @@ module ocn_cpl_indices
      integer :: x2o_Foxx_lat      !< Latent heat flux  (W/m2)
      integer :: x2o_Foxx_lwup     !< Longwave radiation, up (W/m2)
      integer :: x2o_Faxa_lwdn     !< Longwave radiation, down (W/m2)
+     integer :: x2o_Faxa_swvdr    !< Visible, direct shortwave (W/m2)
+     integer :: x2o_Faxa_swvdf    !< Visible, diffuse shortwave (W/m2)
+     integer :: x2o_Faxa_swndr    !< near-IR, direct shortwave (W/m2)
+     integer :: x2o_Faxa_swndf    !< near-IR, direct shortwave (W/m2)
      integer :: x2o_Fioi_melth    !< Heat flux from snow & ice melt (W/m2)
      integer :: x2o_Fioi_meltw    !< Snow melt flux (kg/m2/s)
      integer :: x2o_Fioi_bcpho    !< Black Carbon hydrophobic release from sea ice component
@@ -118,6 +122,10 @@ contains
     ind%x2o_Foxx_sen      = mct_avect_indexra(x2o,'Foxx_sen')
     ind%x2o_Foxx_lwup     = mct_avect_indexra(x2o,'Foxx_lwup')
     ind%x2o_Faxa_lwdn     = mct_avect_indexra(x2o,'Faxa_lwdn')
+    ind%x2o_Faxa_swvdr    = mct_avect_indexra(x2o,'Faxa_swvdr',perrWith='quiet')
+    ind%x2o_Faxa_swvdf    = mct_avect_indexra(x2o,'Faxa_swvdf',perrWith='quiet')
+    ind%x2o_Faxa_swndr    = mct_avect_indexra(x2o,'Faxa_swndr',perrWith='quiet')
+    ind%x2o_Faxa_swndf    = mct_avect_indexra(x2o,'Faxa_swndf',perrWith='quiet')
     ind%x2o_Fioi_melth    = mct_avect_indexra(x2o,'Fioi_melth')
     ind%x2o_Fioi_meltw    = mct_avect_indexra(x2o,'Fioi_meltw')
     ind%x2o_Fioi_salt     = mct_avect_indexra(x2o,'Fioi_salt')
@@ -146,8 +154,8 @@ contains
     ind%x2o_Faxa_dstwet4  = mct_avect_indexra(x2o,'Faxa_dstwet4')
     ind%x2o_Sa_co2prog    = mct_avect_indexra(x2o,'Sa_co2prog',perrWith='quiet')
     ind%x2o_Sa_co2diag    = mct_avect_indexra(x2o,'Sa_co2diag',perrWith='quiet')
-    ! optional per thickness category fields
 
+    ! optional per thickness category fields
     ! convert cpl indices to mcog column indices
     ! this implementation only handles columns due to ice thickness categories
     lmcog_flds_sent = seq_flds_i2o_per_cat
