@@ -57,10 +57,10 @@ contains
           ice_ocean_boundary%q_flux(i,j) = x2o(ind%x2o_Foxx_evap,k) !???TODO: should this be a minus sign
 
           ! sensible heat flux (W/m2)
-          ice_ocean_boundary%t_flux(i,j) = x2o(ind%x2o_Foxx_sen,k) * GRID%mask2dT(i,j)
+          ice_ocean_boundary%t_flux(i,j) = x2o(ind%x2o_Foxx_sen,k) * GRID%mask2dT(i,j) !???TODO: should this be a minus sign
 
           ! latent heat flux (W/m^2)
-          ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k) * GRID%mask2dT(i,j)
+          ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k) * GRID%mask2dT(i,j) !???TODO: should this be a minus sign
 
           ! liquid runoff
           ice_ocean_boundary%rofl_flux(i,j) = x2o(ind%x2o_Foxx_rofl,k) * GRID%mask2dT(i,j)
