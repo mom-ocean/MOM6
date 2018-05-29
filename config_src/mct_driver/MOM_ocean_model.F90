@@ -43,7 +43,8 @@ use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_i
 use MOM_restart,             only : MOM_restart_CS, save_restart
 use MOM_string_functions,    only : uppercase
 use MOM_surface_forcing,     only : surface_forcing_init 
-use MOM_surface_forcing,     only : convert_IOB_to_fluxes_and_forces, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing,     only : convert_IOB_to_fluxes
+use MOM_surface_forcing,     only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing,     only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing,     only : forcing_save_restart
 use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
@@ -417,6 +418,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                  !! the time that is seen by internal modules.
   type(time_type) :: Time1       !< The value of the ocean model's time at the
                                  !! start of a call to step_MOM.
+  integer :: index_bnds(4)       ! The computational domain index bounds in the ice-ocn boundary type
   real :: weight                 !< Flux accumulation weight
   real :: time_step              !< The time step of a call to step_MOM in seconds.
   integer :: secs, days
@@ -444,7 +446,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
+  ! Translate Ice_ocean_boundary into fluxes.
+  call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
+                              index_bnds(3), index_bnds(4))
   weight = 1.0
+
+  call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
+                             OS%grid, OS%forcing_CSp)
 
   if (OS%fluxes%fluxes_used) then
 
@@ -452,8 +460,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%diag)
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_IOB_to_fluxes_and_forces(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
-                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, forces=OS%forces)
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+                               OS%sfc_state, OS%restore_salinity, OS%restore_temp)
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
     call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
@@ -483,8 +491,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%flux_tmp%C_p = OS%fluxes%C_p
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_IOB_to_fluxes_and_forces(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
-                                          OS%sfc_state, OS%restore_salinity, OS%restore_temp, forces=OS%forces)
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+                               OS%sfc_state, OS%restore_salinity, OS%restore_temp)
 
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
