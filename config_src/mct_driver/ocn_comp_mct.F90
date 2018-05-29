@@ -61,7 +61,7 @@ use MOM_diag_mediator,    only: diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator,    only: diag_mediator_close_registration, diag_mediator_end
 use MOM_diag_mediator,    only: safe_alloc_ptr
 use MOM_ice_shelf,        only: initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf,        only: ice_shelf_end, ice_shelf_save_restart
+use MOM_ice_shelf,        only: add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use MOM_string_functions, only: uppercase
 use MOM_constants,        only: CELSIUS_KELVIN_OFFSET, hlf, hlv
 use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
@@ -1727,7 +1727,8 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
@@ -1748,7 +1749,8 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
                        OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option

@@ -492,6 +492,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
         fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
       enddo ; enddo
     endif
+    fluxes%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
   endif
 
   ! more salt restoring logic

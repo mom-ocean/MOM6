@@ -58,8 +58,7 @@ implicit none ; private
 #endif
 
 public shelf_calc_flux, add_shelf_flux, initialize_ice_shelf, ice_shelf_end
-public ice_shelf_save_restart, solo_time_step
-public add_shelf_forces
+public ice_shelf_save_restart, solo_time_step, add_shelf_forces
 
 !> Control structure that contains ice shelf parameters and diagnostics handles
 type, public :: ice_shelf_CS ; private
@@ -176,10 +175,9 @@ contains
 !> Calculates fluxes between the ocean and ice-shelf using the three-equations
 !! formulation (optional to use just two equations).
 !! See \ref section_ICE_SHELF_equations
-subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
+subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   type(surface),         intent(inout) :: state !< structure containing fields that
                                                 !!describe the surface state of the ocean
-  type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
   type(forcing),         intent(inout) :: fluxes !< structure containing pointers to any possible
                                                  !! thermodynamic or mass-flux forcing fields.
   type(time_type),       intent(in)    :: Time  !< Start time of the fluxes.
@@ -188,6 +186,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   type(ice_shelf_CS),    pointer       :: CS !< A pointer to the control structure
                                              !! returned by a previous call to
                                              !! initialize_ice_shelf.
+  type(mech_forcing), optional, intent(inout) :: forces !< A structure with the driving mechanical forces
 
   type(ocean_grid_type), pointer :: G => NULL() ! The grid structure used by the ice shelf.
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
@@ -631,11 +630,7 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
 
   if (CS%DEBUG) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, haloshift=0)
 
-  call add_shelf_forces(G, CS, forces, do_shelf_area=(CS%active_shelf_dynamics .or. &
-                                                      CS%override_shelf_movement))
   call add_shelf_flux(G, CS, state, fluxes)
-
-  call copy_common_forcing_fields(forces, fluxes, G)
 
   ! now the thermodynamic data is passed on... time to update the ice dynamic quantities
 
@@ -667,6 +662,11 @@ subroutine shelf_calc_flux(state, forces, fluxes, Time, time_step, CS)
   if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf,ISS%h_shelf,CS%diag)
   if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
   call disable_averaging(CS%diag)
+
+  if (present(forces)) then
+    call add_shelf_forces(G, CS, forces, do_shelf_area=(CS%active_shelf_dynamics .or. &
+                                                        CS%override_shelf_movement))
+  endif
 
   call cpu_clock_end(id_clock_shelf)
 
@@ -808,6 +808,30 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
 
 end subroutine add_shelf_forces
 
+!> This subroutine adds the ice shelf pressure to the fluxes type.
+subroutine add_shelf_pressure(G, CS, fluxes)
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(ice_shelf_CS),    intent(in)    :: CS   !< This module's control structure.
+  type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be updated.
+
+  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) in Pa.
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  do j=js,je ; do i=is,ie
+    press_ice = (CS%ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
+    if (associated(fluxes%p_surf)) then
+      if (.not.fluxes%accumulate_p_surf) fluxes%p_surf(i,j) = 0.0
+      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + press_ice
+    endif
+    if (associated(fluxes%p_surf_full)) then
+      if (.not.fluxes%accumulate_p_surf) fluxes%p_surf_full(i,j) = 0.0
+      fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + press_ice
+    endif
+  enddo ; enddo
+
+end subroutine add_shelf_pressure
+
 !> Updates surface fluxes that are influenced by sub-ice-shelf melting
 subroutine add_shelf_flux(G, CS, state, fluxes)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
@@ -822,6 +846,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   real :: shelf_mass1     !< Total ice shelf mass at current time (Time).
   real :: delta_mass_shelf!< Change in ice shelf mass over one time step in kg/s
   real :: taux2, tauy2    !< The squared surface stresses, in Pa.
+  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) in Pa.
   real :: asu1, asu2      !< Ocean areas covered by ice shelves at neighboring u-
   real :: asv1, asv2      !< and v-points, in m2.
   real :: fraz            !< refreezing rate in kg m-2 s-1
@@ -842,14 +867,13 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
   real, parameter :: rho_fw = 1000.0 ! fresh water density
-  logical :: find_shelf_area
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
   ISS => CS%ISS
 
-  find_shelf_area = (CS%active_shelf_dynamics .or. CS%override_shelf_movement)
+  call add_shelf_pressure(G, CS, fluxes)
 
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
@@ -1442,12 +1466,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
   endif
 
-  if (present(forces)) then
+  if (present(forces)) &
     call add_shelf_forces(G, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
-  endif
 
-  if (present(fluxes) .and. present(forces)) &
-    call copy_common_forcing_fields(forces, fluxes, G)
+  if (present(fluxes)) call add_shelf_pressure(G, CS, fluxes)
 
   if (CS%active_shelf_dynamics .and. .not.CS%isthermo) then
     ISS%water_flux(:,:) = 0.0
