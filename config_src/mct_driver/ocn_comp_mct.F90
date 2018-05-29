@@ -49,7 +49,8 @@ use mpp_domains_mod,      only: mpp_get_compute_domain
 ! Previously inlined - now in separate modules
 use MOM_ocean_model,      only: ocean_public_type, ocean_state_type
 use MOM_ocean_model,      only: ocean_model_init , update_ocean_model, ocean_model_end
-use MOM_surface_forcing,  only: surface_forcing_CS
+use MOM_ocean_model,      only: convert_state_to_ocean_type
+use MOM_surface_forcing,  only: surface_forcing_CS, forcing_save_restart
 use ocn_cap_methods,      only: ocn_import, ocn_export
 
 ! FMS modules
@@ -61,7 +62,6 @@ use ocn_cpl_indices,   only : cpl_indices_type, cpl_indices_init
 ! GFDL coupler modules
 use coupler_types_mod,   only : coupler_type_spawn
 use coupler_types_mod,   only : coupler_type_initialized, coupler_type_copy_data
-
 
 ! By default make data private
 implicit none; private
@@ -78,8 +78,6 @@ private :: ocn_SetGSMap_mct
 private :: ocn_domain_mct
 private :: get_runtype
 private :: ocean_model_init_sfc
-private :: convert_state_to_ocean_type
-private :: forcing_save_restart
 
 ! Flag for debugging
 logical, parameter :: debug=.true.
@@ -373,7 +371,6 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! if ( lsend_precip_fact )  then
   !    call seq_infodata_PutData( infodata, precip_fact=precip_fact)
   ! end if
-
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_export"
   call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
@@ -740,122 +737,6 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
 end subroutine ocean_model_init_sfc
-
-!=======================================================================
-
-!> Translates the coupler's ocean_data_type into MOM6's surface state variable.
-!! This may eventually be folded into the MOM6's code that calculates the
-!! surface state in the first place.
-subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
-  type(surface),           intent(inout) :: state
-  type(ocean_public_type), target, intent(inout) :: Ocean_sfc !< Ocean surface state
-  type(ocean_grid_type),   intent(inout) :: G                 !< The ocean's grid structure
-  real,          optional, intent(in)    :: patm(:,:)         !< Atmospheric pressure.
-  real,          optional, intent(in)    :: press_to_z        !< Factor to tranform atmospheric
-                                                              !! pressure to z?
-
-  ! local variables
-  real :: IgR0
-  character(len=48)  :: val_str
-  integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
-  integer :: i, j, i0, j0, is, ie, js, je
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  call pass_vector(state%u,state%v,G%Domain)
-
-  call mpp_get_compute_domain(Ocean_sfc%Domain, isc_bnd, iec_bnd, &
-                              jsc_bnd, jec_bnd)
-  if (present(patm)) then
-    ! Check that the inidicies in patm are (isc_bnd:iec_bnd,jsc_bnd:jec_bnd).
-    if (.not.present(press_to_z)) call MOM_error(FATAL, &
-        'convert_state_to_ocean_type: press_to_z must be present if patm is.')
-  endif
-
-  i0 = is - isc_bnd ; j0 = js - jsc_bnd
-  if (state%T_is_conT) then
-    ! Convert the surface T from conservative T to potential T.
-    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%t_surf(i,j) = gsw_pt_from_ct(state%SSS(i+i0,j+j0), &
-                               state%SST(i+i0,j+j0)) + CELSIUS_KELVIN_OFFSET
-    enddo ; enddo
-  else
-    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%t_surf(i,j) = state%SST(i+i0,j+j0) + CELSIUS_KELVIN_OFFSET
-    enddo ; enddo
-  endif
-  if (state%S_is_absS) then
-    ! Convert the surface S from absolute salinity to practical salinity.
-    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%s_surf(i,j) = gsw_sp_from_sr(state%SSS(i+i0,j+j0))
-    enddo ; enddo
-  else
-    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%s_surf(i,j) = state%SSS(i+i0,j+j0)
-    enddo ; enddo
-  endif
-
-  do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-    Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
-    if (present(patm)) &
-      Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
-      if (associated(state%frazil)) &
-      Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
-    Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)
-  enddo ; enddo
-
-  if (Ocean_sfc%stagger == AGRID) then
-    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dT(i+i0,j+j0)*0.5*(state%u(I+i0,j+j0)+state%u(I-1+i0,j+j0))
-      Ocean_sfc%v_surf(i,j) = G%mask2dT(i+i0,j+j0)*0.5*(state%v(i+i0,J+j0)+state%v(i+i0,J-1+j0))
-    enddo ; enddo
-  elseif (Ocean_sfc%stagger == BGRID_NE) then
-    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dBu(I+i0,J+j0)*0.5*(state%u(I+i0,j+j0)+state%u(I+i0,j+j0+1))
-      Ocean_sfc%v_surf(i,j) = G%mask2dBu(I+i0,J+j0)*0.5*(state%v(i+i0,J+j0)+state%v(i+i0+1,J+j0))
-    enddo ; enddo
-  elseif (Ocean_sfc%stagger == CGRID_NE) then
-    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dCu(I+i0,j+j0)*state%u(I+i0,j+j0)
-      Ocean_sfc%v_surf(i,j) = G%mask2dCv(i+i0,J+j0)*state%v(i+i0,J+j0)
-    enddo ; enddo
-  else
-    write(val_str, '(I8)') Ocean_sfc%stagger
-    call MOM_error(FATAL, "convert_state_to_ocean_type: "//&
-      "Ocean_sfc%stagger has the unrecognized value of "//trim(val_str))
-  endif
-
-  if (coupler_type_initialized(state%tr_fields)) then
-    if (.not.coupler_type_initialized(Ocean_sfc%fields)) then
-      call MOM_error(FATAL, "convert_state_to_ocean_type: "//&
-               "Ocean_sfc%fields has not been initialized.")
-    endif
-    call coupler_type_copy_data(state%tr_fields, Ocean_sfc%fields)
-  endif
-
-end subroutine convert_state_to_ocean_type
-
-!=======================================================================
-
-!> Saves restart fields associated with the forcing
-subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, filename_suffix)
-  type(surface_forcing_CS),   pointer       :: CS              !< pointer to the control structure
-                                                               !! returned by a previous call to
-                                                               !! surface_forcing_init
-  type(ocean_grid_type),      intent(inout) :: G               !< The ocean's grid structure
-  type(time_type),            intent(in)    :: Time            !<  model time at this call
-  character(len=*),           intent(in)    :: directory       !< optional directory into which
-                                                               !! to write these restart files
-  logical,          optional, intent(in)    :: time_stamped    !< If true, the restart file
-                                                               !! names include a unique time
-                                                               !! stamp
-  character(len=*), optional, intent(in)    :: filename_suffix !< optional suffix
-                                                               !! (e.g., a time-stamp) to append to the
-                                                               !! restart file names
-  if (.not.associated(CS)) return
-  if (.not.associated(CS%restart_CSp)) return
-  call save_restart(directory, Time, G, CS%restart_CSp, time_stamped)
-
-end subroutine forcing_save_restart
 
 !=======================================================================
 
