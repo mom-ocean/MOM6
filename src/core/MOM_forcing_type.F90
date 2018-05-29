@@ -118,6 +118,10 @@ type, public :: forcing
                                !! in corrections to the sea surface height field
                                !! that is passed back to the calling routines.
                                !! This may point to p_surf or to p_surf_full.
+  logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
+                                 !! and various types of ice needs to be accumulated, and the
+                                 !! surface pressure explicitly reset to zero at the driver level
+                                 !! when appropriate.
 
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
