@@ -893,6 +893,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
       call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
     else
+
       call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
     endif
 
