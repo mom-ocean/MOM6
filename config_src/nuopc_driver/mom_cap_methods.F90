@@ -5,12 +5,12 @@ module mom_cap_methods
 
   ! mct modules
   use ESMF
-  use perf_mod,        only: t_startf, t_stopf
-  use ocean_model_mod, only: ocean_public_type, ocean_state_type
-  use ocean_model_mod, only: ice_ocean_boundary_type
-  use MOM_grid,        only: ocean_grid_type
-  use MOM_domains,     only: pass_var
-  use mpp_domains_mod, only: mpp_get_compute_domain
+  use perf_mod,            only: t_startf, t_stopf
+  use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
+  use MOM_surface_forcing, only: ice_ocean_boundary_type
+  use MOM_grid,            only: ocean_grid_type
+  use MOM_domains,         only: pass_var
+  use mpp_domains_mod,     only: mpp_get_compute_domain
 
   ! By default make data private
   implicit none; private
