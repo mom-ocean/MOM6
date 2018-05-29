@@ -99,14 +99,15 @@ type, public ::  ocean_public_type
   type(domain2d) :: Domain    !< The domain for the surface fields.
   logical :: is_ocean_pe      !< .true. on processors that run the ocean model.
   character(len=32) :: instance_name = '' !< A name that can be used to identify
-                                 !! this instance of an ocean model, for example
-                                 !! in ensembles when writing messages.
+                              !! this instance of an ocean model, for example
+                              !! in ensembles when writing messages.
   integer, pointer, dimension(:) :: pelist => NULL()   !< The list of ocean PEs.
   logical, pointer, dimension(:,:) :: maskmap =>NULL() !< A pointer to an array
-                    !! indicating which logical processors are actually used for
-                    !! the ocean code. The other logical processors would be all
-                    !! land points and are not assigned to actual processors.
-                    !! This need not be assigned if all logical processors are used.
+                              !! indicating which logical processors are actually
+                              !! used for the ocean code. The other logical
+                              !! processors would be all land points and are not
+                              !! assigned to actual processors. This need not be
+                              !! assigned if all logical processors are used.
 
   integer :: stagger = -999   !< The staggering relative to the tracer points
                     !! points of the two velocity components. Valid entries
@@ -251,13 +252,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
 ! been used in a previous call to initialize_ocean_type.
 
-! Arguments: Ocean_sfc - A structure containing various publicly visible ocean
-!                    surface properties after initialization, this is intent(out).
-!  (out,private) OS - A structure whose internal contents are private
-!                    to ocean_model_mod that may be used to contain all
-!                    information about the ocean's interior state.
-!  (in)      Time_init - The start time for the coupled model's calendar.
-!  (in)      Time_in - The time at which to initialize the ocean model.
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
 ! This include declares and sets the variable "version".
@@ -457,31 +451,32 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                               !! cumulative thermodynamic fluxes from the ocean,
                                               !! like frazil, have been used and should be reset.
 
-  type(time_type) :: Master_time ! This allows step_MOM to temporarily change
-                                 ! the time that is seen by internal modules.
-  type(time_type) :: Time1       ! The value of the ocean model's time at the
-                                 ! start of a call to step_MOM.
-  integer :: index_bnds(4)       ! The computational domain index bounds in the
-                                 ! ice-ocean boundary type.
-  real :: weight          ! Flux accumulation weight
-  real :: dt_coupling     ! The coupling time step in seconds.
-  integer :: nts          ! The number of baroclinic dynamics time steps
-                          ! within dt_coupling.
-  real :: dt_therm        ! A limited and quantized version of OS%dt_therm (sec)
-  real :: dt_dyn          ! The dynamics time step in sec.
-  real :: dtdia           ! The diabatic time step in sec.
-  real :: t_elapsed_seg   ! The elapsed time in this update segment, in s.
+  ! local variables
+  type(time_type) :: Master_time !< This allows step_MOM to temporarily change
+                                 !! the time that is seen by internal modules.
+  type(time_type) :: Time1       !< The value of the ocean model's time at the
+                                 !! start of a call to step_MOM.
+  integer :: index_bnds(4)       ! The computational domain index bounds in the ice-ocn boundary type
+  real :: weight                 !< Flux accumulation weight
+  real :: dt_coupling            !< The coupling time step in seconds.
+
+  integer :: nts                       ! The number of baroclinic dynamics time steps
+                                       ! within dt_coupling.
+  real :: dt_therm                     ! A limited and quantized version of OS%dt_therm (sec)
+  real :: dt_dyn                       ! The dynamics time step in sec.
+  real :: dtdia                        ! The diabatic time step in sec.
+  real :: t_elapsed_seg                ! The elapsed time in this update segment, in s.
   integer :: n, n_max, n_last_thermo
-  type(time_type) :: Time2  ! A temporary time.
+  type(time_type) :: Time2             ! A temporary time.
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
-  logical :: do_dyn       ! If true, step the ocean dynamics and transport.
-  logical :: do_thermo    ! If true, step the ocean thermodynamics.
-  logical :: step_thermo           ! If true, take a thermodynamic step.
+  logical :: do_dyn                    ! If true, step the ocean dynamics and transport.
+  logical :: do_thermo                 ! If true, step the ocean thermodynamics.
+  logical :: step_thermo               ! If true, take a thermodynamic step.
   integer :: secs, days
   integer :: is, ie, js, je
 
-  call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
+  call callTree_enter("update_ocean_model(), MOM_ocean_model.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   dt_coupling = 86400.0*real(days) + real(secs)
 
@@ -923,17 +918,13 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, &
 
   if (Ocean_sfc%stagger == AGRID) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dT(i+i0,j+j0) * &
-                0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I-1+i0,j+j0))
-      Ocean_sfc%v_surf(i,j) = G%mask2dT(i+i0,j+j0) * &
-                0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0,J-1+j0))
+      Ocean_sfc%u_surf(i,j) = G%mask2dT(i+i0,j+j0) * 0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I-1+i0,j+j0))
+      Ocean_sfc%v_surf(i,j) = G%mask2dT(i+i0,j+j0) * 0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0,J-1+j0))
     enddo ; enddo
   elseif (Ocean_sfc%stagger == BGRID_NE) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%u_surf(i,j) = G%mask2dBu(I+i0,J+j0) * &
-                0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I+i0,j+j0+1))
-      Ocean_sfc%v_surf(i,j) = G%mask2dBu(I+i0,J+j0) * &
-                0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0+1,J+j0))
+      Ocean_sfc%u_surf(i,j) = G%mask2dBu(I+i0,J+j0) * 0.5*(sfc_state%u(I+i0,j+j0)+sfc_state%u(I+i0,j+j0+1))
+      Ocean_sfc%v_surf(i,j) = G%mask2dBu(I+i0,J+j0) * 0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0+1,J+j0))
     enddo ; enddo
   elseif (Ocean_sfc%stagger == CGRID_NE) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd

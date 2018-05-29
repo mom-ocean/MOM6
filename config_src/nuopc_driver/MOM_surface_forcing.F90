@@ -215,11 +215,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
   type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
-                                                   !! surface state of the ocean.
+                                                      !! surface state of the ocean.
   logical,       optional, intent(in)    :: restore_salt !< If true, salinity is restored to a target value.
   logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
 
+  ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     data_restore,  & ! The surface value toward which to restore (g/kg or degC)
     SST_anom,      & ! Instantaneous sea surface temperature anomalies from a target value (deg C)
@@ -476,6 +477,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
       fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
     if (associated(IOB%sw_flux_nir_dif)) &
       fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
+
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
@@ -588,7 +590,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     rigidity_at_h, & ! Ice rigidity at tracer points (m3 s-1)
     taux_at_h, & ! Zonal wind stresses at h points (Pa)
     tauy_at_h    ! Meridional wind stresses at h points (Pa)
-
+ 
   real :: gustiness     ! unresolved gustiness that contributes to ustar (Pa)
   real :: Irho0         ! inverse of the mean density in (m^3/kg)
   real :: taux2, tauy2  ! squared wind stresses (Pa^2)

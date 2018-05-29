@@ -383,7 +383,7 @@ module mom_cap_mod
   use MOM_get_input,            only: Get_MOM_Input, directories
   use MOM_domains,              only: pass_var
 #ifdef MOM6_CAP
-  use ocean_model_mod,          only: ice_ocean_boundary_type
+  use MOM_ocean_model,          only: ice_ocean_boundary_type
   use MOM_grid,                 only: ocean_grid_type
 #else
   use ocean_types_mod,          only: ice_ocean_boundary_type, ocean_grid_type
@@ -732,7 +732,7 @@ module mom_cap_mod
     call fms_init(mpi_comm_mom)
     call constants_init
     call field_manager_init
-    call set_calendar_type (JULIAN                )
+    call set_calendar_type (JULIAN)
     call diag_manager_init
     ! this ocean connector will be driven at set interval
     dt_cpld = DT_OCEAN
