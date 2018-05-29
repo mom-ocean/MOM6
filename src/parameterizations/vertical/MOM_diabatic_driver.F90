@@ -1950,6 +1950,13 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  default=.false. )
 
   CS%use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
+
+  if (CS%use_CVMix_ddiff .and. differentialDiffusion) then
+    call MOM_error(FATAL, 'diabatic_driver_init: '// &
+           'Multiple double-diffusion options selected (DOUBLE_DIFFUSION and'//&
+           'USE_CVMIX_DDIFF), please disable all but one option to proceed.')
+  endif
+
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
   CS%use_CVMix_shear = CVMix_shear_is_used(param_file)
 
