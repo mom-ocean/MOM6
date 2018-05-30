@@ -1834,7 +1834,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
   logical :: use_kappa_shear, adiabatic, use_omega
-  logical :: use_CVMix_ddiff
+  logical :: use_CVMix_ddiff, differential_diffusion
   type(OBC_segment_type), pointer :: segment  ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1859,6 +1859,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
   use_kappa_shear = .false. !; adiabatic = .false.  ! Needed? -AJA
+  differential_diffusion = .false.
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
@@ -1885,6 +1886,10 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
     CS%RiNo_mix = use_kappa_shear
+    call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differential_diffusion, &
+                 "If true, increase diffusivitives for temperature or salt \n"//&
+                 "based on double-diffusive paramaterization from MOM4/KPP.", &
+                 default=.false.)
     use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
   endif
 
@@ -2038,7 +2043,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
        Time, 'Rayleigh drag velocity at v points', 'm s-1')
   endif
 
-  if (use_CVMix_ddiff) then
+  if (use_CVMix_ddiff .or. differential_diffusion) then
     allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T = 0.0
     allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S = 0.0
   endif
