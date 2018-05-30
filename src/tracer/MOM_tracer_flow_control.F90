@@ -238,7 +238,7 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
     register_ISOMIP_tracer(HI, GV, param_file, CS%ISOMIP_tracer_CSp, &
                            tr_Reg, restart_CS)
   if (CS%use_Elizabeth_tracer) CS%use_Elizabeth_tracer = &
-    register_Elizabeth_tracer(HI, GV, param_file, CS%Elizabeth_tracer_CSp &
+    register_Elizabeth_tracer(HI, GV, param_file, CS%Elizabeth_tracer_CSp, &
                            tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
     register_ideal_age_tracer(HI, GV, param_file,  CS%ideal_age_tracer_CSp, &
@@ -511,6 +511,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                         G, GV, CS%ISOMIP_tracer_CSp, &
                                         evap_CFL_limit=evap_CFL_limit, &
                                         minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_Elizabeth_tracer) &
+      call Elizabeth_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                        G, GV, CS%Elizabeth_tracer_CSp, &
+                                        evap_CFL_limit=evap_CFL_limit, &
+                                        minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_ideal_age) &
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                            G, GV, CS%ideal_age_tracer_CSp, &
@@ -571,6 +576,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
     if (CS%use_ISOMIP_tracer) &
       call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                       G, GV, CS%ISOMIP_tracer_CSp)
+    if (CS%use_Elizabeth_tracer) &
+      call Elizabeth_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%Elizabeth_tracer_CSp)
     if (CS%use_ideal_age) &
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                            G, GV, CS%ideal_age_tracer_CSp)
