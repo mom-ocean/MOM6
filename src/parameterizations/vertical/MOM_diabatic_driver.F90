@@ -281,9 +281,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    ea,     &    ! amount of fluid entrained from the layer above within
+    ea_s,     &  ! amount of fluid entrained from the layer above within
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-    eb,     &    ! amount of fluid entrained from the layer below within
+    eb_s,     &  ! amount of fluid entrained from the layer below within
+                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+    ea_t,     &  ! amount of fluid entrained from the layer above within
+                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+    eb_t,     &  ! amount of fluid entrained from the layer below within
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
     Kd,     &    ! diapycnal diffusivity of layers (m^2/sec)
     h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
@@ -555,12 +559,34 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
+  ! Set diffusivities for heat and salt
+
+!$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
+!$OMP do
+  do k=1,nz+1 ; do j=js,je ; do i=is,ie
+    Kd_salt(i,j,k) = Kd_int(i,j,k)
+    Kd_heat(i,j,k) = Kd_int(i,j,k)
+  enddo ; enddo ; enddo
+  if (associated(visc%Kd_extra_S)) then
+!$OMP do
+    do k=1,nz+1 ; do j=js,je ; do i=is,ie
+      Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if (associated(visc%Kd_extra_T)) then
+!$OMP do
+    do k=1,nz+1 ; do j=js,je ; do i=is,ie
+      Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+!$OMP end parallel
+
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd, "after set_diffusivity Kd",G%HI,haloshift=0)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G%HI,haloshift=0)
+    call hchksum(Kd_heat, "after set_diffusivity Kd_heat",G%HI,haloshift=0)
+    call hchksum(Kd_salt, "after set_diffusivity Kd_salt",G%HI,haloshift=0)
   endif
 
   if (CS%useKPP) then
@@ -577,26 +603,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     ! since the matching to nonzero interior diffusivity can be problematic.
     ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
 
-!$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
-!$OMP do
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,k) = Kd_int(i,j,k)
-        Kd_heat(i,j,k) = Kd_int(i,j,k)
-      enddo ; enddo ; enddo
-    if (associated(visc%Kd_extra_S)) then
-!$OMP do
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,k) = Kd_salt(i,j,k) + visc%Kd_extra_S(i,j,k)
-      enddo ; enddo ; enddo
-    endif
-    if (associated(visc%Kd_extra_T)) then
-!$OMP do
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_heat(i,j,k) = Kd_heat(i,j,k) + visc%Kd_extra_T(i,j,k)
-      enddo ; enddo ; enddo
-    endif
-!$OMP end parallel
-
     call KPP_compute_BLD(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
       fluxes%ustar, CS%KPP_buoy_flux)
 
@@ -610,6 +616,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       call pass_var(Hml, G%domain, halo=1)
     endif
 
+! GMM, I believe the following can be deleted???
     if (.not. CS%KPPisPassive) then
 !$OMP do
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
@@ -628,34 +635,24 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
         enddo ; enddo ; enddo
       endif
     endif ! not passive
+
 !$OMP end parallel
+!!!!!!! delete above ?? !!!!!!!!!!!!!
+
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
-      call hchksum(Kd, "after KPP Kd",G%HI,haloshift=0)
-      call hchksum(Kd_Int, "after KPP Kd_Int",G%HI,haloshift=0)
+      call hchksum(Kd_heat, "after KPP Kd_heat",G%HI,haloshift=0)
+      call hchksum(Kd_salt, "after KPP Kd_salt",G%HI,haloshift=0)
     endif
 
   endif  ! endif for KPP
 
-  ! Add vertical diff./visc. due to convection (computed via CVMix)
-  if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, CS%CVMix_conv_csp, Hml)
-
-      !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
-        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
-      enddo ; enddo ; enddo
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-  endif
 
   if (CS%useKPP) then
-
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
       call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat",G%HI,haloshift=0, scale=GV%H_to_m)
@@ -676,7 +673,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
     endif
-
   endif ! endif for KPP
 
   ! Differential diffusion done here.
@@ -701,6 +697,20 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       enddo ; enddo ; enddo
     endif
 
+  endif
+
+  ! Add vertical diff./visc. due to convection (computed via CVMix)
+  if (CS%use_CVMix_conv) then
+    call calculate_CVMix_conv(h, tv, G, GV, CS%CVMix_conv_csp, Hml)
+
+!$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,visc,CS,Kd_heat)
+!$OMP do
+    do k=1,nz+1 ; do j=js,je ; do i=is,ie
+      Kd_heat(i,j,k) = Kd_heat(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
+      Kd_salt(i,j,k) = Kd_salt(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
+      visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
+    enddo ; enddo ; enddo
+!$OMP end parallel
   endif
 
 
