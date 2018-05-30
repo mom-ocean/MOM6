@@ -183,7 +183,7 @@ type diffusivity_diags
 end type diffusivity_diags
 
 ! Clocks
-integer :: id_clock_kappaShear
+integer :: id_clock_kappaShear, id_clock_CVMix_ddiff
 
 contains
 
@@ -425,7 +425,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     ! Apply double diffusion via CVMix
     ! GMM, we need to pass HBL to compute_ddiff_coeffs, but it is not yet available.
     if (CS%use_CVMix_ddiff) then
+      call cpu_clock_begin(id_clock_CVMix_ddiff)
       call compute_ddiff_coeffs(h, tv, G, GV, j, visc%Kd_extra_T, visc%Kd_extra_S, CS%CVMix_ddiff_csp)
+      call cpu_clock_end(id_clock_CVMix_ddiff)
     endif
 
   ! Add the input turbulent diffusivity.
@@ -2154,6 +2156,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   ! CVMix double diffusion mixing
   CS%use_CVMix_ddiff = CVMix_ddiff_init(Time, G, GV, param_file, CS%diag, CS%CVMix_ddiff_csp)
+  if (CS%use_CVMix_ddiff) &
+    id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion via CVMix)', grain=CLOCK_MODULE)
 
 end subroutine set_diffusivity_init
 
