@@ -251,7 +251,7 @@ end type diabatic_CS
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
-integer :: id_clock_kpp, id_clock_CVMix_ddiff
+integer :: id_clock_kpp
 
 contains
 
@@ -687,11 +687,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T) .and. .not. &
      CS%use_CVMix_ddiff) then
 
-    ! GMM, fix this
-    !call cpu_clock_begin(id_clock_CVMix_ddiff)
     call cpu_clock_begin(id_clock_differential_diff)
     call differential_diffuse_T_S(h, tv, visc, dt, G, GV)
-    !call cpu_clock_end(id_clock_CVMix_ddiff)
     call cpu_clock_end(id_clock_differential_diff)
 
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
@@ -2060,8 +2057,6 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   id_clock_pass = cpu_clock_id('(Ocean diabatic message passing)', grain=CLOCK_ROUTINE)
   id_clock_differential_diff = -1 ; if (differentialDiffusion) &
     id_clock_differential_diff = cpu_clock_id('(Ocean differential diffusion)', grain=CLOCK_ROUTINE)
-  id_clock_CVMix_ddiff = -1 ; if (CS%use_CVMix_ddiff) &
-    id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion via CVMix)', grain=CLOCK_ROUTINE)
 
   ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, GV, param_file, diag, CS%diabatic_aux_CSp, &
