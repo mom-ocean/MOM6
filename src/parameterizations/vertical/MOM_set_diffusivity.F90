@@ -284,9 +284,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   use_EOS = associated(tv%eqn_of_state)
 
-  if ((CS%use_CVMix_ddiff) .or. CS%double_diffusion .and. &
-      .not.(associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S)) ) &
-    call MOM_error(FATAL, "set_diffusivity: visc%Kd_extra_T and "//&
+  if (CS%use_CVMix_ddiff .or. CS%double_diffusion .and. &
+      .not. (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S))) &
+    call MOM_error(FATAL, "set_diffusivity: both visc%Kd_extra_T and "//&
          "visc%Kd_extra_S must be associated when USE_CVMIX_DDIFF or DOUBLE_DIFFUSION are true.")
 
   ! Set Kd, Kd_int and Kv_slow to constant values.
@@ -2106,6 +2106,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
+
   if (CS%double_diffusion) then
     call get_param(param_file, mdl, "MAX_RRHO_SALT_FINGERS", CS%Max_Rrho_salt_fingers, &
                  "Maximum density ratio for salt fingering regime.", &
@@ -2117,12 +2118,6 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "Molecular viscosity for calculation of fluxes under \n"//&
                  "double-diffusive convection.", default=1.5e-6, units="m2 s-1")
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
-
-    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1')
-
-    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1')
 
     if (associated(diag_to_Z_CSp)) then
       vd = var_desc("KT_extra", "m2 s-1", &
@@ -2158,6 +2153,14 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   CS%use_CVMix_ddiff = CVMix_ddiff_init(Time, G, GV, param_file, CS%diag, CS%CVMix_ddiff_csp)
   if (CS%use_CVMix_ddiff) &
     id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion via CVMix)', grain=CLOCK_MODULE)
+
+  if (CS%use_CVMix_ddiff .or. CS%double_diffusion) then
+    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
+         'Double-diffusive diffusivity for temperature', 'm2 s-1')
+
+    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
+         'Double-diffusive diffusivity for salinity', 'm2 s-1')
+  endif
 
 end subroutine set_diffusivity_init
 
