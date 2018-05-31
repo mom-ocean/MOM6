@@ -259,6 +259,8 @@ end function CVMix_conv_is_used
 subroutine CVMix_conv_end(CS)
   type(CVMix_conv_cs), pointer :: CS ! Control structure
 
+  if (.not. associated(CS)) return
+
   deallocate(CS%N2)
   deallocate(CS%kd_conv)
   deallocate(CS%kv_conv)

@@ -52,9 +52,9 @@ use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjus
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
-use MOM_legacy_diabatic_driver,only : legacy_diabatic
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
+use MOM_diabatic_driver,       only : legacy_diabatic
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
 use MOM_diagnostics,           only : register_surface_diags, write_static_fields
@@ -2991,8 +2991,7 @@ subroutine MOM_end(CS)
   call tracer_registry_end(CS%tracer_Reg)
   call tracer_flow_control_end(CS%tracer_flow_CSp)
 
-  ! GMM, the following is commented because it fails on Travis.
-  !if (associated(CS%diabatic_CSp)) call diabatic_driver_end(CS%diabatic_CSp)
+  call diabatic_driver_end(CS%diabatic_CSp)
 
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 
