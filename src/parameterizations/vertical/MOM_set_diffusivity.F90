@@ -148,22 +148,11 @@ type, public :: set_diffusivity_CS ; private
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
   type(tidal_mixing_cs),     pointer :: tm_csp               => NULL()
 
-  integer :: id_maxTKE      = -1
-  integer :: id_TKE_to_Kd   = -1
-
-  integer :: id_Kd_user        = -1
-  integer :: id_Kd_layer       = -1
-  integer :: id_Kd_BBL         = -1
-  integer :: id_Kd_BBL_z       = -1
-  integer :: id_Kd_user_z      = -1
-  integer :: id_Kd_Work        = -1
-
-  integer :: id_N2       = -1
-  integer :: id_N2_z     = -1
-  integer :: id_KT_extra   = -1
-  integer :: id_KS_extra   = -1
-  integer :: id_KT_extra_z = -1
-  integer :: id_KS_extra_z = -1
+  integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
+  integer :: id_Kd_layer   = -1, id_Kd_BBL      = -1, id_Kd_BBL_z   = -1
+  integer :: id_Kd_user_z  = -1, id_N2          = -1, id_N2_z       = -1
+  integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1
+  integer :: id_KT_extra_z = -1, id_KS_extra_z  = -1
 
 end type set_diffusivity_CS
 
@@ -284,9 +273,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   use_EOS = associated(tv%eqn_of_state)
 
-  if ((CS%use_CVMix_ddiff) .or. CS%double_diffusion .and. &
-      .not.(associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S)) ) &
-    call MOM_error(FATAL, "set_diffusivity: visc%Kd_extra_T and "//&
+  if ((CS%use_CVMix_ddiff .or. CS%double_diffusion) .and. .not. &
+     (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S))) &
+     call MOM_error(FATAL, "set_diffusivity: both visc%Kd_extra_T and "//&
          "visc%Kd_extra_S must be associated when USE_CVMIX_DDIFF or DOUBLE_DIFFUSION are true.")
 
   ! Set Kd, Kd_int and Kv_slow to constant values.
@@ -2106,6 +2095,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
+
   if (CS%double_diffusion) then
     call get_param(param_file, mdl, "MAX_RRHO_SALT_FINGERS", CS%Max_Rrho_salt_fingers, &
                  "Maximum density ratio for salt fingering regime.", &
@@ -2137,7 +2127,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                     "Bottom Boundary Layer Diffusivity", z_grid='z')
       CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
-  endif
+  endif ! old double-diffusion
 
   if (CS%user_change_diff) then
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
