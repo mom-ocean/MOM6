@@ -88,7 +88,8 @@ type, public :: KPP_CS ; private
   character(len=30) :: MatchTechnique  !< Method used in CVMix for setting diffusivity and NLT profile functions
   integer :: NLT_shape                 !< MOM6 over-ride of CVMix NLT shape function
   logical :: applyNonLocalTrans        !< If True, apply non-local transport to heat and scalars
-  logical :: smoothBLD                 !< If True, apply a 1-1-4-1-1 Laplacian filter one time on HBLT.
+  integer :: n_smooth                  !< Number of times smoothing operator is applied on OBLdepth.
+  logical :: deepen_only               !< If true, apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper.
   logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero
                                        !! for testing purposes.
   logical :: KPPisAdditive             !< If True, will add KPP diffusivity to initial diffusivity.
@@ -216,10 +217,16 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  'If False, calculates the non-local transport and tendencies but\n'//&
                  'purely for diagnostic purposes.',                                   &
                  default=.not. CS%passiveMode)
-  call get_param(paramFile, mdl, 'SMOOTH_BLD', CS%smoothBLD,  &
-                 'If True, applies a 1-1-4-1-1 Laplacian filter one time on HBLT.\n'//  &
-                 'computed via CVMix to reduce any horizontal two-grid-point noise.',   &
-                 default=.false.)
+  call get_param(paramFile, mdl, 'N_SMOOTH', CS%n_smooth,  &
+                 'The number of times the 1-1-4-1-1 Laplacian filter is applied on\n'//  &
+                 'OBL depth.',   &
+                 default=0)
+  if (CS%n_smooth > 0) then
+    call get_param(paramFile, mdl, 'DEEPEN_ONLY_VIA_SMOOTHING', CS%deepen_only,  &
+                   'If true, apply OBLdepth smoothing at a cell only if the OBLdepth.\n'// &
+                   'gets deeper via smoothing.',   &
+                   default=.false.)
+  endif
   call get_param(paramFile, mdl, 'RI_CRIT', CS%Ri_crit,                            &
                  'Critical bulk Richardson number used to define depth of the\n'// &
                  'surface Ocean Boundary Layer (OBL).',                            &
@@ -1498,7 +1505,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
     enddo
   enddo
 
-  if (CS%smoothBLD) call KPP_smooth_BLD(CS,G,GV,h)
+  if (CS%n_smooth > 0) call KPP_smooth_BLD(CS,G,GV,h)
 
 end subroutine KPP_compute_BLD
 
@@ -1518,38 +1525,45 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   real :: dh                 ! The local thickness used for calculating interface positions (m)
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers (m)
-  integer :: i, j, k
+  integer :: i, j, k, s
 
-  ! Update halos
-  call pass_var(CS%OBLdepth, G%Domain)
+  do s=1,CS%n_smooth
 
-  OBLdepth_original = CS%OBLdepth
-  CS%OBLdepth_original = OBLdepth_original
+    ! Update halos
+    call pass_var(CS%OBLdepth, G%Domain)
 
-  ! apply smoothing on OBL depth
-  do j = G%jsc, G%jec
-    do i = G%isc, G%iec
+    OBLdepth_original = CS%OBLdepth
+    CS%OBLdepth_original = OBLdepth_original
 
-      ! skip land points
-      if (G%mask2dT(i,j)==0.) cycle
+    ! apply smoothing on OBL depth
+    do j = G%jsc, G%jec
+      do i = G%isc, G%iec
 
-      ! compute weights
-      ww = 0.125 * G%mask2dT(i-1,j)
-      we = 0.125 * G%mask2dT(i+1,j)
-      ws = 0.125 * G%mask2dT(i,j-1)
-      wn = 0.125 * G%mask2dT(i,j+1)
-      wc = 1.0 - (ww+we+wn+ws)
+        ! skip land points
+        if (G%mask2dT(i,j)==0.) cycle
 
-      CS%OBLdepth(i,j) =  wc * OBLdepth_original(i,j)   &
-                        + ww * OBLdepth_original(i-1,j) &
-                        + we * OBLdepth_original(i+1,j) &
-                        + ws * OBLdepth_original(i,j-1) &
-                        + wn * OBLdepth_original(i,j+1)
+        ! compute weights
+        ww = 0.125 * G%mask2dT(i-1,j)
+        we = 0.125 * G%mask2dT(i+1,j)
+        ws = 0.125 * G%mask2dT(i,j-1)
+        wn = 0.125 * G%mask2dT(i,j+1)
+        wc = 1.0 - (ww+we+wn+ws)
+
+        CS%OBLdepth(i,j) =  wc * OBLdepth_original(i,j)   &
+                          + ww * OBLdepth_original(i-1,j) &
+                          + we * OBLdepth_original(i+1,j) &
+                          + ws * OBLdepth_original(i,j-1) &
+                          + wn * OBLdepth_original(i,j+1)
+      enddo
     enddo
-  enddo
 
-  ! prevent OBL depths deeper than the bathymetric depth
-  where (CS%OBLdepth > G%bathyT) CS%OBLdepth = G%bathyT
+    ! Apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper via smoothing.
+    if (CS%deepen_only) CS%OBLdepth = max(CS%OBLdepth,CS%OBLdepth_original)
+
+    ! prevent OBL depths deeper than the bathymetric depth
+    where (CS%OBLdepth > G%bathyT) CS%OBLdepth = G%bathyT
+
+  enddo ! s-loop
 
   ! Update kOBL for smoothed OBL depths
   do j = G%jsc, G%jec
@@ -1571,7 +1585,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
-      CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
+      CS%kOBL(i,j) = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
 
     enddo
   enddo
