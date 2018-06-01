@@ -560,7 +560,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
-  ! Set diffusivities for heat and salt
+  ! Set diffusivities for heat and salt separately
 
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
 !$OMP do
@@ -568,6 +568,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     Kd_salt(i,j,k) = Kd_int(i,j,k)
     Kd_heat(i,j,k) = Kd_int(i,j,k)
   enddo ; enddo ; enddo
+  ! Add contribution from double diffusion
   if (associated(visc%Kd_extra_S)) then
 !$OMP do
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
