@@ -2362,16 +2362,16 @@ subroutine CG_action(uret, vret, u, v, Phi, Phisub, umask, vmask, hmask, H_node,
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(in)    :: nu   !< A field related to the ice viscosity from Glen's
-                                                !! flow law. The exact form and units depend on the
-                                                !! basal law exponent.
+                                               !! flow law. The exact form and units depend on the
+                                               !! basal law exponent.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: float_cond !< An array indicating where the ice
                                                 !! shelf is floating: 0 if floating, 1 if not.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points, in m.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                         intent(in)    :: beta !< A field related to the nonlinear part of 
-                                                !! the "linearized" basal stress.  The exact form and
+                         intent(in)    :: beta  !< A field related to the nonlinear part of the
+                                                !! "linearized" basal stress.  The exact form and
                                                 !! units depend on the basal law exponent.
                 ! and/or whether flow is "hybridized"
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -2569,7 +2569,7 @@ subroutine CG_action_subgrid_basal(Phisub, H, U, V, DXDYH, bathyT, dens_ratio, U
         do i=1,nsub
           do qx=1,2
             do qy = 1,2
- 
+
               hloc = Phisub(i,j,1,1,qx,qy)*H(1,1) + Phisub(i,j,1,2,qx,qy)*H(1,2) + &
                      Phisub(i,j,2,1,qx,qy)*H(2,1) + Phisub(i,j,2,2,qx,qy)*H(2,2)
 
@@ -2615,8 +2615,8 @@ subroutine matrix_diagonal(CS, G, float_cond, H_node, nu, beta, hmask, dens_rati
                                                 !! flow law. The exact form and units depend on the
                                                 !! basal law exponent.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                          intent(in)    :: beta !< A field related to the nonlinear part of 
-                                                !! the "linearized" basal stress.  The exact form  and
+                          intent(in)    :: beta !< A field related to the nonlinear part of the
+                                                !! "linearized" basal stress.  The exact form and
                                                 !! units depend on the basal law exponent
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: hmask !< A mask indicating which tracer points are
@@ -2804,8 +2804,8 @@ subroutine apply_boundary_values(CS, ISS, G, time, Phisub, H_node, nu, beta, flo
                                                 !! flow law. The exact form and units depend on the
                                                 !! basal law exponent.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                          intent(in)    :: beta !< A field related to the nonlinear part of 
-                                                !! the "linearized" basal stress.  The exact form  and
+                          intent(in)    :: beta !< A field related to the nonlinear part of the
+                                                !! "linearized" basal stress.  The exact form and
                                                 !! units depend on the basal law exponent
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: float_cond !< An array indicating where the ice
