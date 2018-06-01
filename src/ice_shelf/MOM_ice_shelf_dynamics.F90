@@ -1022,7 +1022,8 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
   real, dimension(SZDIB_(G),SZDJB_(G)), intent(inout) :: u, v
   real, dimension(SZDIB_(G),SZDJB_(G)), intent(in)    :: taudx, taudy, H_node
   real, dimension(SZDI_(G),SZDJ_(G)),   intent(in)    :: float_cond
-  real, dimension(SZDI_(G),SZDJ_(G)),   intent(in)    :: hmask
+  real, dimension(SZDI_(G),SZDJ_(G)),   intent(in)    :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
   integer, intent(out)         :: conv_flag, iters
   type(time_type), intent(in)  :: Time !< The current model time
   real, dimension(SZDI_(G),SZDJ_(G),8,4), intent(in) :: Phi
@@ -1393,7 +1394,8 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
   type(ice_shelf_dyn_CS),     intent(in) :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in) :: G  !< The grid structure used by the ice shelf.
   real,                   intent(in) :: time_step !< The time step for this update, in s.
-  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), intent(in) :: h0
   real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: h_after_uflux
   real, dimension(SZDI_(G),SZDJ_(G),4), intent(inout) :: flux_enter
@@ -1616,7 +1618,8 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
   type(ice_shelf_dyn_CS),     intent(in) :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in) :: G  !< The grid structure used by the ice shelf.
   real,                   intent(in) :: time_step !< The time step for this update, in s.
-  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)),    intent(in) :: h_after_uflux
   real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: h_after_vflux
   real, dimension(SZDI_(G),SZDJ_(G),4), intent(inout) :: flux_enter
@@ -1989,11 +1992,12 @@ end subroutine shelf_advance_front
 subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickness_calve)
   type(ocean_grid_type), intent(in)    :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf
+                         intent(inout) :: h_shelf !< The ice shelf thickness, in m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: hmask
+                         intent(inout) :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
   real,                  intent(in)    :: thickness_calve
 
   integer                        :: i,j
@@ -2014,9 +2018,13 @@ end subroutine ice_shelf_min_thickness_calve
 
 subroutine calve_to_mask(G, h_shelf, area_shelf_h, hmask, calve_mask)
   type(ocean_grid_type), intent(in) :: G  !< The grid structure used by the ice shelf.
-  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: h_shelf
-  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: area_shelf_h
-  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: h_shelf !< The ice shelf thickness, in m.
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), intent(in)    :: calve_mask
 
   integer                        :: i,j
@@ -2229,7 +2237,7 @@ subroutine init_boundary_values(CS, G, time, hmask, input_flux, input_thick, new
   type(time_type),       intent(in)    :: Time !< The current model time
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully coupled by an ice-shelf
+                                             !! partly or fully covered by an ice-shelf
   real,                  intent(in)    :: input_flux, input_thick
   logical,     optional, intent(in)    :: new_sim !< If present and false, this run is being restarted
 
@@ -2546,7 +2554,7 @@ subroutine matrix_diagonal(CS, G, float_cond, H_node, nu, beta, hmask, dens_rati
   real, dimension(SZDIB_(G),SZDJB_(G)), intent(in) :: beta
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully coupled by an ice-shelf
+                                             !! partly or fully covered by an ice-shelf
   real                                 :: dens_ratio
   real, dimension(:,:,:,:,:,:), intent(in) :: Phisub
   real, dimension(SZDIB_(G),SZDJB_(G)), intent(inout) :: u_diagonal, v_diagonal
@@ -3133,7 +3141,7 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
   type(ocean_grid_type), intent(inout) :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully coupled by an ice-shelf
+                                             !! partly or fully covered by an ice-shelf
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(out)   :: umask !< A coded mask indicating the nature of the
                                              !! zonal flow at the corner point
@@ -3291,7 +3299,7 @@ subroutine interpolate_H_to_B(G, h_shelf, hmask, H_node)
                          intent(in)    :: h_shelf !< The ice shelf thickness at tracer points, in m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully coupled by an ice-shelf
+                                             !! partly or fully covered by an ice-shelf
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(inout) :: H_node !< The ice shelf thickness at nodal (corner)
                                              !! points, in m.
@@ -3498,7 +3506,8 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
   type(ice_shelf_dyn_CS),         intent(in) :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type), intent(inout) :: G  !< The grid structure used by the ice shelf.
   real,                       intent(in) :: time_step !< The time step for this update, in s.
-  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), intent(in) :: h0
   real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: h_after_uflux
   real, dimension(SZDI_(G),SZDJ_(G),4), intent(inout) :: flux_enter
@@ -3732,7 +3741,8 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
   type(ice_shelf_dyn_CS),     intent(in) :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in) :: G  !< The grid structure used by the ice shelf.
   real,                   intent(in) :: time_step !< The time step for this update, in s.
-  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(inout) :: hmask !< A mask indicating which tracer points are
+                                             !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)),   intent(in) :: h_after_uflux
   real, dimension(SZDI_(G),SZDJ_(G)),   intent(inout) :: h_after_vflux
   real, dimension(SZDI_(G),SZDJ_(G),4), intent(inout) :: flux_enter
