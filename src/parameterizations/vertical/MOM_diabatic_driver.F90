@@ -293,7 +293,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     Kd,     &    ! diapycnal diffusivity of layers (m^2/sec)
     h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
     h_prebound, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
-    hold,   &    ! layer thickness before diapycnal entrainment, and later
+!    hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
                  ! (m for Bouss, kg/m^2 for non-Bouss)
     dSV_dT, &    ! The partial derivatives of specific volume with temperature
@@ -723,28 +723,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 !$OMP end parallel
   endif
 
-
-  ! set ea_t=eb_t=Kd_heat and ea_s=eb_s=Kd_salt on interfaces for use in the
-  ! tri-diagonal solver.
-
-  do j=js,je ; do i=is,ie
-    ea_t(i,j,1) = 0.; ea_s(i,j,1) = 0.
-  enddo ; enddo
-
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_neglect,h,ea_t,ea_s,GV,dt,Kd_salt,Kd_heat,eb_t,eb_s) &
-!$OMP                          private(hval)
-  do k=2,nz ; do j=js,je ; do i=is,ie
-    hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-    ea_t(i,j,k) = (GV%m_to_H**2) * dt * hval * Kd_heat(i,j,k)
-    eb_t(i,j,k-1) = ea_t(i,j,k)
-    ea_s(i,j,k) = (GV%m_to_H**2) * dt * hval * Kd_salt(i,j,k)
-    eb_s(i,j,k-1) = ea_s(i,j,k)
-  enddo ; enddo ; enddo
-  do j=js,je ; do i=is,ie
-    eb_t(i,j,nz) = 0.; eb_s(i,j,nz) = 0.
-  enddo ; enddo
-  if (showCallTree) call callTree_waypoint("done setting ea_t,ea_s,eb_t,eb_s from Kd_heat and Kd_salt (diabatic)")
-
   ! Save fields before boundary forcing is applied for tendency diagnostics
   if (CS%boundary_forcing_tendency_diag) then
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -789,7 +767,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       Hml(:,:) = visc%MLD(:,:)
     endif
 
-    ! Augment the diffusivities due to those diagnosed in energetic_PBL.
+    ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
     do K=2,nz ; do j=js,je ; do i=is,ie
       if (CS%ePBL_is_additive) then
         Kd_add_here = Kd_ePBL(i,j,K)
@@ -798,17 +776,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
         Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
         visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
       endif
-      Ent_int = Kd_add_here * (GV%m_to_H**2 * dt) / &
-                  (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
-      eb_t(i,j,k-1) = eb_t(i,j,k-1) + Ent_int
-      ea_t(i,j,k) = ea_t(i,j,k) + Ent_int
-      eb_s(i,j,k-1) = eb_s(i,j,k-1) + Ent_int
-      ea_s(i,j,k) = ea_s(i,j,k) + Ent_int
-      Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_add_here
 
-      ! for diagnostics
-      Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_int(i,j,K)
-      Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_int(i,j,K)
+      Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_add_here
+      Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_add_here
 
     enddo ; enddo ; enddo
 
@@ -845,53 +815,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
   if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, tv%T, tv%S, G)
 
-  ! Update h according to divergence of the difference between
-  ! ea and eb. We keep a record of the original h in hold.
-  ! In the following, the checks for negative values are to guard
-  ! against instances where entrainment drives a layer to
-  ! negative thickness.  This situation will never happen if
-  ! enough iterations are permitted in Calculate_Entrainment.
-  ! Even if too few iterations are allowed, it is still guarded
-  ! against.  In other words the checks are probably unnecessary.
-
-  ! GMM, should the code below be deleted? eb(i,j,k-1) = ea(i,j,k),
-  ! see above, so h should not change.
-
-  !$OMP parallel do default(shared)
-  do j=js,je
-    do i=is,ie
-      hold(i,j,1) = h(i,j,1)
-      h(i,j,1) = h(i,j,1) + (eb_t(i,j,1) - ea_t(i,j,2))
-      hold(i,j,nz) = h(i,j,nz)
-      h(i,j,nz) = h(i,j,nz) + (ea_t(i,j,nz) - eb_t(i,j,nz-1))
-      if (h(i,j,1) <= 0.0) then
-        h(i,j,1) = GV%Angstrom
-      endif
-      if (h(i,j,nz) <= 0.0) then
-        h(i,j,nz) = GV%Angstrom
-      endif
-    enddo
-    do k=2,nz-1 ; do i=is,ie
-      hold(i,j,k) = h(i,j,k)
-      h(i,j,k) = h(i,j,k) + ((ea_t(i,j,k) - eb_t(i,j,k-1)) + &
-                    (eb_t(i,j,k) - ea_t(i,j,k+1)))
-      if (h(i,j,k) <= 0.0) then
-        h(i,j,k) = GV%Angstrom
-      endif
-    enddo ; enddo
-  enddo
-  ! Checks for negative thickness may have changed layer thicknesses
-  call diag_update_remap_grids(CS%diag)
-
-  if (CS%debug) then
-    call MOM_state_chksum("after negative check ", u, v, h, G, GV, haloshift=0)
-    call MOM_forcing_chksum("after negative check ", fluxes, G, haloshift=0)
-    call MOM_thermovar_chksum("after negative check ", tv, G)
-  endif
-
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
   if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, h, tv%T, tv%S, G)
-
 
   ! calculate change in temperature & salinity due to dia-coordinate surface diffusion
   if (associated(tv%T)) then
@@ -920,29 +845,53 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       enddo ; enddo ; enddo
     endif
 
-    ! Changes T and S via the tridiagonal solver; no change to h
-    call tracer_vertdiff(hold, ea_t, eb_t, dt, tv%T, G, GV)
-    call tracer_vertdiff(hold, ea_s, eb_s, dt, tv%S, G, GV)
+    ! set ea_t=eb_t=Kd_heat and ea_s=eb_s=Kd_salt on interfaces for use in the
+    ! tri-diagonal solver.
 
-    ! GMM, with the new approach of having ea,eb for temp and salt
-    ! only tracer_vertdiff can be used at this time. Therefore,
-    ! I am commenting the following code. Should this be deleted?
+    do j=js,je ; do i=is,ie
+      ea_t(i,j,1) = 0.; ea_s(i,j,1) = 0.
+    enddo ; enddo
 
-    !if (CS%tracer_tridiag) then
-    !  call tracer_vertdiff(hold, ea_t, eb_t, dt, tv%T, G, GV)
-    !  call tracer_vertdiff(hold, ea_s, eb_s, dt, tv%S, G, GV)
-    !else
-    !
-    !  call triDiagTS(G, GV, is, ie, js, je, hold, ea_t, eb_t, tv%T, tv%S)
-    !endif
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_neglect,h,ea_t,ea_s,GV,dt,Kd_salt,Kd_heat,eb_t,eb_s) &
+!$OMP                          private(hval)
+    do k=2,nz ; do j=js,je ; do i=is,ie
+      hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
+      ea_t(i,j,k) = (GV%m_to_H**2) * dt * hval * Kd_heat(i,j,k)
+      eb_t(i,j,k-1) = ea_t(i,j,k)
+      ea_s(i,j,k) = (GV%m_to_H**2) * dt * hval * Kd_salt(i,j,k)
+      eb_s(i,j,k-1) = ea_s(i,j,k)
+    enddo ; enddo ; enddo
+    do j=js,je ; do i=is,ie
+      eb_t(i,j,nz) = 0.; eb_s(i,j,nz) = 0.
+    enddo ; enddo
+    if (showCallTree) call callTree_waypoint("done setting ea_t,ea_s,eb_t,eb_s from Kd_heat" //&
+       "and Kd_salt (diabatic)")
 
-    ! diagnose temperature, salinity, heat, and salt tendencies
-    ! Note: hold here refers to the thicknesses from before the dual-entraintment when using
-    ! the bulk mixed layer scheme. Otherwise in ALE-mode, layer thicknesses will have changed
-    ! In either case, tendencies should be posted on hold
+  ! Initialize halo regions of ea, eb, and hold to default values.
+  !$OMP parallel do default(shared)
+    do k=1,nz
+      do i=is-1,ie+1
+        ea_t(i,js-1,k) = 0.0 ; eb_t(i,js-1,k) = 0.0
+        ea_s(i,js-1,k) = 0.0 ; eb_s(i,js-1,k) = 0.0
+        ea_t(i,je+1,k) = 0.0 ; eb_t(i,je+1,k) = 0.0
+        ea_s(i,je+1,k) = 0.0 ; eb_s(i,je+1,k) = 0.0
+      enddo
+      do j=js,je
+        ea_t(is-1,j,k) = 0.0 ; eb_t(is-1,j,k) = 0.0
+        ea_s(is-1,j,k) = 0.0 ; eb_s(is-1,j,k) = 0.0
+        ea_t(ie+1,j,k) = 0.0 ; eb_t(ie+1,j,k) = 0.0
+        ea_s(ie+1,j,k) = 0.0 ; eb_s(ie+1,j,k) = 0.0
+      enddo
+    enddo
+
+  ! Changes T and S via the tridiagonal solver; no change to h
+    call tracer_vertdiff(h, ea_t, eb_t, dt, tv%T, G, GV)
+    call tracer_vertdiff(h, ea_s, eb_s, dt, tv%S, G, GV)
+
+
+    ! In ALE-mode, layer thicknesses do not change. Therefore, we can use h below
     if (CS%diabatic_diff_tendency_diag) then
-      call diagnose_diabatic_diff_tendency(tv, hold, temp_diag, saln_diag, dt, G, GV, CS)
-      if (CS%id_diabatic_diff_h > 0) call post_data(CS%id_diabatic_diff_h, hold, CS%diag, alt_h = hold)
+      call diagnose_diabatic_diff_tendency(tv, h, temp_diag, saln_diag, dt, G, GV, CS)
     endif
     call cpu_clock_end(id_clock_tridiag)
 
@@ -1033,7 +982,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
         if (associated(visc%Kd_extra_S)) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
           add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%m_to_H**2) / &
-             (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
+             (0.5 * (h(i,j,k-1) + h(i,j,k)) + &
               h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
           eatr(i,j,k) = eatr(i,j,k) + add_ent
@@ -1059,7 +1008,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (visc%Kd_extra_S(i,j,k) > 0.0) then
         add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%m_to_H**2) / &
-           (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
+           (0.5 * (h(i,j,k-1) + h(i,j,k))  + &
             h_neglect)
       else
         add_ent = 0.0
@@ -1100,32 +1049,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     endif
   endif ! CS%use_sponge
 
-
-  ! Initialize halo regions of ea, eb, and hold to default values.
-  !$OMP parallel do default(shared)
-  do k=1,nz
-    do i=is-1,ie+1
-      hold(i,js-1,k) = GV%Angstrom
-      ea_t(i,js-1,k) = 0.0 ; eb_t(i,js-1,k) = 0.0
-      ea_s(i,js-1,k) = 0.0 ; eb_s(i,js-1,k) = 0.0
-      hold(i,je+1,k) = GV%Angstrom
-      ea_t(i,je+1,k) = 0.0 ; eb_t(i,je+1,k) = 0.0
-      ea_s(i,je+1,k) = 0.0 ; eb_s(i,je+1,k) = 0.0
-    enddo
-    do j=js,je
-      hold(is-1,j,k) = GV%Angstrom
-      ea_t(is-1,j,k) = 0.0 ; eb_t(is-1,j,k) = 0.0
-      ea_s(is-1,j,k) = 0.0 ; eb_s(is-1,j,k) = 0.0
-      hold(ie+1,j,k) = GV%Angstrom
-      ea_t(ie+1,j,k) = 0.0 ; eb_t(ie+1,j,k) = 0.0
-      ea_s(ie+1,j,k) = 0.0 ; eb_s(ie+1,j,k) = 0.0
-    enddo
-  enddo
-
   call cpu_clock_begin(id_clock_pass)
   if (G%symmetric) then ; dir_flag = To_All+Omit_Corners
   else ; dir_flag = To_West+To_South+Omit_Corners ; endif
-  call create_group_pass(CS%pass_hold_eb_ea, hold, G%Domain, dir_flag, halo=1)
   call create_group_pass(CS%pass_hold_eb_ea, eb_t, G%Domain, dir_flag, halo=1)
   call create_group_pass(CS%pass_hold_eb_ea, eb_s, G%Domain, dir_flag, halo=1)
   call create_group_pass(CS%pass_hold_eb_ea, ea_t, G%Domain, dir_flag, halo=1)
