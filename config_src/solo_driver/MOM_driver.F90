@@ -66,7 +66,7 @@ program MOM_main
   use time_interp_external_mod, only : time_interp_external_init
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
+  use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
@@ -483,10 +483,8 @@ program MOM_main
     endif
 
     if (use_ice_shelf) then
-      call shelf_calc_flux(sfc_state, forces, fluxes, Time, dt_forcing, ice_shelf_CSp)
-!###IS     call add_shelf_flux_forcing(fluxes, ice_shelf_CSp)
-!###IS  ! With a coupled ice/ocean run, use the following call.
-!###IS      call add_shelf_flux_IOB(ice_ocean_bdry_type, ice_shelf_CSp)
+      call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
+      call add_shelf_forces(grid, Ice_shelf_CSp, forces)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = dt_forcing
