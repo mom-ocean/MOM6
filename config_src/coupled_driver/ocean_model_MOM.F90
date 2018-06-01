@@ -54,7 +54,7 @@ use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
+use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
@@ -514,18 +514,24 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                              OS%grid, OS%forcing_CSp)
 
   if (OS%fluxes%fluxes_used) then
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
+    if (do_thermo) &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, &
                                OS%restore_salinity, OS%restore_temp)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_thermo) &
+        call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_dyn) &
+        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
-      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
-                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-      call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
+      if (do_dyn) &
+        call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      if (do_thermo) &
+        call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
@@ -541,22 +547,28 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%fluxes%dt_buoy_accum = dt_coupling
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
+    if (do_thermo) &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_thermo) &
+        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_dyn) &
+        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
-      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
-                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-      call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+      if (do_dyn) &
+        call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      if (do_thermo) &
+        call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
     ! Some of the fields that exist in both the forcing and mech_forcing types
-    ! are time-averages must be copied back to the forces type.
+    ! (e.g., ustar) are time-averages must be copied back to the forces type.
     call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
 
 #ifdef _USE_GENERIC_TRACER
