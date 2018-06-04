@@ -492,6 +492,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
         fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
       enddo ; enddo
     endif
+    fluxes%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
   endif
 
   ! more salt restoring logic
@@ -645,6 +646,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
   endif
 
+  forces%accumulate_rigidity = .true. ! Multiple components may contribute to rigidity.
   if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
@@ -661,7 +663,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
         forces%p_surf(i,j) = forces%p_surf_full(i,j)
       enddo ; enddo
     endif
+  else
+    do j=js,je ; do i=is,ie
+      forces%p_surf_full(i,j) = 0.0
+      forces%p_surf(i,j) = 0.0
+    enddo ; enddo
   endif
+  forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
   wind_stagger = CS%wind_stagger
   if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
