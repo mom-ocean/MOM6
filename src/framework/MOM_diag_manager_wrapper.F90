@@ -6,6 +6,8 @@ module MOM_diag_manager_wrapper
 use MOM_time_manager, only : time_type
 use diag_manager_mod, only : register_diag_field
 
+implicit none ; private
+
 public register_diag_field_fms
 
 !> A wrapper for register_diag_field_array()
