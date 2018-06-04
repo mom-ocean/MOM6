@@ -392,6 +392,7 @@ module mom_cap_mod
   use mom_cap_methods,          only: ocn_export, ocn_import
   use esmFlds,                  only: flds_scalar_name, flds_scalar_num
   use esmFlds,                  only: fldListFr, fldListTo, compocn, compname
+  use esmFlds,                  only: flds_scalar_index_nx, flds_scalar_index_ny
   use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Realize
   use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Concat
   use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Getnumflds
@@ -868,6 +869,7 @@ module mom_cap_mod
     real(ESMF_KIND_R8), pointer            :: dataPtr_xcor(:,:)
     real(ESMF_KIND_R8), pointer            :: dataPtr_ycor(:,:)
     type(ESMF_Field)                       :: field_t_surf
+    integer                                :: mpicom
     character(len=*),parameter  :: subname='(mom_cap:InitializeRealize)'
     
     rc = ESMF_SUCCESS
@@ -888,7 +890,7 @@ module mom_cap_mod
       file=__FILE__)) &
       return  ! bail out
 
-    call ESMF_VMGet(vm, petCount=npet, rc=rc)
+    call ESMF_VMGet(vm, petCount=npet, mpiCommunicator=mpicom, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -1306,6 +1308,14 @@ module mom_cap_mod
 
     call shr_nuopc_fldList_Realize(exportState, fldListFr(compocn), flds_scalar_name, flds_scalar_num, &
          grid=gridOut, tag=subname//':MOM6Export', rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  
+
+    call shr_nuopc_methods_State_SetScalar(dble(nxg),flds_scalar_index_nx, exportState, mpicom, &
+         flds_scalar_name, flds_scalar_num, rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  
+    
+    call shr_nuopc_methods_State_SetScalar(dble(nyg),flds_scalar_index_ny, exportState, mpicom, &
+         flds_scalar_name, flds_scalar_num, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  
 #else
     call MOM_RealizeFields(importState, gridIn , fldsToOcn_num, fldsToOcn, "Ocn import", rc)
