@@ -574,8 +574,8 @@ end subroutine MOM_grid_end
 !! - Metrics centered on v-points are labelled Cv (C-grid v location). e.g. dyCv is the y-distance between two -points.
 !! - Metrics centered on q-points are labelled Bu (B-grid u,v location). e.g. areaBu is the area centered on a q-point.
 !!
-!! \image html Grid_metrics.png
-!! "The labelling of distances (grid metrics) at various staggered location on an T-cell and around a q-point.
+!! \image html Grid_metrics.png "The labelling of distances (grid metrics) at various staggered
+!! location on an T-cell and around a q-point."
 !!
 !! Areas centered at T-, u-, v- and q- points are `areaT`, `areaCu`, `areaCv` and `areaBu` respectively.
 !!

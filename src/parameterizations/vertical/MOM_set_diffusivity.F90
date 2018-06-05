@@ -284,9 +284,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   use_EOS = associated(tv%eqn_of_state)
 
-  if ((CS%use_CVMix_ddiff) .or. CS%double_diffusion .and. &
-      .not.(associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S)) ) &
-    call MOM_error(FATAL, "set_diffusivity: visc%Kd_extra_T and "//&
+  if ((CS%use_CVMix_ddiff .or. CS%double_diffusion) .and. .not. &
+     (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S))) &
+     call MOM_error(FATAL, "set_diffusivity: both visc%Kd_extra_T and "//&
          "visc%Kd_extra_S must be associated when USE_CVMIX_DDIFF or DOUBLE_DIFFUSION are true.")
 
   ! Set Kd, Kd_int and Kv_slow to constant values.
@@ -2106,6 +2106,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
+
   if (CS%double_diffusion) then
     call get_param(param_file, mdl, "MAX_RRHO_SALT_FINGERS", CS%Max_Rrho_salt_fingers, &
                  "Maximum density ratio for salt fingering regime.", &
