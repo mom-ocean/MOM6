@@ -282,6 +282,8 @@ end function CVMix_shear_is_used
 subroutine CVMix_shear_end(CS)
   type(CVMix_shear_cs), pointer :: CS ! Control structure
 
+  if (.not. associated(CS)) return
+
   if (CS%id_N2 > 0) deallocate(CS%N2)
   if (CS%id_S2 > 0) deallocate(CS%S2)
   if (CS%id_ri_grad > 0) deallocate(CS%ri_grad)
