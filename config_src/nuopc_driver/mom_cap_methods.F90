@@ -141,34 +141,34 @@ contains
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
     !tcx
-     ! write(tmpstr,'(a,6i8)') subname//'tcx1',lbnd1,ubnd1,lbnd2,ubnd2
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx2',isc,iec,jsc,jec
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx3_1',lbound(ssh,1),ubound(ssh,1)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx3_2',lbound(ssh,2),ubound(ssh,2)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx4_1',lbound(ocean_public%sea_lev,1),ubound(ocean_public%sea_lev,1)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx4_2',lbound(ocean_public%sea_lev,2),ubound(ocean_public%sea_lev,2)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx5_1',lbound(grid%mask2dT,1),ubound(grid%mask2dT,1)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx5_2',lbound(grid%mask2dT,2),ubound(grid%mask2dT,2)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx6',grid%isd,grid%ied,grid%jsd,grid%jed
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx7',grid%isc,grid%iec,grid%jsc,grid%jec
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx8',grid%idg_offset, grid%jdg_offset
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx9_1',lbound(dataPtr_omask,1),ubound(dataPtr_omask,1)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-     ! write(tmpstr,'(a,6i8)') subname//'tcx9_2',lbound(dataPtr_omask,2),ubound(dataPtr_omask,2)
-     ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx1',lbnd1,ubnd1,lbnd2,ubnd2
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx2',isc,iec,jsc,jec
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx3_1',lbound(ssh,1),ubound(ssh,1)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx3_2',lbound(ssh,2),ubound(ssh,2)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx4_1',lbound(ocean_public%sea_lev,1),ubound(ocean_public%sea_lev,1)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx4_2',lbound(ocean_public%sea_lev,2),ubound(ocean_public%sea_lev,2)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx5_1',lbound(grid%mask2dT,1),ubound(grid%mask2dT,1)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx5_2',lbound(grid%mask2dT,2),ubound(grid%mask2dT,2)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx6',grid%isd,grid%ied,grid%jsd,grid%jed
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx7',grid%isc,grid%iec,grid%jsc,grid%jec
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx8',grid%idg_offset, grid%jdg_offset
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx9_1',lbound(dataPtr_omask,1),ubound(dataPtr_omask,1)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! write(tmpstr,'(a,6i8)') subname//'tcx9_2',lbound(dataPtr_omask,2),ubound(dataPtr_omask,2)
+    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     !tcx 
-
+    
     !Copy from ocean_public to exportstate. ocean_public uses global indexing with no halos.
     !The mask comes from "grid" that uses the usual MOM domain that has halos
     !and does not use global indexing.
@@ -191,10 +191,6 @@ contains
        end do
     end do
 
-    !dataPtr_dhdx(:,:) = 0.
-    !dataPtr_dhdy(:,:) = 0.
-    !ssh(:,:)  = 0.
- 
     ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
     ! in order to update halos. i.e. does not use global indexing.
     do j=grid%jsc, grid%jec
@@ -272,71 +268,6 @@ contains
           if (grid%mask2dT(i,j)==0.) dataPtr_dhdy(i1,j1) = 0.0
        end do
     end do
-
-!!$    ! Update halo of ssh so we can calculate gradients
-!!$    call pass_var(ssh, grid%domain)
-!!$
-!!$    ! d/dx ssh
-!!$    do j=grid%jsc, grid%jec  
-!!$       j1 = j + lbnd2 - grid%jsc
-!!$       do i=grid%isc,grid%iec
-!!$          i1 = i + lbnd1 - grid%isc
-!!$          ! This is a simple second-order difference
-!!$          ! dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(ig,jg)
-!!$          ! This is a PLM slope which might be less prone to the A-grid null mode
-!!$          slp_L = (ssh(i,j) - ssh(i-1,j)) * grid%mask2dCu(i-1,j)
-!!$          if (grid%mask2dCu(i-1,j)==0.) slp_L = 0.
-!!$
-!!$          slp_R = (ssh(i+1,j) - ssh(i,j)) * grid%mask2dCu(i,j)
-!!$          if (grid%mask2dCu(i+1,j)==0.) slp_R = 0.
-!!$
-!!$          slp_C = 0.5 * (slp_L + slp_R)
-!!$          if ( (slp_L * slp_R) > 0.0 ) then
-!!$             ! This limits the slope so that the edge values are bounded by the
-!!$             ! two cell averages spanning the edge.
-!!$             u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-!!$             u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-!!$             slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-!!$          else
-!!$             ! Extrema in the mean values require a PCM reconstruction avoid generating
-!!$             ! larger extreme values.
-!!$             slope = 0.0
-!!$          end if
-!!$          dataPtr_dhdx(i1,j1) = slope * grid%IdxT(i,j) * grid%mask2dT(ig,jg)
-!!$          if (grid%mask2dT(ig,jg)==0.) dataPtr_dhdx(i1,j1) = 0.0
-!!$       end do
-!!$    end do
-!!$
-!!$    ! d/dy ssh
-!!$    do j=grid%jsc, grid%jec  
-!!$       j1 = j + lbnd2 - grid%jsc
-!!$       do i=grid%isc,grid%iec
-!!$          i1 = i + lbnd1 - grid%isc
-!!$          ! This is a simple second-order difference
-!!$          ! dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(ig,jg)
-!!$          ! This is a PLM slope which might be less prone to the A-grid null mode
-!!$          slp_L = ssh(i,j) - ssh(i,j-1) * grid%mask2dCv(i,j-1)
-!!$          if (grid%mask2dCv(i,j-1)==0.) slp_L = 0.
-!!$
-!!$          slp_R = ssh(i,j+1) - ssh(i,j) * grid%mask2dCv(i,j)
-!!$          if (grid%mask2dCv(i,j+1)==0.) slp_R = 0.
-!!$
-!!$          slp_C = 0.5 * (slp_L + slp_R)
-!!$          if ((slp_L * slp_R) > 0.0) then
-!!$             ! This limits the slope so that the edge values are bounded by the
-!!$             ! two cell averages spanning the edge.
-!!$             u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-!!$             u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-!!$             slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-!!$          else
-!!$             ! Extrema in the mean values require a PCM reconstruction avoid generating
-!!$             ! larger extreme values.
-!!$             slope = 0.0
-!!$          end if
-!!$          dataPtr_dhdy(i1,j1) = slope * grid%IdyT(i,j) * grid%mask2dT(ig,jg)
-!!$          if (grid%mask2dT(ig,jg)==0.) dataPtr_dhdy(i1,j1) = 0.0
-!!$       end do
-!!$    end do
 
   end subroutine ocn_export
 

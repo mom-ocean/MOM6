@@ -453,7 +453,11 @@ module mom_cap_mod
   integer   :: dbrc
 
   type(ESMF_Grid)         :: mom_grid_i
+#ifdef CESMCOUPLED
+  logical                 :: write_diagnostics = .false.
+#else
   logical                 :: write_diagnostics = .true.
+#endif
   logical                 :: profile_memory = .true.
   logical                 :: ocean_solo = .true.
   logical                 :: grid_attach_area = .false.
