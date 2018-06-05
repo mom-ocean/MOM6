@@ -385,21 +385,14 @@ contains
 
   !> Returns posterior adjustments or full state
   !!Note that only those PEs associated with an ensemble member receive data
-  subroutine get_posterior_tracer(Time, CS, G, GV, h, tv, increment)
+  subroutine get_posterior_tracer(Time, CS, h, tv, increment)
      type(time_type), intent(in) :: Time !< the current model time
      type(ODA_CS), pointer :: CS !< ocean DA control structure
-     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
-     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
      real, dimension(:,:,:), pointer :: h    !< Layer thicknesses, in H (usually m or kg m-2)
      type(thermo_var_ptrs), pointer :: tv   !< A structure pointing to various thermodynamic variables
-
      logical, optional, intent(in) :: increment
 
-     type(ocean_grid_type), pointer :: Grid=>NULL()
      type(ocean_control_struct), pointer :: Ocean_increment=>NULL()
-     integer :: is, ie, js, je
-     integer :: isd, ied, jsd, jed
-     integer :: isc, iec, jsc, jec
      integer :: i, j, m
      logical :: used, get_inc
 
@@ -420,7 +413,6 @@ contains
        Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
        Ocean_increment%S = CS%Ocean_posterior%S - CS%Ocean_prior%S
      endif
-     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
      do m=1,CS%ensemble_size
        if (get_inc) then
          call mpp_redistribute(CS%mpp_domain, Ocean_increment%T(:,:,:,m), &
@@ -432,21 +424,6 @@ contains
                  CS%domains(m)%mpp_domain, CS%tv%T, complete=.true.)
          call mpp_redistribute(CS%mpp_domain, CS%Ocean_posterior%S(:,:,:,m), &
                  CS%domains(m)%mpp_domain, CS%tv%S, complete=.true.)
-       endif
-
-       if (CS%Ocean_posterior%id_t(m)>0) then
-         if (get_inc) then
-           used=send_data(CS%Ocean_posterior%id_t(m), Ocean_increment%T(isc:iec,jsc:jec,:,m), CS%Time)
-         else
-           used=send_data(CS%Ocean_posterior%id_t(m), CS%Ocean_posterior%T(isc:iec,jsc:jec,:,m), CS%Time)
-         endif
-       endif
-       if (CS%Ocean_posterior%id_s(m)>0) then
-         if (get_inc) then
-           used=send_data(CS%Ocean_posterior%id_s(m), Ocean_increment%S(isc:iec,jsc:jec,:,m), CS%Time)
-         else
-           used=send_data(CS%Ocean_posterior%id_s(m), CS%Ocean_posterior%S(isc:iec,jsc:jec,:,m), CS%Time)
-         endif
        endif
      enddo
 
