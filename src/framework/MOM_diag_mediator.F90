@@ -835,7 +835,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 !  (in,opt)  mask     - If present, use this real array as the data mask.
 
   real, dimension(:,:), pointer :: locfield => NULL()
+  character(len=300) :: mesg
   logical :: used, is_stat
+  integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, i, j, chksum
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
@@ -847,27 +849,34 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   ! the output data size and assumes that halos are symmetric.
   isv = diag_cs%is ; iev = diag_cs%ie ; jsv = diag_cs%js ; jev = diag_cs%je
 
-  if ( size(field,1) == diag_cs%ied-diag_cs%isd +1 ) then
-    isv = diag_cs%is ; iev = diag_cs%ie        ! Data domain
-  elseif ( size(field,1) == diag_cs%ied-diag_cs%isd +2 ) then
-    isv = diag_cs%is ; iev = diag_cs%ie+1      ! Symmetric data domain
-  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +1 ) then
-    isv = 1 ; iev = diag_cs%ie + 1-diag_cs%is  ! Computational domain
-  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +2 ) then
-    isv = 1 ; iev = diag_cs%ie + 2-diag_cs%is  ! Symmetric computational domain
+  cszi = diag_cs%ie-diag_cs%is +1 ; dszi = diag_cs%ied-diag_cs%isd +1
+  cszj = diag_cs%je-diag_cs%js +1 ; dszj = diag_cs%jed-diag_cs%jsd +1
+  if ( size(field,1) == dszi ) then
+    isv = diag_cs%is ; iev = diag_cs%ie     ! Data domain
+  elseif ( size(field,1) == dszi + 1 ) then
+    isv = diag_cs%is ; iev = diag_cs%ie+1   ! Symmetric data domain
+  elseif ( size(field,1) == cszi) then
+    isv = 1 ; iev = cszi                    ! Computational domain
+  elseif ( size(field,1) == cszi + 1 ) then
+    isv = 1 ; iev = cszi+1                  ! Symmetric computational domain
   else
-    call MOM_error(FATAL,"post_data_2d_low: peculiar size in i-direction")
+    write (mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
+       "does not match one of ", cszi, cszi+1, dszi, dszi+1
+    call MOM_error(FATAL,"post_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
-  if ( size(field,2) == diag_cs%jed-diag_cs%jsd +1 ) then
-    jsv = diag_cs%js ; jev = diag_cs%je        ! Data domain
-  elseif ( size(field,2) == diag_cs%jed-diag_cs%jsd +2 ) then
-    jsv = diag_cs%js ; jev = diag_cs%je+1      ! Symmetric data domain
-  elseif ( size(field,2) == diag_cs%je-diag_cs%js +1 ) then
-    jsv = 1 ; jev = diag_cs%je + 1-diag_cs%js  ! Computational domain
-  elseif ( size(field,1) == diag_cs%je-diag_cs%js +2 ) then
-    jsv = 1 ; jev = diag_cs%je + 2-diag_cs%js  ! Symmetric computational domain
+
+  if ( size(field,2) == dszj ) then
+    jsv = diag_cs%js ; jev = diag_cs%je     ! Data domain
+  elseif ( size(field,2) == dszj + 1 ) then
+    jsv = diag_cs%js ; jev = diag_cs%je+1   ! Symmetric data domain
+  elseif ( size(field,2) == cszj ) then
+    jsv = 1 ; jev = cszj                    ! Computational domain
+  elseif ( size(field,2) == cszj+1 ) then
+    jsv = 1 ; jev = cszj+1                  ! Symmetric computational domain
   else
-    call MOM_error(FATAL,"post_data_2d_low: peculiar size in j-direction")
+    write (mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
+       "does not match one of ", cszj, cszj+1, dszj, dszj+1
+    call MOM_error(FATAL,"post_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
@@ -1069,9 +1078,11 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 !  (in,opt)      mask - If present, use this real array as the data mask.
 
   real, dimension(:,:,:), pointer :: locfield => NULL()
+  character(len=300) :: mesg
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: staggered_in_x, staggered_in_y
   logical :: is_stat
+  integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
   integer :: chksum
 
@@ -1084,27 +1095,34 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   ! the output data size and assumes that halos are symmetric.
   isv = diag_cs%is ; iev = diag_cs%ie ; jsv = diag_cs%js ; jev = diag_cs%je
 
-  if ( size(field,1) == diag_cs%ied-diag_cs%isd +1 ) then
-    isv = diag_cs%is ; iev = diag_cs%ie        ! Data domain
-  elseif ( size(field,1) == diag_cs%ied-diag_cs%isd +2 ) then
-    isv = diag_cs%is ; iev = diag_cs%ie+1      ! Symmetric data domain
-  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +1 ) then
-    isv = 1 ; iev = diag_cs%ie + 1-diag_cs%is  ! Computational domain
-  elseif ( size(field,1) == diag_cs%ie-diag_cs%is +2 ) then
-    isv = 1 ; iev = diag_cs%ie + 2-diag_cs%is  ! Symmetric computational domain
+  cszi = (diag_cs%ie-diag_cs%is) +1 ; dszi = (diag_cs%ied-diag_cs%isd) +1
+  cszj = (diag_cs%je-diag_cs%js) +1 ; dszj = (diag_cs%jed-diag_cs%jsd) +1
+  if ( size(field,1) == dszi ) then
+    isv = diag_cs%is ; iev = diag_cs%ie     ! Data domain
+  elseif ( size(field,1) == dszi + 1 ) then
+    isv = diag_cs%is ; iev = diag_cs%ie+1   ! Symmetric data domain
+  elseif ( size(field,1) == cszi) then
+    isv = 1 ; iev = cszi                    ! Computational domain
+  elseif ( size(field,1) == cszi + 1 ) then
+    isv = 1 ; iev = cszi+1                  ! Symmetric computational domain
   else
-    call MOM_error(FATAL,"post_data_3d_low: peculiar size in i-direction")
+    write (mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
+       "does not match one of ", cszi, cszi+1, dszi, dszi+1
+    call MOM_error(FATAL,"post_data_3d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
-  if ( size(field,2) == diag_cs%jed-diag_cs%jsd +1 ) then
-    jsv = diag_cs%js ; jev = diag_cs%je        ! Data domain
-  elseif ( size(field,2) == diag_cs%jed-diag_cs%jsd +2 ) then
-    jsv = diag_cs%js ; jev = diag_cs%je+1      ! Symmetric data domain
-  elseif ( size(field,2) == diag_cs%je-diag_cs%js +1 ) then
-    jsv = 1 ; jev = diag_cs%je + 1-diag_cs%js  ! Computational domain
-  elseif ( size(field,1) == diag_cs%je-diag_cs%js +2 ) then
-    jsv = 1 ; jev = diag_cs%je + 2-diag_cs%js  ! Symmetric computational domain
+
+  if ( size(field,2) == dszj ) then
+    jsv = diag_cs%js ; jev = diag_cs%je     ! Data domain
+  elseif ( size(field,2) == dszj + 1 ) then
+    jsv = diag_cs%js ; jev = diag_cs%je+1   ! Symmetric data domain
+  elseif ( size(field,2) == cszj ) then
+    jsv = 1 ; jev = cszj                    ! Computational domain
+  elseif ( size(field,2) == cszj+1 ) then
+    jsv = 1 ; jev = cszj+1                  ! Symmetric computational domain
   else
-    call MOM_error(FATAL,"post_data_3d_low: peculiar size in j-direction")
+    write (mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
+       "does not match one of ", cszj, cszj+1, dszj, dszj+1
+    call MOM_error(FATAL,"post_data_3d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
