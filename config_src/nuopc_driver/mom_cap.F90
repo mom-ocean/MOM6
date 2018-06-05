@@ -399,14 +399,10 @@ module mom_cap_mod
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_SetScalar
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_GetScalar
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_Diagnose
-  use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
-  use MOM_ocean_model,          only: ocean_model_data_get
-  use MOM_ocean_model,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
-#else
-  use ocean_model_mod,          only: ocean_model_restart, ocean_public_type, ocean_state_type
-  use ocean_model_mod,          only: ocean_model_data_get
-  use ocean_model_mod,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
 #endif
+  use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
+  use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
+  use MOM_ocean_model,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
 
   use ESMF
   use NUOPC
@@ -742,10 +738,14 @@ module mom_cap_mod
     ocean_public%is_ocean_pe = .true.
     call ocean_model_init(ocean_public, ocean_state, Time, Time)
 
-!tcx tcraig This results in errors in CESM with help from Alper
-! FATAL error "MPP_OPEN: error in OPEN for data_table"
-! The subroutine data_override_init shouldn't be called because ALLOW_FLUX_ADJUSTMENTS is set to FALSE
-!tcx    call data_override_init(ocean_domain_in = ocean_public%domain)
+#ifdef CESMCOUPLED    
+    call ocean_model_init_sfc(ocean_state, ocean_public)
+#endif
+
+    !tcx tcraig This results in errors in CESM with help from Alper
+    ! FATAL error "MPP_OPEN: error in OPEN for data_table"
+    ! The subroutine data_override_init shouldn't be called because ALLOW_FLUX_ADJUSTMENTS is set to FALSE
+    !tcx    call data_override_init(ocean_domain_in = ocean_public%domain)
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
     call IOB_allocate(ice_ocean_boundary, isc, iec, jsc, jec)
@@ -792,7 +792,10 @@ module mom_cap_mod
     call MOM_FieldsSetup(ice_ocean_boundary, ocean_public)
 
     call MOM_AdvertiseFields(importState, fldsToOcn_num, fldsToOcn, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_file_u)) return  ! bail out
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     call MOM_AdvertiseFields(exportState, fldsFrOcn_num, fldsFrOcn, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1403,13 +1406,9 @@ module mom_cap_mod
       return  ! bail out
 
     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
-    ocean_public          => ocean_internalstate%ptr%ocean_public_type_ptr
+    ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
     call get_ocean_grid(ocean_state, ocean_grid)
-
-    !tcx ----------
-    RETURN
-    !tcx ----------
 
     call ocn_export(ocean_public, ocean_grid, exportState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -2431,6 +2430,5 @@ module mom_cap_mod
   end subroutine
 #endif
 #endif
-
 
 end module mom_cap_mod
