@@ -26,11 +26,10 @@ use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
-use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
+use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS, get_ALE_sponge_nz_data
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type 
-!use MOM_tracer_registry, only : add_tracer_diagnostics
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
@@ -188,7 +187,7 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies whether, where, and what open boundary conditions are used. This is not being used for now.
   type(Elizabeth_tracer_CS),                pointer    :: CS !< The control structure returned by a previous call to Elizabeth_register_tracer.
-  type(sponge_CS),                   pointer    :: sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
+  type(ALE_sponge_CS),                       pointer    :: sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure for diagnostics in depth space.
 
   real, allocatable :: temp(:,:,:)
@@ -211,6 +210,7 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  integer :: nzdata
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -238,8 +238,42 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           CS%tr(i,j,k,m) = 0.0
         enddo ; enddo ; enddo
       enddo
+      m=1
+      do j=js,je ; do i=is,ie
+         !set tracer to 1.0 in the surface of the continental shelf
+         if (G%geoLonT(i,j) <= (CS%CSL)) then
+            CS%tr(i,j,1,m) = 1.0 !first layer
+         endif
+      enddo ; enddo
+
     endif
   endif ! restart
+
+  if ( CS%use_sponge ) then
+!   If sponges are used, this damps values to zero in the offshore boundary. 
+!  For any tracers that are not damped in the sponge, the call
+! to set_up_sponge_field can simply be omitted.
+    if (.not.associated(sponge_CSp)) &
+      call MOM_error(FATAL, "Elizabeth_initialize_tracer: "// &
+        "The pointer to sponge_CSp must be associated if SPONGE is defined.")
+    nzdata = get_ALE_sponge_nz_data(sponge_CSp)
+    if (nzdata>0) then
+      allocate(temp(G%isd:G%ied,G%jsd:G%jed,nzdata))
+      do k=1,nzdata ; do j=js,je ; do i=is,ie
+        if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
+          temp(i,j,k) = 0.0
+        endif
+      enddo ; enddo; enddo
+!   do m=1,NTR
+      do m=1,1
+      ! This is needed to force the compiler not to do a copy in the sponge
+      ! calls.  Curses on the designers and implementers of Fortran90.
+        tr_ptr => CS%tr(:,:,:,m)
+        call set_up_ALE_sponge_field(temp, G, tr_ptr, sponge_CSp)
+      enddo
+      deallocate(temp)
+    endif
+  endif
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
@@ -249,31 +283,6 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     ! Register the tracer for the restart file.
     call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
                        caller="initialize_Elizabeth_tracer")
-!    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-!        day, trim(longname) , trim(units))
-!    CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-!        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
-!        trim(flux_units))
-!    CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-!        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
-!        trim(flux_units))
-!    CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-!        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
-!        trim(flux_units))
-!    CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-!        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
-!        trim(flux_units))
-!    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
-!    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
-!    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
-!    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
-
-!    Register the tracer for horizontal advection & diffusion.
-!    if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
-!        (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-!      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
-!                                  CS%tr_ady(m)%p, CS%tr_dfx(m)%p, CS%tr_dfy(m)%p)
-
     call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
                            day, G, diag_to_Z_CSp)
   enddo
@@ -335,14 +344,6 @@ subroutine Elizabeth_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G
      if (G%geoLonT(i,j) <= (CS%CSL)) then
         CS%tr(i,j,1,m) = 1.0 !first layer
      endif
-  enddo ; enddo
-
-  do j=js,je ; do i=is,ie
-     ! remove tracer in the sponge layer
-     if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
-        CS%tr(i,j,:,m) = 0.0 ! all layers
-     endif
-
   enddo ; enddo
 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then

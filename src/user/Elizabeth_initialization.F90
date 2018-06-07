@@ -37,6 +37,7 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use MOM_domains, only: pass_var
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -201,6 +202,7 @@ subroutine Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
    if (use_ALE) then
 
     call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
+    call pass_var(h, G%domain)
 
     !call initialize_ALE_sponge(Idamp, h, nz, G, PF, ACSp)
     call initialize_ALE_sponge(Idamp, G, PF, ACSp, h, nz)
