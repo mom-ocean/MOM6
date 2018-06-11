@@ -1,23 +1,7 @@
+!> Interfaces for MOM6 ensembles and data assimilation.
 module MOM_oda_driver_mod
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! This is the top-level module for MOM6 ocean data assimilation.
-! It can be used to gather an ensemble of ocean states
-! before calling ensemble filter routines which calculate
-! increments based on cross-ensemble co-variance. It can also
-! be used to compare gridded model state variables to in-situ
-! observations without applying DA incrementa.
-!
-! init_oda:  Initialize the ODA module
-! set_analysis_time : update time for performing next analysis
-! set_prior: Store prior model state
-! oda: call to filter
-! get_posterior : returns posterior increments (or full state) for the current ensemble member
-!
-! Authors: Matthew.Harrison@noaa.gov
-!          Feiyu.Liu@noaa.gov and
-!          Tony.Rosati@noaa.gov
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+! This file is part of MOM6. see LICENSE.md for the license.
   use fms_mod, only : open_namelist_file, close_file, check_nml_error
   use fms_mod, only : error_mesg, FATAL
   use mpp_mod, only : stdout, stdlog, mpp_error, npes=>mpp_npes,pe=>mpp_pe
@@ -74,6 +58,7 @@ module MOM_oda_driver_mod
 
 #include <MOM_memory.h>
 
+  !> Control structure that contains a transpose of the ocean state across ensemble members.
   type, public :: ODA_CS; private
      type(ocean_control_struct), pointer :: Ocean_prior=> NULL() !< ensemble ocean prior states in DA space
      type(ocean_control_struct), pointer :: Ocean_posterior=> NULL() !< ensemble ocean posterior states
@@ -110,24 +95,26 @@ module MOM_oda_driver_mod
      type(diag_ctrl) :: diag_cs !<Diagnostics control structure
   end type ODA_CS
 
+  !> pointer to a mpp_domain object
   type :: pointer_mpp_domain
      type(domain2d), pointer :: mpp_domain => NULL()
   end type pointer_mpp_domain
 
-
+  !>@{
+  !! DA parameters
   integer, parameter :: NO_ASSIM = 0, OI_ASSIM=1, EAKF_ASSIM=2
+  !>@}
 
 contains
 
-!V initialize First_guess (prior) and Analysis grid
+!> initialize First_guess (prior) and Analysis grid
 !! information for all ensemble members
-!!
   subroutine init_oda(Time, G, GV, CS)
 
     type(time_type), intent(in) :: Time !< The current model time.
     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
     type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-    type(ODA_CS), pointer, intent(inout) :: CS
+    type(ODA_CS), pointer, intent(inout) :: CS  !< The DA control structure
 
  ! Local variables
     type(thermo_var_ptrs) :: tv_dummy
@@ -325,6 +312,7 @@ contains
    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
   end subroutine init_oda
 
+  !> Copy ensemble member tracers to ensemble vector.
   subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
     type(time_type), intent(in)    :: Time !< The current model time
     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
@@ -393,8 +381,7 @@ contains
      type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
      real, dimension(:,:,:), pointer :: h    !< Layer thicknesses, in H (usually m or kg m-2)
      type(thermo_var_ptrs), pointer :: tv   !< A structure pointing to various thermodynamic variables
-
-     logical, optional, intent(in) :: increment
+     logical, optional, intent(in) :: increment !< True if returning increment only
 
      type(ocean_grid_type), pointer :: Grid=>NULL()
      type(ocean_control_struct), pointer :: Ocean_increment=>NULL()
@@ -458,13 +445,14 @@ contains
 
    end subroutine get_posterior_tracer
 
+  !> Gather observations and sall ODA routines
   subroutine oda(Time, CS)
-     type(time_type), intent(in) :: Time
-     type(oda_CS), intent(inout) :: CS
+     type(time_type), intent(in) :: Time !< the current model time
+     type(oda_CS), intent(inout) :: CS !< the ocean DA control structure
 
      integer :: i, j
      integer :: m
-    integer :: yr, mon, day, hr, min, sec
+     integer :: yr, mon, day, hr, min, sec
 
      if ( Time >= CS%Time ) then
 
@@ -484,11 +472,13 @@ contains
      return
   end subroutine oda
 
+  !> Finalize DA module
   subroutine oda_end(CS)
-    type(ODA_CS), intent(inout) :: CS
+    type(ODA_CS), intent(inout) :: CS !< the ocean DA control structure
 
   end subroutine oda_end
 
+  !> Initialize DA module
   subroutine init_ocean_ensemble(CS,Grid,GV,ens_size)
     type(ocean_control_struct), pointer :: CS !< Pointer to ODA control structure
     type(ocean_grid_type), pointer :: Grid !< Pointer to ocean analysis grid
@@ -515,9 +505,10 @@ contains
     return
   end subroutine init_ocean_ensemble
 
+  !> Set the next analysis time
   subroutine set_analysis_time(Time,CS)
-    type(time_type), intent(in) :: Time
-    type(ODA_CS), pointer, intent(inout) :: CS
+    type(time_type), intent(in) :: Time !< the current model time
+    type(ODA_CS), pointer, intent(inout) :: CS !< the DA control structure
 
     integer :: yr, mon, day, hr, min, sec
 
@@ -538,9 +529,10 @@ contains
 
   end subroutine set_analysis_time
 
+  !> Write observation differences to a file
   subroutine save_obs_diff(filename,CS)
-    character(len=*), intent(in) :: filename
-    type(ODA_CS), pointer, intent(in) :: CS
+    character(len=*), intent(in) :: filename !< name of output file
+    type(ODA_CS), pointer, intent(in) :: CS  !< pointer to DA control structure
 
     integer :: fid ! profile file handle
     type(ocean_profile_type), pointer :: Prof=>NULL()
@@ -563,6 +555,8 @@ contains
     return
   end subroutine save_obs_diff
 
+
+  !> Apply increments to tracers
   subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
     real, intent(in) :: dt ! the tracer timestep (seconds)
     type(ocean_grid_type),    intent(in)    :: G      !< ocean grid structure
@@ -572,4 +566,19 @@ contains
     type(ODA_CS),              intent(inout) :: CS     !< the data assimilation structure
 
   end subroutine apply_oda_tracer_increments
+
+!> \namespace MOM_oda_driver_mod
+!!
+!! \section section_ODA The Ocean data assimilation (DA) and Ensemble Framework
+!!
+!! The DA framework implements ensemble capability in MOM6.   Currently, this framework
+!! is enabled using the cpp directive ENSEMBLE_OCEAN.  The ensembles need to be generated
+!! at the level of the calling routine for oda_init or above. The ensemble instances may
+!! exist on overlapping or non-overlapping processors. The ensemble information is accessed
+!! via the FMS ensemble manager. An independent PE layout is used to gather (prior) ensemble
+!! member information where this information is stored in the ODA control structure.  This
+!! module was developed in collaboration with Feiyu Lu and Tony Rosati in the GFDL prediction
+!! group for use in their coupled ensemble framework. These interfaces should be suitable for
+!! interfacing MOM6 to other data assimilation packages as well.
+
 end module MOM_oda_driver_mod
