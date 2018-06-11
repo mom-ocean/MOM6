@@ -91,40 +91,40 @@ type, public:: wave_parameters_CS ; private
 
   ! Surface Wave Dependent 1d/2d/3d vars
   real, allocatable, dimension(:), public :: &
-       WaveNum_Cen        !< Wavenumber bands for read/coupled
+       WaveNum_Cen        !< Wavenumber bands for read/coupled (1/m)
   real, allocatable, dimension(:), public :: &
-       Freq_Cen           !< Frequency bands for read/coupled
+       Freq_Cen           !< Frequency bands for read/coupled (1/s)
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkX !< Surface Stokes drift if prescribed
+       PrescribedSurfStkX !< Surface Stokes drift if prescribed (m/s)
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkY !< Surface Stokes drift if prescribed
+       PrescribedSurfStkY !< Surface Stokes drift if prescribed (m/s)
   real, allocatable, dimension(:,:,:), public :: &
-       Us_x               !< 3d Stokes drift profile (zonal)
+       Us_x               !< 3d Stokes drift profile (zonal, m/s)
                           !! Horizontal -> U points
                           !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-       Us_y               !< 3d Stokes drift profile (meridional)
+       Us_y               !< 3d Stokes drift profile (meridional, m/s)
                           !! Horizontal -> V points
                           !! Vertical -> Mid-points
   real, allocatable, dimension(:,:), public :: &
        LangNum            !< Langmuir number (directionality factored later)
                           !! Horizontal -> H points
   real, allocatable, dimension(:,:), public :: &
-       US0_x              !< Surface Stokes Drift (zonal)
+       US0_x              !< Surface Stokes Drift (zonal, m/s)
                           !! Horizontal -> U points
   real, allocatable, dimension(:,:), public :: &
-       US0_y              !< Surface Stokes Drift (meridional)
+       US0_y              !< Surface Stokes Drift (meridional, m/s)
                           !! Horizontal -> V points
   real, allocatable, dimension(:,:,:), public :: &
-       STKx0              !< Stokes Drift spectrum (zonal)
+       STKx0              !< Stokes Drift spectrum (zonal, m/s)
                           !! Horizontal -> U points
                           !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       STKy0              !< Stokes Drift spectrum (meridional)
+       STKy0              !< Stokes Drift spectrum (meridional, m/s)
                           !! Horizontal -> V points
                           !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       KvS                !< Viscosity for Stokes Drift shear
+       KvS                !< Viscosity for Stokes Drift shear (m2/s)
 
   ! Pointers to auxiliary fields
   type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
@@ -187,7 +187,7 @@ CONTAINS
 
 !> Initializes parameters related to MOM_wave_interface
 subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
-  type(time_type), target, intent(in)    :: Time       !< Time
+  type(time_type), target, intent(in)    :: Time       !< Time (s)
   type(ocean_grid_type), intent(inout)   :: G          !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure
   type(param_file_type), intent(in)      :: param_file !< Input parameter structure
@@ -305,7 +305,7 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
          " STOKES_Y, there are no safety checks in the code.",              &
          units='', default=1)
       allocate( CS%WaveNum_Cen(1:NumBands) )
-      CS%WaveNum_Cen(:)=0.0
+      CS%WaveNum_Cen(:) = 0.0
       allocate( CS%PrescribedSurfStkX(1:NumBands))
       CS%PrescribedSurfStkX(:) = 0.0
       allocate( CS%PrescribedSurfStkY(1:NumBands))
@@ -414,8 +414,8 @@ subroutine Update_Surface_Waves(G,GV,Day,DT,CS)
   type(wave_parameters_CS), pointer    :: CS  !< Wave parameter Control structure
   type(ocean_grid_type), intent(inout) :: G   !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV  !< Vertical grid structure
-  type(time_type), intent(in)          :: Day !<Time (s)
-  type(time_type), intent(in)          :: DT  !<Timestep (s)
+  type(time_type), intent(in)          :: Day !< Time (s)
+  type(time_type), intent(in)          :: DT  !< Timestep (s)
 
   integer :: ii, jj, kk, b
   type(time_type) :: Day_Center
@@ -732,7 +732,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
       endif
       ! Allocating size of wavenumber bins
       allocate( CS%WaveNum_Cen(1:id) )
-      CS%WaveNum_Cen(:)=0.0
+      CS%WaveNum_Cen(:) = 0.0
     elseif (rcode_fr == 0) then
       ! frequencies found:
       PartitionMode = 1
@@ -755,10 +755,10 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
       endif
       ! Allocating size of frequency bins
       allocate( CS%Freq_Cen(1:id) )
-      CS%Freq_Cen(:)=0.0
+      CS%Freq_Cen(:) = 0.0
     ! Allocating size of wavenumber bins
       allocate( CS%WaveNum_Cen(1:id) )
-      CS%WaveNum_Cen(:)=0.0
+      CS%WaveNum_Cen(:) = 0.0
     endif
 
     ! Reading wavenumber bins/Frequencies
