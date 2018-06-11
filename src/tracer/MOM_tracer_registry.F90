@@ -727,11 +727,11 @@ end subroutine MOM_tracer_chksum
 
 !> Calculates and prints the global inventory of all tracers in the registry.
 subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
-  character(len=*),                         intent(in) :: mesg   !< message that appears on the chksum lines
-  type(ocean_grid_type),                    intent(in) :: G      !< ocean grid structure
-  type(tracer_type),                        intent(in) :: Tr(:)  !< array of all of registered tracers
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h      !< Layer thicknesses
-  integer,                                  intent(in) :: ntr    !< number of registered tracers
+  character(len=*),                         intent(in) :: mesg !< message that appears on the chksum lines
+  type(ocean_grid_type),                    intent(in) :: G    !< ocean grid structure
+  type(tracer_type), dimension(:),          intent(in) :: Tr   !< array of all of registered tracers
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses
+  integer,                                  intent(in) :: ntr  !< number of registered tracers
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: tr_inv !< Tracer inventory
   real :: total_inv
@@ -743,7 +743,7 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
     do k=1,nz ; do j=js,je ; do i=is,ie
       tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%areaT(i,j)*G%mask2dT(i,j)
     enddo ; enddo ; enddo
-    total_inv = reproducing_sum(tr_inv, is, ie, js, je)
+    total_inv = reproducing_sum(tr_inv, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
     if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg
   enddo
 

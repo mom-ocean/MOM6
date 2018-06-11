@@ -29,9 +29,7 @@ module MOM_ocmip2_co2calc_mod  !{
 !------------------------------------------------------------------
 !
 
-implicit none
-
-private
+implicit none ; private
 
 public  :: MOM_ocmip2_co2calc, CO2_dope_vector
 

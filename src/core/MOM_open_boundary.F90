@@ -431,7 +431,7 @@ subroutine open_boundary_config(G, param_file, OBC)
     !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
     call initialize_segment_data(G, OBC, param_file)
 
-    if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
+    if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
       call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
                    "The maximum magnitude of the baroclinic radiation \n"//&
                    "velocity (or speed of characteristics).  This is only \n"//&
@@ -451,6 +451,11 @@ subroutine open_boundary_config(G, param_file, OBC)
                    "Valid values range from 0 to 1. This is only used if \n"//&
                    "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.2)
+    endif
+
+    Lscale_in = 0.
+    Lscale_out = 0.
+    if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT ", Lscale_out, &
                  "An effective length scale for restoring the tracer concentration \n"//&
                  "at the boundaries to externally imposed values when the flow \n"//&
@@ -460,11 +465,8 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "An effective length scale for restoring the tracer concentration \n"//&
                  "at the boundaries to values from the interior when the flow \n"//&
                  "is entering the domain.", units="m", default=0.0)
-
-    else
-      Lscale_in = 0.
-      Lscale_out = 0.
     endif
+
     if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
 
     ! All tracers are using the same restoring length scale for now, but we may want to make this
@@ -763,7 +765,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
   integer :: j, a_loop
-  character(len=32) :: action_str(5)
+  character(len=32) :: action_str(8)
   character(len=128) :: segment_param_str
   real, allocatable, dimension(:)  :: tnudge
   ! This returns the global indices for the segment
@@ -784,7 +786,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
 
   OBC%segment(l_seg)%on_pe = .false.
 
-  do a_loop = 1,5 ! up to 5 options available
+  do a_loop = 1,8 ! up to 8 options available
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
@@ -878,7 +880,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
   integer :: i, a_loop
-  character(len=32) :: action_str(5)
+  character(len=32) :: action_str(8)
   character(len=128) :: segment_param_str
   real, allocatable, dimension(:)  :: tnudge
 
@@ -900,7 +902,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
 
   OBC%segment(l_seg)%on_pe = .false.
 
-  do a_loop = 1,5
+  do a_loop = 1,8
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
@@ -1484,6 +1486,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   real, parameter :: eps = 1.0e-20
   type(OBC_segment_type), pointer :: segment
   integer :: i, j, k, is, ie, js, je, nz, n
+  integer :: is_obc, ie_obc, js_obc, je_obc
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
@@ -1614,8 +1618,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB
+           Js_obc = max(segment%HI%JsdB,G%jsd+1)
+           Je_obc = min(segment%HI%JedB,G%jed-1)
+           do k=1,nz ; do J=Js_obc,Je_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCu(I-1,j) > 0.0 .and. G%mask2dCu(I-1,j+1) > 0.0) then
+!              rx_avg = 0.5*(u_new(I-1,j,k) + u_new(I-1,j+1,k))*dt*G%IdxBu(I-1,J)
+!            elseif (G%mask2dCu(I-1,j) > 0.0) then
+!              rx_avg = u_new(I-1,j,k)*dt*G%IdxBu(I-1,J)
+!            elseif (G%mask2dCu(I-1,j+1) > 0.0) then
+!              rx_avg = u_new(I-1,j+1,k)*dt*G%IdxBu(I-1,J)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((v_new(i,J,k) - v_new(i-1,J,k))*G%IdxBu(I-1,J) + &
                                rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%IdxBu(I-2,J)) / (1.0+rx_avg)
            enddo ; enddo
@@ -1713,8 +1728,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
+           Js_obc = max(segment%HI%JsdB,G%jsd+1)
+           Je_obc = min(segment%HI%JedB,G%jed-1)
+           do k=1,nz ;  do J=Js_obc,Je_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCu(I+1,j) > 0.0 .and. G%mask2dCu(I+1,j+1) > 0.0) then
+!              rx_avg = 0.5*(u_new(I+1,j,k) + u_new(I+1,j+1,k))*dt*G%IdxBu(I+1,J)
+!            elseif (G%mask2dCu(I+1,j) > 0.0) then
+!              rx_avg = u_new(I+1,j,k)*dt*G%IdxBu(I+1,J)
+!            elseif (G%mask2dCu(I+1,j+1) > 0.0) then
+!              rx_avg = u_new(I+1,j+1,k)*dt*G%IdxBu(I+1,J)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((v_new(i+2,J,k) - v_new(i+1,J,k))*G%IdxBu(I+1,J) + &
                                rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%IdxBu(I+2,J)) / (1.0+rx_avg)
            enddo ; enddo
@@ -1788,10 +1814,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
          J=segment%HI%JsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           rx_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
-           rx_tangential(segment%HI%IedB,J,k) = segment%rx_normal(segment%HI%ied,J,k)
+           rx_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
+           rx_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
            do I=segment%HI%IsdB+1,segment%HI%IedB-1
-             rx_tangential(I,J,k) = 0.5*(segment%rx_normal(i,J,k) + segment%rx_normal(i+1,J,k))
+             rx_tangential(I,J,k) = 0.5*(segment%ry_normal(i,J,k) + segment%ry_normal(i+1,J,k))
            enddo
          enddo
          if (segment%radiation_tan) then
@@ -1813,8 +1839,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
+           Is_obc = max(segment%HI%IsdB,G%isd+1)
+           Ie_obc = min(segment%HI%IedB,G%ied-1)
+           do k=1,nz ;  do I=Is_obc,Ie_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCv(i,J-1) > 0.0 .and. G%mask2dCv(i+1,J-1) > 0.0) then
+!              rx_avg = 0.5*(v_new(i,J-1,k) + v_new(i+1,J-1,k)*dt*G%IdyBu(I,J-1))
+!            elseif (G%mask2dCv(i,J-1) > 0.0) then
+!              rx_avg = v_new(i,J-1,k)*dt*G%IdyBu(I,J-1)
+!            elseif (G%mask2dCv(i+1,J-1) > 0.0) then
+!              rx_avg = v_new(i+1,J-1,k)*dt*G%IdyBu(I,J-1)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((u_new(I,j,k) - u_new(I-1,j,k))*G%IdyBu(I,J-1) + &
                                rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%IdyBu(I,J-2)) / (1.0+rx_avg)
            enddo ; enddo
@@ -1888,10 +1925,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
          J=segment%HI%JsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           rx_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
-           rx_tangential(segment%HI%IedB,J,k) = segment%rx_normal(segment%HI%ied,J,k)
+           rx_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
+           rx_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
            do I=segment%HI%IsdB+1,segment%HI%IedB-1
-             rx_tangential(I,J,k) = 0.5*(segment%rx_normal(i,J,k) + segment%rx_normal(i+1,J,k))
+             rx_tangential(I,J,k) = 0.5*(segment%ry_normal(i,J,k) + segment%ry_normal(i+1,J,k))
            enddo
          enddo
          if (segment%radiation_tan) then
@@ -1913,8 +1950,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            enddo ; enddo
          endif
          if (segment%radiation_grad) then
-           do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
+           Is_obc = max(segment%HI%IsdB,G%isd+1)
+           Ie_obc = min(segment%HI%IedB,G%ied-1)
+           do k=1,nz ;  do I=Is_obc,Ie_obc
              rx_avg = rx_tangential(I,J,k)
+!            if (G%mask2dCv(i,J+1) > 0.0 .and. G%mask2dCv(i+1,J+1) > 0.0) then
+!              rx_avg = 0.5*(v_new(i,J+1,k) + v_new(i+1,J+1,k))*dt*G%IdyBu(I,J+1)
+!            elseif (G%mask2dCv(i,J+1) > 0.0) then
+!              rx_avg = v_new(i,J+1,k)*dt*G%IdyBu(I,J+1)
+!            elseif (G%mask2dCv(i+1,J+1) > 0.0) then
+!              rx_avg = v_new(i+1,J+1,k)*dt*G%IdyBu(I,J+1)
+!            else
+!              rx_avg = 0.0
+!            endif
              segment%tangential_grad(I,J,k) = ((u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
                                rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%IdyBu(I,J+2)) / (1.0+rx_avg)
            enddo ; enddo
@@ -2403,6 +2451,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   real, dimension(:,:,:), allocatable :: tmp_buffer
   real, dimension(:), allocatable :: h_stack
   integer :: is_obc2, js_obc2
+  real :: net_H_src, net_H_int, scl_fac
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2439,30 +2488,21 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
         segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
- !       if (GV%Boussinesq) then
-        segment%Htot(I,j) = G%bathyT(i+ishift,j)*GV%m_to_H! + eta(i+ishift,j)
- !       else
- !         segment%Htot(I,j) =  eta(i+ishift,j)
- !       endif
+        segment%Htot(I,j)=0.0
         do k=1,G%ke
           segment%h(I,j,k) = h(i+ishift,j,k)
+          segment%Htot(I,j)=segment%Htot(I,j)+segment%h(I,j,k)
         enddo
       enddo
-
-
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
         segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
-!       if (GV%Boussinesq) then
-        segment%Htot(i,J) = G%bathyT(i,j+jshift)*GV%m_to_H! + eta(i,j+jshift)
-!          else
-!            segment%Htot(i,J) = eta(i,j+jshift)
-!          endif
+        segment%Htot(i,J)=0.0
         do k=1,G%ke
           segment%h(i,J,k) = h(i,j+jshift,k)
-!           segment%e(i,J,k) = e(i,j+jshift,k)
+          segment%Htot(i,J)=segment%Htot(i,J)+segment%h(i,J,k)
         enddo
       enddo
     endif
@@ -2644,8 +2684,11 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                 ! Pretty sure we need to check for source/target grid consistency here
                 segment%field(m)%buffer_dst(I,j,:)=0.0  ! initialize remap destination buffer
                 if (G%mask2dCu(I,j)>0.) then
+                  net_H_src = sum( segment%field(m)%dz_src(I,j,:) )
+                  net_H_int = sum( h(i+ishift,j,:) )
+                  scl_fac = net_H_int / net_H_src
                   call remapping_core_h(OBC%remap_CS, &
-                       segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
+                       segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,j,:), &
                        G%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:))
                 endif
@@ -2687,6 +2730,9 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
               ! Pretty sure we need to check for source/target grid consistency here
                 segment%field(m)%buffer_dst(i,J,:)=0.0  ! initialize remap destination buffer
                 if (G%mask2dCv(i,J)>0.) then
+                  net_H_src = sum( segment%field(m)%dz_src(i,J,:) )
+                  net_H_int = sum( h(i,j+jshift,:) )
+                  scl_fac = net_H_int / net_H_src
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(i,J,:), &
                        segment%field(m)%buffer_src(i,J,:), &
