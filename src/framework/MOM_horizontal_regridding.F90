@@ -58,7 +58,7 @@ contains
 subroutine myStats(array, missing, is, ie, js, je, k, mesg)
   real, dimension(:,:), intent(in) :: array !< input array (ND)
   real, intent(in) :: missing !< missing value (ND)
-  integer :: is,ie,js,je,k 
+  integer :: is,ie,js,je,k
   character(len=*) :: mesg
   ! Local variables
   real :: minA, maxA
@@ -101,13 +101,13 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
 
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), &          !< The array with missing values to fill
-                         intent(inout) :: aout !! 
+                         intent(inout) :: aout !!
   real, dimension(SZI_(G),SZJ_(G)), &          !< Valid data mask for incoming array
-                         intent(in)    :: good !! (1==good data; 0==missing data).                                               
+                         intent(in)    :: good !! (1==good data; 0==missing data).
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(in)    :: fill !< Same shape array of points which need
                                                !! filling (1==fill;0==dont fill)
-                                               
+
   real, dimension(SZI_(G),SZJ_(G)), &          !< First guess where isolated holes exist.
                optional, intent(in)    :: prev !!
   logical,     optional, intent(in)    :: smooth !< If present and true, apply a number of
@@ -891,7 +891,7 @@ function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
 integer, dimension(:,:), intent(in)             :: m !< input array (ND)
 logical,                 intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
 logical,                 intent(in)             :: tripolar_n !< True if domain has an Arctic fold
-real,    dimension(size(m,1),size(m,2))         :: m_real 
+real,    dimension(size(m,1),size(m,2))         :: m_real
 real,    dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
 integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
