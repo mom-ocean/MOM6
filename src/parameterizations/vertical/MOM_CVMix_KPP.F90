@@ -1,5 +1,5 @@
 !> Provides the K-Profile Parameterization (KPP) of Large et al., 1994, via CVMix.
-module MOM_KPP
+module MOM_CVMix_KPP
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -186,11 +186,11 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
 
   ! Local variables
 #include "version_variable.h"
-  character(len=40) :: mdl = 'MOM_KPP' ! name of this module
+  character(len=40) :: mdl = 'MOM_CVMix_KPP' ! name of this module
   character(len=20) :: string          ! local temporary string
   logical :: CS_IS_ONE=.false.         ! Logical for setting Cs based on Non-local
 
-  if (associated(CS)) call MOM_error(FATAL, 'MOM_KPP, KPP_init: '// &
+  if (associated(CS)) call MOM_error(FATAL, 'MOM_CVMix_KPP, KPP_init: '// &
            'Control structure has already been initialized')
   allocate(CS)
 
@@ -848,7 +848,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
           enddo
         else
            !This shouldn't be reached.
-           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in Vt2")
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in Vt2")
            LangEnhVT2(:) = 1.0
         endif
       else
@@ -925,7 +925,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
            LangEnhK = min(2.25, 1. + 1./WAVES%LangNum(i,j))
         else
            !This shouldn't be reached.
-           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in LT_K_ENHANCEMENT")
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in LT_K_ENHANCEMENT")
            LangEnhK = 1.0
         endif
         do k=1,G%ke
@@ -1372,7 +1372,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
           enddo
         else
            !This shouldn't be reached.
-           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in Vt2")
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in Vt2")
            LangEnhVT2(:) = 1.0
         endif
       else
@@ -1426,7 +1426,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 
 ! Following "correction" step has been found to be unnecessary.
 ! Code should be removed after further testing.
-! BGR: 03/15/2018-> Restructured code (Vt2 changed to compute from call in MOM_KPP now)
+! BGR: 03/15/2018-> Restructured code (Vt2 changed to compute from call in MOM_CVMix_KPP now)
 !      I have not taken this restructuring into account here.
 !      Do we ever run with correctSurfLayerAvg?
 !      smg's suggested testing and removal is advised, in the meantime
@@ -1793,4 +1793,4 @@ end subroutine KPP_end
 !!
 !! \sa
 !! kpp_calculate(), kpp_applynonlocaltransport()
-end module MOM_KPP
+end module MOM_CVMix_KPP
