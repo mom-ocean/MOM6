@@ -50,9 +50,9 @@ use MOM_interface_heights,   only : find_eta
 use MOM_internal_tides,      only : propagate_int_tide
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
-use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_compute_BLD, KPP_calculate
-use MOM_KPP,                 only : KPP_end, KPP_get_BLD
-use MOM_KPP,                 only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
+use MOM_CVMix_KPP,           only : KPP_CS, KPP_init, KPP_compute_BLD, KPP_calculate
+use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD
+use MOM_CVMix_KPP,           only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
 use MOM_opacity,             only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
 use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_TKE
