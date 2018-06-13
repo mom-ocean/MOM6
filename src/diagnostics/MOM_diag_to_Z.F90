@@ -89,7 +89,8 @@ type, public :: diag_to_Z_CS ; private
   type(axes_grp) :: axesZ
   integer, dimension(1) :: axesz_out
 
-  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic output timing
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
 
 end type diag_to_Z_CS
 
@@ -150,19 +151,20 @@ end function global_z_mean
 
 !> This subroutine maps tracers and velocities into depth space for diagnostics.
 subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
-                                                                   !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity,
-                                                                   !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H
-                                                                   !! (usually m or kg m-2).
-  real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh_in !< Sea surface height
-                                                                   !! (meter or kg/m2).
-  real, dimension(:,:),                      pointer       :: frac_shelf_h
-  type(diag_to_Z_CS),                        pointer       :: CS   !< Control structure returned by
-                                                                   !! previous call to diag_to_Z_init.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)    :: ssh_in !< Sea surface height in meters.
+  real, dimension(:,:),    pointer       :: frac_shelf_h !< The fraction of the cell area covered by
+                                                 !! ice shelf, or unassocatiaed if there is no shelf
+  type(diag_to_Z_CS),      pointer       :: CS   !< Control structure returned by a previous call
+                                                 !! to diag_to_Z_init.
 
 ! This subroutine maps tracers and velocities into depth space for diagnostics.
 
@@ -791,7 +793,7 @@ subroutine find_limited_slope(val, e, slope, k)
 
 end subroutine find_limited_slope
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine calculates interface diagnostics in z-space.
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -1027,7 +1029,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
 end subroutine register_Z_tracer_low
 
-! #@# This subroutine needs a doxygen comment.
+!> This subroutine sets parameters that control Z-space diagnostic output.
 subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -1036,15 +1038,8 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Struct to regulate diagnostic output.
   type(diag_to_Z_CS),      pointer       :: CS   !< Pointer to point to control structure for
-                                                 !! this module.
-
-! Arguments:
-!  (in)      Time       - current model time
-!  (in)      G          - ocean grid structure
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - struct indicating open file to parse for model param values
-!  (in)      diag       - struct to regulate diagnostic output
-!  (in/out)  CS         - pointer to point to control structure for this module
+                                                 !! this module, which is allocated and
+                                                 !! populated here.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1348,7 +1343,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axes_grp), pointer :: axes
+  type(axes_grp), pointer :: axes => NULL()
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
@@ -1401,7 +1396,7 @@ function register_Zint_diag(var_desc, CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid          ! Variable grid info.
-  type(axes_grp), pointer :: axes
+  type(axes_grp), pointer :: axes => NULL()
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, caller="register_Zint_diag")
