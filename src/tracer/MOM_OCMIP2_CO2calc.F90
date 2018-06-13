@@ -21,6 +21,8 @@ module MOM_ocmip2_co2calc_mod  !{
 !</DESCRIPTION>
 !
 
+use MOM_hor_index, only : hor_index_type, CO2_dope_vector => hor_index_type
+
 !
 !------------------------------------------------------------------
 !
@@ -33,13 +35,10 @@ implicit none ; private
 
 public  :: MOM_ocmip2_co2calc, CO2_dope_vector
 
+#include <MOM_memory.h>
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-
-type CO2_dope_vector
-  integer  :: isc, iec, jsc, jec
-  integer  :: isd, ied, jsd, jed
-end type CO2_dope_vector
 !
 !-----------------------------------------------------------------------
 !
@@ -61,9 +60,6 @@ contains
 ! the T and S to calculate the various coefficients.
 !
 ! INPUT
-!
-!       dope_vec   = an array of indices corresponding to the compute
-!                    and data domain boundaries.
 !
 !       mask       = land mask array (0.0 = land)
 !
@@ -95,87 +91,85 @@ contains
 !
 ! </DESCRIPTION>
 
-subroutine MOM_ocmip2_co2calc(dope_vec, mask,                      &
-                          t_in, s_in, dic_in, pt_in, sit_in, ta_in, htotallo, &
-                          htotalhi, htotal, co2star, alpha, pCO2surf, co3_ion)  !{
-
-implicit none
+!> Calculate co2* from total alkalinity, total CO2, temperature and salinity.
+subroutine MOM_ocmip2_co2calc(HI, mask, t_in, s_in, dic_in, pt_in, sit_in, ta_in, htotallo, &
+                              htotalhi, htotal, co2star, alpha, pCO2surf, co3_ion)
+  type(hor_index_type), intent(in)  :: HI   !< A horizontal index type structure.
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  :: mask !< A land mask array (0.0 = land)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  t_in !< Surface temperature in deg C.
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  s_in !< Salinity in psu
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  dic_in !< total inorganic carbon (mol/kg)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  pt_in  !< inorganic phosphate (mol/kg)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  sit_in !< inorganic silicate (mol/kg)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  ta_in  !< total alkalinity (eq/kg)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  htotallo !< lower limit of htotal range
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                        intent(in)  ::  htotalhi !< upper limit of htotal range
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+                     intent(inout)  :: htotal !< H+ concentration (mol/kg)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+              optional, intent(out) :: alpha  !< Solubility of CO2 for air (mol/kg/atm)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+              optional, intent(out) :: pCO2surf !< oceanic pCO2 (ppmv)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+              optional, intent(out) :: co2star !< CO2*water, or H2CO3 concentration (mol/kg)
+  real, dimension(SZDI_(HI),SZDJ_(HI)), &
+              optional, intent(out) :: co3_ion !< Carbonate ion, or CO3-- concentration (mol/kg)
 
 !
+!       local variables, all of which need better documentation.
+!
+  real :: alpha_internal
+  real :: bt
+  real :: co2star_internal
+  real :: dlogtk
+  real :: ft
+  real :: htotal2
+  real :: invtk
+  real :: is
+  real :: is2
+  real :: k0
+  real :: k1
+  real :: k2
+  real :: k1p
+  real :: k2p
+  real :: k3p
+  real :: kb
+  real :: kf
+  real :: ks
+  real :: ksi
+  real :: kw
+  real :: log100
+  real :: s2
+  real :: scl
+  real :: sqrtis
+  real :: sqrts
+  real :: st
+  real :: tk
+  real :: tk100
+  real :: tk1002
+  real :: logf_of_s
+  integer :: i, j, isc, iec, jsc, jec
+
 !       local parameters
-!
+  real, parameter :: permeg = 1.e-6
+  real, parameter :: xacc = 1.0e-10
 
-real, parameter :: permeg = 1.e-6
-real, parameter :: xacc = 1.0e-10
-
-!
-!       arguments
-!
-type(CO2_dope_vector), intent(in)           :: dope_vec
-real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
-      intent(in)::             mask, &
-                               t_in, &
-                               s_in, &
-                               dic_in, &
-                               pt_in, &
-                               sit_in, &
-                               ta_in, &
-                               htotallo, &
-                               htotalhi
-real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
-      intent(inout)         :: htotal
-real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
-      optional, intent(out) :: alpha, &
-                               pCO2surf, &
-                               co2star, &
-                               co3_ion
-!
-!       local variables
-!
-integer :: isc, iec, jsc, jec
-integer :: i,j
-real :: alpha_internal
-real :: bt
-real :: co2star_internal
-real :: dlogtk
-real :: ft
-real :: htotal2
-real :: invtk
-real :: is
-real :: is2
-real :: k0
-real :: k1
-real :: k2
-real :: k1p
-real :: k2p
-real :: k3p
-real :: kb
-real :: kf
-real :: ks
-real :: ksi
-real :: kw
-real :: log100
-real :: s2
-real :: scl
-real :: sqrtis
-real :: sqrts
-real :: st
-real :: tk
-real :: tk100
-real :: tk1002
-real :: logf_of_s
 
 ! Set the loop indices.
-  isc = dope_vec%isc ; iec = dope_vec%iec
-  jsc = dope_vec%jsc ; jec = dope_vec%jec
+  isc = HI%isc ; iec = HI%iec ; jsc = HI%jsc ; jec = HI%jec
 
-!
-!       Initialize the module
-!
   log100 = log(100.0)
 
-  do j = jsc, jec  !{
-    do i = isc, iec  !{
+  do j=jsc,jec ; do i=isc,iec
 !
 !---------------------------------------------------------------------
 !
@@ -334,7 +328,7 @@ real :: logf_of_s
 ! recommended (xacc of 10**-9 drops precision to 2 significant
 ! figures).
 !
-      if (mask(i,j) /= 0.0) then  !{
+      if (mask(i,j) /= 0.0) then
         htotal(i,j) = drtsafe(k0, k1, k2, kb, k1p, k2p, k3p, ksi, kw,   &
                                 ks, kf, bt, dic_in(i,j), ft, pt_in(i,j),&
                                 sit_in(i,j), st, ta_in(i,j),            &
@@ -363,12 +357,10 @@ real :: logf_of_s
         if (present(pCO2surf)) then
           pCO2surf(i,j) = co2star_internal / (alpha_internal * permeg)
         endif
-    enddo  !} i
-  enddo  !} j
 
-return
+  enddo ; enddo
 
-end subroutine  MOM_ocmip2_co2calc  !}
+end subroutine  MOM_ocmip2_co2calc
 ! </SUBROUTINE> NAME="MOM_ocmip2_co2calc"
 
 
