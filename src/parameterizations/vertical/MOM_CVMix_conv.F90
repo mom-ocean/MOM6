@@ -258,7 +258,8 @@ end function CVMix_conv_is_used
 
 !> Clear pointers and dealocate memory
 subroutine CVMix_conv_end(CS)
-  type(CVMix_conv_cs), pointer :: CS ! Control structure
+  type(CVMix_conv_cs), pointer :: CS !< Control structure for this module that
+                                     !! will be deallocated in this subroutine
 
   if (.not. associated(CS)) return
 
