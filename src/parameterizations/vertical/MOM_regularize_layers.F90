@@ -67,9 +67,9 @@ type, public :: regularize_layers_CS ; private
                              ! intensity.  Now 30% and 50% of the way from
                              ! h_def_tol1 to 1.
   real    :: Hmix_min        ! The minimum mixed layer thickness in m.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
   logical :: debug           ! If true, do more thorough checks for debugging purposes.
 
   integer :: id_def_rat = -1

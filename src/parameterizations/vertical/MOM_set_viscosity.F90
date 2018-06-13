@@ -76,8 +76,8 @@ type, public :: set_visc_CS ; private
                             ! this fraction of the absolute rotation rate blended
                             ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                            ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                            ! regulate the timing of diagnostic output.
   integer :: id_bbl_thick_u = -1, id_kv_bbl_u = -1
   integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1
@@ -1841,7 +1841,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
   logical :: use_kappa_shear, adiabatic, use_omega
   logical :: use_CVMix_ddiff, differential_diffusion
-  type(OBC_segment_type), pointer :: segment  ! pointer to OBC segment type
+  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.

@@ -27,7 +27,7 @@ type, public :: optics_type
                             ! the nbands bands that penetrates beyond the surface.
                             ! The most rapidly varying dimension is the band.
 
-  real, pointer, dimension(:) ::   &
+  real, pointer, dimension(:) :: &
     min_wavelength_band => NULL(), & ! The range of wavelengths in each band of
     max_wavelength_band => NULL()    ! penetrating shortwave radiation (nm)
 

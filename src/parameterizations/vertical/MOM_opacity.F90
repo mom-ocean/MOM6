@@ -79,9 +79,9 @@ type, public :: opacity_CS ; private
   integer :: sbc_chl         ! An integer handle used in time interpolation of
                              ! chlorophyll read from a file.
   logical ::  chl_from_file  !   If true, chl_a is read from a file.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp => NULL()
                     ! A pointer to the control structure of the tracer modules.
 

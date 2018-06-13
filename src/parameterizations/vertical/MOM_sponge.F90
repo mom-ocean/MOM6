@@ -112,8 +112,8 @@ type, public :: sponge_CS ; private
   type(p2d) :: Ref_val_im(MAX_FIELDS_)  ! The values toward which the i-means of
                              ! fields are damped.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
   integer :: id_w_sponge = -1
 
 end type sponge_CS

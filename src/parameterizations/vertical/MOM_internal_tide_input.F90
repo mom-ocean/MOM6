@@ -46,9 +46,9 @@ implicit none ; private
 public set_int_tide_input, int_tide_input_init, int_tide_input_end
 
 type, public :: int_tide_input_CS ; private
-  logical :: debug           ! If true, write verbose checksums for debugging.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  logical :: debug      ! If true, write verbose checksums for debugging.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                        ! regulate the timing of diagnostic output.
   real :: TKE_itide_max ! Maximum Internal tide conversion (W m-2)
                         ! available to mix above the BBL
 
