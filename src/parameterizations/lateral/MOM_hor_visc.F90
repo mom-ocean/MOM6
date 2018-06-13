@@ -193,7 +193,7 @@ type, public :: hor_visc_CS ; private
     Laplac3_Const_xy, & ! Laplacian  metric-dependent constants (nondim)
     Biharm5_Const_xy    ! Biharmonic metric-dependent constants (nondim)
 
-  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic timing
+  type(diag_ctrl), pointer :: diag => NULL() ! structure to regulate diagnostics
 
   ! diagnostic ids
   integer :: id_diffu     = -1, id_diffv         = -1
@@ -1639,11 +1639,10 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
 end subroutine hor_visc_init
 
+!> This subroutine deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
-! This subroutine deallocates any variables allocated in hor_visc_init.
-! Argument:  CS - The control structure returned by a previous call to
-!                 hor_visc_init.
-  type(hor_visc_CS), pointer :: CS
+  type(hor_visc_CS), pointer :: CS !< The control structure returned by a
+                                   !! previous call to hor_visc_init.
 
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
