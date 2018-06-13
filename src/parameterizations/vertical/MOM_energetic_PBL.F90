@@ -155,7 +155,7 @@ type, public :: energetic_PBL_CS ; private
   real :: LaC_EKoOB_un       !   ...
   real :: Max_Enhance_M = 5. ! The maximum allowed LT enhancement to the mixing.
   real :: CNV_MST_FAC        ! Factor to reduce mstar when statically unstable.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+  type(time_type), pointer :: Time=>NULL() ! A pointer to the ocean model's clock.
 
   integer :: MSTAR_MODE = 0  ! An integer to determine which formula is used to
                              !  set mstar
@@ -171,7 +171,7 @@ type, public :: energetic_PBL_CS ; private
   logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
                                           !  length and velocity scale
   logical :: MSTAR_Diagnostics=.false.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+  type(diag_ctrl), pointer :: diag=>NULL() ! A structure that is used to regulate the
                              ! timing of diagnostic output.
 
 ! These are terms in the mixed layer TKE budget, all in J m-2 = kg s-2.
@@ -1524,7 +1524,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       if (allocated(CS%La)) CS%La(i,j) = LA
       if (allocated(CS%La_mod)) CS%La_mod(i,j) = LAmod
     else
-      ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
+      ! For masked points, Kd_int must still be set (to 0) because it has intent out.
       do K=1,nz+1
         Kd(i,K) = 0.
       enddo
@@ -1909,9 +1909,10 @@ end subroutine energetic_PBL_get_MLD
 
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
 subroutine ust_2_u10_coare3p5(USTair,U10,GV)
-  real, intent(in)  :: USTair
-  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, intent(out) :: U10
+  real,                    intent(in)  :: USTair !< Ustar in the air, in m s-1.
+  type(verticalGrid_type), intent(in)  :: GV     !< The ocean's vertical grid structure
+  real,                    intent(out) :: U10    !< The 10 m wind speed, in m s-1.
+
   real, parameter :: vonkar = 0.4
   real, parameter :: nu=1e-6
   real :: z0sm, z0, z0rough, u10a, alpha, CD
@@ -1950,7 +1951,13 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
   return
 end subroutine ust_2_u10_coare3p5
 
+!> This subroutine returns the Langmuir number, given ustar and the boundary
+!! layer thickness, inclusion conversion to the 10m wind.
 subroutine get_LA_windsea(ustar, hbl, GV, LA)
+  real,                    intent(in)  :: ustar !< The water-side surface friction velocity (m/s)
+  real,                    intent(in)  :: hbl   !< The ocean boundary layer depth (m)
+  type(verticalGrid_type), intent(in)  :: GV    !< The ocean's vertical grid structure
+  real,                    intent(out) :: LA    !< The Langmuir number returned from this module
 ! Original description:
 ! This function returns the enhancement factor, given the 10-meter
 ! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
@@ -1965,13 +1972,6 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
 ! BGR remove u10 input
 
 ! Input
-  real, intent(in) :: &
-       ! water-side surface friction velocity (m/s)
-       ustar, &
-       ! boundary layer depth (m)
-       hbl
-  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, intent(out) :: LA
 ! Local variables
   ! parameters
   real, parameter :: &
@@ -2044,13 +2044,15 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
   endif
 endsubroutine Get_LA_windsea
 
+!> This subroutine initializes the energetic_PBL module
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
-  type(time_type), target, intent(in)    :: Time
+  type(time_type), target, intent(in)    :: Time !< The current model time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(energetic_PBL_CS), pointer        :: CS
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic output
+  type(energetic_PBL_CS),  pointer       :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -2367,8 +2369,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
 
 end subroutine energetic_PBL_init
 
+!> Clean up and deallocate memory associated with the energetic_PBL module.
 subroutine energetic_PBL_end(CS)
-  type(energetic_PBL_CS), pointer :: CS
+  type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure that
+                                        !! will be deallocated in this subroutine.
 
   if (.not.associated(CS)) return
 

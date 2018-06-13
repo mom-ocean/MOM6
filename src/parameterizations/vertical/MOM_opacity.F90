@@ -99,6 +99,7 @@ character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP"
 
 contains
 
+!> This sets the opacity of sea water based based on one of several different schemes.
 subroutine set_opacity(optics, fluxes, G, GV, CS)
   type(optics_type),       intent(inout) :: optics !< An optics structure that has values
                                                    !! set based on the opacities.
@@ -227,6 +228,8 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
 end subroutine set_opacity
 
 
+!> This sets the "blue" band opacity based on chloophyll A concencentrations
+!! The red portion is lumped into the net heating at the surface.
 subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   type(optics_type),     intent(inout)  :: optics !< An optics structure that has values
                                                   !! set based on the opacities.
@@ -260,7 +263,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
 !   In this model, the Morel (modified) and Manizza (modified) schemes
-! use the "blue" band in the paramterizations to determine the e-folding
+! use the "blue" band in the parameterizations to determine the e-folding
 ! depth of the incoming shortwave attenuation. The red portion is lumped
 ! into the net heating at the surface.
 !
@@ -413,8 +416,10 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
 
 end subroutine opacity_from_chl
 
+!> This sets the blue-wavelength opacity according to the scheme proposed by
+!! Morel and Antoine (1994).
 function opacity_morel(chl_data)
-  real, intent(in)  :: chl_data
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
   real :: opacity_morel
 ! Argument : chl_data - The chlorophyll-A concentration in mg m-3.
 !   The following are coefficients for the optical model taken from Morel and
@@ -431,8 +436,10 @@ function opacity_morel(chl_data)
       ((Z2_coef(3) + Chl*Z2_coef(4)) + Chl2*(Z2_coef(5) + Chl*Z2_coef(6))) )
 end function
 
+!> This sets the penetrating shortwave fraction according to the scheme proposed by
+!! Morel and Antoine (1994).
 function SW_pen_frac_morel(chl_data)
-  real, intent(in)  :: chl_data
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
   real :: SW_pen_frac_morel
 ! Argument : chl_data - The chlorophyll-A concentration in mg m-3.
 !   The following are coefficients for the optical model taken from Morel and
@@ -449,8 +456,10 @@ function SW_pen_frac_morel(chl_data)
        ((V1_coef(3) + Chl*V1_coef(4)) + Chl2*(V1_coef(5) + Chl*V1_coef(6))) )
 end function SW_pen_frac_morel
 
+!>   This sets the blue-wavelength opacity according to the scheme proposed by
+!! Manizza, M. et al, 2005.
 function opacity_manizza(chl_data)
-  real, intent(in)  :: chl_data
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
   real :: opacity_manizza
 ! Argument : chl_data - The chlorophyll-A concentration in mg m-3.
 !   This sets the blue-wavelength opacity according to the scheme proposed by
@@ -467,7 +476,8 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
   type(tracer_flow_control_CS), &
-                  target, intent(in)     :: tracer_flow
+                   target, intent(in)    :: tracer_flow !< A pointer to the tracer flow control
+                                                 !! module's control structure
   type(opacity_CS),        pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module.
   type(optics_type),       pointer       :: optics !< An optics structure that has parameters
