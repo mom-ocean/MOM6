@@ -364,7 +364,8 @@ end subroutine calculate_compress_linear
 subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa, &
                  bathyT, dz_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HII, HIO
+  type(hor_index_type), intent(in)  :: HII       !< The horizontal index type for the input arrays.
+  type(hor_index_type), intent(in)  :: HIO       !< The horizontal index type for the output arrays.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! in C.

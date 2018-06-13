@@ -187,8 +187,13 @@ subroutine calculate_density_derivs_array_teos10(T, S, pressure, drho_dT, drho_d
 end subroutine calculate_density_derivs_array_teos10
 
 subroutine calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_dS)
-  real,    intent(in)  ::  T, S, pressure
-  real,    intent(out) :: drho_dT, drho_dS
+  real,    intent(in)  :: T        !< Conservative temperature in C
+  real,    intent(in)  :: S        !< Absolute Salinity in g/kg
+  real,    intent(in)  :: pressure !< Pressure in Pa.
+  real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                   !! temperature, in kg m-3 K-1.
+  real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                   !! in kg m-3 psu-1.
   ! Local variables
   real :: zs,zt,zp
   !Conversions
@@ -238,7 +243,9 @@ end subroutine calculate_specvol_derivs_teos10
 !> Calculate the 5 second derivatives of the equation of state for scalar inputs
 subroutine calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                          drho_dT_dT, drho_dS_dP, drho_dT_dP)
-  real, intent(in)     :: T, S, pressure
+  real, intent(in)     :: T          !< Conservative temperature in C
+  real, intent(in)     :: S          !< Absolute Salinity in g/kg
+  real, intent(in)     :: pressure   !< Pressure in Pa.
   real, intent(out)    :: drho_dS_dS !< Partial derivative of beta with respect to S
   real, intent(out)    :: drho_dS_dT !< Partial derivative of beta with resepct to T
   real, intent(out)    :: drho_dT_dT !< Partial derivative of alpha with respect to T
@@ -266,7 +273,9 @@ end subroutine calculate_density_second_derivs_scalar_teos10
 !> Calculate the 5 second derivatives of the equation of state for scalar inputs
 subroutine calculate_density_second_derivs_array_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                         drho_dT_dT, drho_dS_dP, drho_dT_dP, start, npts)
-  real, dimension(:), intent(in)     :: T, S, pressure
+  real, dimension(:), intent(in)     :: T          !< Conservative temperature in C
+  real, dimension(:), intent(in)     :: S          !< Absolute Salinity in g/kg
+  real, dimension(:), intent(in)     :: pressure   !< Pressure in Pa.
   real, dimension(:), intent(out)    :: drho_dS_dS !< Partial derivative of beta with respect to S
   real, dimension(:), intent(out)    :: drho_dS_dT !< Partial derivative of beta with resepct to T
   real, dimension(:), intent(out)    :: drho_dT_dT !< Partial derivative of alpha with respect to T
