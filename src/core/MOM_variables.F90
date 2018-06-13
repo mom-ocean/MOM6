@@ -233,6 +233,9 @@ type, public :: vertvisc_type
                          !! convection etc).
     TKE_turb => NULL()  !< The turbulent kinetic energy per unit mass defined
                         !! at the interfaces between each layer, in m2 s-2.
+    logical :: add_Kv_slow !< If True, adds Kv_slow when calculating the
+                        !! 'coupling coefficient' (a[k]) at the interfaces.
+                        !! This is done in find_coupling_coef.
 end type vertvisc_type
 
 !> The BT_cont_type structure contains information about the summed layer
