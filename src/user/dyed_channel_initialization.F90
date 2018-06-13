@@ -92,8 +92,8 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
   integer :: i, j, k, l, itt, isd, ied, jsd, jed, m, n
   integer :: IsdB, IedB, JsdB, JedB
   real :: dye
-  type(OBC_segment_type), pointer :: segment
-  type(tracer_type), pointer      :: tr_ptr
+  type(OBC_segment_type), pointer :: segment => NULL()
+  type(tracer_type), pointer      :: tr_ptr => NULL()
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
         'dyed_channel_set_OBC_data() was called but OBC type was not initialized!')
@@ -143,7 +143,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
   real :: flow, time_sec, PI
   integer :: i, j, k, l, itt, isd, ied, jsd, jed, m, n
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
         'dyed_channel_update_flow() was called but OBC type was not initialized!')

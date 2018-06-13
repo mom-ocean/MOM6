@@ -54,17 +54,17 @@ type, public :: BFB_surface_forcing_CS ; private
                              ! forcing ramp
   real :: SST_n              ! SST at the northern edge of the linear
                              ! forcing ramp
-  real :: lfrslat              ! Southern latitude where the linear forcing ramp
+  real :: lfrslat            ! Southern latitude where the linear forcing ramp
                              ! begins
-  real :: lfrnlat              ! Northern latitude where the linear forcing ramp
+  real :: lfrnlat            ! Northern latitude where the linear forcing ramp
                              ! ends
   real :: drho_dt            ! Rate of change of density with temperature.
                              ! Note that temperature is being used as a dummy
                              ! variable here. All temperatures are converted
                              ! into density.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
 end type BFB_surface_forcing_CS
 
 contains

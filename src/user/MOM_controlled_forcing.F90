@@ -62,9 +62,9 @@ type, public :: ctrl_forcing_CS ; private
     avg_SST_anom => NULL(), &
     avg_SSS_anom => NULL(), &
     avg_SSS => NULL()
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  integer :: id_heat_0 = -1 ! See if these are neede later...
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                            ! regulate the timing of diagnostic output.
+  integer :: id_heat_0 = -1 ! See if these are needed later...
 end type ctrl_forcing_CS
 
 contains
