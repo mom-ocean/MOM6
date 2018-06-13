@@ -66,8 +66,8 @@ module MOM_generic_tracer
                               ! initialization code if they are not found in the
                               ! restart files.
 
-     type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+     type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
      type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
      !   The following pointer will be directed to the first element of the
