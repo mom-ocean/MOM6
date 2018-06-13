@@ -884,7 +884,7 @@ end function find_unused_unit_number
 subroutine doc_end(doc)
   type(doc_type), pointer :: doc !< A pointer to a structure that controls where the
                                  !! documentation occurs and its formatting
-  type(link_msg), pointer :: this, next
+  type(link_msg), pointer :: this => NULL(), next => NULL()
 
   if (.not.associated(doc)) return
 
@@ -929,7 +929,7 @@ function mesgHasBeenDocumented(doc,varName,mesg)
                                         !! to compare with the message that was written previously
   logical                       :: mesgHasBeenDocumented
 ! Returns true if documentation has already been written
-  type(link_msg), pointer :: newLink, this, last
+  type(link_msg), pointer :: newLink => NULL(), this => NULL(), last => NULL()
 
   mesgHasBeenDocumented = .false.
 

@@ -67,7 +67,8 @@ type, public :: diagnostics_CS ; private
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
                                        !! calculating the equivalent barotropic wave speed. (m)
 
-  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostics timing
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
 
   ! following arrays store diagnostics calculated here and unavailable outside.
 

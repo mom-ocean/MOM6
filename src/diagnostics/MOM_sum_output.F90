@@ -134,7 +134,7 @@ type, public :: sum_output_CS ; private
   logical :: date_stamped_output ! If true, use dates (not times) in messages to stdout.
   type(time_type) :: Start_time ! The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
-  integer, pointer :: ntrunc    ! The number of times the velocity has been
+  integer, pointer :: ntrunc => NULL() ! The number of times the velocity has been
                                 ! truncated since the last call to write_energy.
   real    :: max_Energy         ! The maximum permitted energy per unit mass
                                 ! If there is more energy than this, the model
@@ -426,7 +426,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
   integer :: pe_num
   integer :: iyear, imonth, iday, ihour, iminute, isecond, itick ! For call to get_date()
   logical :: local_open_BC
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)

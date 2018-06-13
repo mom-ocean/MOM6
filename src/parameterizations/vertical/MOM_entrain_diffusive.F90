@@ -76,8 +76,8 @@ type, public :: entrain_diffusive_CS ; private
                              ! used to calculate the diapycnal entrainment.
   real    :: Tolerance_Ent   ! The tolerance with which to solve for entrainment
                              ! values, in m.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
   integer :: id_Kd = -1, id_diff_work = -1
 end type entrain_diffusive_CS
 

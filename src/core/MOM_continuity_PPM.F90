@@ -278,7 +278,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, local_open_BC, is_simple
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
@@ -1108,7 +1108,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, is_simple, local_open_BC
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
@@ -1900,7 +1900,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, n, stencil
   logical :: local_open_BC
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   use_CW84 = .false. ; if (present(monotonic)) use_CW84 = monotonic
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
@@ -2039,7 +2039,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, n, stencil
   logical :: local_open_BC
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   use_CW84 = .false. ; if (present(monotonic)) use_CW84 = monotonic
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd

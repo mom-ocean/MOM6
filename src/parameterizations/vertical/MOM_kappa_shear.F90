@@ -85,8 +85,8 @@ type, public :: Kappa_shear_CS ; private
                              ! no good reason why this should be false.
   logical :: layer_stagger = .false.
   logical :: debug = .false.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                            ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
   integer :: id_Kd_shear = -1, id_TKE = -1
   integer :: id_ILd2 = -1, id_dz_Int = -1
 end type Kappa_shear_CS
