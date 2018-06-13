@@ -111,8 +111,8 @@ type, public :: int_tide_CS ; private
                         ! energy loss rates summed over angle, freq, and mode
   real :: q_itides      ! fraction of local dissipation (nondimensional)
   real :: En_sum        ! global sum of energy for use in debugging
-  type(time_type),pointer    :: Time
-                        ! The current model time
+  type(time_type), pointer :: Time => NULL()
+                        ! A pointer to the model's clock.
   character(len=200) :: inputdir
                         ! directory to look for coastline angle file
   real :: decay_rate    ! A constant rate at which internal tide energy is
@@ -143,7 +143,7 @@ type, public :: int_tide_CS ; private
                                ! Y Location of generation site
                                ! for internal tide for testing
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to regulate the
                         ! timing of diagnostic output.
   type(wave_structure_CS),  pointer :: wave_structure_CSp => NULL()
 
@@ -173,6 +173,7 @@ type, public :: int_tide_CS ; private
 
 end type int_tide_CS
 
+!> A structure with the active energy loop bounds.
 type :: loop_bounds_type ; private
   integer :: ish, ieh, jsh, jeh
 end type loop_bounds_type
@@ -192,16 +193,15 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                                                         !! (needed for wave structure).
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input !< The energy input to the
                                                         !! internal waves, in W m-2.
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide       !< Barotropic velocity read
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide !< Barotropic velocity read
                                                         !! from file, in m s-1.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency, in s-1.
   real,                             intent(in)    :: dt !< Length of time over which these fluxes
                                                         !! will be applied, in s.
-  type(int_tide_CS),                pointer       :: CS !< A pointer to the control structure
-                                                        !! returned by a previous call to
-                                                        !! int_tide_init.
+  type(int_tide_CS),                pointer       :: CS !< The control structure returned by a
+                                                        !! previous call to int_tide_init.
   real, dimension(SZI_(G),SZJ_(G),CS%nMode), &
-                                    intent(in)    :: cn
+                                    intent(in)    :: cn !< The internal wave speeds of each mode, in m s-1.
 
   ! This subroutine calls other subroutines in this file that are needed to
   ! refract, propagate, and dissipate energy density of the internal tide.
@@ -639,10 +639,12 @@ end subroutine propagate_int_tide
 
 !> This subroutine checks for energy conservation on computational domain
 subroutine sum_En(G, CS, En, label)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure.
-  type(int_tide_CS), pointer            :: CS
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle), intent(in) :: En
-  character(len=*), intent(in) :: label
+  type(ocean_grid_type),  intent(in) :: G  !< The ocean's grid structure.
+  type(int_tide_CS),      pointer    :: CS !< The control structure returned by a
+                                           !! previous call to int_tide_init.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle), &
+                          intent(in) :: En !< The energy density of the internal tides, in J m-2.
+  character(len=*),       intent(in) :: label !< A label to use in error messages
 
   ! This subroutine checks for energy conservation on computational domain
   integer :: m,fr,a
@@ -682,12 +684,13 @@ end subroutine sum_En
 !! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
 subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
   type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
-  type(int_tide_CS),         pointer       :: CS
+  type(int_tide_CS),         pointer       :: CS !< The control structure returned by a
+                                                 !! previous call to int_tide_init.
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                              intent(in)    :: Nb !< Near-bottom stratification, in s-1.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), &
                              intent(inout) :: Ub !< Rms (over one period) near-bottom horizontal
-                                                 !! mode velocity , in m s-1.
+                                                 !! mode velocity, in m s-1.
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                              intent(in) :: TKE_loss_fixed !< Fixed part of energy loss,
                                                  !! in kg m-2 (rho*kappa*h^2).
@@ -782,12 +785,14 @@ end subroutine itidal_lowmode_loss
 !> been summed across all angles, frequencies, and modes for a given mechanism and location.
 !> It can be called from another module to get values from this module's (private) CS.
 subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
-  integer,                intent(in)  :: i,j
-  type(ocean_grid_type),  intent(in)  :: G            !< The ocean's grid structure
-  type(int_tide_CS),      pointer     :: CS
-  character(len=*),       intent(in)  :: mechanism
-  real,                   intent(out) :: TKE_loss_sum !< Total energy loss rate due to specified
-                                                      !! mechanism, in W m-2.
+  integer,               intent(in)  :: i   !< The i-index of the value to be reported.
+  integer,               intent(in)  :: j   !< The j-index of the value to be reported.
+  type(ocean_grid_type), intent(in)  :: G   !< The ocean's grid structure
+  type(int_tide_CS),     pointer     :: CS  !< The control structure returned by a
+                                            !! previous call to int_tide_init.
+  character(len=*),      intent(in)  :: mechanism    !< The named mechanism of loss to return
+  real,                  intent(out) :: TKE_loss_sum !< Total energy loss rate due to specified
+                                                     !! mechanism, in W m-2.
 
   ! This subroutine extracts the energy lost from the propagating internal which has
   ! been summed across all angles, frequencies, and modes for a given mechanism and location.
@@ -805,18 +810,19 @@ end subroutine get_lowmode_loss
 
 !> This subroutine does refraction on the internal waves at a single frequency.
 subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure.
-  integer,                intent(in)    :: NAngle
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure.
+  integer,               intent(in)    :: NAngle !< The number of wave orientations in the
+                                               !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
-                          intent(inout) :: En   !< The internal gravity wave energy density as a
-                                                !! function of space and angular resolution,
-                                                !! in J m-2 radian-1.
+                         intent(inout) :: En   !< The internal gravity wave energy density as a
+                                               !! function of space and angular resolution,
+                                               !! in J m-2 radian-1.
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
-                          intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
-  real,                   intent(in)    :: freq !< Wave frequency, in s-1.
-  real,                   intent(in)    :: dt   !< Time step, in s.
-  logical,                intent(in)    :: use_PPMang !< If true, use PPM for advection rather
-                                                !! than upwind.
+                         intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
+  real,                  intent(in)    :: freq !< Wave frequency, in s-1.
+  real,                  intent(in)    :: dt   !< Time step, in s.
+  logical,               intent(in)    :: use_PPMang !< If true, use PPM for advection rather
+                                               !! than upwind.
   !  This subroutine does refraction on the internal waves at a single frequency.
 
   ! Arguments:
@@ -949,18 +955,20 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   enddo ! j-loop
 end subroutine refract
 
-!> This subroutine calculates the 1-d flux for advection in angular space
-!! using a monotonic piecewise parabolic scheme. Should be within i and j spatial
-!! loops.
+!> This subroutine calculates the 1-d flux for advection in angular space using a monotonic
+!! piecewise parabolic scheme. This needs to be called from within i and j spatial loops.
 subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
-  integer,                     intent(in)    :: NAngle
-  real,                        intent(in)    :: dt
-  integer,                     intent(in)    :: halo_ang
+  integer,                   intent(in)    :: NAngle  !< The number of wave orientations in the
+                                                      !! discretized wave energy spectrum.
+  real,                      intent(in)    :: dt      !< Time increment in s.
+  integer,                   intent(in)    :: halo_ang !< The halo size in angular space
   real, dimension(1-halo_ang:NAngle+halo_ang),   &
-                               intent(in)    :: En2d
+                             intent(in)    :: En2d    !< The internal gravity wave energy density as a
+                                                      !! function of angular resolution, in J m-2 radian-1.
   real, dimension(1-halo_ang:NAngle+halo_ang),   &
-                               intent(in)    :: CFL_ang
-  real, dimension(0:NAngle),   intent(out)   :: Flux_En
+                             intent(in)    :: CFL_ang !< The CFL number of the energy advection across angles
+  real, dimension(0:NAngle), intent(out)   :: Flux_En !< The time integrated internal wave energy flux
+                                                      !! across angles, in J m-2 radian-1.
 
   !   This subroutine calculates the 1-d flux for advection in angular space
   ! using a monotonic piecewise parabolic scheme. Should be within i and j spatial
@@ -1034,17 +1042,19 @@ end subroutine PPM_angular_advect
 
 !> This subroutine does refraction on the internal waves at a single frequency.
 subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
-  type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure.
-  integer,                intent(in)    :: NAngle
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  integer,               intent(in)    :: NAngle !< The number of wave orientations in the
+                                               !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
-                          intent(inout) :: En   !< The internal gravity wave energy density as a
-                                                !! function of space and angular resolution,
-                                                !! in J m-2 radian-1.
+                         intent(inout) :: En   !< The internal gravity wave energy density as a
+                                               !! function of space and angular resolution,
+                                               !! in J m-2 radian-1.
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
-                          intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
-  real,                   intent(in)    :: freq !< Wave frequency, in s-1.
-  real,                   intent(in)    :: dt   !< Time step, in s.
-  type(int_tide_CS),      pointer       :: CS
+                         intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
+  real,                  intent(in)    :: freq !< Wave frequency, in s-1.
+  real,                  intent(in)    :: dt   !< Time step, in s.
+  type(int_tide_CS),     pointer       :: CS   !< The control structure returned by a
+                                               !! previous call to int_tide_init.
   !  This subroutine does refraction on the internal waves at a single frequency.
 
   ! Arguments:
@@ -1174,7 +1184,8 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
                           intent(in)    :: speed !< The magnitude of the group velocity at the cell
                                                  !! corner points, in m s-1.
   integer,                intent(in)    :: energized_wedge !< Index of current ray direction.
-  integer,                intent(in)    :: NAngle
+  integer,                intent(in)    :: NAngle !< The number of wave orientations in the
+                                                 !! discretized wave energy spectrum.
   real,                   intent(in)    :: dt    !< Time increment in s.
   type(int_tide_CS),      pointer       :: CS    !< The control structure returned by a previous
                                                  !! call to continuity_PPM_init.
@@ -1439,17 +1450,20 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   enddo ; enddo
 end subroutine propagate_corner_spread
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine propicates the internal wave energy in the logical x-direction.
 subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
-  integer,                 intent(in)    :: NAngle
+  integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
+                                               !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   &
                            intent(inout) :: En !< The energy density integrated over an angular
                                                !! band, in J m-2, intent in/out.
   real, dimension(G%IsdB:G%IedB,G%jsd:G%jed),        &
                            intent(in)    :: speed_x !< The magnitude of the group velocity at the
                                                !! Cu points, in m s-1.
-  real, dimension(Nangle), intent(in)    :: Cgx_av, dCgx
+  real, dimension(Nangle), intent(in)    :: Cgx_av !< The average x-projection in each angular band.
+  real, dimension(Nangle), intent(in)    :: dCgx !< The difference in x-projections between the
+                                               !! edges of each angular band.
   real,                    intent(in)    :: dt !< Time increment in s.
   type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
                                                !! to continuity_PPM_init.
@@ -1528,17 +1542,20 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
 
 end subroutine propagate_x
 
-! #@# This subroutine needs a doxygen description.
+!> This subroutine propicates the internal wave energy in the logical y-direction.
 subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
-  integer,                 intent(in)    :: NAngle
+  integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
+                                               !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle), &
                            intent(inout) :: En !< The energy density integrated over an angular
                                                !! band, in J m-2, intent in/out.
   real, dimension(G%isd:G%ied,G%JsdB:G%JedB),      &
                            intent(in)    :: speed_y !< The magnitude of the group velocity at the
                                                !! Cv points, in m s-1.
-  real, dimension(Nangle), intent(in)    :: Cgy_av, dCgy
+  real, dimension(Nangle), intent(in)    :: Cgy_av !< The average y-projection in each angular band.
+  real, dimension(Nangle), intent(in)    :: dCgy !< The difference in y-projections between the
+                                               !! edges of each angular band.
   real,                    intent(in)    :: dt !< Time increment in s.
   type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
                                                !! to continuity_PPM_init.
@@ -1732,12 +1749,16 @@ end subroutine merid_flux_En
 
 !> This subroutine does reflection of the internal waves at a single frequency.
 subroutine reflect(En, NAngle, CS, G, LB)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
-  integer,                intent(in)    :: NAngle
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure
+  integer,                intent(in)    :: NAngle !< The number of wave orientations in the
+                                              !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
-                          intent(inout) :: En
-  type(int_tide_CS),      pointer       :: CS
-  type(loop_bounds_type), intent(in)    :: LB
+                          intent(inout) :: En !< The internal gravity wave energy density as a
+                                              !! function of space and angular resolution,
+                                              !! in J m-2 radian-1.
+  type(int_tide_CS),      pointer       :: CS !< The control structure returned by a
+                                              !! previous call to int_tide_init.
+  type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
 
   !  This subroutine does reflection of the internal waves at a single frequency.
 
@@ -1850,16 +1871,19 @@ end subroutine reflect
 !> This subroutine moves energy across lines of partial reflection to prevent
 !! reflection of energy that is supposed to get across.
 subroutine teleport(En, NAngle, CS, G, LB)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure.
-  integer,                intent(in)    :: NAngle
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
+  integer,                intent(in)    :: NAngle !< The number of wave orientations in the
+                                              !! discretized wave energy spectrum.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
-                          intent(inout) :: En
-  type(int_tide_CS),      pointer       :: CS
-  type(loop_bounds_type), intent(in)    :: LB
+                          intent(inout) :: En !< The internal gravity wave energy density as a
+                                              !! function of space and angular resolution,
+                                              !! in J m-2 radian-1.
+  type(int_tide_CS),      pointer       :: CS !< The control structure returned by a
+                                              !! previous call to int_tide_init.
+  type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
 
   ! This subroutine moves energy across lines of partial reflection to prevent
   ! reflection of energy that is supposed to get across.
-
   real, dimension(G%isd:G%ied,G%jsd:G%jed)    :: angle_c
                                               ! angle of boudary wrt equator
   real, dimension(G%isd:G%ied,G%jsd:G%jed)    :: part_refl
@@ -1951,10 +1975,16 @@ end subroutine teleport
 !> This subroutine rotates points in the halos where required to accomodate
 !! changes in grid orientation, such as at the tripolar fold.
 subroutine correct_halo_rotation(En, test, G, NAngle)
-  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(:,:,:,:,:),         intent(inout) :: En
-  real, dimension(SZI_(G),SZJ_(G),2), intent(in)    :: test
-  integer,                            intent(in)    :: NAngle
+  type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(:,:,:,:,:), intent(inout) :: En   !< The internal gravity wave energy density as a
+                                       !! function of space, angular orientation, frequency,
+                                       !! and vertical mode, in J m-2 radian-1.
+  real, dimension(SZI_(G),SZJ_(G),2), &
+                              intent(in)    :: test !< An x-unit vector that has been passed through
+                                       !! the halo updates, to enable the rotation of the
+                                       !! wave energies in the halo region to be corrected.
+  integer,                    intent(in)    :: NAngle !< The number of wave orientations in the
+                                                      !! discretized wave energy spectrum.
   !   This subroutine rotates points in the halos where required to accomodate
   ! changes in grid orientation, such as at the tripolar fold.
 
@@ -2225,8 +2255,9 @@ end subroutine PPM_limit_pos
 ! subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
 !   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
 !   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-!   type(int_tide_CS),     pointer :: CS
-!   type(MOM_restart_CS),  pointer :: restart_CS
+!   type(int_tide_CS),     pointer       :: CS  !< The control structure returned by a
+!                                               !! previous call to int_tide_init.
+!   type(MOM_restart_CS),  pointer :: restart_CS !<  A pointer to the restart control structure.
 
 !   ! This subroutine is not currently in use!!
 
@@ -2277,7 +2308,7 @@ end subroutine PPM_limit_pos
 
 ! end subroutine register_int_tide_restarts
 
-! #@# This subroutine needs a doxygen comment.
+!> This subroutine initializes the internal tides module.
 subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target,   intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure.
@@ -2714,11 +2745,10 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
 end subroutine internal_tides_init
 
-
+!> This subroutine deallocates the memory associated with the internal tides control structure
 subroutine internal_tides_end(CS)
-  type(int_tide_CS),            pointer :: CS
-  ! Arguments:  CS - A pointer to the control structure returned by a previous
-  !                  call to internal_tides_init, it will be deallocated here.
+  type(int_tide_CS), pointer :: CS  !< A pointer to the control structure returned by a previous
+                                    !! call to internal_tides_init, it will be deallocated here.
 
   if (associated(CS)) then
     if (associated(CS%En)) deallocate(CS%En)
