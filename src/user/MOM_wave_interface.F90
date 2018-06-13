@@ -7,7 +7,7 @@ module MOM_wave_interface
 !*  By Brandon Reichl, 2018.                                           *
 !*                                                                     *
 !*   This module should be moved as wave coupling progresses and       *
-!* likely will should mirror the iceberg or sea-ice model set-up.       *
+!* likely will should mirror the iceberg or sea-ice model set-up.      *
 !*                                                                     *
 !*   This module is meant to contain the routines to read in and       *
 !* interpret surface wave data for MOM6. In its original form, the     *
