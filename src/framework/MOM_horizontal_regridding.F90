@@ -1,4 +1,6 @@
+!> Horizontal interpolation
 module MOM_horizontal_regridding
+
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging, only : hchksum
@@ -40,11 +42,13 @@ public :: horiz_interp_and_extrap_tracer, myStats
 
 character(len=40)  :: mdl = "MOM_horizontal_regridding" ! This module's name.
 
+!> Fill grid edges
 interface fill_boundaries
   module procedure fill_boundaries_real
   module procedure fill_boundaries_int
 end interface
 
+!> Extrapolate and interpolate data
 interface horiz_interp_and_extrap_tracer
    module procedure horiz_interp_and_extrap_tracer_record
    module procedure horiz_interp_and_extrap_tracer_fms_id
@@ -54,12 +58,16 @@ real, parameter :: epsln=1.e-10
 
 contains
 
-
+!> Write to the terminal some basic statistics about the k-th level of an array
 subroutine myStats(array, missing, is, ie, js, je, k, mesg)
   real, dimension(:,:), intent(in) :: array !< input array (ND)
   real, intent(in) :: missing !< missing value (ND)
-  integer :: is,ie,js,je,k
-  character(len=*) :: mesg
+  !!@{
+  !> Horizontal loop bounds to calculate statistics for
+  integer :: is,ie,js,je
+  !!@}
+  integer :: k !< Level to calculate statistics for
+  character(len=*) :: mesg !< Label to use in message
   ! Local variables
   real :: minA, maxA
   integer :: i,j
@@ -100,16 +108,16 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   use MOM_coms, only : sum_across_PEs
 
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)), &          !< The array with missing values to fill
-                         intent(inout) :: aout !!
-  real, dimension(SZI_(G),SZJ_(G)), &          !< Valid data mask for incoming array
-                         intent(in)    :: good !! (1==good data; 0==missing data).
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(inout) :: aout !< The array with missing values to fill
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in)    :: good !< Valid data mask for incoming array
+                                               !! (1==good data; 0==missing data).
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(in)    :: fill !< Same shape array of points which need
                                                !! filling (1==fill;0==dont fill)
-
-  real, dimension(SZI_(G),SZJ_(G)), &          !< First guess where isolated holes exist.
-               optional, intent(in)    :: prev !!
+  real, dimension(SZI_(G),SZJ_(G)), &
+               optional, intent(in)    :: prev !< First guess where isolated holes exist.
   logical,     optional, intent(in)    :: smooth !< If present and true, apply a number of
                                                  !! Laplacian iterations to the interpolated data
   integer,     optional, intent(in)    :: num_pass !< The maximum number of iterations
@@ -283,10 +291,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
                                                      !! to produce perfectly "flat" initial conditions
 
-  real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
-                                                     !! native horizontal grid and extended grid
-                                                     !! with poles.
-  real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid.
+  real, dimension(:,:),  allocatable   :: tr_in,tr_inp ! A 2-d array for holding input data on
+                                                     ! native horizontal grid and extended grid
+                                                     ! with poles.
+  real, dimension(:,:),  allocatable   :: mask_in    ! A 2-d mask for extended input grid.
 
   real :: PI_180
   integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
@@ -859,13 +867,13 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 end subroutine horiz_interp_and_extrap_tracer_fms_id
 
 
+
+!> Create a 2d-mesh of grid coordinates from 1-d arrays.
 subroutine meshgrid(x,y,x_T,y_T)
-
-!<  create a 2d-mesh of grid coordinates
-!! from 1-d arrays.
-
-real, dimension(:),                   intent(in)    :: x,y  !< input 1-dimensional vectors
-real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T,y_T !< output 2-dimensional arrays
+real, dimension(:),                   intent(in)    :: x  !< input 1-dimensional vector
+real, dimension(:),                   intent(in)    :: y  !< input 1-dimensional vector
+real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T !< output 2-dimensional array
+real, dimension(size(x,1),size(y,1)), intent(inout) :: y_T !< output 2-dimensional array
 
 integer :: ni,nj,i,j
 
@@ -884,16 +892,15 @@ return
 end subroutine meshgrid
 
 
+!> Fill grid edges for integer data
 function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
-!
-! fill grid edges
-!
 integer, dimension(:,:), intent(in)             :: m !< input array (ND)
 logical,                 intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
 logical,                 intent(in)             :: tripolar_n !< True if domain has an Arctic fold
+integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
+
 real,    dimension(size(m,1),size(m,2))         :: m_real
 real,    dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
-integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
 m_real = real(m)
 
@@ -905,11 +912,11 @@ return
 
 end function fill_boundaries_int
 
+!> Fill grid edges for real data
 function fill_boundaries_real(m,cyclic_x,tripolar_n) result(mp)
-!< fill grid edges
-
-real, dimension(:,:),             intent(in) :: m
-logical,                          intent(in) :: cyclic_x, tripolar_n
+real, dimension(:,:), intent(in)             :: m !< input array (ND)
+logical,              intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
+logical,              intent(in)             :: tripolar_n !< True if domain has an Arctic fold
 real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
 integer :: ni,nj,i,j
@@ -939,7 +946,7 @@ return
 
 end function fill_boundaries_real
 
-!< Solve del2 (zi) = 0 using successive iterations
+!> Solve del2 (zi) = 0 using successive iterations
 !! with a 5 point stencil. Only points fill==1 are
 !! modified. Except where bad==1, information propagates
 !! isotropically in index space.  The resulting solution
