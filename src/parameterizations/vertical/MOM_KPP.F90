@@ -1571,7 +1571,7 @@ subroutine KPP_get_BLD(CS, BLD, G)
   type(KPP_CS),                     pointer     :: CS  !< Control structure for
                                                        !! this module
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: BLD!< bnd. layer depth (m)
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: BLD!< bnd. layer depth (m)
   ! Local variables
   integer :: i,j
   do j = G%jsc, G%jec ; do i = G%isc, G%iec

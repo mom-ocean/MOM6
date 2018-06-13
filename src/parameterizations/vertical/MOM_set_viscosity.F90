@@ -2,38 +2,6 @@ module MOM_set_visc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - October 2006                      *
-!*  Quadratic Bottom Drag by James Stephens and R. Hallberg.           *
-!*                                                                     *
-!*    This file contains the subroutine that calculates various values *
-!*  related to the bottom boundary layer, such as the viscosity and    *
-!*  thickness of the BBL (set_viscous_BBL).  This would also be the    *
-!*  module in which other viscous quantities that are flow-independent *
-!*  might be set.  This information is transmitted to other modules    *
-!*  via a vertvisc type structure.                                     *
-!*                                                                     *
-!*    The same code is used for the two velocity components, by        *
-!*  indirectly referencing the velocities and defining a handful of    *
-!*  direction-specific defined variables.                              *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, frhatv, tauy                          *
-!*    j    x ^ x ^ x   At >:  u, frhatu, taux                          *
-!*    j    > o > o >   At o:  h                                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_debugging, only : uvchksum, hchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -44,8 +12,9 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
-use MOM_CVMix_shear, only : CVMix_shear_is_used
-use MOM_CVMix_conv,  only : CVMix_conv_is_used
+use MOM_cvmix_shear, only : cvmix_shear_is_used
+use MOM_cvmix_conv,  only : cvmix_conv_is_used
+use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
@@ -1797,8 +1766,10 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
+
   use_kappa_shear = .false. ; use_CVMix_shear = .false.
   useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false.
+
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
     use_CVMix_shear = CVMix_shear_is_used(param_file)
@@ -1817,7 +1788,9 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
     allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
-    allocate(visc%Kv_slow(isd:ied,jsd:jed,nz+1)) ; visc%Kv_slow(:,:,:) = 0.0
+
+  ! MOM_bkgnd_mixing is always used, so always allocate visc%Kv_slow. GMM
+  allocate(visc%Kv_slow(isd:ied,jsd:jed,nz+1)) ; visc%Kv_slow(:,:,:) = 0.0
 
     vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
                   hor_grid='h', z_grid='i')
@@ -1860,21 +1833,14 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (out)     visc - A structure containing vertical viscosities and related
-!                   fields.  Allocated here.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+
+  ! local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
-  logical :: use_kappa_shear, adiabatic, differential_diffusion, use_omega
+  logical :: use_kappa_shear, adiabatic, use_omega
+  logical :: use_CVMix_ddiff, differential_diffusion
   type(OBC_segment_type), pointer :: segment  ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1897,8 +1863,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
-  CS%RiNo_mix = .false.
-  use_kappa_shear = .false. ; differential_diffusion = .false. !; adiabatic = .false.  ! Needed? -AJA
+  CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
+  use_kappa_shear = .false. !; adiabatic = .false.  ! Needed? -AJA
+  differential_diffusion = .false.
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
@@ -1929,7 +1896,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
+    use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
   endif
+
   call get_param(param_file, mdl, "PRANDTL_TURB", visc%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
                  "instability.", units="nondim", default=1.0)
@@ -2022,6 +1991,15 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
+
+  call get_param(param_file, mdl, "ADD_KV_SLOW", visc%add_Kv_slow, &
+                 "If true, the background vertical viscosity in the interior \n"//&
+                 "(i.e., tidal + background + shear + convenction) is addded \n"// &
+                 "when computing the coupling coefficient. The purpose of this \n"// &
+                 "flag is to be able to recover previous answers and it will likely \n"// &
+                 "be removed in the future since this option should always be true.", &
+                  default=.false.)
+
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
                  units="m2 s-1", default=Kv_background)
@@ -2071,7 +2049,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
        Time, 'Rayleigh drag velocity at v points', 'm s-1')
   endif
 
-  if (differential_diffusion) then
+  if (use_CVMix_ddiff .or. differential_diffusion) then
     allocate(visc%Kd_extra_T(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_T = 0.0
     allocate(visc%Kd_extra_S(isd:ied,jsd:jed,nz+1)) ; visc%Kd_extra_S = 0.0
   endif
@@ -2121,5 +2099,38 @@ subroutine set_visc_end(visc, CS)
 
   deallocate(CS)
 end subroutine set_visc_end
+
+!> \namespace MOM_set_visc
+!!********+*********+*********+*********+*********+*********+*********+**
+!!*                                                                     *
+!!*  By Robert Hallberg, April 1994 - October 2006                      *
+!!*  Quadratic Bottom Drag by James Stephens and R. Hallberg.           *
+!!*                                                                     *
+!!*    This file contains the subroutine that calculates various values *
+!!*  related to the bottom boundary layer, such as the viscosity and    *
+!!*  thickness of the BBL (set_viscous_BBL).  This would also be the    *
+!!*  module in which other viscous quantities that are flow-independent *
+!!*  might be set.  This information is transmitted to other modules    *
+!!*  via a vertvisc type structure.                                     *
+!!*                                                                     *
+!!*    The same code is used for the two velocity components, by        *
+!!*  indirectly referencing the velocities and defining a handful of    *
+!!*  direction-specific defined variables.                              *
+!!*                                                                     *
+!!*  Macros written all in capital letters are defined in MOM_memory.h. *
+!!*                                                                     *
+!!*     A small fragment of the grid is shown below:                    *
+!!*                                                                     *
+!!*    j+1  x ^ x ^ x   At x:  q                                        *
+!!*    j+1  > o > o >   At ^:  v, frhatv, tauy                          *
+!!*    j    x ^ x ^ x   At >:  u, frhatu, taux                          *
+!!*    j    > o > o >   At o:  h                                        *
+!!*    j-1  x ^ x ^ x                                                   *
+!!*        i-1  i  i+1  At x & ^:                                       *
+!!*           i  i+1    At > & o:                                       *
+!!*                                                                     *
+!!*  The boundaries always run through q grid points (x).               *
+!!*                                                                     *
+!!********+*********+*********+*********+*********+*********+*********+**
 
 end module MOM_set_visc

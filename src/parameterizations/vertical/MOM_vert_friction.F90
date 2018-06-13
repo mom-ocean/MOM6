@@ -2,7 +2,7 @@
 module MOM_vert_friction
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
+use MOM_domains,       only : pass_var, To_All, Omit_corners
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_debugging, only : uvchksum, hchksum
@@ -116,6 +116,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
+  integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
@@ -616,6 +617,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
                   ! based on harmonic mean thicknesses, in m or kg m-2.
     h_ml          ! The mixed layer depth, in m or kg m-2.
   real, allocatable, dimension(:,:) :: hML_u, hML_v
+  real, allocatable, dimension(:,:,:) :: Kv_v, & !< Total vertical viscosity at u-points
+                                         Kv_u    !< Total vertical viscosity at v-points
   real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
@@ -647,6 +650,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
+
+  if (CS%id_Kv_u > 0) then
+    allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,G%ke)) ; Kv_u(:,:,:) = 0.0
+  endif
+
+  if (CS%id_Kv_v > 0) then
+    allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,G%ke)) ; Kv_v(:,:,:) = 0.0
+  endif
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
     allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
@@ -823,6 +834,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) ; enddo ; enddo
     endif
 
+    ! Diagnose total Kv at u-points
+    if (CS%id_Kv_u > 0) then
+      do k=1,nz ; do I=Isq,Ieq
+        if (do_i(I)) Kv_u(I,j,k) = 0.5 * (CS%a_u(I,j,K)+CS%a_u(I,j,K+1)) * CS%h_u(I,j,k)
+      enddo ; enddo
+    endif
+
   enddo
 
 
@@ -986,6 +1004,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) CS%a_v(i,J,K) = a(i,K) ; enddo ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) ; enddo ; enddo
     endif
+
+    ! Diagnose total Kv at v-points
+    if (CS%id_Kv_v > 0) then
+      do k=1,nz ; do i=is,ie
+        if (do_i(I)) Kv_v(i,J,k) = 0.5 * (CS%a_v(i,J,K)+CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
+      enddo ; enddo
+    endif
+
   enddo ! end of v-point j loop
 
   if (CS%debug) then
@@ -999,6 +1025,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   endif
 
 ! Offer diagnostic fields for averaging.
+  if (CS%id_Kv_slow > 0) call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
+  if (CS%id_Kv_u > 0) call post_data(CS%id_Kv_u, Kv_u, CS%diag)
+  if (CS%id_Kv_v > 0) call post_data(CS%id_Kv_v, Kv_v, CS%diag)
   if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)
   if (CS%id_av_vv > 0) call post_data(CS%id_av_vv, CS%a_v, CS%diag)
   if (CS%id_h_u > 0) call post_data(CS%id_h_u, CS%h_u, CS%diag)
@@ -1150,6 +1179,44 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
             do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j+1,k) ; enddo
+          endif
+        endif ; enddo
+      endif
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        a(i,K) = a(i,K) + Kv_add(i,K)
+      endif ; enddo ; enddo
+    endif
+  endif
+
+  ! add "slow" varying vertical viscosity (e.g., from background, tidal etc)
+  if (associated(visc%Kv_slow) .and. (visc%add_Kv_slow)) then
+    ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
+    if (work_on_u) then
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        Kv_add(i,K) = Kv_add(i,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
+      endif ; enddo ; enddo
+      if (do_OBCs) then
+        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
+          endif
+        endif ; enddo
+      endif
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        a(i,K) = a(i,K) + Kv_add(i,K)
+      endif ; enddo ; enddo
+    else
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        Kv_add(i,K) = Kv_add(i,K) + 1.0*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
+      endif ; enddo ; enddo
+      if (do_OBCs) then
+        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1666,17 +1733,30 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   ALLOC_(CS%a_v(isd:ied,JsdB:JedB,nz+1)) ; CS%a_v(:,:,:) = 0.0
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
+  CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
+     'Slow varying vertical viscosity', 'm2 s-1')
+
+  CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
+     'Total vertical viscosity at u-points', 'm2 s-1')
+
+  CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
+     'Total vertical viscosity at v-points', 'm2 s-1')
+
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'm s-1')
+
   CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
      'Meridional Viscous Vertical Coupling Coefficient', 'm s-1')
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
      'Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+
   CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
      'Thickness at Meridional Velocity Points for Viscosity', thickness_units)
+
   CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+
   CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units)
 
