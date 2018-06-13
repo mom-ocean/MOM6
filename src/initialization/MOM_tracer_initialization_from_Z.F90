@@ -55,7 +55,8 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   logical,          optional, intent(in)    :: homogenize !< optionally homogenize to mean value
   logical,          optional, intent(in)    :: useALEremapping !< to remap or not (optional)
   character(len=*), optional, intent(in)    :: remappingScheme !< remapping scheme to use.
-  character(len=*), optional, intent(in)    :: src_var_gridspec ! Not implemented yet.
+  character(len=*), optional, intent(in)    :: src_var_gridspec !< Source variable name in a gridspec file.
+                                                                !! This is not implemented yet.
 
   real :: land_fill = 0.0
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
