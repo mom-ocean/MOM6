@@ -47,9 +47,12 @@ type, public :: dumbbell_surface_forcing_CS ; private
   real :: slp_amplitude      ! The amplitude of pressure loading (in Pa) applied
                              ! to the reservoirs
   real :: slp_period         ! Period of sinusoidal pressure wave
-  real :: S_surf, S_range
-  real, pointer, dimension(:,:) :: forcing_mask, S_restore
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+  real, dimension(:,:), allocatable :: &
+    forcing_mask             ! A mask regulating where forcing occurs
+  real, dimension(:,:), allocatable :: &
+    S_restore                ! The surface salinity field toward which to
+                             ! restore, in PSU.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to regulate the
                              ! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
 
@@ -261,9 +264,9 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
                                 pointer    :: CS   !< A pointer to the control structure for this module
 
  ! This include declares and sets the variable "version".
-
-  integer :: i,j
-  real :: x,y
+  real :: S_surf, S_range
+  real :: x, y
+  integer :: i, j
 
 #include "version_variable.h"
   character(len=40)  :: mdl = "dumbbell_surface_forcing" ! This module's name.
@@ -300,9 +303,9 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default = 1.0)
-  call get_param(param_file, mdl,"INITIAL_SSS", CS%S_surf, &
+  call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", units="1e-3", default=34.0, do_not_log=.true.)
-  call get_param(param_file, mdl,"INITIAL_S_RANGE", CS%S_range, &
+  call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                  "Initial salinity range (bottom - surface)", units="1e-3", &
                  default=2., do_not_log=.true.)
 
@@ -329,13 +332,13 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
       y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
       CS%forcing_mask(i,j)=0
-      CS%S_restore(i,j) = CS%S_surf
+      CS%S_restore(i,j) = S_surf
       if ((x>0.25)) then
         CS%forcing_mask(i,j) = 1
-        CS%S_restore(i,j) = CS%S_surf + CS%S_range
+        CS%S_restore(i,j) = S_surf + S_range
       elseif ((x<-0.25)) then
         CS%forcing_mask(i,j) = 1
-        CS%S_restore(i,j) = CS%S_surf - CS%S_range
+        CS%S_restore(i,j) = S_surf - S_range
       endif
     enddo
   enddo
