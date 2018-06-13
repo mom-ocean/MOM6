@@ -512,10 +512,11 @@ end subroutine initialize_ALE_sponge_varying
 !> Initialize diagnostics for the ALE_sponge module.
 ! GMM: this routine is not being used for now.
 subroutine init_ALE_sponge_diags(Time, G, diag, CS)
-  type(time_type),       target, intent(in)    :: Time
-  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(diag_ctrl),       target, intent(inout) :: diag
-  type(ALE_sponge_CS),           pointer       :: CS
+  type(time_type), target, intent(in)    :: Time !< The current model time
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
+                                                 !! output.
+  type(ALE_sponge_CS),     pointer       :: CS   !< ALE sponge control structure
 
   if (.not.associated(CS)) return
 
@@ -527,7 +528,7 @@ end subroutine init_ALE_sponge_diags
 !! whose address is given by f_ptr.
 subroutine set_up_ALE_sponge_field_fixed(sp_val, G, f_ptr, CS)
   type(ocean_grid_type), intent(in) :: G  !< Grid structure
-  type(ALE_sponge_CS),   pointer    :: CS !< Sponge structure (in/out).
+  type(ALE_sponge_CS),   pointer    :: CS !< ALE sponge control structure (in/out).
   real, dimension(SZI_(G),SZJ_(G),CS%nz_data), &
                          intent(in) :: sp_val !< Field to be used in the sponge, it has arbritary number of layers.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -561,15 +562,17 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, f_ptr, CS)
 end subroutine set_up_ALE_sponge_field_fixed
 
 !> This subroutine stores the reference profile at h points for the variable
-! whose address is given by filename and fieldname.
+!! whose address is given by filename and fieldname.
 subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, CS)
-  character(len=*),      intent(in) :: filename
-  character(len=*),      intent(in) :: fieldname
-  type(time_type),       intent(in) :: Time
-  type(ocean_grid_type), intent(in) :: G !< Grid structure (in).
+  character(len=*),      intent(in) :: filename !< The name of the file with the
+                                                !! time varying field data
+  character(len=*),      intent(in) :: fieldname !< The name of the field in the file
+                                                !! with the time varying field data
+  type(time_type),       intent(in) :: Time  !< The current model time
+  type(ocean_grid_type), intent(in) :: G     !< Grid structure (in).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
-  type(ALE_sponge_CS),   pointer    :: CS !< Sponge structure (in/out).
+  type(ALE_sponge_CS),   pointer    :: CS    !< Sponge control structure (in/out).
 
   real, allocatable, dimension(:,:,:) :: sp_val !< Field to be used in the sponge
   real, allocatable, dimension(:,:,:) :: mask_z !< Field mask for the sponge data
@@ -1011,12 +1014,13 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
 
 end subroutine apply_ALE_sponge
 
-!> GMM: I could not find where sponge_end is being called, but I am keeping
+! GMM: I could not find where sponge_end is being called, but I am keeping
 !  ALE_sponge_end here so we can add that if needed.
+!> This subroutine deallocates any memory associated with the ALE_sponge module.
 subroutine ALE_sponge_end(CS)
-  type(ALE_sponge_CS),              pointer       :: CS
-!  (in)      CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
+  type(ALE_sponge_CS), pointer :: CS !< A pointer to the control structure that is
+                                     !! set by a previous call to initialize_sponge.
+
   integer :: m
 
   if (.not.associated(CS)) return

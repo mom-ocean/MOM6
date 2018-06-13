@@ -346,21 +346,29 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
 !< This subroutine calculates the total shortwave heat flux integrated over
 !! bands as a function of depth.  This routine is only called for computing
 !! buoyancy fluxes for use in KPP. This routine does not updat e the state.
-  type(ocean_grid_type),              intent(in)    :: G   !< The ocean's grid structure.
-  type(verticalGrid_type),            intent(in)    :: GV  !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: h   !< Layer thicknesses, in H (usually m
-                                                           !! or kg m-2).
-  real, dimension(:,:,:),             intent(in)    :: opacity_band !< opacity in each band of
-                                                           !! penetrating shortwave radiation,
-                                                           !! in m-1. The indicies are band, i, k.
-  integer,                            intent(in)    :: nsw !< number of bands of penetrating
-                                                           !! shortwave radiation.
-  integer,                            intent(in)    :: j   !< j-index to work on.
-  real,                               intent(in)    :: dt  !< Time step (seconds).
-  real,                               intent(in)    :: H_limit_fluxes
-  logical,                            intent(in)    :: absorbAllSW
-  real, dimension(:,:),               intent(in)    :: iPen_SW_bnd
-  real, dimension(SZI_(G),SZK_(G)+1), intent(inout) :: netPen ! Units of K H.
+  type(ocean_grid_type),    intent(in)    :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)    :: GV  !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZK_(G)), &
+                            intent(in)    :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(:,:,:),   intent(in)    :: opacity_band !< opacity in each band of
+                                                 !! penetrating shortwave radiation,
+                                                 !! in m-1. The indicies are band, i, k.
+  integer,                  intent(in)    :: nsw !< number of bands of penetrating
+                                                 !! shortwave radiation.
+  integer,                  intent(in)    :: j   !< j-index to work on.
+  real,                     intent(in)    :: dt  !< Time step (seconds).
+  real,                     intent(in)    :: H_limit_fluxes !< the total depth at which the
+                                                 !! surface fluxes start to be limited to avoid
+                                                 !! excessive heating of a thin ocean (H units)
+  logical,                  intent(in)    :: absorbAllSW !< If true, ensure that all shortwave
+                                                 !! radiation is absorbed in the ocean water column.
+  real, dimension(:,:),     intent(in)    :: iPen_SW_bnd !< The incident penetrating shortwave
+                                                 !! heating in each band that hits the bottom and
+                                                 !! will be redistributed through the water column
+                                                 !! (K H units); size nsw x SZI_(G).
+  real, dimension(SZI_(G),SZK_(G)+1), &
+                             intent(inout) :: netPen !< Net penetrating shortwave heat flux at each
+                                                 !! interface, summed across all bands, in K H.
 
 ! Arguments:
 !  (in)      G             = ocean grid structure

@@ -150,7 +150,7 @@ type, public:: diabatic_CS; private
                                      !! applied to tracers, especially in massless layers
                                      !! near the bottom, in m2 s-1.
   real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
-                                           !! fluxes is applied, in m.
+                                           !! fluxes are applied, in m.
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
                                      !! evaporated in one time-step (non-dim).
 
@@ -2855,12 +2855,14 @@ end subroutine legacy_diabatic
 !! each returned argument is an optional argument
 subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
                                    evap_CFL_limit, minimum_forcing_depth)
-  type(diabatic_CS),           intent(in   ) :: CS
+  type(diabatic_CS),           intent(in   ) :: CS !< module control structure
   ! All output arguments are optional
-  type(opacity_CS),  optional, pointer       :: opacity_CSp
-  type(optics_type), optional, pointer       :: optics_CSp
-  real,              optional, intent(  out) :: evap_CFL_limit
-  real,              optional, intent(  out) :: minimum_forcing_depth
+  type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
+  type(optics_type), optional, pointer       :: optics_CSp  !< A pointer to be set to the optics control structure
+  real,              optional, intent(  out) :: evap_CFL_limit !<The largest fraction of a layer that can be
+                                                            !! evaporated in one time-step (non-dim).
+  real,              optional, intent(  out) :: minimum_forcing_depth !< The smallest depth over which heat
+                                                            !! and freshwater fluxes are applied, in m.
 
   ! Pointers to control structures
   if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp

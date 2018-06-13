@@ -71,17 +71,20 @@ end type int_tide_input_type
 
 contains
 
+!> This subroutine sets the model-state dependent internal tide energy sources.
 subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
-  type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv
-  type(forcing),                             intent(in)    :: fluxes
-  type(int_tide_input_type),                 intent(inout) :: itide
-  real,                                      intent(in)    :: dt
-  type(int_tide_input_CS),                   pointer       :: CS
+  type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),                     intent(in)    :: tv !< A structure containing pointers to the
+                                                                 !! thermodynamic fields
+  type(forcing),                             intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
+  type(int_tide_input_type),                 intent(inout) :: itide !< A structure containing fields related
+                                                                 !! to the internal tide sources.
+  real,                                      intent(in)    :: dt !< The time increment in s.
+  type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
 
 ! Arguments: u - Zonal velocity, in m s-1.
 !  (in)      v - Meridional velocity, in m s-1.
@@ -145,16 +148,22 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
 
 end subroutine set_int_tide_input
 
+!> This subroutine estimates the near-bottom buoyancy frequency (N^2).
 subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
-  type(ocean_grid_type),                    intent(in)   :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)   :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(in)   :: tv
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)   :: h2
-  type(forcing),                            intent(in)   :: fluxes
-  type(int_tide_input_CS),                  pointer      :: CS
-  real, dimension(SZI_(G),SZJ_(G)),         intent(out)  :: N2_bot
+  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure containing pointers to the
+                                                                !! thermodynamic fields
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_f  !< Temperature after vertical filtering to
+                                                                !! smooth out the values in thin layers, in degC.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_f  !< Salinity after vertical filtering to
+                                                                !! smooth out the values in thin layers, in PSU.
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness, in m2
+  type(forcing),                            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
+  type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
+  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: N2_bot !< The squared buoyancy freqency at the
+                                                                 !! ocean bottom, in s-2.
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces.
@@ -253,14 +262,16 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
 
 end subroutine find_N2_bottom
 
+!> This subroutine initializes the data related to the internal tide input module
 subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
-  type(time_type),          intent(in)    :: Time
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,  intent(inout) :: diag
-  type(int_tide_input_CS),   pointer      :: CS
-  type(int_tide_input_type), pointer      :: itide
+  type(time_type),           intent(in)    :: Time !< The current model time
+  type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),     intent(in)    :: param_file !< A structure to parse for run-time parameters
+  type(diag_ctrl),   target, intent(inout) :: diag !< structure used to regulate diagnostic output.
+  type(int_tide_input_CS),   pointer       :: CS   !< This module's control structure, which is initialized here.
+  type(int_tide_input_type), pointer       :: itide !< A structure containing fields related
+                                                   !! to the internal tide sources.
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -386,8 +397,9 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
 
 end subroutine int_tide_input_init
 
+!> This subroutine deallocates any memory related to the internal tide input module.
 subroutine int_tide_input_end(CS)
-  type(int_tide_input_CS), pointer :: CS
+  type(int_tide_input_CS), pointer :: CS !< This module's control structure, which is deallocated here.
 
   if (associated(CS)) deallocate(CS)
 

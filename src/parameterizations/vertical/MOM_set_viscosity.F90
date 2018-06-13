@@ -959,13 +959,16 @@ end subroutine set_viscous_BBL
 
 !> This subroutine finds a thickness-weighted value of v at the u-points.
 function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
-  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,                                   intent(in) :: i, j, k
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: mask2dCv
-  type(ocean_OBC_type),                      pointer    :: OBC
-  real                                                  :: set_v_at_u
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                         intent(in) :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  integer,               intent(in) :: i, j, k !< The indices of the u-location to work on.
+  real, dimension(SZI_(G),SZJB_(G)),&
+                         intent(in) :: mask2dCv !< A multiplicative mask of the v-points
+  type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
+  real                              :: set_v_at_u !< The retur value of v at u points, in m s-1.
 
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(0:1,-1:0)    ! Masked weights used to average u onto v, in H.
@@ -998,12 +1001,15 @@ end function set_v_at_u
 !> This subroutine finds a thickness-weighted value of u at the v-points.
 function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,                                   intent(in) :: i, j, k
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: mask2dCu
-  type(ocean_OBC_type),                      pointer    :: OBC
-  real                                                  :: set_u_at_v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                         intent(in) :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  integer,               intent(in) :: i, j, k !< The indices of the v-location to work on.
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                         intent(in) :: mask2dCu !< A multiplicative mask of the u-points
+  type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
+  real                              :: set_u_at_v !< The return value of u at v points, in m s-1.
 
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(-1:0,0:1)    ! Masked weights used to average u onto v, in H.
@@ -1853,7 +1859,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                                                  !! related fields.  Allocated here.
   type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
-  type(ocean_OBC_type),    pointer       :: OBC
+  type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -2084,9 +2090,12 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
 end subroutine set_visc_init
 
+!> This subroutine dellocates any memory in the set_visc control structure.
 subroutine set_visc_end(visc, CS)
-  type(vertvisc_type), intent(inout) :: visc
-  type(set_visc_CS),   pointer       :: CS
+  type(vertvisc_type), intent(inout) :: visc !< A structure containing vertical viscosities and
+                                             !! related fields.  Elements are deallocated here.
+  type(set_visc_CS),   pointer       :: CS   !< The control structure returned by a previous
+                                             !! call to vertvisc_init.
   if (CS%bottomdraglaw) then
     deallocate(visc%bbl_thick_u) ; deallocate(visc%bbl_thick_v)
     deallocate(visc%kv_bbl_u) ; deallocate(visc%kv_bbl_v)
