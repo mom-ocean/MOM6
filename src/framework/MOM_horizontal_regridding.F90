@@ -56,8 +56,8 @@ contains
 
 
 subroutine myStats(array, missing, is, ie, js, je, k, mesg)
-  real, dimension(:,:), intent(in) :: array
-  real, intent(in) :: missing
+  real, dimension(:,:), intent(in) :: array !< input array (ND)
+  real, intent(in) :: missing !< missing value (ND)
   integer :: is,ie,js,je,k
   character(len=*) :: mesg
   ! Local variables
@@ -97,41 +97,26 @@ end subroutine myStats
 !! Then use a previous guess (prev). Optionally (smooth)
 !! blend the filled points to achieve a more desirable result.
 subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug,debug)
-  !
-  !# Use ICE-9 algorithm to populate points (fill=1) with
-  !# valid data (good=1). If no information is available,
-  !# Then use a previous guess (prev). Optionally (smooth)
-  !# blend the filled points to achieve a more desirable result.
-  !
-  !  (in)        a   : input 2-d array with missing values
-  !  (in)     good   : valid data mask for incoming array (1==good data; 0==missing data)
-  !  (in)     fill   : same shape array of points which need filling (1==please fill;0==leave it alone)
-  !  (in)     prev   : first guess where isolated holes exist,
-  !
   use MOM_coms, only : sum_across_PEs
 
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(inout) :: aout !< The array with missing values to fill
-  real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(in)    :: good !< Valid data mask for incoming array
-                                               !! (1==good data; 0==missing data).
+  real, dimension(SZI_(G),SZJ_(G)), &          !< The array with missing values to fill
+                         intent(inout) :: aout !!
+  real, dimension(SZI_(G),SZJ_(G)), &          !< Valid data mask for incoming array
+                         intent(in)    :: good !! (1==good data; 0==missing data).
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(in)    :: fill !< Same shape array of points which need
-                                               !! filling (1==please fill;0==leave
-                                               !! it alone).
-  real, dimension(SZI_(G),SZJ_(G)), &
-               optional, intent(in)    :: prev !< First guess where isolated holes exist.
+                                               !! filling (1==fill;0==dont fill)
+
+  real, dimension(SZI_(G),SZJ_(G)), &          !< First guess where isolated holes exist.
+               optional, intent(in)    :: prev !!
   logical,     optional, intent(in)    :: smooth !< If present and true, apply a number of
-                                               !! Laplacian smoothing passes to the interpolated data
-  integer,     optional, intent(in)    :: num_pass !< The maximum number of smoothing passes
-                                               !! to apply.
-  real,        optional, intent(in)    :: relc !< A nondimensional relaxation coefficient for
-                                               !! the smoothing passes.
-  real,        optional, intent(in)    :: crit !< A minimal value for changes in the array
-                                               !! at which point the smoothing is stopped.
+                                                 !! Laplacian iterations to the interpolated data
+  integer,     optional, intent(in)    :: num_pass !< The maximum number of iterations
+  real,        optional, intent(in)    :: relc !< A relaxation coefficient for Laplacian (ND)
+  real,        optional, intent(in)    :: crit !< A minimal value for deltas between iterations.
   logical,     optional, intent(in)    :: keep_bug !< Use an algorithm with a bug that dates
-                                               !! to the "sienna" code release.
+                                                   !! to the "sienna" code release.
   logical,     optional, intent(in)    :: debug !< If true, write verbose debugging messages.
 
 
@@ -276,6 +261,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
 
 end subroutine fill_miss_2d
 
+!> Extrapolate and interpolate from a file record
 subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, recnum, G, tr_z, mask_z, z_in, &
                                                 z_edges_in, missing_value, reentrant_x, tripolar_n, homogenize )
 
@@ -594,6 +580,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
 end subroutine horiz_interp_and_extrap_tracer_record
 
+!> Extrapolate and interpolate using a FMS time interpolation handle
 subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, tr_z, mask_z, z_in, &
                                                 z_edges_in, missing_value, reentrant_x, tripolar_n, homogenize )
 
@@ -870,13 +857,15 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   enddo ! kd
 
 end subroutine horiz_interp_and_extrap_tracer_fms_id
+
+
 subroutine meshgrid(x,y,x_T,y_T)
 
 !<  create a 2d-mesh of grid coordinates
 !! from 1-d arrays.
 
-real, dimension(:),                   intent(in)    :: x,y
-real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T,y_T
+real, dimension(:),                   intent(in)    :: x,y  !< input 1-dimensional vectors
+real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T,y_T !< output 2-dimensional arrays
 
 integer :: ni,nj,i,j
 
@@ -893,12 +882,15 @@ enddo
 return
 
 end subroutine meshgrid
+
+
 function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
 !
 ! fill grid edges
 !
-integer, dimension(:,:), intent(in)             :: m
-logical,                 intent(in)             :: cyclic_x, tripolar_n
+integer, dimension(:,:), intent(in)             :: m !< input array (ND)
+logical,                 intent(in)             :: cyclic_x !< True if domain is zonally re-entrant
+logical,                 intent(in)             :: tripolar_n !< True if domain has an Arctic fold
 real,    dimension(size(m,1),size(m,2))         :: m_real
 real,    dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
 integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
@@ -947,20 +939,21 @@ return
 
 end function fill_boundaries_real
 
-subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
 !< Solve del2 (zi) = 0 using successive iterations
 !! with a 5 point stencil. Only points fill==1 are
 !! modified. Except where bad==1, information propagates
 !! isotropically in index space.  The resulting solution
 !! in each region is an approximation to del2(zi)=0 subject to
 !! boundary conditions along the valid points curve bounding this region.
+subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
 
-real,    dimension(:,:),                   intent(inout) :: zi
-integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill
-integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad
-real,                                      intent(in)  :: sor
-integer,                                   intent(in) :: niter
-logical,                                   intent(in) :: cyclic_x, tripolar_n
+real,    dimension(:,:),                   intent(inout) :: zi !< input and output array (ND)
+integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill !< same shape as zi, 1=fill
+integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad  !< same shape as zi, 1=bad data
+real,                                      intent(in)  :: sor !< relaxation coefficient (ND)
+integer,                                   intent(in) :: niter !< maximum number of iterations
+logical,                                   intent(in) :: cyclic_x !< true if domain is zonally reentrant
+logical,                                   intent(in) :: tripolar_n !< true if domain has an Arctic fold
 
 integer :: i,j,k,n
 integer :: ni,nj
