@@ -148,7 +148,7 @@ type, public :: surface_forcing_CS ; private
 end type surface_forcing_CS
 
 
-! ice_ocean_boundary_type is a structure corresponding to forcing, but with 
+! ice_ocean_boundary_type is a structure corresponding to forcing, but with
 ! the elements, units, and conventions that exactly conform to the use for
 ! MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
