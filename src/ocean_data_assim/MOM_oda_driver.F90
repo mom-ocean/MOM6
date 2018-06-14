@@ -535,12 +535,12 @@ contains
 
   !> Apply increments to tracers
   subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
-    real, intent(in) :: dt ! the tracer timestep (seconds)
-    type(ocean_grid_type),    intent(in)    :: G      !< ocean grid structure
-    type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
+    real,                     intent(in)    :: dt !< The tracer timestep (seconds)
+    type(ocean_grid_type),    intent(in)    :: G  !< ocean grid structure
+    type(thermo_var_ptrs),    intent(inout) :: tv !< A structure pointing to various thermodynamic variables
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                              intent(in)    :: h      !< layer thickness (m or kg/m2)
-    type(ODA_CS),              intent(inout) :: CS     !< the data assimilation structure
+                              intent(in)    :: h  !< layer thickness (m or kg/m2)
+    type(ODA_CS),             intent(inout) :: CS !< the data assimilation structure
 
   end subroutine apply_oda_tracer_increments
 
