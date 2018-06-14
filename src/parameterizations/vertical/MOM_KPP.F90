@@ -1304,7 +1304,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
     call pass_var(CS%OBLdepth, G%Domain)
 
     OBLdepth_original = CS%OBLdepth
-    CS%OBLdepth_original = OBLdepth_original
+    if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = OBLdepth_original
 
     ! apply smoothing on OBL depth
     do j = G%jsc, G%jec
@@ -1325,14 +1325,27 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
                           + we * OBLdepth_original(i+1,j) &
                           + ws * OBLdepth_original(i,j-1) &
                           + wn * OBLdepth_original(i,j+1)
+
+        iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
+        hcorr = 0.
+        do k=1,G%ke
+
+          ! cell center and cell bottom in meters (negative values in the ocean)
+          dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+          dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
+          hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+          dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+          cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+          iFaceHeight(k+1) = iFaceHeight(k) - dh
+        enddo
+
+        CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(G%ke+1) ) ! no deeper than bottom
+
       enddo
     enddo
 
     ! Apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper via smoothing.
     if (CS%deepen_only) CS%OBLdepth = max(CS%OBLdepth,CS%OBLdepth_original)
-
-    ! prevent OBL depths deeper than the bathymetric depth
-    where (CS%OBLdepth > G%bathyT) CS%OBLdepth = G%bathyT
 
   enddo ! s-loop
 
