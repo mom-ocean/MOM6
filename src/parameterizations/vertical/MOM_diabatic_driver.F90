@@ -606,9 +606,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call KPP_compute_BLD(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
       fluxes%ustar, CS%KPP_buoy_flux)
 
-    call KPP_calculate(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, &
-      CS%KPP_NLTscalar, Waves=Waves)
+    call KPP_calculate(CS%KPP_CSp, G, GV, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,G,Kd_heat,Hml)
 
     if (associated(Hml)) then
@@ -1552,9 +1551,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call KPP_compute_BLD(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
       fluxes%ustar, CS%KPP_buoy_flux)
 
-    call KPP_calculate(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, &
-      CS%KPP_NLTscalar, Waves=Waves)
+    call KPP_calculate(CS%KPP_CSp, G, GV, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,G,Kd_heat,Hml)
 
     if (associated(Hml)) then
