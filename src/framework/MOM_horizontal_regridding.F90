@@ -131,6 +131,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   real, dimension(SZI_(G),SZJ_(G)) :: b,r
   real, dimension(SZI_(G),SZJ_(G)) :: fill_pts,good_,good_new
 
+  character(len=256) :: mesg  ! The text of an error message
   integer :: i,j,k
   real    :: east,west,north,south,sor
   real    :: ge,gw,gn,gs,ngood
@@ -219,11 +220,12 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
            enddo
         enddo
      elseif (nfill == nfill_prev) then
-        print *,&
+        call MOM_error(WARNING, &
              'Unable to fill missing points using either data at the same vertical level from a connected basin'//&
              'or using a point from a previous vertical level.  Make sure that the original data has some valid'//&
-             'data in all basins.'
-        print *,'nfill=',nfill
+             'data in all basins.', .true.)
+        write(mesg,*) 'nfill=',nfill
+        call MOM_error(WARNING, mesg, .true.)
      endif
 
      nfill = sum(fill_pts(is:ie,js:je))
@@ -258,7 +260,8 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   do j=js,je
      do i=is,ie
         if (good_(i,j) == 0.0 .and. fill_pts(i,j) == 1.0) then
-           print *,'in fill_miss, fill, good,i,j= ',fill_pts(i,j),good_(i,j),i,j
+           write(mesg,*) 'In fill_miss, fill, good,i,j= ',fill_pts(i,j),good_(i,j),i,j
+           call MOM_error(WARNING, mesg, .true.)
            call MOM_error(FATAL,"MOM_initialize: "// &
                 "fill is true and good is false after fill_miss, how did this happen? ")
         endif

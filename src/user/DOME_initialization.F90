@@ -4,7 +4,7 @@ module DOME_initialization
 
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
@@ -280,7 +280,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
 
   if (OBC%number_of_segments /= 1) then
-    print *, 'Error in DOME OBC segment setup'
+    call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)
     return   !!! Need a better error message here
   endif
   segment => OBC%segment(1)

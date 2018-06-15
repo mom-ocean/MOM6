@@ -15,7 +15,7 @@ use MOM_diabatic_driver,      only : diabatic_CS, extract_diabatic_member
 use MOM_diabatic_aux,         only : tridiagTS
 use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
-use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
@@ -213,6 +213,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   real, dimension(SZI_(CS%G),SZJ_(CS%G))         :: eta_pre, eta_end
   integer                                        :: niter, iter
   real                                           :: Inum_iter
+  character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
@@ -221,7 +222,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
   integer :: nstocks
   real :: stock_values(MAX_FIELDS_)
-  character*20 :: debug_msg
+  character(len=20) :: debug_msg
   call cpu_clock_begin(CS%id_clock_offline_adv)
 
   ! Grid-related pointer assignments
@@ -288,9 +289,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   endif
   tot_residual = remaining_transport_sum(CS, uhtr, vhtr)
   if (CS%print_adv_offline) then
-    if (is_root_pe()) then
-      write(*,'(A,ES24.16)') "Main advection starting transport: ", tot_residual
-    endif
+    write(mesg,'(A,ES24.16)') "Main advection starting transport: ", tot_residual
+    call MOM_mesg(mesg)
   endif
 
   ! This loop does essentially a flux-limited, nonlinear advection scheme until all mass fluxes
@@ -351,13 +351,13 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
     ! advection has stalled
     tot_residual = remaining_transport_sum(CS, uhtr, vhtr)
     if (CS%print_adv_offline) then
-      if (is_root_pe()) then
-        write(*,'(A,ES24.16)') "Main advection remaining transport: ", tot_residual
-      endif
+      write(mesg,'(A,ES24.16)') "Main advection remaining transport: ", tot_residual
+      call MOM_mesg(mesg)
     endif
     ! If all the mass transports have been used u, then quit
     if (tot_residual == 0.0) then
-      if (is_root_pe()) write(0,*) "Converged after iteration", iter
+      write(mesg,*) "Converged after iteration ", iter
+      call MOM_mesg(mesg)
       converged = .true.
       exit
     endif
@@ -414,6 +414,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: uhr  !< Zonal mass transport
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)) :: vhr  !< Meridional mass transport
 
+  character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, iter
   real :: prev_tot_residual, tot_residual, stock_values(MAX_FIELDS_)
   integer :: nstocks
@@ -546,9 +547,8 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
       ! Check to see if all transport has been exhausted
       tot_residual = remaining_transport_sum(CS, uhtr, vhtr)
       if (CS%print_adv_offline) then
-        if (is_root_pe()) then
-          write(*,'(A,ES24.16)') "Residual advection remaining transport: ", tot_residual
-        endif
+        write(mesg,'(A,ES24.16)') "Residual advection remaining transport: ", tot_residual
+        call MOM_mesg(mesg)
       endif
       ! If the remaining residual is 0, then this return is done
       if (tot_residual==0.0 ) then
@@ -646,7 +646,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
 
   call cpu_clock_begin(CS%id_clock_offline_diabatic)
 
-  if (is_root_pe()) write (0,*) "Applying tracer source, sinks, and vertical mixing"
+  call MOM_mesg("Applying tracer source, sinks, and vertical mixing")
 
   if (CS%debug) then
     call hchksum(h_pre,"h_pre before offline_diabatic_ale",CS%G%HI)
@@ -850,6 +850,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
   integer                                        :: niter, iter
   real                                           :: Inum_iter, dt_iter
   logical                                        :: converged
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
@@ -961,9 +962,11 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
     enddo ; enddo ; enddo
     call sum_across_PEs(sum_abs_fluxes)
 
-    print *, "Remaining u-flux, v-flux:", sum_u, sum_v
+    write(mesg,*) "offline_advection_layer: Remaining u-flux, v-flux:", sum_u, sum_v
+    call MOM_mesg(mesg)
     if (sum_abs_fluxes==0) then
-      print *, 'Converged after iteration', iter
+      write(mesg,*) 'offline_advection_layer: Converged after iteration', iter
+      call MOM_mesg(mesg)
       exit
     endif
 
@@ -1436,7 +1439,7 @@ subroutine read_all_input(CS)
     allocate(CS%temp_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%temp_all(:,:,:,:) = 0.0
     allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
 
-    if (is_root_pe()) write (0,*) "Reading in uhtr, vhtr, h_start, h_end, temp, salt"
+    call MOM_mesg("Reading in uhtr, vhtr, h_start, h_end, temp, salt")
     do t = 1,ntime
       call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
                        CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, timelevel=t)

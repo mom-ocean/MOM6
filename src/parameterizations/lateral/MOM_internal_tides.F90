@@ -239,6 +239,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real :: En_new, En_check                           ! for debugging
   real :: En_initial, Delta_E_check                  ! for debugging
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! for debugging
+  character(len=160) :: mesg  ! The text of an error message
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: id_g, jd_g         ! global (decomp-invar) indices (for debugging)
   type(group_pass_type), save :: pass_test, pass_En
@@ -288,7 +289,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   call create_group_pass(pass_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
   call start_group_pass(pass_test, G%domain)
 
-  ! Apply half the refraction.*****************************************************
+  ! Apply half the refraction.
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle, CS%use_PPMang)
   enddo ; enddo
@@ -298,10 +299,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=js,je ; do i=is,ie
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        print *, 'After first refraction: En<0.0 at ig=', id_g, ', jg=', jd_g
-        print *, 'En=',CS%En(i,j,a,fr,m)
-        print *, 'Setting En to zero'; CS%En(i,j,a,fr,m) = 0.0
-        !stop
+        write(mesg,*) 'After first refraction: En<0.0 at ig=', id_g, ', jg=', jd_g, &
+                      'En=',CS%En(i,j,a,fr,m)
+        call MOM_error(WARNING, "propagate_int_tide: "//trim(mesg))
+        CS%En(i,j,a,fr,m) = 0.0
+!        call MOM_error(FATAL, "propagate_int_tide: stopped due to negative energy.")
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
@@ -313,7 +315,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Rotate points in the halos as necessary.
   call correct_halo_rotation(CS%En, test, G, CS%nAngle)
 
-  ! Propagate the waves.***********************************************************
+  ! Propagate the waves.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, G, CS, CS%NAngle)
   enddo ; enddo
@@ -323,34 +325,18 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=js,je ; do i=is,ie
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
-        CS%En(i,j,a,fr,m) = 0.0
-        if (abs(CS%En(i,j,a,fr,m))>1.0)then! only print if large
-          print *, 'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g
-          print *, 'En=',CS%En(i,j,a,fr,m)
-          print *, 'Setting En to zero'
-          !stop
+        if (abs(CS%En(i,j,a,fr,m))>1.0) then ! only print if large
+          write(mesg,*)  'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g, &
+                         'En=', CS%En(i,j,a,fr,m)
+          call MOM_error(WARNING, "propagate_int_tide: "//trim(mesg))
+!          call MOM_error(FATAL, "propagate_int_tide: stopped due to negative energy.")
         endif
+        CS%En(i,j,a,fr,m) = 0.0
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
 
-  !! Test if energy has passed coast for debugging only; delete later
-  !do j=js,je
-  !  do i=is,ie
-  !    id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
-  !    if (id_g == 106 .and. jd_g == 55 ) then
-        !print *, 'After propagation:'
-        !print *, 'En_O  =', CS%En(i,j,:,1,1), 'refl_angle=', CS%refl_angle(i,j)
-        !print *, 'En_W =', CS%En(i-1,j,:,1,1), 'refl_angle=', CS%refl_angle(i-1,j)
-        !print *, 'En_NW =', CS%En(i-1,j+1,:,1,1), 'refl_angle=', CS%refl_angle(i-1,j+1)
-        !print *, 'En_N =', CS%En(i,j+1,:,1,1), 'refl_angle=', CS%refl_angle(i,j+1)
-        !print *, 'En_NE =', CS%En(i+1,j+1,:,1,1), 'refl_angle=', CS%refl_angle(i+1,j+1)
-        !print *, 'En_E =', CS%En(i+1,j,:,1,1), 'refl_angle=', CS%refl_angle(i+1,j)
- !     endif
- !   enddo
- ! enddo
-
-  ! Apply the other half of the refraction.****************************************
+  ! Apply the other half of the refraction.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%NAngle, CS%use_PPMang)
   enddo ; enddo
@@ -360,13 +346,16 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=js,je ; do i=is,ie
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        print *, 'After second refraction: En<0.0 at ig=', id_g, ', jg=', jd_g
-        !stop
+        write(mesg,*) 'After second refraction: En<0.0 at ig=', id_g, ', jg=', jd_g, &
+                      'En=',CS%En(i,j,a,fr,m)
+        call MOM_error(WARNING, "propagate_int_tide: "//trim(mesg))
+        CS%En(i,j,a,fr,m) = 0.0
+!        call MOM_error(FATAL, "propagate_int_tide: stopped due to negative energy.")
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
 
-  ! Apply various dissipation mechanisms.******************************************
+  ! Apply various dissipation mechanisms.
   if (CS%apply_background_drag .or. CS%apply_bottom_drag &
       .or. CS%apply_wave_drag .or. CS%apply_Froude_drag &
       .or. (CS%id_tot_En > 0)) then
@@ -394,8 +383,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=js,je ; do i=is,ie
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        print *, 'After leak loss: En<0.0 at ig=', id_g, ', jg=', jd_g
-        !stop
+        write(mesg,*) 'After leak loss: En<0.0 at ig=', id_g, ', jg=', jd_g, &
+                      'En=',CS%En(i,j,a,fr,m)
+        call MOM_error(WARNING, "propagate_int_tide: "//trim(mesg), all_print=.true.)
+        CS%En(i,j,a,fr,m) = 0.0
+!       call MOM_error(FATAL, "propagate_int_tide: stopped due to negative energy.")
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
@@ -419,7 +411,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=js,je ; do i=is,ie
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        print *, 'After bottom loss: En<0.0 at ig=', id_g, ', jg=', jd_g
+        write(mesg,*) 'After bottom loss: En<0.0 at ig=', id_g, ', jg=', jd_g, &
+                      'En=',CS%En(i,j,a,fr,m)
+        call MOM_error(WARNING, "propagate_int_tide: "//trim(mesg), all_print=.true.)
+        CS%En(i,j,a,fr,m) = 0.0
+!       call MOM_error(FATAL, "propagate_int_tide: stopped due to negative energy.")
         !stop
       endif
     enddo ; enddo
@@ -439,23 +435,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         nzm = CS%wave_structure_CSp%num_intfaces(i,j)
         Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
         Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
-        !! for debugging print profile, etc. Delete later
-        !if (id_g == 260 .and. &
-        !   jd_g == 50 .and. &
-        !   tot_En_mode(i,j,1,1)>500.0) then
-        !  print *, 'Profiles for mode ',m,' and frequency ',fr
-        !  print *, 'id_g=', id_g, 'jd_g=', jd_g
-        !  print *, 'c',m,'=',   cn(i,j,m)
-        !  print *, 'nzm=',  nzm
-        !  print *, 'z=',    CS%wave_structure_CSp%z_depths(i,j,1:nzm)
-        !  print *, 'N2=',   CS%wave_structure_CSp%N2(i,j,1:nzm)
-        !  print *, 'Ub=',   Ub(i,j,fr,m)
-        !  print *, 'Umax=', Umax(i,j,fr,m)
-        !  print *, 'Upro=', CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm)
-        !  print *, 'Wpro=', CS%wave_structure_CSp%W_profile(i,j,1:nzm)
-        !  print *, 'En',m,'=',   tot_En_mode(i,j,fr,m)
-        !  if (m==3) stop
-        !endif ! for debug - delete later
       enddo ; enddo ! i-loop, j-loop
     enddo ; enddo ! fr-loop, m-loop
   endif ! apply_wave or _Froude_drag (Ub or Umax needed)
@@ -470,8 +449,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=js,je ; do i=is,ie
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        print *, 'After wave drag loss: En<0.0 at ig=', id_g, ', jg=', jd_g
-        !stop
+        write(mesg,*) 'After wave drag loss: En<0.0 at ig=', id_g, ', jg=', jd_g, &
+                      'En=',CS%En(i,j,a,fr,m)
+        call MOM_error(WARNING, "propagate_int_tide: "//trim(mesg), all_print=.true.)
+        CS%En(i,j,a,fr,m) = 0.0
+!       call MOM_error(FATAL, "propagate_int_tide: stopped due to negative energy.")
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
@@ -506,10 +488,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
               ! Re-scale (reduce) energy due to breaking
               CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m)/Fr2_max
               ! Check (for debugging only)
-             if (abs(En_new - En_check) > 1e-10) then
-               call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr-breaking.")
-               print *, "En_new=", En_new
-               print *, "En_check=", En_check
+              if (abs(En_new - En_check) > 1e-10) then
+                call MOM_error(WARNING, "MOM_internal_tides: something is wrong with Fr-breaking.", &
+                               all_print=.true.)
+                write(mesg,*) "En_new=", En_new , "En_check=", En_check
+                call MOM_error(WARNING, "MOM_internal_tides: "//trim(mesg), all_print=.true.)
               endif
             enddo
             ! Check (for debugging)
@@ -517,9 +500,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
             TKE_Froude_loss_check = abs(Delta_E_check)/dt
             TKE_Froude_loss_tot = sum(CS%TKE_Froude_loss(i,j,:,fr,m))
             if (abs(TKE_Froude_loss_check - TKE_Froude_loss_tot) > 1e-10) then
-              call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr energy update.")
-              print *, "TKE_Froude_loss_check=", TKE_Froude_loss_check
-              print *, "TKE_Froude_loss_tot=", TKE_Froude_loss_tot
+              call MOM_error(WARNING, "MOM_internal_tides: something is wrong with Fr energy update.", &
+                             all_print=.true.)
+              write(mesg,*) "TKE_Froude_loss_check=", TKE_Froude_loss_check, &
+                            "TKE_Froude_loss_tot=", TKE_Froude_loss_tot
+              call MOM_error(WARNING, "MOM_internal_tides: "//trim(mesg), all_print=.true.)
             endif
           endif ! Fr2>1
         endif ! Kmag2>0
@@ -532,7 +517,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=js,je ; do i=is,ie
       if (CS%En(i,j,a,fr,m)<0.0) then
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
-        print *, 'After Froude loss: En<0.0 at ig=', id_g, ', jg=', jd_g
+        write(mesg,*) 'After Froude loss: En<0.0 at ig=', id_g, ', jg=', jd_g, &
+                      'En=',CS%En(i,j,a,fr,m)
+        call MOM_error(WARNING, "propagate_int_tide: "//trim(mesg), all_print=.true.)
+        CS%En(i,j,a,fr,m) = 0.0
+!       call MOM_error(FATAL, "propagate_int_tide: stopped due to negative energy.")
         !stop
       endif
     enddo ; enddo
@@ -540,7 +529,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Check for energy conservation on computational domain.*************************
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    !print *, 'sum_En: mode(',m,'), freq(',fr,'):'
     call sum_En(G,CS,CS%En(:,:,:,fr,m),'prop_int_tide')
   enddo ; enddo
 
@@ -649,6 +637,7 @@ subroutine sum_En(G, CS, En, label)
   ! This subroutine checks for energy conservation on computational domain
   integer :: m,fr,a
   real :: En_sum, tmpForSumming, En_sum_diff, En_sum_pdiff
+  character(len=160) :: mesg  ! The text of an error message
   integer :: seconds
   real :: Isecs_per_day = 1.0 / 86400.0
   real :: days
@@ -671,11 +660,11 @@ subroutine sum_En(G, CS, En, label)
   CS%En_sum = En_sum
   !! Print to screen
   !if (is_root_pe()) then
-  !  print *, label,':','days =', days
-  !  print *, 'En_sum=', En_sum
-  !  print *, 'En_sum_diff=',    En_sum_diff
-  !  print *, 'Percent change=', En_sum_pdiff, '%'
-  !  !if (abs(En_sum_pdiff) > 1.0) then ; stop ; endif
+  !  write(mesg,*) trim(label)//': days =', days, ', En_sum=', En_sum, &
+  !                ', En_sum_diff=', En_sum_diff, ', Percent change=', En_sum_pdiff, '%'
+  !  call MOM_mesg(mesg)
+  !if (is_root_pe() .and. (abs(En_sum_pdiff) > 1.0)) &
+  !  call MOM_error(FATAL, "Run stopped due to excessive internal tide energy change.")
   !endif
 
 end subroutine sum_En
@@ -768,7 +757,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
     !      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
     !    else
     !      call MOM_error(WARNING, "itidal_lowmode_loss: energy loss greater than avalable, "// &
-    !                        " setting En to zero.")
+    !                        " setting En to zero.", all_print=.true.)
     !      En(i,j,a,fr,m) = 0.0
     !    endif
     !  enddo
@@ -947,8 +936,8 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
 
   ! Update and copy back to En.
     do a=1,na ; do i=is,ie
-      !if (En2d(i,a)+(Flux_E(i,A-1)-Flux_E(i,A)) < 0.0)then ! for debugging
-      !  print *,"refract: OutFlux>Available" ; !stop
+      !if (En2d(i,a)+(Flux_E(i,A-1)-Flux_E(i,A)) < 0.0) then ! for debugging
+      !  call MOM_error(FATAL, "refract: OutFlux>Available")
       !endif
       En(i,j,a) = En2d(i,a) + (Flux_E(i,A-1) - Flux_E(i,A))
     enddo ; enddo
@@ -1533,8 +1522,8 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
-    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
-    !    print *,"propagate_x: OutFlux>Available" ; !stop
+    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) then ! for debugging
+    !    call MOM_error(FATAL, "propagate_x: OutFlux>Available")
     !  endif
     !enddo
     En(i,j,:) = En(i,j,:) + G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
@@ -1579,6 +1568,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
     Fdt_m, Fdt_p! South and north energy fluxes, in J
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
@@ -1606,12 +1596,10 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
       Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx (J)
       Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx (J)
       !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
-      !  print *,"propagate_y: OutFlux>Available prior to reflection" ; !stop
-      !  print *,"flux_y_south=",flux_y(i,J-1)
-      !  print *,"flux_y_north=",flux_y(i,J)
-      !  print *,"En=",En(i,j,a)
-      !  print *,"cn_south=", speed_y(i,J-1) * (Cgy_av(a))
-      !  print *,"cn_north=", speed_y(i,J) * (Cgy_av(a))
+      !  call MOM_error(WARNING, "propagate_y: OutFlux>Available prior to reflection", .true.)
+      !  write(mesg,*) "flux_y_south=",flux_y(i,J-1),"flux_y_north=",flux_y(i,J),"En=",En(i,j,a), &
+      !           "cn_south=", speed_y(i,J-1) * (Cgy_av(a)), "cn_north=", speed_y(i,J) * (Cgy_av(a))
+      !  call MOM_error(WARNING, mesg, .true.)
       !endif
     enddo ; enddo
 
@@ -1634,7 +1622,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
     !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
-    !    print *,"propagate_y: OutFlux>Available" ; !stop
+    !    call MOM_error(FATAL, "propagate_y: OutFlux>Available", .true.)
     !  endif
     !enddo
     En(i,j,:) = En(i,j,:) + G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
@@ -1805,10 +1793,9 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
   !do j=jsc-1,jec+1
   do j=jsh,jeh
-    jd_g = j + G%jdg_offset
     !do i=isc-1,iec+1
     do i=ish,ieh
-      id_g = i + G%idg_offset
+      ! jd_g = j + G%jdg_offset ; id_g = i + G%idg_offset
       ! redistribute energy in angular space if ray will hit boundary
       ! i.e., if energy is in a reflecting cell
       if (angle_c(i,j) /= CS%nullangle) then
@@ -1853,18 +1840,13 @@ subroutine reflect(En, NAngle, CS, G, LB)
   enddo ! j-loop
 
   ! Check to make sure no energy gets onto land (only run for debugging)
-  !do j=jsc,jec
-  !  jd_g = j + G%jdg_offset
-  !  do i=isc,iec
-  !    id_g = i + G%idg_offset
-  !    do a=1,NAngle
-  !      if (En(i,j,a) > 0.001 .and. G%mask2dT(i,j) == 0) then
-  !        print *, 'En=', En(i,j,a), 'a=', a, 'ig_g=',id_g, 'jg_g=',jd_g
-  !        !stop 'Energy detected out of bounds!'
-  !      endif
-  !    enddo ! a-loop
-  !  enddo ! i-loop
-  !enddo ! j-loop
+  ! do a=1,NAngle ; do j=jsc,jec ; do i=isc,iec
+  !   if (En(i,j,a) > 0.001 .and. G%mask2dT(i,j) == 0) then
+  !     jd_g = j + G%jdg_offset ; id_g = i + G%idg_offset
+  !     write (mesg,*) 'En=', En(i,j,a), 'a=', a, 'ig_g=',id_g, 'jg_g=',jd_g
+  !     call MOM_error(FATAL, "reflect: Energy detected out of bounds: "//trim(mesg), .true.)
+  !   endif
+  ! enddo ; enddo ; enddo
 
 end subroutine reflect
 
@@ -1898,6 +1880,7 @@ subroutine teleport(En, NAngle, CS, G, LB)
   real, dimension(1:NAngle)   :: angle_i    ! angle of incident ray wrt equator
   real, dimension(1:NAngle)   :: cos_angle, sin_angle
   real                        :: En_tele    ! energy to be "teleported"
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, a
   !integer :: isd, ied, jsd, jed    ! start and end local indices on data domain
   !                                 ! (values include halos)
@@ -1959,9 +1942,8 @@ subroutine teleport(En, NAngle, CS, G, LB)
                 En(i,j,a) = En(i,j,a) - En_tele
                 En(i+ios,j+jos,a) = En(i+ios,j+jos,a) + En_tele
               else
-                call MOM_error(WARNING, "teleport: no receptive ocean cell", .true.)
-                print *, 'idg=',id_g,'jd_g=',jd_g,'a=',a
-                stop
+                write(mesg,*) 'idg=',id_g,'jd_g=',jd_g,'a=',a
+                call MOM_error(FATAL, "teleport: no receptive ocean cell at "//trim(mesg), .true.)
               endif
             endif ! incidence check
           endif ! energy check
@@ -1992,7 +1974,7 @@ subroutine correct_halo_rotation(En, test, G, NAngle)
   integer, dimension(G%isd:G%ied) :: a_shift
   integer :: i_first, i_last, a_new
   integer :: a, i, j, isd, ied, jsd, jed, m, fr
-  character(len=80) :: mesg
+  character(len=160) :: mesg  ! The text of an error message
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   do j=jsd,jed
@@ -2057,7 +2039,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real :: h_ip1, h_im1
   real :: dMx, dMn
   logical :: use_CW84, use_2nd
-  character(len=256) :: mesg
+  character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
@@ -2142,7 +2124,7 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   real :: h_jp1, h_jm1
   real :: dMx, dMn
   logical :: use_2nd
-  character(len=256) :: mesg
+  character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
@@ -2228,7 +2210,7 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
 
   ! Local variables
   real    :: curv, dh, scale
-  character(len=256) :: mesg
+  character(len=256) :: mesg  ! The text of an error message
   integer :: i,j
 
   do j=jis,jie ; do i=iis,iie
@@ -2297,14 +2279,6 @@ end subroutine PPM_limit_pos
 !     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
 !     'h','1','1',"J m-2")
 !   call register_restart_field(CS%En_restart, vd, .false., restart_CS)
-
-!   !--------------------check----------------------------------------------
-!   if (is_root_pe()) then
-!     print *,'register_int_tide_restarts: CS and CS%En_restart allocated!'
-!     print *,'register_int_tide_restarts: CS%En_restart registered!'
-!     print *,'register_int_tide_restarts: done!'
-!   endif
-!   !-----------------------------------------------------------------------
 
 ! end subroutine register_int_tide_restarts
 
