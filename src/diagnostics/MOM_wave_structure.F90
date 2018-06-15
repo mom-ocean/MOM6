@@ -44,8 +44,8 @@ implicit none ; private
 public wave_structure, wave_structure_init
 
 type, public :: wave_structure_CS ; !private
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                                   ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   real, allocatable, dimension(:,:,:) :: w_strct
                                    ! Vertical structure of vertical velocity (normalized), in m s-1.
   real, allocatable, dimension(:,:,:) :: u_strct
@@ -160,7 +160,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T, S
+  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))

@@ -792,7 +792,7 @@ end subroutine tracer_registry_init
 
 !> This routine closes the tracer registry module.
 subroutine tracer_registry_end(Reg)
-  type(tracer_registry_type), pointer :: Reg
+  type(tracer_registry_type), pointer :: Reg !< The tracer registry that will be deallocated
   if (associated(Reg)) deallocate(Reg)
 end subroutine tracer_registry_end
 

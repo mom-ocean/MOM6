@@ -110,7 +110,7 @@ type, public :: bulkmixedlayer_CS ; private
   logical :: Resolve_Ekman   !   If true, the nkml layers in the mixed layer are
                              ! chosen to optimally represent the impact of the
                              ! Ekman transport on the mixed layer TKE budget.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
   logical :: do_rivermix = .false. ! Provide additional TKE to mix river runoff
                                    ! at the river mouths to "rivermix_depth" meters
@@ -130,7 +130,7 @@ type, public :: bulkmixedlayer_CS ; private
   logical :: use_calving_heat_content ! Use SST for temperature of froz_runoff
   logical :: salt_reject_below_ML ! It true, add salt below mixed layer (layer mode only)
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   real    :: Allowed_T_chg   ! The amount by which temperature is allowed
                              ! to exceed previous values during detrainment, K.
@@ -242,11 +242,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                                                       !! vertical absorption decay scale for
                                                       !! penetrating shortwave radiation, in m-1.
   real, dimension(:,:),       pointer       :: Hml    !< active mixed layer depth
-  logical,                    intent(in)    :: aggregate_FW_forcing
-  real,                       optional, intent(in)    :: dt_diag   !< The diagnostic time step,
+  logical,                    intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
+                                                     !! outgoing surface freshwater fluxes are
+                                                     !! combined before being applied, instead of
+                                                     !! being applied separately.
+  real,             optional, intent(in)    :: dt_diag  !< The diagnostic time step,
                                                       !! which may be less than dt if there are
                                                       !! two callse to mixedlayer, in s.
-  logical,                    optional, intent(in)    :: last_call !< if true, this is the last call
+  logical,          optional, intent(in)    :: last_call !< if true, this is the last call
                                                       !! to mixedlayer in the current time step, so
                                                       !! diagnostics will be written. The default is
                                                       !! .true.
@@ -361,7 +364,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
     netMassInOut, &  ! The net mass flux (if non-Boussinsq) or volume flux (if
                      ! Boussinesq - i.e. the fresh water flux (P+R-E)) into the
                      ! ocean over a time step, in H.
-    NetMassOut,   &  ! The mass flux (if non-Boussinsq) or volume flux (if
+    NetMassOut,   &  ! The mass flux (if non-Boussinesq) or volume flux (if
                      ! Boussinesq) over a time step from evaporating fresh water (H)
     Net_heat, & !   The net heating at the surface over a time step in K H.  Any
                 ! penetrating shortwave radiation is not included in Net_heat.
@@ -388,7 +391,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
   real, dimension(max(CS%nsw,1),SZI_(G),SZK_(GV)) :: &
     opacity_band ! The opacity in each band, in H-1. The indicies are band, i, k.
 
-  real :: cMKE(2,SZI_(G)) ! Coefficients of HpE and HpE^2 in calculating the
+  real :: cMKE(2,SZI_(G)) ! Coefficients of HpE and HpE^2 used in calculating the
                           ! denominator of MKE_rate, in m-1 and m-2.
   real :: Irho0         ! 1.0 / rho_0
   real :: Inkml, Inkmlm1!  1.0 / REAL(nkml) and  1.0 / REAL(nkml-1)
@@ -902,7 +905,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: v    !< Zonal velocities interpolated to h
                                                            !! points, m s-1.
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: T    !< Layer temperatures, in deg C.
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: S
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: S    !< Layer salinities, in psu.
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: R0   !< Potential density referenced to
                                                            !! surface pressure, in kg m-3.
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: Rcv  !< The coordinate defining potential
@@ -911,7 +914,8 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                                                            !! in the entrainment from below, in H.
                                                            !! Positive values go with mass gain by
                                                            !! a layer.
-  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: eps
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: eps  !< The negligibly small amount of water
+                                                           !! that will be left in each layer, in H.
   real, dimension(SZI_(G),SZK_(GV)), intent(out)   :: dKE_CA !< The vertically integrated change in
                                                            !! kinetic energy due to convective
                                                            !! adjustment, in m3 s-2.
@@ -1048,58 +1052,94 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_en,       &
                                  dKE_FC, j, ksort, G, GV, CS, tv, fluxes, dt,      &
                                  aggregate_FW_forcing)
-  type(ocean_grid_type),             intent(in)    :: G       !< The ocean's grid structure.
-  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid
-                                                              !! structure.
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h       !< Layer thickness, in m or kg m-2.
-                                                              !! (Intent in/out)  The units of h are
-                                                              !! referred to as H below.
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: d_eb    !< The downward increase across a
-                                                              !! layer in the entrainment from below
-                                                              !! , in H. Positive values go with
-                                                              !! mass gain by a layer.
-  real, dimension(SZI_(G)),          intent(out)   :: htot    !< The accumulated mixed layer
-                                                              !! thickness, in H.
-  real, dimension(SZI_(G)),          intent(out)   :: Ttot    !< The depth integrated mixed layer
-                                                              !! temperature, in deg C H.
-  real, dimension(SZI_(G)),          intent(out)   :: Stot    !< The depth integrated mixed layer
-                                                              !! salinity, in psu H.
-  real, dimension(SZI_(G)),          intent(out)   :: uhtot   !< The depth integrated mixed layer
-                                                              !! zonal velocity, H m s-1.
-  real, dimension(SZI_(G)),          intent(out)   :: vhtot   !< The integrated mixed layer
-                                                              !! meridional velocity, H m s-1.
-  real, dimension(SZI_(G)),          intent(out)   :: R0_tot  !< The integrated mixed layer
-                                                              !! potential density referenced to 0
-                                                              !! pressure, in kg m-2.
-  real, dimension(SZI_(G)),          intent(out)   :: Rcv_tot !< The integrated mixed layer
-                                                              !! coordinate variable potential
-                                                              !! density, in kg m-2.
-  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: u, v, T, S, R0, Rcv, eps
-  real, dimension(SZI_(G)),          intent(in)    :: dR0_dT, dRcv_dT, dR0_dS, dRcv_dS
-  real, dimension(SZI_(G)),          intent(in)    :: netMassInOut, netMassOut
-  real, dimension(SZI_(G)),          intent(in)    :: Net_heat, Net_salt
-  integer,                           intent(in)    :: nsw     !< The number of bands of penetrating
-                                                              !! shortwave radiation.
-  real, dimension(:,:),              intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
-                                                              !! heating at the sea surface in each
-                                                              !! penetrating band, in K H,
-                                                              !! size nsw x SZI_(G).
-  real, dimension(:,:,:),            intent(in)    :: opacity_band
-  real, dimension(SZI_(G)),          intent(out)   :: Conv_en !< The buoyant turbulent kinetic
-                                                              !! energy source due to free
-                                                              !! convection, in m3 s-2.
-  real, dimension(SZI_(G)),          intent(out)   :: dKE_FC  !< The vertically integrated change
-                                                              !! in kinetic energy due to free
-                                                              !! convection, in m3 s-2.
-  integer,                           intent(in)    :: j       !< The j-index to work on.
+  type(ocean_grid_type),    intent(in)    :: G     !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)    :: GV    !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(inout) :: h     !< Layer thickness, in m or kg m-2.
+                                                   !! The units of h are referred to as H below.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(inout) :: d_eb  !< The downward increase across a layer in the
+                                                   !! layer in the entrainment from below, in H.
+                                                   !! Positive values go with mass gain by a layer.
+  real, dimension(SZI_(G)), intent(out)   :: htot  !< The accumulated mixed layer thickness, in H.
+  real, dimension(SZI_(G)), intent(out)   :: Ttot  !< The depth integrated mixed layer temperature,
+                                                   !! in deg C H.
+  real, dimension(SZI_(G)), intent(out)   :: Stot  !< The depth integrated mixed layer salinity,
+                                                   !! in psu H.
+  real, dimension(SZI_(G)), intent(out)   :: uhtot !< The depth integrated mixed layer zonal
+                                                   !! velocity, H m s-1.
+  real, dimension(SZI_(G)), intent(out)   :: vhtot !< The integrated mixed layer meridional
+                                                   !! velocity, H m s-1.
+  real, dimension(SZI_(G)), intent(out)   :: R0_tot !< The integrated mixed layer potential
+                                                   !! density referenced to 0  pressure, in H kg m-2.
+  real, dimension(SZI_(G)), intent(out)   :: Rcv_tot !< The integrated mixed layer coordinate
+                                                   !! variable potential density, in H kg m-2.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: u     !< Zonal velocities interpolated to h points, m s-1.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: v     !< Zonal velocities interpolated to h points, m s-1.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: T     !< Layer temperatures, in deg C.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: S     !< Layer salinities, in psu.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: R0    !< Potential density referenced to
+                                                   !! surface pressure, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: Rcv   !< The coordinate defining potential
+                                                   !! density, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: eps   !< The negligibly small amount of water
+                                                   !! that will be left in each layer, in H.
+  real, dimension(SZI_(G)), intent(in)    :: dR0_dT  !< The partial derivative of R0 with respect to
+                                                   !! temperature, in kg m-3 degC-1.
+  real, dimension(SZI_(G)), intent(in)    :: dRcv_dT !< The partial derivative of Rcv with respect to
+                                                   !! temperature, in kg m-3 degC-1.
+  real, dimension(SZI_(G)), intent(in)    :: dR0_dS  !< The partial derivative of R0 with respect to
+                                                   !! salinity, in kg m-3 psu-1.
+  real, dimension(SZI_(G)), intent(in)    :: dRcv_dS !< The partial derivative of Rcv with respect to
+                                                   !! salinity, in kg m-3 psu-1.
+  real, dimension(SZI_(G)), intent(in)    :: netMassInOut !< The net mass flux (if non-Boussinesq)
+                                                   !! or volume flux (if Boussinesq) into the ocean
+                                                   !! within a time step in H. (I.e. P+R-E.)
+  real, dimension(SZI_(G)), intent(in)    :: netMassOut !< The mass or volume flux out of the ocean
+                                                   !! within a time step in H.
+  real, dimension(SZI_(G)), intent(in)    :: Net_heat !< The net heating at the surface over a
+                                                   !! time step in K H.  Any penetrating shortwave
+                                                   !! radiation is not included in Net_heat.
+  real, dimension(SZI_(G)), intent(in)    :: Net_salt !< The net surface salt flux into the ocean
+                                                   !! over a time step in psu H.
+  integer,                  intent(in)    :: nsw   !< The number of bands of penetrating
+                                                   !! shortwave radiation.
+  real, dimension(:,:),     intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
+                                                   !! heating at the sea surface in each
+                                                   !! penetrating band, in K H,
+                                                   !! size nsw x SZI_(G).
+  real, dimension(:,:,:),   intent(in)    :: opacity_band !< The opacity in each band of penetrating
+                                                   !! shortwave radiation, in H-1.
+                                                   !! The indicies of opacity_band are band, i, k.
+  real, dimension(SZI_(G)), intent(out)   :: Conv_en !< The buoyant turbulent kinetic
+                                                   !! energy source due to free
+                                                   !! convection, in m3 s-2.
+  real, dimension(SZI_(G)), intent(out)   :: dKE_FC !< The vertically integrated change
+                                                   !! in kinetic energy due to free
+                                                   !! convection, in m3 s-2.
+  integer,                  intent(in)    :: j     !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
-                                     intent(in)    :: ksort   !< The density-sorted k-indices.
-  type(bulkmixedlayer_CS),           pointer       :: CS      !< The control structure for this
-                                                              !! module.
-  type(thermo_var_ptrs),             intent(inout) :: tv
-  type(forcing),                     intent(inout) :: fluxes
-  real,                              intent(in)    :: dt
-  logical,                           intent(in)    :: aggregate_FW_forcing
+                            intent(in)    :: ksort !< The density-sorted k-indices.
+  type(bulkmixedlayer_CS),  pointer       :: CS    !< The control structure for this
+                                                   !! module.
+  type(thermo_var_ptrs),    intent(inout) :: tv    !< A structure containing pointers to any
+                                                   !! available thermodynamic fields. Absent
+                                                   !! fields have NULL ptrs.
+  type(forcing),            intent(inout) :: fluxes  !< A structure containing pointers to any
+                                                   !! possible forcing fields.  Unused fields
+                                                   !! have NULL ptrs.
+  real,                     intent(in)    :: dt    !< Time increment, in s.
+  logical,                  intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
+                                                   !! outgoing surface freshwater fluxes are
+                                                   !! combined before being applied, instead of
+                                                   !! being applied separately.
 
 !   This subroutine causes the mixed layer to entrain to the depth of free
 ! convection.  The depth of free convection is the shallowest depth at which the
@@ -1433,12 +1473,15 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
                                                        !! mixing over a time step, in m3 s-2.
   real, dimension(SZI_(G)),   intent(out)   :: Idecay_len_TKE !< The inverse of the vertical decay
                                                        !! scale for TKE, in H-1.
-  real, dimension(SZI_(G)),   intent(in)    :: TKE_river
+  real, dimension(SZI_(G)),   intent(in)    :: TKE_river !< The turbulent kinetic energy available
+                                                       !! for driving mixing at river mouths
+                                                       !! integrated over a time step, in m3 s-2.
   real, dimension(2,SZI_(G)), intent(out)   :: cMKE    !< Coefficients of HpE and HpE^2 in
                                                        !! calculating the denominator of MKE_rate,
                                                        !! in H-1 and H-2.
   real,                       intent(in)    :: dt      !< The time step in s.
-  real,                       intent(in)    :: Idt_diag
+  real,                       intent(in)    :: Idt_diag !< The inverse of the accumulated diagnostic
+                                                       !! time interval, in s-1.
   integer,                    intent(in)    :: j       !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
                               intent(in)    :: ksort   !< The density-sorted k-indicies.
@@ -1616,52 +1659,70 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                   dR0_dT, dRcv_dT, cMKE, Idt_diag, nsw, &
                                   Pen_SW_bnd, opacity_band, TKE, &
                                   Idecay_len_TKE, j, ksort, G, GV, CS)
-  type(ocean_grid_type),             intent(in)    :: G       !< The ocean's grid structure.
-  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid
-                                                              !! structure.
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h       !< Layer thickness, in m or kg m-2.
-                                                              !! (Intent in/out)  The units of h are
-                                                              !! referred to as H below.
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: d_eb    !< The downward increase across a
-                                                              !! layer in the entrainment from
-                                                              !! below, in H. Positive values go
-                                                              !! with mass gain by a layer.
-  real, dimension(SZI_(G)),          intent(inout) :: htot    !< The accumlated mixed layer
-                                                              !! thickness, in H.
-  real, dimension(SZI_(G)),          intent(inout) :: Ttot    !< The depth integrated mixed layer
-                                                              !! temperature, in deg C H.
-  real, dimension(SZI_(G)),          intent(inout) :: Stot    !< The depth integrated mixed layer
-                                                              !! salinity, in psu H.
-  real, dimension(SZI_(G)),          intent(inout) :: uhtot   !< The depth integrated mixed layer
-                                                              !! zonal velocity, H m s-1.
-  real, dimension(SZI_(G)),          intent(inout) :: vhtot   !< The integrated mixed layer
-                                                              !! meridional velocity, H m s-1.
-  real, dimension(SZI_(G)),          intent(inout) :: R0_tot  !< The integrated mixed layer
-                                                              !! potential density referenced to 0
-                                                              !! pressure, in H kg m-3.
-  real, dimension(SZI_(G)),          intent(inout) :: Rcv_tot !< The integrated mixed layer
-                                                              !! coordinate variable potential
-                                                              !! density, in H kg m-3.
-  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: u, v, T, S, R0, Rcv, eps
-  real, dimension(SZI_(G)),          intent(in)    :: dR0_dT, dRcv_dT
-  real, dimension(2,SZI_(G)),        intent(in)    :: cMKE
-  real,                              intent(in)    :: Idt_diag
-  integer,                           intent(in)    :: nsw     !< The number of bands of penetrating
-                                                              !! shortwave radiation.
-  real, dimension(:,:),              intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
-                                                              !! heating at the sea surface in each
-                                                              !! penetrating band, in K H,
-                                                              !! size nsw x SZI_(G).
-  real, dimension(:,:,:),            intent(in)    :: opacity_band
-  real, dimension(SZI_(G)),          intent(inout) :: TKE     !< The turbulent kinetic energy
-                                                              !! available for mixing over a time
-                                                              !! step, in m3 s-2.
-  real, dimension(SZI_(G)),          intent(inout) :: Idecay_len_TKE
-  integer,                           intent(in)    :: j       !< The j-index to work on.
+  type(ocean_grid_type),    intent(in)    :: G     !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)    :: GV    !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(inout) :: h     !< Layer thickness, in m or kg m-2.
+                                                   !! The units of h are referred to as H below.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(inout) :: d_eb  !< The downward increase across a layer in the
+                                                   !! layer in the entrainment from below, in H.
+                                                   !! Positive values go with mass gain by a layer.
+  real, dimension(SZI_(G)), intent(inout) :: htot  !< The accumlated mixed layer thickness, in H.
+  real, dimension(SZI_(G)), intent(inout) :: Ttot  !< The depth integrated mixed layer temperature,
+                                                   !! in deg C H.
+  real, dimension(SZI_(G)), intent(inout) :: Stot  !< The depth integrated mixed layer salinity,
+                                                   !! in psu H.
+  real, dimension(SZI_(G)), intent(inout) :: uhtot !< The depth integrated mixed layer zonal
+                                                   !! velocity, H m s-1.
+  real, dimension(SZI_(G)), intent(inout) :: vhtot !< The integrated mixed layer meridional
+                                                   !! velocity, H m s-1.
+  real, dimension(SZI_(G)), intent(inout) :: R0_tot !< The integrated mixed layer potential
+                                                   !! density referenced to 0 pressure, in H kg m-3.
+  real, dimension(SZI_(G)), intent(inout) :: Rcv_tot !< The integrated mixed layer coordinate
+                                                   !! variable potential density, in H kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: u     !< Zonal velocities interpolated to h points, m s-1.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: v     !< Zonal velocities interpolated to h points, m s-1.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: T     !< Layer temperatures, in deg C.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: S     !< Layer salinities, in psu.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: R0    !< Potential density referenced to
+                                                   !! surface pressure, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: Rcv   !< The coordinate defining potential
+                                                   !! density, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: eps   !< The negligibly small amount of water
+                                                   !! that will be left in each layer, in H.
+  real, dimension(SZI_(G)), intent(in)    :: dR0_dT  !< The partial derivative of R0 with respect to
+                                                   !! temperature, in kg m-3 degC-1.
+  real, dimension(SZI_(G)), intent(in)    :: dRcv_dT !< The partial derivative of Rcv with respect to
+                                                   !! temperature, in kg m-3 degC-1.
+  real, dimension(2,SZI_(G)), intent(in)  :: cMKE  !< Coefficients of HpE and HpE^2 used in calculating
+                                                   !! the denominator of MKE_rate, in m-1 and m-2.
+  real,                     intent(in)    :: Idt_diag !< The inverse of the accumulated diagnostic
+                                                   !! time interval, in s-1.
+  integer,                  intent(in)    :: nsw   !< The number of bands of penetrating
+                                                   !! shortwave radiation.
+  real, dimension(:,:),     intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
+                                                   !! heating at the sea surface in each
+                                                   !! penetrating band, in K H,
+                                                   !! size nsw x SZI_(G).
+  real, dimension(:,:,:),   intent(in)    :: opacity_band !< The opacity in each band of penetrating
+                                                   !! shortwave radiation, in H-1.
+                                                   !! The indicies of opacity_band are band, i, k.
+  real, dimension(SZI_(G)), intent(inout) :: TKE   !< The turbulent kinetic energy
+                                                   !! available for mixing over a time
+                                                   !! step, in m3 s-2.
+  real, dimension(SZI_(G)), intent(inout) :: Idecay_len_TKE !< The vertical TKE decay rate, in H-1.
+  integer,                  intent(in)    :: j     !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
-                                     intent(in)    :: ksort !< The density-sorted k-indicies.
-  type(bulkmixedlayer_CS),           pointer       :: CS    !< The control structure for this
-                                                            !! module.
+                            intent(in)    :: ksort !< The density-sorted k-indicies.
+  type(bulkmixedlayer_CS),  pointer       :: CS    !< The control structure for this module.
 
 ! This subroutine calculates mechanically driven entrainment.
 ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
@@ -3322,7 +3383,8 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
   real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt !< The target value of Rcv for each
                                                             !! layer, in kg m-3.
   real,                               intent(in)    :: dt   !< Time increment, in s.
-  real,                               intent(in)    :: dt_diag
+  real,                               intent(in)    :: dt_diag !< The accumulated time interval for
+                                                            !! diagnostics, in s.
   real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_ea !< The upward increase across a layer in
                                                             !! the entrainment from above, in m or
                                                             !! kg m-2 (H). Positive d_ea goes with
@@ -3620,9 +3682,9 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
 
 end subroutine mixedlayer_detrain_1
 
-! #@# This subroutine needs a doxygen description.
+!> This subroutine initializes the MOM bulk mixed layer module.
 subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
-  type(time_type), target, intent(in)    :: Time
+  type(time_type), target, intent(in)    :: Time !< The model's clock with the current time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time

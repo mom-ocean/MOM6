@@ -261,8 +261,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   character(len=32)  :: name
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
-  type(tracer_type), pointer      :: tr_ptr
+  type(OBC_segment_type), pointer :: segment => NULL()
+  type(tracer_type), pointer      :: tr_ptr => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed

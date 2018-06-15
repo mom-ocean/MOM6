@@ -68,12 +68,11 @@ public advection_test_tracer_column_physics, advection_test_stock
 integer, parameter :: NTR = 11
 
 type, public :: advection_test_tracer_CS ; private
-  integer :: ntr = NTR                  ! Number of tracers in this module
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
+  integer :: ntr = NTR                 ! Number of tracers in this module
+  logical :: coupled_tracers = .false. ! These tracers are not offered to the coupler.
   character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
-                                   ! to initialize internally.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+                                       ! to initialize internally.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
@@ -88,8 +87,8 @@ type, public :: advection_test_tracer_CS ; private
              ! if it is used and the surface tracer concentrations are to be
              ! provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   type(vardesc) :: tr_desc(NTR)

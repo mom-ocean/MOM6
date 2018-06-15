@@ -30,11 +30,10 @@ public dyed_obc_tracer_column_physics, dyed_obc_tracer_end
 
 type, public :: dyed_obc_tracer_CS ; private
   integer :: ntr    ! The number of tracers that are actually used.
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
+  logical :: coupled_tracers = .false. ! These tracers are not offered to the coupler.
   character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
-                                   ! to initialize internally.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+                                       ! to initialize internally.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
@@ -43,8 +42,8 @@ type, public :: dyed_obc_tracer_CS ; private
     ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
                ! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   type(vardesc), allocatable :: tr_desc(:)

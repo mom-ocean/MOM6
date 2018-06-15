@@ -17,6 +17,7 @@ use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
+use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
@@ -46,22 +47,29 @@ type, public :: dumbbell_surface_forcing_CS ; private
   real :: slp_amplitude      ! The amplitude of pressure loading (in Pa) applied
                              ! to the reservoirs
   real :: slp_period         ! Period of sinusoidal pressure wave
-  real :: S_surf, S_range
-  real, pointer, dimension(:,:) :: forcing_mask, S_restore
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
+  real, dimension(:,:), allocatable :: &
+    forcing_mask             ! A mask regulating where forcing occurs
+  real, dimension(:,:), allocatable :: &
+    S_restore                ! The surface salinity field toward which to
+                             ! restore, in PSU.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to regulate the
                              ! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
 
 contains
 
 subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
-  type(forcing),                 intent(inout) :: fluxes
-  type(time_type),               intent(in)    :: day
+  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+                                                       !! describe the surface state of the ocean.
+  type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
+                                                       !! possible forcing fields. Unused fields
+                                                       !! have NULL ptrs.
+  type(time_type),               intent(in)    :: day  !< Time of the fluxes.
   real,                          intent(in)    :: dt   !< The amount of time over which
                                                        !! the fluxes apply, in s
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(dumbbell_surface_forcing_CS),  pointer       :: CS
+  type(dumbbell_surface_forcing_CS),  pointer  :: CS   !< A control structure returned by a previous
+                                                       !! call to dumbbell_surface_forcing_init
 
 !    This subroutine specifies the current surface fluxes of buoyancy or
 !  temperature and fresh water.  It may also be modified to add
@@ -109,19 +117,19 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
   if (CS%use_temperature) then
-    call alloc_if_needed(fluxes%evap, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%fprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lrunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%frunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%vprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%evap, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%fprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lrunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%frunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%vprec, isd, ied, jsd, jed)
 
-    call alloc_if_needed(fluxes%sw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%latent, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%sens, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%latent, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sens, isd, ied, jsd, jed)
   else ! This is the buoyancy only mode.
-    call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%buoy, isd, ied, jsd, jed)
   endif
 
 
@@ -170,13 +178,18 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 end subroutine dumbbell_buoyancy_forcing
 
 subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
-  type(forcing),                 intent(inout) :: fluxes
-  type(time_type),               intent(in)    :: day
+  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+                                                       !! describe the surface state of the ocean.
+  type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
+                                                       !! possible forcing fields. Unused fields
+                                                       !! have NULL ptrs.
+  type(time_type),               intent(in)    :: day  !< Time of the fluxes.
   real,                          intent(in)    :: dt   !< The amount of time over which
                                                        !! the fluxes apply, in s
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(dumbbell_surface_forcing_CS),  pointer       :: CS
+  type(dumbbell_surface_forcing_CS),  pointer  :: CS   !< A control structure returned by a previous
+                                                       !! call to dumbbell_surface_forcing_init
+
 
 !    This subroutine specifies the current surface fluxes of buoyancy or
 !  temperature and fresh water.  It may also be modified to add
@@ -223,8 +236,8 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
 
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
-  call alloc_if_needed(fluxes%p_surf, isd, ied, jsd, jed)
-  call alloc_if_needed(fluxes%p_surf_full, isd, ied, jsd, jed)
+  call safe_alloc_ptr(fluxes%p_surf, isd, ied, jsd, jed)
+  call safe_alloc_ptr(fluxes%p_surf_full, isd, ied, jsd, jed)
 
 
   ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
@@ -240,36 +253,20 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
 
 end subroutine dumbbell_dynamic_forcing
 
-subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
-  ! If ptr is not associated, this routine allocates it with the given size
-  ! and zeros out its contents.  This is equivalent to safe_alloc_ptr in
-  ! MOM_diag_mediator, but is here so as to be completely transparent.
-  real, pointer :: ptr(:,:)
-  integer :: isd, ied, jsd, jed
-  if (.not.associated(ptr)) then
-    allocate(ptr(isd:ied,jsd:jed))
-    ptr(:,:) = 0.0
-  endif
-end subroutine alloc_if_needed
 
 subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),                   intent(in) :: Time
-  type(ocean_grid_type),             intent(in) :: G    !< The ocean's grid structure
-  type(param_file_type),             intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,           intent(in) :: diag
-  type(dumbbell_surface_forcing_CS), pointer    :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+  type(time_type),              intent(in) :: Time !< The current model time.
+  type(ocean_grid_type),        intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(diag_ctrl),      target, intent(in) :: diag !< A structure that is used to
+                                                   !! regulate diagnostic output.
+  type(dumbbell_surface_forcing_CS), &
+                                pointer    :: CS   !< A pointer to the control structure for this module
 
-  ! This include declares and sets the variable "version".
-
-  integer :: i,j
-  real :: x,y
+ ! This include declares and sets the variable "version".
+  real :: S_surf, S_range
+  real :: x, y
+  integer :: i, j
 
 #include "version_variable.h"
   character(len=40)  :: mdl = "dumbbell_surface_forcing" ! This module's name.
@@ -306,9 +303,9 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default = 1.0)
-  call get_param(param_file, mdl,"INITIAL_SSS", CS%S_surf, &
+  call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", units="1e-3", default=34.0, do_not_log=.true.)
-  call get_param(param_file, mdl,"INITIAL_S_RANGE", CS%S_range, &
+  call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                  "Initial salinity range (bottom - surface)", units="1e-3", &
                  default=2., do_not_log=.true.)
 
@@ -335,13 +332,13 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
       y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
       CS%forcing_mask(i,j)=0
-      CS%S_restore(i,j) = CS%S_surf
+      CS%S_restore(i,j) = S_surf
       if ((x>0.25)) then
         CS%forcing_mask(i,j) = 1
-        CS%S_restore(i,j) = CS%S_surf + CS%S_range
+        CS%S_restore(i,j) = S_surf + S_range
       elseif ((x<-0.25)) then
         CS%forcing_mask(i,j) = 1
-        CS%S_restore(i,j) = CS%S_surf - CS%S_range
+        CS%S_restore(i,j) = S_surf - S_range
       endif
     enddo
   enddo

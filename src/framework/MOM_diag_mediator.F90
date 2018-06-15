@@ -416,7 +416,7 @@ subroutine set_masks_for_axes(G, diag_cs)
                                                        !! used for diagnostics
   ! Local variables
   integer :: c, nk, i, j, k
-  type(axes_grp), pointer :: axes, h_axes ! Current axes, for convenience
+  type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
 
   do c=1, diag_cs%num_diag_coords
     ! This vertical coordinate has been configured so can be used.
@@ -555,7 +555,7 @@ subroutine diag_associate_volume_cell_measure(diag_cs, id_h_volume)
   type(diag_ctrl),   intent(inout) :: diag_cs     !< Diagnostics control structure
   integer,           intent(in)    :: id_h_volume !< Diag_manager id for volume of h-cells
   ! Local variables
-  type(diag_type), pointer :: tmp
+  type(diag_type), pointer :: tmp => NULL()
 
   if (id_h_volume<=0) return ! Do nothing
   diag_cs%volume_cell_measure_dm_id = id_h_volume ! Record for diag_get_volume_cell_measure_dm_id()
@@ -959,7 +959,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
   integer :: nz, i, j, k
   real, dimension(:,:,:), allocatable :: remapped_field
   logical :: staggered_in_x, staggered_in_y
-  real, dimension(:,:,:), pointer :: h_diag
+  real, dimension(:,:,:), pointer :: h_diag => NULL()
 
   if (present(alt_h)) then
     h_diag => alt_h
@@ -2128,7 +2128,7 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axes_grp), pointer :: axes
+  type(axes_grp), pointer :: axes => NULL()
 
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
                      z_grid=z_grid, caller="ocean_register_diag")
@@ -2426,7 +2426,8 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
                                                         !! the current salinity
   ! Local variables
   integer :: i
-  real, dimension(:,:,:), pointer :: h_diag, T_diag, S_diag
+  real, dimension(:,:,:), pointer :: h_diag => NULL()
+  real, dimension(:,:,:), pointer :: T_diag => NULL(), S_diag => NULL()
 
   if (present(alt_h)) then
     h_diag => alt_h
@@ -2637,7 +2638,7 @@ subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
   type(diag_ctrl), target, intent(inout) :: diag_cs !< structure used to regulate diagnostic output
   type(diag_type),         pointer       :: diag    !< structure representing a diagnostic (inout)
 
-  type(diag_type), pointer :: tmp
+  type(diag_type), pointer :: tmp => NULL()
 
   if (.not. diag_cs%diags(diag_id)%in_use) then
     diag => diag_cs%diags(diag_id)

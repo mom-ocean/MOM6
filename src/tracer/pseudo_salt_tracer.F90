@@ -68,7 +68,7 @@ public pseudo_salt_tracer_column_physics, pseudo_salt_tracer_surface_state
 public pseudo_salt_stock, pseudo_salt_tracer_end
 
 type, public :: pseudo_salt_tracer_CS ; private
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: ps(:,:,:) => NULL()   ! The array of pseudo-salt tracer used in this
                                          ! subroutine, in psu
@@ -78,8 +78,8 @@ type, public :: pseudo_salt_tracer_CS ; private
 
   integer :: id_psd = -1
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   type(vardesc) :: tr_desc
@@ -284,12 +284,9 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   real :: year, h_total, scale, htot, Ih_limit
   integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, k_max
-  real, allocatable :: local_tr(:,:,:)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real, dimension(:,:), pointer :: net_salt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  net_salt=>fluxes%netSalt
 
   if (.not.associated(CS)) return
   if (.not.associated(CS%diff)) return
@@ -301,11 +298,11 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
 
   ! This uses applyTracerBoundaryFluxesInOut, usually in ALE mode
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-    do k=1,nz ;do j=js,je ; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
     call applyTracerBoundaryFluxesInOut(G, GV, CS%ps, dt, fluxes, h_work, &
-      evap_CFL_limit, minimum_forcing_depth, out_flux_optional=net_salt)
+      evap_CFL_limit, minimum_forcing_depth, out_flux_optional=fluxes%netSalt)
     call tracer_vertdiff(h_work, ea, eb, dt, CS%ps, G, GV)
   else
     call tracer_vertdiff(h_old, ea, eb, dt, CS%ps, G, GV)
