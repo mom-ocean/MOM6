@@ -2657,8 +2657,6 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
           if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
         endif
       else            ! This is assuming Flather as only other option
-        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*(0.5* &
-                                (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
@@ -2668,9 +2666,14 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(i,j) = eta(i,j)
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + eta(i,j)))
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
             BT_OBC%H_u(i,j) = eta(i+1,j)
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i+1,j) + eta(i+1,j)))
           endif
+        endif
+        if (GV%Boussinesq) then
+          BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * BT_OBC%H_u(i,j))
         endif
       endif
     endif ; enddo ; enddo
@@ -2710,8 +2713,6 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
           if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
         endif
       else              ! This is assuming Flather as only other option
-        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*(0.5* &
-                                (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
@@ -2721,9 +2722,14 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = eta(i,j)
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + eta(i,j)))
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             BT_OBC%H_v(i,J) = eta(i,j+1)
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j+1) + eta(i,j+1)))
           endif
+        endif
+        if (GV%Boussinesq) then
+          BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * BT_OBC%H_v(i,J))
         endif
       endif
     endif ; enddo ; enddo
