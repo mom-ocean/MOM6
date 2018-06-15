@@ -937,8 +937,10 @@ end subroutine entrainment_diffusive
 subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, do_i_in)
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: F    !< The density flux through a layer within a time step divided by the
-            ! density difference across the interface below the layer, in H.
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: F    !< The density flux through a layer within
+                                                          !! a time step divided by the density
+                                                          !! difference across the interface below
+                                                          !! the layer, in H.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer, dimension(SZI_(G)),      intent(in)    :: kb   !< The index of the lightest layer denser than
