@@ -488,6 +488,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
 
   ! Translate import fields to ice_ocean_boundary
+  ! TODO: make this an input variable
+  glb%sw_decomp = .false.
   if (glb%sw_decomp) then
      call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, c1=glb%c1, c2=glb%c2, c3=glb%c3, c4=glb%c4)
   else
