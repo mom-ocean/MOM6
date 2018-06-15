@@ -157,6 +157,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   real    :: delta_h, rho_range
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot, rho_sur, rho_bot
   logical :: just_read    ! If true, just read parameters but set nothing.
+  character(len=256) :: mesg  ! The text of an error message
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -187,11 +188,14 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
 
     ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
     call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
-    !write (*,*)'Surface density is:', rho_sur
+    ! write(mesg,*) 'Surface density is:', rho_sur
+    ! call MOM_mesg(mesg,5)
     call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
-    !write (*,*)'Bottom density is:', rho_bot
+    ! write(mesg,*) 'Bottom density is:', rho_bot
+    ! call MOM_mesg(mesg,5)
     rho_range = rho_bot - rho_sur
-    !write (*,*)'Density range is:', rho_range
+    ! write(mesg,*) 'Density range is:', rho_range
+    ! call MOM_mesg(mesg,5)
 
     ! Construct notional interface positions
     e0(1) = 0.
@@ -199,8 +203,8 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
       e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
       e0(k) = min( 0., e0(k) ) ! Bound by surface
       e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
-      !write(*,*)'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
-
+      ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
+      ! call MOM_mesg(mesg,5)
     enddo
     e0(nz+1) = -G%max_depth
 
@@ -266,6 +270,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   real      :: x, ds, dt, rho_sur, rho_bot
   real      :: xi0, xi1, dxi, r, S_sur, T_sur, S_bot, T_bot, S_range, T_range
   real      :: z          ! vertical position in z space
+  character(len=256) :: mesg  ! The text of an error message
   character(len=40) :: verticalCoordinate, density_profile
   real :: rho_tmp
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -293,9 +298,11 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
                  'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
 
   call calculate_density(t_sur,s_sur,0.0,rho_sur,eqn_of_state)
-  !write (*,*)'Density in the surface layer:', rho_sur
+  ! write(mesg,*) 'Density in the surface layer:', rho_sur
+  ! call MOM_mesg(mesg,5)
   call calculate_density(t_bot,s_bot,0.0,rho_bot,eqn_of_state)
-  !write (*,*)'Density in the bottom layer::', rho_bot
+  ! write(mesg,*) 'Density in the bottom layer::', rho_bot
+  ! call MOM_mesg(mesg,5)
 
   select case ( coordinateMode(verticalCoordinate) )
 
@@ -304,7 +311,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
       S_range = s_sur - s_bot
       T_range = t_sur - t_bot
-      !write(*,*)'S_range,T_range',S_range,T_range
+      ! write(mesg,*) 'S_range,T_range',S_range,T_range
+      ! call MOM_mesg(mesg,5)
 
       S_range = S_range / G%max_depth ! Convert S_range into dS/dz
       T_range = T_range / G%max_depth ! Convert T_range into dT/dz
@@ -337,11 +345,13 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
                  default=35.0, do_not_log=just_read)
      if (just_read) return ! All run-time parameters have been read, so return.
 
-     !write(*,*)'read drho_dS, drho_dT', drho_dS1, drho_dT1
+     ! write(mesg,*) 'read drho_dS, drho_dT', drho_dS1, drho_dT1
+     ! call MOM_mesg(mesg,5)
 
      S_range = s_bot - s_sur
      T_range = t_bot - t_sur
-     !write(*,*)'S_range,T_range',S_range,T_range
+     ! write(mesg,*) 'S_range,T_range',S_range,T_range
+     ! call MOM_mesg(mesg,5)
      S_range = S_range / G%max_depth ! Convert S_range into dS/dz
      T_range = T_range / G%max_depth ! Convert T_range into dT/dz
 
@@ -353,11 +363,13 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
           S0(k) = S_sur +  S_range * xi1
           T0(k) = T_sur +  T_range * xi1
           xi0 = xi0 + h(i,j,k) * GV%H_to_m
-          !write(*,*)'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
+          ! write(mesg,*) 'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
+          ! call MOM_mesg(mesg,5)
        enddo
 
        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
-       !write(*,*)'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
+       ! write(mesg,*) 'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
+       ! call MOM_mesg(mesg,5)
        call calculate_density(T0(1),S0(1),0.,rho_guess(1),eqn_of_state)
 
        if (fit_salin) then
@@ -404,8 +416,9 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   ! for debugging
   !i=G%iec; j=G%jec
   !do k = 1,nz
-  !   call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,eqn_of_state)
-  !   write(*,*) 'k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+  !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,eqn_of_state)
+  !  write(mesg,*) 'k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+  ! call MOM_mesg(mesg,5)
   !enddo
 
 end subroutine ISOMIP_initialize_temperature_salinity
@@ -517,10 +530,13 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
   call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
   !write (*,*)'Surface density in sponge:', rho_sur
+  ! call MOM_mesg(mesg,5)
   call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
   !write (*,*)'Bottom density in sponge:', rho_bot
+  ! call MOM_mesg(mesg,5)
   rho_range = rho_bot - rho_sur
   !write (*,*)'Density range in sponge:', rho_range
+  ! call MOM_mesg(mesg,5)
 
   if (use_ALE) then
 
@@ -533,8 +549,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
          e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
          e0(k) = min( 0., e0(k) ) ! Bound by surface
          e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
-         !write(*,*)'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
-
+         ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
+         ! call MOM_mesg(mesg,5)
        enddo
        e0(nz+1) = -G%max_depth
 
@@ -596,7 +612,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     !i=G%iec; j=G%jec
     !do k = 1,nz
     !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
-    !  write(*,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+    !  write(mesg,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+    !  call MOM_mesg(mesg,5)
     !enddo
 
     !   Now register all of the fields which are damped in the sponge.   !
@@ -644,9 +661,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
        ! for debugging
        !i=G%iec; j=G%jec
        !do k = 1,nz
-       !    call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
-       !    write(*,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
-       !                S(i,j,k),rho_tmp,GV%Rlay(k)
+       !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
+       !  write(mesg,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
+       !              S(i,j,k),rho_tmp,GV%Rlay(k)
+       !  call MOM_mesg(mesg,5)
        !enddo
 
        ! Set the inverse damping rates so that the model will know where to

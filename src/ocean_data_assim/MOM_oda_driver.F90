@@ -31,7 +31,7 @@ module MOM_oda_driver_mod
   ! MOM Modules
   use MOM_io, only : slasher, MOM_read_data
   use MOM_diag_mediator, only : diag_ctrl, set_axes_info
-  use MOM_error_handler, only : FATAL, WARNING, MOM_error, is_root_pe
+  use MOM_error_handler, only : FATAL, WARNING, MOM_error, MOM_mesg, is_root_pe
   use MOM_get_input, only : get_MOM_input, directories
   use MOM_variables, only : thermo_var_ptrs
   use MOM_grid, only : ocean_grid_type, MOM_grid_init
@@ -337,7 +337,7 @@ contains
 
     !! switch to global pelist
     call set_current_pelist(CS%filter_pelist)
-    if (is_root_pe()) print *, 'Setting prior'
+    call MOM_mesg('Setting prior')
 
     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
     call mpp_get_compute_domain(CS%domains(CS%ensemble_id)%mpp_domain,is,ie,js,je)
@@ -390,7 +390,7 @@ contains
 
      !! switch to global pelist
      call set_current_pelist(CS%filter_pelist)
-     if (is_root_pe()) print *, 'Getting posterior'
+     call MOM_mesg('Getting posterior')
 
      get_inc = .true.
      if (present(increment)) get_inc = increment
@@ -487,20 +487,23 @@ contains
     type(time_type), intent(in) :: Time !< the current model time
     type(ODA_CS), pointer, intent(inout) :: CS !< the DA control structure
 
+    character(len=160) :: mesg  ! The text of an error message
     integer :: yr, mon, day, hr, min, sec
 
     if (Time >= CS%Time) then
       CS%Time=increment_time(CS%Time,CS%assim_frequency*3600)
 
       call get_date(Time, yr, mon, day, hr, min, sec)
-      if (pe() == mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
+      write(mesg,*) 'Model Time: ', yr, mon, day, hr, min, sec
+      call MOM_mesg("set_analysis_time: "//trim(mesg))
       call get_date(CS%time, yr, mon, day, hr, min, sec)
-      if (pe() == mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
+      write(mesg,*) 'Assimilation Time: ', yr, mon, day, hr, min, sec
+      call MOM_mesg("set_analysis_time: "//trim(mesg))
     endif
     if (CS%Time < Time) then
-        call MOM_error(FATAL, " set_analysis_time: " // &
-             "assimilation interval appears to be shorter than " // &
-             "the model timestep")
+      call MOM_error(FATAL, " set_analysis_time: " // &
+           "assimilation interval appears to be shorter than " // &
+           "the model timestep")
     endif
     return
 

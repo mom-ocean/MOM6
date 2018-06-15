@@ -329,25 +329,20 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
     ! start with initial condition
     S(:,:,:) = 0.0
 
-    do j=G%jsc,G%jec
-      do i=G%isc,G%iec
-
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-         x = ( G%geoLonT(i,j) ) / dblen
-         if (x>=0.25 ) then
-           do k=1,nz
-             S(i,j,k)=S_ref + 0.5*S_range
-           enddo
-         endif
-         if (x<=-0.25 ) then
-           do k=1,nz
-             S(i,j,k)=S_ref - 0.5*S_range
-           enddo
-         endif
-!         if (j == G%jsc) print *,'i,Sponge S= ',i,S(i,1,1)
-       enddo
-
-     enddo
+       x = ( G%geoLonT(i,j) ) / dblen
+       if (x>=0.25 ) then
+         do k=1,nz
+           S(i,j,k)=S_ref + 0.5*S_range
+         enddo
+       endif
+       if (x<=-0.25 ) then
+         do k=1,nz
+           S(i,j,k)=S_ref - 0.5*S_range
+         enddo
+       endif
+     enddo ; enddo
   endif
 
   if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
