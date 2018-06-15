@@ -1600,10 +1600,10 @@ end subroutine hor_visc_end
 !! In general, the horizontal stress tensor can be written as
 !! \f[
 !! {\bf \sigma} =
-!! \left( \begin{array}{cc}
+!! \begin{pmatrix}
 !! \frac{1}{2} \left( \sigma_D + \sigma_T \right) & \frac{1}{2} \sigma_S \\
 !! \frac{1}{2} \sigma_S & \frac{1}{2} \left( \sigma_D - \sigma_T \right)
-!! \end{array} \right)
+!! \end{pmatrix}
 !! \f]
 !! where \f$\sigma_D\f$, \f$\sigma_T\f$ and \f$\sigma_S\f$ are stresses associated with
 !! invariant factors in the strain-rate tensor. For a Newtonian fluid, the stress
@@ -1611,10 +1611,10 @@ end subroutine hor_visc_end
 !! strain-rate tensor is
 !! \f[
 !! \dot{\bf e} =
-!! \left( \begin{array}{cc}
+!! \begin{pmatrix}
 !! \frac{1}{2} \left( \dot{e}_D + \dot{e}_T \right) & \dot{e}_S \\
 !! \dot{e}_S & \frac{1}{2} \left( \dot{e}_D - \dot{e}_T \right)
-!! \end{array} \right)
+!! \end{pmatrix}
 !! \f]
 !! where \f$\dot{e}_D = \partial_x u + \partial_y v\f$ is the horizontal divergence,
 !! \f$\dot{e}_T = \partial_x u - \partial_y v\f$ is the horizontal tension, and
@@ -1629,15 +1629,15 @@ end subroutine hor_visc_end
 !! tensor can be considered to be
 !! \f[
 !! {\bf \sigma} =
-!! \left( \begin{array}{cc}
+!! \begin{pmatrix}
 !! \frac{1}{2} \sigma_T & \frac{1}{2} \sigma_S \\
 !! \frac{1}{2} \sigma_S & - \frac{1}{2} \sigma_T
-!! \end{array} \right)
+!! \end{pmatrix}
 !! .\f]
 !!
 !! The stresses above are linearly related to the strain through a viscosity
 !! coefficient, \f$\kappa_h\f$:
-!! \f{eqnarray*}
+!! \f{eqnarray*}{
 !! \sigma_T & = & 2 \kappa_h \dot{e}_T \\
 !! \sigma_S & = & 2 \kappa_h \dot{e}_S
 !! .
@@ -1647,7 +1647,7 @@ end subroutine hor_visc_end
 !! \f$\kappa_h\f$ may vary with the shear, as proposed by Smagorinsky (1993).
 !!
 !! The accelerations resulting form the divergence of the stress tensor are
-!! \f{eqnarray*}
+!! \f{eqnarray*}{
 !! \hat{\bf x} \cdot \left( \nabla \cdot {\bf \sigma} \right)
 !! & = &
 !! \partial_x \left( \frac{1}{2} \sigma_T \right)
@@ -1669,7 +1669,7 @@ end subroutine hor_visc_end
 !! \f}
 !!
 !! The form of the Laplacian viscosity in general coordinates is:
-!! \f{eqnarray*}
+!! \f{eqnarray*}{
 !! \hat{\bf x} \cdot \left( \nabla \cdot \sigma \right)
 !! & = &
 !! \frac{1}{h} \left[ \partial_x \left( \kappa_h h \dot{e}_T \right)
@@ -1766,7 +1766,7 @@ end subroutine hor_visc_end
 !! \dot{e}_S = v_x + u_y
 !! \f]
 !! where
-!! \f{align*}
+!! \f{align*}{
 !! v_x &= \frac{\Delta y}{\Delta x} \delta_i \left( \frac{1}{\Delta y} v \right) \\
 !! u_y &= \frac{\Delta x}{\Delta y} \delta_j \left( \frac{1}{\Delta x} u \right)
 !! \f}
