@@ -1601,7 +1601,7 @@ end subroutine hor_visc_end
 !! \f[
 !! {\bf \sigma} =
 !! \begin{pmatrix}
-!! \frac{1}{2} \left( \sigma_D + \sigma_T \right) & \frac{1}{2} \sigma_S \\
+!! \frac{1}{2} \left( \sigma_D + \sigma_T \right) & \frac{1}{2} \sigma_S \\\\
 !! \frac{1}{2} \sigma_S & \frac{1}{2} \left( \sigma_D - \sigma_T \right)
 !! \end{pmatrix}
 !! \f]
@@ -1612,7 +1612,7 @@ end subroutine hor_visc_end
 !! \f[
 !! \dot{\bf e} =
 !! \begin{pmatrix}
-!! \frac{1}{2} \left( \dot{e}_D + \dot{e}_T \right) & \dot{e}_S \\
+!! \frac{1}{2} \left( \dot{e}_D + \dot{e}_T \right) & \dot{e}_S \\\\
 !! \dot{e}_S & \frac{1}{2} \left( \dot{e}_D - \dot{e}_T \right)
 !! \end{pmatrix}
 !! \f]
@@ -1630,7 +1630,7 @@ end subroutine hor_visc_end
 !! \f[
 !! {\bf \sigma} =
 !! \begin{pmatrix}
-!! \frac{1}{2} \sigma_T & \frac{1}{2} \sigma_S \\
+!! \frac{1}{2} \sigma_T & \frac{1}{2} \sigma_S \\\\
 !! \frac{1}{2} \sigma_S & - \frac{1}{2} \sigma_T
 !! \end{pmatrix}
 !! .\f]
@@ -1638,7 +1638,7 @@ end subroutine hor_visc_end
 !! The stresses above are linearly related to the strain through a viscosity
 !! coefficient, \f$\kappa_h\f$:
 !! \f{eqnarray*}{
-!! \sigma_T & = & 2 \kappa_h \dot{e}_T \\
+!! \sigma_T & = & 2 \kappa_h \dot{e}_T \\\\
 !! \sigma_S & = & 2 \kappa_h \dot{e}_S
 !! .
 !! \f}
@@ -1652,16 +1652,16 @@ end subroutine hor_visc_end
 !! & = &
 !! \partial_x \left( \frac{1}{2} \sigma_T \right)
 !! + \partial_y \left( \frac{1}{2} \sigma_S \right)
-!! \\
+!! \\\\
 !! & = &
 !! \partial_x \left( \kappa_h \dot{e}_T \right)
 !! + \partial_y \left( \kappa_h \dot{e}_S \right)
-!! \\
+!! \\\\
 !! \hat{\bf y} \cdot \left( \nabla \cdot {\bf \sigma} \right)
 !! & = &
 !! \partial_x \left( \frac{1}{2} \sigma_S \right)
 !! + \partial_y \left( \frac{1}{2} \sigma_T \right)
-!! \\
+!! \\\\
 !! & = &
 !! \partial_x \left( \kappa_h \dot{e}_S \right)
 !! + \partial_y \left( - \kappa_h \dot{e}_T \right)
@@ -1674,7 +1674,7 @@ end subroutine hor_visc_end
 !! & = &
 !! \frac{1}{h} \left[ \partial_x \left( \kappa_h h \dot{e}_T \right)
 !! + \partial_y \left( \kappa_h h \dot{e}_S \right) \right]
-!! \\
+!! \\\\
 !! \hat{\bf y} \cdot \left( \nabla \cdot \sigma \right)
 !! & = &
 !! \frac{1}{h} \left[ \partial_x \left( \kappa_h h \dot{e}_S \right)
@@ -1767,7 +1767,7 @@ end subroutine hor_visc_end
 !! \f]
 !! where
 !! \f{align*}{
-!! v_x &= \frac{\Delta y}{\Delta x} \delta_i \left( \frac{1}{\Delta y} v \right) \\
+!! v_x &= \frac{\Delta y}{\Delta x} \delta_i \left( \frac{1}{\Delta y} v \right) \\\\
 !! u_y &= \frac{\Delta x}{\Delta y} \delta_j \left( \frac{1}{\Delta x} u \right)
 !! \f}
 !! which are calculated separately so that no-slip or free-slip boundary
