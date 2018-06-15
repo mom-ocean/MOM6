@@ -441,13 +441,14 @@ module mom_cap_mod
     real(ESMF_KIND_R8), dimension(:,:), pointer :: farrayPtr
   end type fld_list_type
 
-  integer,parameter :: fldsMax = 100
-  integer :: fldsToOcn_num = 0
+  integer,parameter    :: fldsMax = 100
+  integer              :: fldsToOcn_num = 0
   type (fld_list_type) :: fldsToOcn(fldsMax)
-  integer :: fldsFrOcn_num = 0
+  integer              :: fldsFrOcn_num = 0
   type (fld_list_type) :: fldsFrOcn(fldsMax)
 #endif
 
+  integer   :: debug = 0
   integer   :: import_slice = 1
   integer   :: export_slice = 1
   character(len=256) :: tmpstr
@@ -935,10 +936,12 @@ module mom_cap_mod
     allocate(xb(ntiles),xe(ntiles),yb(ntiles),ye(ntiles),pe(ntiles))
     call mpp_get_compute_domains(ocean_public%domain, xbegin=xb, xend=xe, ybegin=yb, yend=ye)
     call mpp_get_pelist(ocean_public%domain, pe)
-    do n = 1,ntiles
-      write(tmpstr,'(a,6i6)') subname//' tiles ',n,pe(n),xb(n),xe(n),yb(n),ye(n)
-      call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)  
-    enddo
+    if (debug > 0) then
+       do n = 1,ntiles
+          write(tmpstr,'(a,6i6)') subname//' tiles ',n,pe(n),xb(n),xe(n),yb(n),ye(n)
+          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)  
+       enddo
+    end if
 
     !---------------------------------
     ! create delayout and distgrid
@@ -971,6 +974,7 @@ module mom_cap_mod
       return  ! bail out
     
     allocate(connectionList(2))
+
     ! bipolar boundary condition at top row: nyg
     call ESMF_DistGridConnectionSet(connectionList(1), tileIndexA=1, &
       tileIndexB=1, positionVector=(/nxg+1, 2*nyg+1/), &
@@ -979,6 +983,7 @@ module mom_cap_mod
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
     ! periodic boundary condition along first dimension
     call ESMF_DistGridConnectionSet(connectionList(2), tileIndexA=1, &
       tileIndexB=1, positionVector=(/nxg, 0/), rc=rc)
