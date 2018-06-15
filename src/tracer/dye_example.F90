@@ -50,8 +50,8 @@ type, public :: dye_tracer_CS ; private
     ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
                ! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   type(vardesc), allocatable :: tr_desc(:)

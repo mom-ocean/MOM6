@@ -54,9 +54,9 @@ type, public :: PointAccel_CS ; private
                             ! written by this PE during the current run.
   integer :: max_writes     ! The maximum number of times any PE can write out
                             ! a column's worth of accelerations during a run.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
 ! The following are pointers to many of the state variables and accelerations
 ! that are used to step the physical model forward.  They all use the same
 ! names as the variables they point to in MOM.F90
@@ -439,25 +439,6 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
 ! that have been applied to a column of meridional velocities over
 ! the previous timestep.  This subroutine is called from vertvisc.
 
-! Arguments: i - The zonal index of the column to be documented.
-!  (in)      J - The meridional index of the column to be documented.
-!  (in)      vm - The new meridional velocity, in m s-1.
-!  (in)      hin - The layer thickness, in m.
-!  (in)      ADp - A structure pointing to the various accelerations in
-!                  the momentum equations.
-!  (in)      CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      dt - The model's dynamics time step.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PointAccel_init.
-!  (in)      str - The surface wind stress integrated over a time
-!                  step, in m2 s-1.
-!  (in)      a - The layer coupling coefficients from vertvisc, m.
-!  (in)      hv - The layer thicknesses at velocity grid points, from
-!                 vertvisc, in m.
-
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, dv
@@ -757,7 +738,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
 
 end subroutine write_v_accel
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine initializes the parameters regulating how truncations are logged.
 subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   type(ocean_internal_state), &
                         target, intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers
@@ -774,16 +755,6 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   type(PointAccel_CS),          pointer       :: CS   !< A pointer that is set to point to the
                                                       !! control structure for this module.
 
-! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
-!                  accelerations that make up the ocean's physical state.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      dirs - A structure containing several relevant directory paths.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PointAccel" ! This module's name.

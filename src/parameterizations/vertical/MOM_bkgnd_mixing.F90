@@ -437,7 +437,10 @@ end function CVMix_bkgnd_is_used
 
 !> Clear pointers and dealocate memory
 subroutine bkgnd_mixing_end(CS)
-  type(bkgnd_mixing_cs), pointer :: CS ! Control structure
+  type(bkgnd_mixing_cs), pointer :: CS !< Control structure for this module that
+                                       !! will be deallocated in this subroutine
+
+  if (.not. associated(CS)) return
 
   deallocate(CS%kd_bkgnd)
   deallocate(CS%kv_bkgnd)

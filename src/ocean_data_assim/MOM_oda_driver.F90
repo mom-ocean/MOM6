@@ -64,7 +64,7 @@ module MOM_oda_driver_mod
                                                                      !! or increments to prior in DA space
      integer :: nk !< number of vertical layers used for DA
      type(ocean_grid_type), pointer :: Grid => NULL() !< MOM6 grid type and decomposition for the DA
-     type(pointer_mpp_domain), pointer, dimension(:) :: domains => NULL() !< Pointer to mpp_domain objects
+     type(ptr_mpp_domain), pointer, dimension(:) :: domains => NULL() !< Pointer to mpp_domain objects
                                                                           !! for ensemble members
      type(verticalGrid_type), pointer :: GV => NULL() !< vertical grid for DA
      type(domain2d), pointer :: mpp_domain => NULL() !< Pointer to a mpp domain object for DA
@@ -85,7 +85,7 @@ module MOM_oda_driver_mod
      ! Profiles local to the analysis domain
      type(ocean_profile_type), pointer :: Profiles => NULL() !< pointer to linked list of all available profiles
      type(ocean_profile_type), pointer :: CProfiles => NULL()!< pointer to linked list of current profiles
-     type(kd_root), pointer :: kdroot
+     type(kd_root), pointer :: kdroot => NULL()
      type(ALE_CS), pointer :: ALE_CS=>NULL() !< ALE control structure for DA
      logical :: use_ALE_algorithm !< true is using ALE remapping
      type(regridding_CS) :: regridCS !< ALE control structure for regridding
@@ -95,9 +95,9 @@ module MOM_oda_driver_mod
   end type ODA_CS
 
   !> pointer to a mpp_domain object
-  type :: pointer_mpp_domain
-     type(domain2d), pointer :: mpp_domain => NULL()
-  end type pointer_mpp_domain
+  type :: ptr_mpp_domain
+    type(domain2d), pointer :: mpp_domain => NULL()
+  end type ptr_mpp_domain
 
   !>@{
   !! DA parameters
@@ -535,12 +535,12 @@ contains
 
   !> Apply increments to tracers
   subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
-    real, intent(in) :: dt ! the tracer timestep (seconds)
-    type(ocean_grid_type),    intent(in)    :: G      !< ocean grid structure
-    type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
+    real,                     intent(in)    :: dt !< The tracer timestep (seconds)
+    type(ocean_grid_type),    intent(in)    :: G  !< ocean grid structure
+    type(thermo_var_ptrs),    intent(inout) :: tv !< A structure pointing to various thermodynamic variables
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                              intent(in)    :: h      !< layer thickness (m or kg/m2)
-    type(ODA_CS),              intent(inout) :: CS     !< the data assimilation structure
+                              intent(in)    :: h  !< layer thickness (m or kg/m2)
+    type(ODA_CS),             intent(inout) :: CS !< the data assimilation structure
 
   end subroutine apply_oda_tracer_increments
 

@@ -56,7 +56,8 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: use_neutral_diffusion ! If true, use the neutral_diffusion module from within
                                    ! tracer_hor_diff.
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() ! Control structure for neutral diffusion.
-  type(diag_ctrl), pointer :: diag ! structure to regulate timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   logical :: debug                 ! If true, write verbose checksums for debugging purposes.
   logical :: show_call_tree        ! Display the call tree while running. Set by VERBOSITY level.
   logical :: first_call = .true.

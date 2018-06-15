@@ -291,7 +291,8 @@ end function CVMix_ddiff_is_used
 
 !> Clear pointers and dealocate memory
 subroutine CVMix_ddiff_end(CS)
-  type(CVMix_ddiff_cs), pointer :: CS ! Control structure
+  type(CVMix_ddiff_cs), pointer :: CS !< Control structure for this module that
+                                      !! will be deallocated in this subroutine
 
   deallocate(CS)
 

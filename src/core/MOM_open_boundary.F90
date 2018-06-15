@@ -501,9 +501,9 @@ end subroutine open_boundary_config
 subroutine initialize_segment_data(G, OBC, PF)
   use mpp_mod, only : mpp_pe, mpp_set_current_pelist, mpp_get_current_pelist,mpp_npes
 
-  type(dyn_horgrid_type),  intent(in) :: G   !< Ocean grid structure
-  type(ocean_OBC_type), intent(inout) :: OBC !< Open boundary control structure
-  type(param_file_type), intent(in)   :: PF  !< Parameter file handle
+  type(dyn_horgrid_type), intent(in)    :: G   !< Ocean grid structure
+  type(ocean_OBC_type),   intent(inout) :: OBC !< Open boundary control structure
+  type(param_file_type),  intent(in)    :: PF  !< Parameter file handle
 
   integer :: n,m,num_fields
   character(len=256) :: segstr, filename
@@ -513,7 +513,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   integer            :: orient
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   character(len=128) :: inputdir
-  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   character(len=32)  :: remappingScheme
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   integer, dimension(4) :: siz,siz2
@@ -1289,7 +1289,7 @@ end function open_boundary_query
 !> Deallocate open boundary data
 subroutine open_boundary_dealloc(OBC)
   type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
   integer :: n
 
   if (.not. associated(OBC)) return
@@ -1317,7 +1317,7 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: depth !< Bathymetry at h-points
   ! Local variables
   integer :: i, j, n
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   if (.not.associated(OBC)) return
 
@@ -1362,7 +1362,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell (m2)
   ! Local variables
   integer :: i, j, n
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
   logical :: any_U, any_V
 
   if (.not.associated(OBC)) return
@@ -1484,7 +1484,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   real, pointer, dimension(:,:,:) :: rx_tangential=>NULL()
   real, pointer, dimension(:,:,:) :: ry_tangential=>NULL()
   real, parameter :: eps = 1.0e-20
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
   integer :: i, j, k, is, ie, js, je, nz, n
   integer :: is_obc, ie_obc, js_obc, je_obc
 
@@ -2000,7 +2000,7 @@ subroutine open_boundary_apply_normal_flow(OBC, G, u, v)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open boundaries
   ! Local variables
   integer :: i, j, k, n
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   if (.not.associated(OBC)) return ! Bail out if OBC is not available
 
@@ -2034,7 +2034,7 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open boundaries
   ! Local variables
   integer :: i, j, k, n
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   if (.not.associated(OBC)) return ! Bail out if OBC is not available
 
@@ -2058,7 +2058,7 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
 end subroutine open_boundary_zero_normal_flow
 
 !> Calculate the tangential gradient of the normal flow at the boundary q-points.
-subroutine gradient_at_q_points(G,segment,uvel,vvel)
+subroutine gradient_at_q_points(G, segment, uvel, vvel)
   type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
   type(OBC_segment_type), pointer :: segment !< OBC segment structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uvel !< zonal velocity
@@ -2121,7 +2121,7 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(OBC_segment_type), pointer :: segment  => NULL() ! pointer to segment type list
   character(len=40)  :: mdl = "set_tracer_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
@@ -2439,7 +2439,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   integer :: IsdB, IedB, JsdB, JedB, n, m, nz
   character(len=40)  :: mdl = "set_OBC_segment_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
   integer, dimension(4) :: siz,siz2
   real :: sumh ! column sum of thicknesses (m)
   integer :: ni_seg, nj_seg  ! number of src gridpoints along the segments
@@ -3114,7 +3114,7 @@ subroutine register_temp_salt_segments(GV, OBC, tr_Reg, param_file)
   integer :: i, j, k, n
   character(len=32)  :: name
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
-  type(tracer_type), pointer      :: tr_ptr
+  type(tracer_type), pointer      :: tr_ptr => NULL()
 
   if (.not. associated(OBC)) return
 
@@ -3145,7 +3145,7 @@ subroutine fill_temp_salt_segments(G, OBC, tv)
 ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz
   integer :: i, j, k
-  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
 
   if (.not. associated(OBC)) return
   if (.not. associated(tv%T) .and. associated(tv%S)) return
@@ -3209,7 +3209,7 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
   real    :: min_depth
   integer, parameter  :: cin = 3, cout = 4, cland = -1, cedge = -2
   character(len=256) :: mesg    ! Message for error messages.
-  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   real, allocatable, dimension(:,:) :: color, color2  ! For sorting inside from outside,
                                                       ! two different ways
 

@@ -34,7 +34,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
   real :: zonal_flow
   integer :: i, j, k, l
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'supercritical_initialization.F90: '// &
         'supercritical_set_OBC_data() was called but OBC type was not initialized!')

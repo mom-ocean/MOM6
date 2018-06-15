@@ -274,7 +274,7 @@ subroutine calculate_density_second_derivs_array_linear(T, S,pressure,  drho_dS_
 
 end subroutine calculate_density_second_derivs_array_linear
 
-! #@# This subroutine needs a doxygen description.
+!> Calculate the derivatives of specific volume with temperature and salinity
 subroutine calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, &
                              start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
   real,    intent(in),  dimension(:) :: T         !< Potential temperature relative to the surface
@@ -288,19 +288,11 @@ subroutine calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, &
   integer, intent(in)                :: start     !< The starting point in the arrays.
   integer, intent(in)                :: npts      !< The number of values to calculate.
   real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
-  real,    intent(in)                :: dRho_dT, dRho_dS !< The derivatives of density with
-                                                  !! temperature and salinity, in kg m-3 C-1
-                                                  !! and kg m-3 psu-1.
+  real,    intent(in)                :: dRho_dT   !< The derivative of density with
+                                                  !! temperature, in kg m-3 C-1.
+  real,    intent(in)                :: dRho_dS   !< The derivative of density with
+                                                  !! salinity, in kg m-3 psu-1.
 
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in g/kg.                                   *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     dSV_dT - the partial derivative of specific volume with *
-! *                     potential temperature, in m3 kg-1 K-1.         *
-! *  (out)     dSV_dS - the partial derivative of specific volume with *
-! *                      salinity, in m3 kg-1 / (g/kg).                *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
   real :: I_rho2
   integer :: j
 
@@ -364,7 +356,8 @@ end subroutine calculate_compress_linear
 subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa, &
                  bathyT, dz_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HII, HIO
+  type(hor_index_type), intent(in)  :: HII       !< The horizontal index type for the input arrays.
+  type(hor_index_type), intent(in)  :: HIO       !< The horizontal index type for the output arrays.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! in C.

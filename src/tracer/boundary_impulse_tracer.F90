@@ -38,9 +38,8 @@ integer, parameter :: NTR_MAX = 1
 
 type, public :: boundary_impulse_tracer_CS ; private
   integer :: ntr=NTR_MAX    ! The number of tracers that are actually used.
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+  logical :: coupled_tracers = .false. ! These tracers are not offered to the  coupler.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
@@ -56,8 +55,8 @@ type, public :: boundary_impulse_tracer_CS ; private
   real :: remaining_source_time ! How much longer (same units as the timestep) to
                                 ! inject the tracer at the surface
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   type(vardesc) :: tr_desc(NTR_MAX)

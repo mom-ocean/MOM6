@@ -1158,10 +1158,8 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   GoRho = GV%g_Earth / GV%Rho0
   nonLocalTrans(:,:) = 0.0
 
-!$OMP parallel do default(private) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho, &
-!$OMP                                  Waves,buoyFlux)                             &
-
   ! loop over horizontal points on processor
+  !$OMP parallel do default(shared)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 

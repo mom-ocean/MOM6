@@ -47,10 +47,15 @@ contains
 !! southern edge of the domain. The temperatures are then converted to densities of the top and bottom layers
 !! and linearly interpolated for the intermediate layers.
 subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
-  real, dimension(NKMEM_), intent(out) :: Rlay, g_prime
+  real, dimension(NKMEM_), intent(out) :: Rlay !< Layer potential density.
+  real, dimension(NKMEM_), intent(out) :: g_prime !< The reduced gravity at
+                                                  !! each interface, in m s-2.
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
-  type(EOS_type),          pointer     :: eqn_of_state
+  type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
+                                                     !! equation of state.
+
+
   real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
   integer                              :: k, nz
   character(len=40)  :: mdl = "BFB_set_coord" ! This subroutine's name.
@@ -87,12 +92,14 @@ end subroutine BFB_set_coord
 !> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
 !! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
 subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
-  type(ocean_grid_type), intent(in)                   :: G    !< The ocean's grid structure
-  logical,               intent(in)                   :: use_temperature
-  type(thermo_var_ptrs), intent(in)                   :: tv   !< A structure pointing to various thermodynamic variables
-  type(param_file_type), intent(in)                   :: param_file !< A structure to parse for run-time parameters
-  type(sponge_CS),       pointer                      :: CSp
-  real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  logical,               intent(in) :: use_temperature !< If true, temperature and salinity are used as
+                                            !! state variables.
+  type(thermo_var_ptrs), intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(sponge_CS),       pointer    :: CSp  !< A pointer to the sponge control structure
+  real, dimension(NIMEM_, NJMEM_, NKMEM_), &
+                         intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   !call MOM_error(FATAL, &
   ! "BFB_initialization.F90, BFB_initialize_sponges: " // &
   ! "Unmodified user routine called - you must edit the routine to use it")
