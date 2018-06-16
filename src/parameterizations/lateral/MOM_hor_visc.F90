@@ -22,118 +22,124 @@ implicit none ; private
 
 public horizontal_viscosity, hor_visc_init, hor_visc_end
 
+!> Control structure for horizontal viscosity
 type, public :: hor_visc_CS ; private
-  logical :: Laplacian       ! Use a Laplacian horizontal viscosity if true.
-  logical :: biharmonic      ! Use a biharmonic horizontal viscosity if true.
-  logical :: no_slip         ! If true, no slip boundary conditions are used.
-                             ! Otherwise free slip boundary conditions are assumed.
-                             ! The implementation of the free slip boundary
-                             ! conditions on a C-grid is much cleaner than the
-                             ! no slip boundary conditions. The use of free slip
-                             ! b.c.s is strongly encouraged. The no slip b.c.s
-                             ! are not implemented with the biharmonic viscosity.
-  logical :: bound_Kh        ! If true, the Laplacian coefficient is locally
-                             ! limited to guarantee stability.
-  logical :: better_bound_Kh ! If true, use a more careful bounding of the
-                             ! Laplacian viscosity to guarantee stability.
-  logical :: bound_Ah        ! If true, the biharmonic coefficient is locally
-                             ! limited to guarantee stability.
-  logical :: better_bound_Ah ! If true, use a more careful bounding of the
-                             ! biharmonic viscosity to guarantee stability.
-  real    :: bound_coef      ! The nondimensional coefficient of the ratio of
-                             ! the viscosity bounds to the theoretical maximum
-                             ! for stability without considering other terms.
-                             ! The default is 0.8.
-  logical :: Smagorinsky_Kh  ! If true, use Smagorinsky nonlinear eddy
-                             ! viscosity. KH is the background value.
-  logical :: Smagorinsky_Ah  ! If true, use a biharmonic form of Smagorinsky
-                             ! nonlinear eddy viscosity. AH is the background.
-  logical :: Leith_Kh        ! If true, use 2D Leith nonlinear eddy
-                             ! viscosity. KH is the background value.
-  logical :: Modified_Leith  ! If true, use extra component of Leith viscosity
-                             ! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
-  logical :: Leith_Ah        ! If true, use a biharmonic form of 2D Leith
-                             ! nonlinear eddy viscosity. AH is the background.
-  logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
-                             ! viscosity is modified to include a term that
-                             ! scales quadratically with the velocity shears.
-  logical :: use_Kh_bg_2d    ! Read 2d background viscosity from a file.
-  real    :: Kh_bg_min       ! The minimum value allowed for Laplacian horizontal
-                             ! viscosity. The default is 0.0
-  logical :: use_land_mask   ! Use the land mask for the computation of thicknesses
-                             ! at velocity locations. This eliminates the dependence on
-                             ! arbitrary values over land or outside of the domain.
-                             ! Default is False to maintain answers with legacy experiments
-                             ! but should be changed to True for new experiments.
+  logical :: Laplacian       !< Use a Laplacian horizontal viscosity if true.
+  logical :: biharmonic      !< Use a biharmonic horizontal viscosity if true.
+  logical :: no_slip         !< If true, no slip boundary conditions are used.
+                             !! Otherwise free slip boundary conditions are assumed.
+                             !! The implementation of the free slip boundary
+                             !! conditions on a C-grid is much cleaner than the
+                             !! no slip boundary conditions. The use of free slip
+                             !! b.c.s is strongly encouraged. The no slip b.c.s
+                             !! are not implemented with the biharmonic viscosity.
+  logical :: bound_Kh        !< If true, the Laplacian coefficient is locally
+                             !! limited to guarantee stability.
+  logical :: better_bound_Kh !< If true, use a more careful bounding of the
+                             !! Laplacian viscosity to guarantee stability.
+  logical :: bound_Ah        !< If true, the biharmonic coefficient is locally
+                             !! limited to guarantee stability.
+  logical :: better_bound_Ah !< If true, use a more careful bounding of the
+                             !! biharmonic viscosity to guarantee stability.
+  real    :: bound_coef      !< The nondimensional coefficient of the ratio of
+                             !! the viscosity bounds to the theoretical maximum
+                             !! for stability without considering other terms.
+                             !! The default is 0.8.
+  logical :: Smagorinsky_Kh  !< If true, use Smagorinsky nonlinear eddy
+                             !! viscosity. KH is the background value.
+  logical :: Smagorinsky_Ah  !< If true, use a biharmonic form of Smagorinsky
+                             !! nonlinear eddy viscosity. AH is the background.
+  logical :: Leith_Kh        !< If true, use 2D Leith nonlinear eddy
+                             !! viscosity. KH is the background value.
+  logical :: Modified_Leith  !< If true, use extra component of Leith viscosity
+                             !! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
+  logical :: Leith_Ah        !< If true, use a biharmonic form of 2D Leith
+                             !! nonlinear eddy viscosity. AH is the background.
+  logical :: bound_Coriolis  !< If true & SMAGORINSKY_AH is used, the biharmonic
+                             !! viscosity is modified to include a term that
+                             !! scales quadratically with the velocity shears.
+  logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
+  real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
+                             !! viscosity. The default is 0.0
+  logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
+                             !! at velocity locations. This eliminates the dependence on
+                             !! arbitrary values over land or outside of the domain.
+                             !! Default is False to maintain answers with legacy experiments
+                             !! but should be changed to True for new experiments.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_bg_xx,        &! The background Laplacian viscosity at h points, in units
-                      ! of m2 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_bg_2d,        &! The background Laplacian viscosity at h points, in units
-                      ! of m2 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Ah_bg_xx,        &! The background biharmonic viscosity at h points, in units
-                      ! of m4 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_Max_xx,       &! The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xx,       &! The maximum permitted biharmonic viscosity, m4 s-1.
-    Biharm_Const2_xx,&! A constant relating the biharmonic viscosity to the
-                      ! square of the velocity shear, in m4 s.  This value is
-                      ! set to be the magnitude of the Coriolis terms once the
-                      ! velocity differences reach a value of order 1/2 MAXVEL.
-
-    reduction_xx      ! The amount by which stresses through h points are reduced
-                      ! due to partial barriers. Nondimensional.
+    Kh_bg_xx,        &!< The background Laplacian viscosity at h points, in units
+                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+    Kh_bg_2d,        &!< The background Laplacian viscosity at h points, in units
+                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+    Ah_bg_xx,        &!< The background biharmonic viscosity at h points, in units
+                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+    Kh_Max_xx,       &!< The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xx,       &!< The maximum permitted biharmonic viscosity, m4 s-1.
+    Biharm_Const2_xx,&!< A constant relating the biharmonic viscosity to the
+                      !! square of the velocity shear, in m4 s.  This value is
+                      !! set to be the magnitude of the Coriolis terms once the
+                      !! velocity differences reach a value of order 1/2 MAXVEL.
+    reduction_xx      !< The amount by which stresses through h points are reduced
+                      !! due to partial barriers. Nondimensional.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_bg_xy,        &! The background Laplacian viscosity at q points, in units
-                      ! of m2 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Ah_bg_xy,        &! The background biharmonic viscosity at q points, in units
-                      ! of m4 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_Max_xy,       &! The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xy,       &! The maximum permitted biharmonic viscosity, m4 s-1.
-    Biharm_Const2_xy,&! A constant relating the biharmonic viscosity to the
-                      ! square of the velocity shear, in m4 s.  This value is
-                      ! set to be the magnitude of the Coriolis terms once the
-                      ! velocity differences reach a value of order 1/2 MAXVEL.
-    reduction_xy      ! The amount by which stresses through q points are reduced
-                      ! due to partial barriers. Nondimensional.
+    Kh_bg_xy,        &!< The background Laplacian viscosity at q points, in units
+                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+    Ah_bg_xy,        &!< The background biharmonic viscosity at q points, in units
+                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+    Kh_Max_xy,       &!< The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xy,       &!< The maximum permitted biharmonic viscosity, m4 s-1.
+    Biharm_Const2_xy,&!< A constant relating the biharmonic viscosity to the
+                      !! square of the velocity shear, in m4 s.  This value is
+                      !! set to be the magnitude of the Coriolis terms once the
+                      !! velocity differences reach a value of order 1/2 MAXVEL.
+    reduction_xy      !! The amount by which stresses through q points are reduced
+                      !! due to partial barriers. Nondimensional.
 
-! The following variables are precalculated combinations of metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dx2h, dy2h, &       ! dx^2  and dy^2  at h points, in m2
-    dx_dyT, dy_dxT      ! dx/dy and dy/dx at h points, nondim
+    dx2h,   & !< Pre-calculated dx^2 at h points, in m2
+    dy2h,   & !< Pre-calculated dy^2 at h points, in m2
+    dx_dyT, & !< Pre-calculated dx/dy at h points, nondim
+    dy_dxT    !< Pre-calculated dy/dx at h points, nondim
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    dx2q, dy2q, &       ! dx^2  and dy^2  at q points, in m2
-    dx_dyBu, dy_dxBu    ! dx/dy and dy/dx at q points, nondim
+    dx2q,    & !< Pre-calculated dx^2 at q points, in m2
+    dy2q,    & !< Pre-calculated dy^2 at q points, in m2
+    dx_dyBu, & !< Pre-calculated dx/dy at q points, nondim
+    dy_dxBu    !< Pre-calculated dy/dx at q points, nondim
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    Idx2dyCu, Idxdy2u   ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3
+    Idx2dyCu, & !< 1/(dx^2 dy) at u points, in m-3
+    Idxdy2u     !< 1/(dx dy^2) at u points, in m-3
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     Idx2dyCv, Idxdy2v   ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3
 
-! The following variables are precalculated time-invariant combinations of
-! parameters and metric terms.
+  ! The following variables are precalculated time-invariant combinations of
+  ! parameters and metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Laplac_Const_xx, &  ! Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xx, &  ! Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xx, & ! Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xx    ! Biharmonic metric-dependent constants (nondim)
+    Laplac_Const_xx,  & !< Laplacian  metric-dependent constants (nondim)
+    Biharm_Const_xx,  & !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_Const_xx, & !< Laplacian  metric-dependent constants (nondim)
+    Biharm5_Const_xx    !< Biharmonic metric-dependent constants (nondim)
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Laplac_Const_xy, &  ! Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xy, &  ! Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xy, & ! Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xy    ! Biharmonic metric-dependent constants (nondim)
+    Laplac_Const_xy,  & !< Laplacian  metric-dependent constants (nondim)
+    Biharm_Const_xy,  & !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_Const_xy, & !< Laplacian  metric-dependent constants (nondim)
+    Biharm5_Const_xy    !< Biharmonic metric-dependent constants (nondim)
 
   type(diag_ctrl), pointer :: diag => NULL() ! structure to regulate diagnostics
 
-  ! diagnostic ids
+  !>@{
+  !! Diagnostic id
   integer :: id_diffu     = -1, id_diffv         = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
+  !!@}
 
 end type hor_visc_CS
 
