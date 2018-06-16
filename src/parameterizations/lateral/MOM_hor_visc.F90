@@ -285,45 +285,41 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         "VarMix%Res_fn_q both need to be associated with Resoln_scaled_Kh.")
   endif
 
+  ! Coefficient for modified Leith
+  if (CS%Modified_Leith) then
+    mod_Leith = 1.0
+  else
+    mod_Leith = 0.0
+  endif
+
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
   use_MEKE_Ku = associated(MEKE%Ku)
 
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
 !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
 !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
+!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
+!$OMP                                  mod_Leith)                                     &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
 !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
-!$OMP                                  div_xx, div_xx_dx, div_xx_dy, mod_Leith,       &
+!$OMP                                  div_xx, div_xx_dx, div_xx_dy,                  &
 !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
-!    This code uses boundary conditions that are consistent with
-!  free slip and no normal flow boundary conditions.  The boundary
-!  conditions for the western boundary, for example, are:
-!    dv/dx = 0,  d^3v/dx^3 = 0,    u = 0,     d^2u/dx^2 = 0 .
-!  The overall scheme is second order accurate.
-!    All of the metric terms are retained, and the repeated use of
-!  the symmetric stress tensor insures that no stress is applied with
-!  no flow or solid-body rotation, even with non-constant values of
-!  of the biharmonic viscosity.
+    ! The following are the forms of the horizontal tension and horizontal
+    ! shearing strain advocated by Smagorinsky (1993) and discussed in
+    ! Griffies and Hallberg (2000).
 
-!  The following are the forms of the horizontal tension and hori-
-!  shearing strain advocated by Smagorinsky (1993) and discussed in
-!  Griffies and Hallberg (MWR, 2000).
+    ! Calculate horizontal tension
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       sh_xx(i,j) = (CS%DY_dxT(i,j)*(G%IdyCu(I,j) * u(I,j,k) - &
                                     G%IdyCu(I-1,j) * u(I-1,j,k)) - &
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
-      div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
-                          G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
-                         (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
-                          G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
-                                    (h(i,j,k) + h_neglect)
     enddo ; enddo
+
     ! Components for the shearing strain
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
@@ -331,7 +327,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     enddo ; enddo
 
     ! Interpolate the thicknesses to velocity points.
-    ! The extra wide halos are to accomodate the cross-corner-point projections
+    ! The extra wide halos are to accommodate the cross-corner-point projections
     ! in OBCs, which are not ordinarily be necessary, and might not be necessary
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
@@ -458,6 +454,20 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
     enddo ; endif
 
+    ! Calculate horizontal divergence (not from continuity) if needed.
+    ! h_u and h_v include modifications at OBCs from above.
+    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+        div_xx(i,j) = ((G%dyCu(I  ,j) * u(I  ,j,k) * h_u(I  ,j) - &
+                        G%dyCu(I-1,j) * u(I-1,j,k) * h_u(I-1,j) ) + &
+                       (G%dxCv(i,J  ) * v(i,J  ,k) * h_v(i,J  ) - &
+                        G%dxCv(i,J-1) * v(i,J-1,k) * h_v(i,J-1) ) )*G%IareaT(i,j)/ &
+                                  (h(i,j,k) + h_neglect)
+      enddo ; enddo
+    endif
+
+    ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
+    ! dudy and dvdx include modifications at OBCs from above.
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
@@ -468,27 +478,29 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
     endif
 
-    if (CS%no_slip) then
-      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
-    else
-      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
-    endif
-
-! Vorticity gradient
-    do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
-      vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
-    enddo ; enddo
-
-    do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
-      vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
-    enddo ; enddo
-
-! Divergence gradient
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      ! Calculate relative vorticity (including no-slip boundary conditions at the 2-D land-sea mask).
+      ! dudy and dvdx include modifications at OBCs from above.
+      if (CS%no_slip) then
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      else
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      endif
+
+      ! Vorticity gradient
+      do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+        vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
+      enddo ; enddo
+
+      do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+        vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
+      enddo ; enddo
+
+      ! Divergence gradient
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
         div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
       enddo ; enddo
@@ -498,14 +510,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
     endif
 
-! Coefficient for modified Leith
-    if (CS%Modified_Leith) then
-      mod_Leith = 1.0
-    else
-      mod_Leith = 0.0
-    endif
-
-!  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
+    !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
         u0(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*sh_xx(i+1,j) - CS%DY2h(i,j)*sh_xx(i,j)) + &
@@ -588,8 +593,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif ! Laplacian
 
       if (CS%biharmonic) then
-!       Determine the biharmonic viscosity at h points, using the
-!       largest value from several parameterizations.
+        ! Determine the biharmonic viscosity at h points, using the
+        ! largest value from several parameterizations.
         AhSm = 0.0; AhLth = 0.0
         if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah)) then
           if (CS%Smagorinsky_Ah) then
@@ -676,8 +681,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
-!      hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
-!          ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
+      !hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
+      !    ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
       hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
           ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
 
@@ -789,8 +794,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
     enddo ; enddo
 
+    ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
     do j=js,je ; do I=Isq,Ieq
-!  Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
       diffu(I,j,k) = ((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
@@ -811,7 +816,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo
     endif
 
-!  Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
+    ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
       diffv(i,J,k) = ((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
@@ -833,7 +838,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
-    ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
+      ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
               (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
@@ -898,7 +903,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   enddo ! end of k loop
 
-! Offer fields for diagnostic averaging.
+  ! Offer fields for diagnostic averaging.
   if (CS%id_diffu>0)     call post_data(CS%id_diffu, diffu, CS%diag)
   if (CS%id_diffv>0)     call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
@@ -916,7 +921,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     enddo
     call post_data(CS%id_FrictWorkIntz, FrictWorkIntz, CS%diag)
   endif
-
 
 end subroutine horizontal_viscosity
 
