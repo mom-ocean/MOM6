@@ -776,6 +776,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
                         u_last, v_last, H_node
   real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! An array indicating where the ice
                                                 ! shelf is floating: 0 if floating, 1 if not.
+  character(len=160) :: mesg  ! The text of an error message
   integer :: conv_flag, i, j, k,l, iter
   integer :: isdq, iedq, jsdq, jedq, isd, ied, jsd, jed, isumstart, jsumstart, nodefloat, nsub
   real                     :: err_max, err_tempu, err_tempv, err_init, area, max_vel, tempu, tempv, rhoi, rhow
@@ -909,7 +910,8 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
 
   call max_across_PEs(err_init)
 
-  if (is_root_pe()) print *,"INITIAL nonlinear residual: ",err_init
+  write(mesg,*) "ice_shelf_solve_outer: INITIAL nonlinear residual = ",err_init
+  call MOM_mesg(mesg, 5)
 
   u_last(:,:) = u(:,:) ; v_last(:,:) = v(:,:)
 
@@ -925,7 +927,8 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
       call qchksum(v, "v shelf", G%HI, haloshift=2)
     endif
 
-    if (is_root_pe()) print *,"linear solve done",iters," iterations"
+    write(mesg,*) "ice_shelf_solve_outer: linear solve done in ",iters," iterations"
+    call MOM_mesg(mesg, 5)
 
     call calc_shelf_visc(CS, ISS, G, u, v)
     call pass_var(CS%ice_visc, G%domain)
@@ -1001,11 +1004,12 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
 
     endif
 
-    if (is_root_pe()) print *,"nonlinear residual: ",err_max/err_init
+    write(mesg,*) "ice_shelf_solve_outer: nonlinear residual = ",err_max/err_init
+    call MOM_mesg(mesg, 5)
 
     if (err_max <= CS%nonlinear_tolerance * err_init) then
-      if (is_root_pe()) &
-        print *,"exiting nonlinear solve after ",iter," iterations"
+      write(mesg,*) "ice_shelf_solve_outer: exiting nonlinear solve after ",iter," iterations"
+      call MOM_mesg(mesg, 5)
       exit
     endif
 
@@ -1882,6 +1886,7 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
   integer :: iter_flag
 
   real :: h_reference, dxh, dyh, dxdyh, rho, partial_vol, tot_flux
+  character(len=160) :: mesg  ! The text of an error message
   integer, dimension(4) :: mapi, mapj, new_partial
 !   real, dimension(size(flux_enter,1),size(flux_enter,2),size(flux_enter,2)) :: flux_enter_replace
   real, dimension(SZDI_(G),SZDJ_(G),4) :: flux_enter_replace
@@ -2011,7 +2016,10 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
 
   call max_across_PEs(iter_count)
 
-  if (is_root_pe() .and. (iter_count > 1)) print *, iter_count, "MAX ITERATIONS,ADVANCE FRONT"
+  if (is_root_pe() .and. (iter_count > 1)) then
+    write(mesg,*) "shelf_advance_front: ", iter_count, " max iterations"
+    call MOM_mesg(mesg, 5)
+  endif
 
 end subroutine shelf_advance_front
 
