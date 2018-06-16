@@ -1694,7 +1694,8 @@ end subroutine hor_visc_end
 !!   - A function of
 !! latitude, \f$\kappa_{\phi}(x,y) = \kappa_{\pi/2} |\sin(\phi)|^n\f$.
 !!   - A dynamic Smagorinsky viscosity, \f$\kappa_{Sm}(x,y,t) = C_{Sm} \Delta^2 \sqrt{\dot{e}_T^2 + \dot{e}_S^2}\f$.
-!!   - A dynamic Leith viscosity, \f$\kappa_{Lth}(x,y,t) = C_{Lth} \Delta^3 \sqrt{|\nabla \zeta|^2 + |\nabla \dot{e}_D|^2}\f$.
+!!   - A dynamic Leith viscosity, \f$\kappa_{Lth}(x,y,t) =
+!!                                    C_{Lth} \Delta^3 \sqrt{|\nabla \zeta|^2 + |\nabla \dot{e}_D|^2}\f$.
 !!
 !! A maximum stable viscosity, \f$\kappa_{max}(x,y)\f$ is calculated based on the
 !! grid-spacing and time-step and used to clip calculated viscosities.

@@ -684,14 +684,17 @@ end subroutine
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
 !! mixing to the interface diffusivities.
 subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
-  integer,                                  intent(in)    :: j     !< The j-index to work on
-  type(ocean_grid_type),                    intent(in)    :: G     !< Grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV    !< ocean vertical grid structure
-  type(tidal_mixing_cs),                    pointer       :: CS    !< This module's control structure.
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(in)    :: N2_int !< The squared buoyancy frequency at the
+  integer,                 intent(in)    :: j     !< The j-index to work on
+  type(ocean_grid_type),   intent(in)    :: G     !< Grid structure.
+  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  type(tidal_mixing_cs),   pointer       :: CS    !< This module's control structure.
+  real, dimension(SZI_(G),SZK_(G)+1), &
+                           intent(in)    :: N2_int !< The squared buoyancy frequency at the
                                                                    !! interfaces, in s-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd    !< The diapycnal diffusivities in the layers, in m2 s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: Kd    !< The diapycnal diffusivities in the layers, in m2 s-1
 
   ! local
   real, dimension(SZK_(G)+1) :: Kd_tidal    !< tidal diffusivity [m2/s]
@@ -700,7 +703,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   real, dimension(SZK_(G)+1) :: SchmittnerSocn
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
-  real, dimension(SZK_(G))   :: tidal_qe_md !< Tidal dissipation energy interpolated from 3d input to model coordinates
+  real, dimension(SZK_(G))   :: tidal_qe_md !< Tidal dissipation energy interpolated from 3d input
+                                            !! to model coordinates
   real, dimension(SZK_(G))   :: Schmittner_coeff
   real, dimension(SZK_(G))   :: h_m         !< Cell thickness [m]
   real, allocatable, dimension(:,:) :: exp_hab_zetar
@@ -962,6 +966,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   real :: TKE_lowmode_tot ! TKE from all low modes (W/m2) (BDM)
 
   logical :: use_Polzin, use_Simmons
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, k, is, ie, nz
   integer :: a, fr, m
   type(tidal_mixing_diags), pointer :: dd => NULL()
@@ -1112,8 +1117,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
       ! TODO: uncomment the following call and fix it
       !call get_lowmode_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
-      print *, "========", __FILE__, __LINE__
-      call MOM_error(FATAL,"this block not supported yet. (aa)")
+      write (mesg,*) "========", __FILE__, __LINE__
+      call MOM_error(FATAL,trim(mesg)//": this block not supported yet. (aa)")
 
       TKE_lowmode_bot(i) = CS%Mu_itides * I_rho0 * TKE_lowmode_tot
     endif
@@ -1571,7 +1576,7 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
   !do j=G%jsd,G%jed
   !  do i=isd,ied
   !    if ( i+G%idg_offset .eq. 90 .and. j+G%jdg_offset .eq. 126) then
-  !      print *, "-------------------------------------------"
+  !      write(1905,*) "-------------------------------------------"
   !      do k=50,nz_in(1)
   !          write(1905,*) i,j,k
   !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)

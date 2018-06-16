@@ -583,7 +583,8 @@ subroutine initialize_segment_data(G, OBC, PF)
 
     call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
     if (num_fields == 0) then
-        print *,'num_fields = 0';cycle ! cycle to next segment
+      call MOM_mesg('initialize_segment_data: num_fields = 0')
+      cycle ! cycle to next segment
     endif
 
     allocate(segment%field(num_fields))
@@ -1216,7 +1217,6 @@ end subroutine parse_segment_str
         call abort()
      endif
 
-     print *,'00001x'
     ! Process first word which will start with the fieldname
      word3 = extract_word(segment_str,',',m)
 !     word1 = extract_word(word3,':',1)
@@ -1226,7 +1226,6 @@ end subroutine parse_segment_str
         method=trim(extract_word(word1,'=',2))
         lword=len_trim(method)
         read(method(1:lword),*,err=987) param_value
-        print *,'00002x'
         ! if (method(lword-3:lword) == 'file') then
         !    ! raise an error id filename/fieldname not in argument list
         !    word1 = extract_word(word3,':',2)
