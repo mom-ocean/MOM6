@@ -1609,8 +1609,8 @@ end subroutine hor_visc_end
 !! \f[
 !! \dot{\bf e} =
 !! \begin{pmatrix}
-!! \frac{1}{2} \left( \dot{e}_D + \dot{e}_T \right) & \dot{e}_S \\\\
-!! \dot{e}_S & \frac{1}{2} \left( \dot{e}_D - \dot{e}_T \right)
+!! \frac{1}{2} \left( \dot{e}_D + \dot{e}_T \right) & \frac{1}{2} \dot{e}_S \\\\
+!! \frac{1}{2} \dot{e}_S & \frac{1}{2} \left( \dot{e}_D - \dot{e}_T \right)
 !! \end{pmatrix}
 !! \f]
 !! where \f$\dot{e}_D = \partial_x u + \partial_y v\f$ is the horizontal divergence,
@@ -1737,6 +1737,66 @@ end subroutine hor_visc_end
 !! These boundary conditions are largely dictated by the use of an Arakawa
 !! C-grid and by the varying layer thickness.
 !!
+!! \subsection section_anisotropic_viscosity Anisotropic viscosity
+!!
+!! Large et al., 2001, proposed enhancing viscosity in a particular direction and the
+!! approach was generalized in Smith and McWilliams, 2003. We use the second form of their
+!! two coefficient anisotropic viscosity (section 4.3). We also replace their
+!! \f$A^\prime\f$ nd $D$ such that \f$2A^\prime = 2 \kappa_h + D\f$ and
+!! \f$\kappa_a = D$ so that \f$\kappa_h\f$ can be considered the isotropic
+!! viscosity and \f$\kappa_a=D\f$ can be consider the anisotropic viscosity. The
+!! direction of anisotropy is defined by a unit vector \f$\hat{\bf
+!! n}=(n_1,n_2)\f$.
+!!
+!! The contributions to the stress tensor are
+!! \f[
+!! \begin{pmatrix}
+!! \sigma_T \\\\ \sigma_S
+!! \end{pmatrix}
+!! =
+!! \left[
+!! \begin{pmatrix}
+!! 2 \kappa_h + \kappa_a & 0 \\\\
+!! 0 & 2 \kappa_h
+!! \end{pmatrix}
+!! + 2 \kappa_a n_1 n_2
+!! \begin{pmatrix}
+!! - 2 n_1 n_2 & n_1^2 - n_2^2 \\\\
+!! n_1^2 - n_2^2 & 2 n_1 n_2
+!! \end{pmatrix}
+!! \right]
+!! \begin{pmatrix}
+!! \dot{e}_T \\\\ \dot{e}_S
+!! \end{pmatrix}
+!! \f]
+!! Dissipation of kinetic energy requires \f$\kappa_h \geq 0\f$ and \f$2 \kappa_h + \kappa_a \geq 0\f$.
+!! Note that when anisotropy is aligned with the x-direction, \f$n_1 = \pm 1\f$, then
+!! \f$n_2 = 0\f$ and the cross terms vanish. The accelerations in this aligned limit
+!! with constant coefficients become
+!! \f{eqnarray*}{
+!! \hat{\bf x} \cdot \nabla \cdot {\bf \sigma}
+!! & = &
+!! \partial_x \left( \left( \kappa_h + \frac{1}{2} \kappa_a \right) \dot{e}_T \right)
+!! + \partial_y \left( \kappa_h \dot{e}_S \right)
+!! \\\\
+!! & = &
+!! \left( \kappa_h + \kappa_a \right) \partial_{xx} u
+!! + \kappa_h \partial_{yy} u
+!! - \frac{1}{2} \kappa_a \partial_x \left( \partial_x u + \partial_y v \right)
+!! \\\\
+!! \hat{\bf y} \cdot \nabla \cdot {\bf \sigma}
+!! & = &
+!! \partial_x \left( \kappa_h \dot{e}_S \right)
+!! - \partial_y \left( \left( \kappa_h + \frac{1}{2} \kappa_a \right) \dot{e}_T \right)
+!! \\\\
+!! & = &
+!! \kappa_h \partial_{xx} v
+!! + \left( \kappa_h + \kappa_a \right) \partial_{yy} v
+!! - \frac{1}{2} \kappa_a \partial_y \left( \partial_x u + \partial_y v \right)
+!! \f}
+!! which has contributions akin to a negative divergence damping (a divergence
+!! enhancement?) but which is weaker than the enhanced tension terms by half.
+!!
 !! \subsection section_viscous_discretization Discretization
 !!
 !! The horizontal tension, \f$\dot{e}_T\f$, is stored in variable <code>sh_xx</code> and
@@ -1799,6 +1859,12 @@ end subroutine hor_visc_end
 !! Smagorinsky-like viscosity for use in large-scale eddy-permitting ocean models.
 !! Monthly Weather Review, 128(8), 2935-2946.
 !! https://doi.org/10.1175/1520-0493(2000)128%3C2935:BFWASL%3E2.0.CO;2
+!!
+!! Large, W.G., Danabasoglu, G., McWilliams, J.C., Gent, P.R. and Bryan, F.O.,
+!! 2001: Equatorial circulation of a global ocean climate model with
+!! anisotropic horizontal viscosity.
+!! Journal of Physical Oceanography, 31(2), pp.518-536.
+!! https://doi.org/10.1175/1520-0485(2001)031%3C0518:ECOAGO%3E2.0.CO;2
 !!
 !! Smagorinsky, J., 1993: Some historical remarks on the use of nonlinear
 !! viscosities. Large eddy simulation of complex engineering and geophysical
