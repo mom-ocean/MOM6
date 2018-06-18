@@ -60,12 +60,16 @@ type, public :: hor_visc_CS ; private
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
-                             !! viscosity. The default is 0.0
+                             !! viscosity, in m2 s-1. The default is 0.0
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
                              !! Default is False to maintain answers with legacy experiments
                              !! but should be changed to True for new experiments.
+  logical :: anisotropic     !< If true, allow anisotropic component to the viscosity.
+  real    :: Kh_aniso        !< The anisotropic viscosity in m2 s-1.
+  logical :: dynamic_aniso   !< If true, the anisotropic viscosity is recomputed as a function
+                             !! of state. This is set depending on ANISOTROPIC_MODE.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Kh_bg_xx,        &!< The background Laplacian viscosity at h points, in units
                       !! of m2 s-1. The actual viscosity may be the larger of this
@@ -82,8 +86,10 @@ type, public :: hor_visc_CS ; private
                       !! square of the velocity shear, in m4 s.  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
-    reduction_xx      !< The amount by which stresses through h points are reduced
+    reduction_xx,    &!< The amount by which stresses through h points are reduced
                       !! due to partial barriers. Nondimensional.
+    n1n2_h,          &!< Factor n1*n2 in the anisotropic direction tensor at h-points
+    n1n1_m_n2n2_h     !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Kh_bg_xy,        &!< The background Laplacian viscosity at q points, in units
@@ -98,8 +104,10 @@ type, public :: hor_visc_CS ; private
                       !! square of the velocity shear, in m4 s.  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
-    reduction_xy      !! The amount by which stresses through q points are reduced
+    reduction_xy,    &!! The amount by which stresses through q points are reduced
                       !! due to partial barriers. Nondimensional.
+    n1n2_q,          &!< Factor n1*n2 in the anisotropic direction tensor at q-points
+    n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     dx2h,   & !< Pre-calculated dx^2 at h points, in m2
@@ -961,6 +969,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
+  integer :: aniso_mode    ! Selects the mode for setting the anisotropic direction
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
@@ -992,6 +1001,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%bound_Coriolis = .false.
   CS%Modified_Leith = .false.
+  CS%anisotropic = .false.
+  CS%dynamic_aniso = .false.
 
   Kh = 0.0 ; Ah = 0.0
 
@@ -1056,6 +1067,23 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "If true, the Laplacian coefficient is locally limited \n"//&
                  "to be stable with a better bounding than just BOUND_KH.", &
                  default=CS%bound_Kh)
+    call get_param(param_file, mdl, "ANISOTROPIC_VISCOSITY", CS%anisotropic, &
+                 "If true, allow anistropic viscosity in the Laplacian\n"//&
+                 "horizontal viscosity.", default=.false.)
+  endif
+  if (CS%anisotropic .or. get_all) then
+    call get_param(param_file, mdl, "KH_ANISO", CS%Kh_aniso, &
+                 "The background Laplacian anisotropic horizontal viscosity.", &
+                 units = "m2 s-1", default=0.0)
+    call get_param(param_file, mdl, "ANISOTROPIC_MODE", aniso_mode, &
+                 "Selects the mode for setting the direction of anistropy.\n"//&
+                 "\t 0 - Points along the grid i-direction.\n"//&
+                 "\t 1 - Points towards East.\n"//&
+                 "\t 2 - Points along the flow direction, U/|U|.", &
+                 default=0)
+    if (aniso_mode == 2) then
+      CS%dynamic_aniso = .false.
+    endif
   endif
 
   call get_param(param_file, mdl, "BIHARMONIC", CS%biharmonic, &
@@ -1196,6 +1224,16 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
   ALLOC_(CS%reduction_xy(IsdB:IedB,JsdB:JedB)) ; CS%reduction_xy(:,:) = 0.0
+
+  if (CS%anisotropic) then
+    ALLOC_(CS%n1n2_h(isd:ied,jsd:jed)) ; CS%n1n2_h(:,:) = 0.0
+    ALLOC_(CS%n1n1_m_n2n2_h(isd:ied,jsd:jed)) ; CS%n1n1_m_n2n2_h(:,:) = 0.0
+    ALLOC_(CS%n1n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n2_q(:,:) = 0.0
+    ALLOC_(CS%n1n1_m_n2n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n1_m_n2n2_q(:,:) = 0.0
+    select case (aniso_mode)
+      case (0) ; call align_aniso_tensor_to_grid(CS, 1., 0.)
+    end select
+  endif
 
   if (CS%use_Kh_bg_2d) then
     ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
@@ -1527,6 +1565,26 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
 end subroutine hor_visc_init
 
+!> Calculates factors in the anisotropic orientation tensor to be align with the grid.
+!! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
+subroutine align_aniso_tensor_to_grid(CS, n1, n2)
+  type(hor_visc_CS), pointer :: CS !< Control structure for horizontal viscosity
+  real,              intent(in) :: n1 !< i-component of direction vector (nondim)
+  real,              intent(in) :: n2 !< j-component of direction vector (nondim)
+  ! Local variables
+  real :: recip_n2_norm
+
+  ! For normalizing n=(n1,n2) in case arguments are not a unit vector
+  recip_n2_norm = n1**2 + n2**2
+  if (recip_n2_norm > 0.) recip_n2_norm = 1./recip_n2_norm
+
+  CS%n1n2_h(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
+  CS%n1n2_q(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
+  CS%n1n1_m_n2n2_h(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
+  CS%n1n1_m_n2n2_q(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
+
+end subroutine align_aniso_tensor_to_grid
+
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
   type(hor_visc_CS), pointer :: CS !< The control structure returned by a
@@ -1567,6 +1625,12 @@ subroutine hor_visc_end(CS)
     if (CS%Leith_Ah) then
       DEALLOC_(CS%Biharm5_Const_xx) ; DEALLOC_(CS%Biharm5_Const_xy)
     endif
+  endif
+  if (CS%anisotropic) then
+    DEALLOC_(CS%n1n2_h)
+    DEALLOC_(CS%n1n2_q)
+    DEALLOC_(CS%n1n1_m_n2n2_h)
+    DEALLOC_(CS%n1n1_m_n2n2_q)
   endif
   deallocate(CS)
 
