@@ -147,8 +147,6 @@ type, public :: OBC_segment_type
                                                             !! segment (m3 s-1).
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
                                                             !! the OB segment (m s-1).
-  real, pointer, dimension(:,:)   :: normal_trans_bt=>NULL()!< The barotropic transport normal to
-                                                            !! the OB segment (m3 s-1).
   real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment (m).
   real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
                                                             !! segment (m s-1)
@@ -498,6 +496,8 @@ subroutine open_boundary_config(G, param_file, OBC)
 
 end subroutine open_boundary_config
 
+!> Allocate space for reading OBC data from files. It sets up the required vertical
+!! remapping. In the process, it does funky stuff with the MPI processes.
 subroutine initialize_segment_data(G, OBC, PF)
   use mpp_mod, only : mpp_pe, mpp_set_current_pelist, mpp_get_current_pelist,mpp_npes
 
@@ -562,6 +562,13 @@ subroutine initialize_segment_data(G, OBC, PF)
        check_remapping=check_remapping, force_bounds_in_subcell=force_bounds_in_subcell)
 
   if (OBC%user_BCs_set_globally) return
+
+  ! Try this here just for the documentation. It is repeated below.
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
+    call get_param(PF, mdl, segnam, segstr, 'OBC segment docs')
+  enddo
 
   !< temporarily disable communication in order to read segment data independently
 
@@ -1354,7 +1361,8 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 end subroutine open_boundary_impose_normal_slope
 
 !> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed.
-!! Also adjust u- and v-point cell area on specified open boundaries.
+!! Also adjust u- and v-point cell area on specified open boundaries and mask all
+!! points outside open boundaries.
 subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),            intent(inout) :: G !< Ocean grid structure
@@ -1372,6 +1380,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
     if (.not. segment%on_pe) cycle
     if (segment%is_E_or_W) then
       ! Sweep along u-segments and delete the OBC for blocked points.
+      ! Also, mask all points outside.
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
         if (G%mask2dCu(I,j) == 0) OBC%segnum_u(I,j) = OBC_NONE
@@ -2242,7 +2251,6 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Htot(IsdB:IedB,jsd:jed));                segment%Htot(:,:)=0.0
     allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));            segment%h(:,:,:)=0.0
     allocate(segment%eta(IsdB:IedB,jsd:jed));                 segment%eta(:,:)=0.0
-    allocate(segment%normal_trans_bt(IsdB:IedB,jsd:jed));     segment%normal_trans_bt(:,:)=0.0
     if (segment%radiation) then
       allocate(segment%rx_normal(IsdB:IedB,jsd:jed,OBC%ke));  segment%rx_normal(:,:,:)=0.0
     endif
@@ -2278,7 +2286,6 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Htot(isd:ied,JsdB:JedB));                segment%Htot(:,:)=0.0
     allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke));            segment%h(:,:,:)=0.0
     allocate(segment%eta(isd:ied,JsdB:JedB));                 segment%eta(:,:)=0.0
-    allocate(segment%normal_trans_bt(isd:ied,JsdB:JedB));     segment%normal_trans_bt(:,:)=0.0
     if (segment%radiation) then
       allocate(segment%ry_normal(isd:ied,JsdB:JedB,OBC%ke));  segment%ry_normal(:,:,:)=0.0
     endif
@@ -2323,7 +2330,6 @@ subroutine deallocate_OBC_segment_data(OBC, segment)
   if (associated (segment%Htot)) deallocate(segment%Htot)
   if (associated (segment%h)) deallocate(segment%h)
   if (associated (segment%eta)) deallocate(segment%eta)
-  if (associated (segment%normal_trans_bt)) deallocate(segment%normal_trans_bt)
   if (associated (segment%rx_normal)) deallocate(segment%rx_normal)
   if (associated (segment%ry_normal)) deallocate(segment%ry_normal)
   if (associated (segment%normal_vel)) deallocate(segment%normal_vel)
@@ -2452,6 +2458,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   real, dimension(:), allocatable :: h_stack
   integer :: is_obc2, js_obc2
   real :: net_H_src, net_H_int, scl_fac
+  real, pointer, dimension(:,:)   :: normal_trans_bt=>NULL() ! barotropic transport
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2484,6 +2491,8 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
      ! calculate auxiliary fields at staggered locations
     ishift=0;jshift=0
     if (segment%is_E_or_W) then
+      allocate(normal_trans_bt(segment%HI%IsdB:segment%HI%IedB,segment%HI%jsd:segment%HI%jed))
+      normal_trans_bt(:,:)=0.0
       if (segment%direction == OBC_DIRECTION_W) ishift=1
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
@@ -2495,6 +2504,8 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         enddo
       enddo
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
+      allocate(normal_trans_bt(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB))
+      normal_trans_bt(:,:)=0.0
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
@@ -2784,28 +2795,28 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           if (trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) then
             I=is_obc
             do j=js_obc+1,je_obc
-              segment%normal_trans_bt(I,j) = 0.0
+              normal_trans_bt(I,j) = 0.0
               do k=1,G%ke
                 segment%normal_vel(I,j,k) = segment%field(m)%buffer_dst(I,j,k)
                 segment%normal_trans(I,j,k) = segment%field(m)%buffer_dst(I,j,k)*segment%h(I,j,k) * &
                           G%dyCu(I,j)
-                segment%normal_trans_bt(I,j)= segment%normal_trans_bt(I,j)+segment%normal_trans(I,j,k)
+                normal_trans_bt(I,j) = normal_trans_bt(I,j)+segment%normal_trans(I,j,k)
               enddo
-              segment%normal_vel_bt(I,j) = segment%normal_trans_bt(I,j)/(max(segment%Htot(I,j),1.e-12) * &
+              segment%normal_vel_bt(I,j) = normal_trans_bt(I,j)/(max(segment%Htot(I,j),1.e-12) * &
                           G%dyCu(I,j))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(I,j,:) = segment%normal_vel(I,j,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
             J=js_obc
             do i=is_obc+1,ie_obc
-              segment%normal_trans_bt(i,J) = 0.0
+              normal_trans_bt(i,J) = 0.0
               do k=1,G%ke
                 segment%normal_vel(i,J,k) = segment%field(m)%buffer_dst(i,J,k)
                 segment%normal_trans(i,J,k) = segment%field(m)%buffer_dst(i,J,k)*segment%h(i,J,k) * &
                           G%dxCv(i,J)
-                segment%normal_trans_bt(i,J)= segment%normal_trans_bt(i,J)+segment%normal_trans(i,J,k)
+                normal_trans_bt(i,J) = normal_trans_bt(i,J)+segment%normal_trans(i,J,k)
               enddo
-              segment%normal_vel_bt(i,J) = segment%normal_trans_bt(i,J)/(max(segment%Htot(i,J),1.e-12) * &
+              segment%normal_vel_bt(i,J) = normal_trans_bt(i,J)/(max(segment%Htot(i,J),1.e-12) * &
                           G%dxCv(i,J))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
             enddo
@@ -2908,6 +2919,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
     enddo ! end field loop
     deallocate(h_stack)
+    deallocate(normal_trans_bt)
 
   enddo ! end segment loop
 
