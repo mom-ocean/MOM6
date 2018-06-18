@@ -558,23 +558,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if (CS%Laplacian) then
         ! Determine the Laplacian viscosity at h points, using the
         ! largest value from several parameterizations.
-        Kh_scale = 1.0 ; if (rescale_Kh) Kh_scale = VarMix%Res_fn_h(i,j)
-        KhSm = 0.0; KhLth = 0.0
-        if ((CS%Smagorinsky_Kh) .or. (CS%Leith_Kh)) then
-          if (CS%Smagorinsky_Kh) &
-            KhSm = CS%LAPLAC_CONST_xx(i,j) * Shear_mag
-          if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xx(i,j) * Vort_mag
-          Kh = Kh_scale * MAX(KhLth, MAX(CS%Kh_bg_xx(i,j), KhSm))
-          if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
-            Kh = MIN(Kh, CS%Kh_Max_xx(i,j))
-        else
-          Kh = Kh_scale * CS%Kh_bg_xx(i,j)
-        endif
+        Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xx(i,j) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xx(i,j) * Vort_mag )
+        ! Older method of bounding for stability
+        if (CS%bound_Kh .and. .not.CS%better_bound_Kh) Kh = MIN(Kh, CS%Kh_Max_xx(i,j))
+        ! All viscosity contributions above are subject to resolution scaling
+        if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
+        if (use_MEKE_Ku) Kh = Kh + MEKE%Ku(i,j) ! *Add* the MEKE contribution (might be negative)
 
-        if (use_MEKE_Ku) then
-          Kh = Kh + MEKE%Ku(i,j)
-        endif
+        ! Newer method of bounding for stability
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xx(i,j)) then
             visc_bound_rem = 0.0
@@ -715,26 +708,20 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if (CS%Laplacian) then
         ! Determine the Laplacian viscosity at q points, using the
         ! largest value from several parameterizations.
-        Kh_scale = 1.0 ; if (rescale_Kh) Kh_scale = VarMix%Res_fn_q(I,J)
-        KhSm = 0.0; KhLth = 0.0
-        if ((CS%Smagorinsky_Kh) .or. (CS%Leith_Kh)) then
-          if (CS%Smagorinsky_Kh) &
-            KhSm = CS%LAPLAC_CONST_xy(I,J) * Shear_mag
-          if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xy(I,J) * Vort_mag
-          Kh = Kh_scale * MAX(MAX(CS%Kh_bg_xy(I,J), KhSm), KhLth)
-          if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
-            Kh = MIN(Kh, CS%Kh_Max_xy(I,J))
-        else
-          Kh = Kh_scale * CS%Kh_bg_xy(I,J)
-        endif
-        if (use_MEKE_Ku) then
+        Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh,  CS%LAPLAC3_CONST_xy(I,J) * Vort_mag)
+        ! Older method of bounding for stability
+        if (CS%bound_Kh .and. .not.CS%better_bound_Kh) Kh = min(Kh, CS%Kh_Max_xy(I,J))
+        ! All viscosity contributions above are subject to resolution scaling
+        if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
+        if (use_MEKE_Ku) then ! *Add* the MEKE contribution (might be negative)
           Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
         endif
-        ! Place a floor on the viscosity, if desired.
-        Kh = MAX(Kh,CS%Kh_bg_min)
+        Kh = max(Kh,CS%Kh_bg_min) ! Place a floor on the viscosity, if desired.
 
+        ! Newer method of bounding for stability
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xy(I,J)) then
             visc_bound_rem = 0.0
