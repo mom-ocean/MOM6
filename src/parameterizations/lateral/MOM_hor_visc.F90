@@ -255,6 +255,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                     ! Laplacian viscosity is rescaled
   real :: RoScl     ! The scaling function for MEKE source term
   real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
+  real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
 
   logical :: rescale_Kh
   logical :: find_FrictWork
@@ -574,6 +575,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
         if (use_MEKE_Ku) Kh = Kh + MEKE%Ku(i,j) ! *Add* the MEKE contribution (might be negative)
+        if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * ( 1. - CS%n1n2_h(i,j)**2 ) ! *Add* the tension component
+                                                                               ! of anisotropic viscosity
 
         ! Newer method of bounding for stability
         if (CS%better_bound_Kh) then
@@ -592,6 +595,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       else   ! not Laplacian
         str_xx(i,j) = 0.0
       endif ! Laplacian
+
+      if (CS%anisotropic) then
+        ! Shearing-strain averaged to h-points
+        local_strain = 0.25 * ( (sh_xy(I,J) + sh_xy(I-1,J-1)) + (sh_xy(I-1,J) + sh_xy(I,J-1)) )
+        ! *Add* the shear-strain contribution to the xx-component of stress
+        str_xx(i,j) = str_xx(i,j) - CS%Kh_aniso * CS%n1n2_h(i,j) * CS%n1n1_m_n2n2_h(i,j) * local_strain
+      endif
 
       if (CS%biharmonic) then
         ! Determine the biharmonic viscosity at h points, using the
@@ -728,6 +738,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
         endif
         Kh = max(Kh,CS%Kh_bg_min) ! Place a floor on the viscosity, if desired.
+        if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * CS%n1n2_q(I,J)**2 ! *Add* the shear component
+                                                                            ! of anisotropic viscosity
 
         ! Newer method of bounding for stability
         if (CS%better_bound_Kh) then
@@ -746,6 +758,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       else   ! not Laplacian
         str_xy(I,J) = 0.0
       endif ! Laplacian
+
+      if (CS%anisotropic) then
+        ! Horizontal-tension averaged to q-points
+        local_strain = 0.25 * ( (sh_xx(i,j) + sh_xx(i+1,j+1)) + (sh_xx(i+1,j) + sh_xx(i,j+1)) )
+        ! *Add* the tension contribution to the xy-component of stress
+        str_xy(I,J) = str_xy(I,J) - CS%Kh_aniso * CS%n1n2_q(i,j) * CS%n1n1_m_n2n2_q(i,j) * local_strain
+      endif
 
       if (CS%biharmonic) then
       ! Determine the biharmonic viscosity at q points, using the
@@ -969,6 +988,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
+  real    :: aniso_grid_dir(2) ! Vector (n1,n2) for anisotropic direction
   integer :: aniso_mode    ! Selects the mode for setting the anisotropic direction
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -1081,9 +1101,18 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "\t 1 - Points towards East.\n"//&
                  "\t 2 - Points along the flow direction, U/|U|.", &
                  default=0)
-    if (aniso_mode == 2) then
-      CS%dynamic_aniso = .false.
-    endif
+    select case (aniso_mode)
+      case (0)
+        call get_param(param_file, mdl, "ANISO_GRID_DIR", aniso_grid_dir, &
+                 "The vector pointing in the direction of anistropy for\n"//&
+                 "horizont viscosity. n1,n2 are the i,j components relative\n"//&
+                 "to the grid.", units = "nondim", fail_if_missing=.true.)
+      case (1)
+        call get_param(param_file, mdl, "ANISO_GRID_DIR", aniso_grid_dir, &
+                 "The vector pointing in the direction of anistropy for\n"//&
+                 "horizont viscosity. n1,n2 are the i,j components relative\n"//&
+                 "to the spherical coordinates.", units = "nondim", fail_if_missing=.true.)
+    end select
   endif
 
   call get_param(param_file, mdl, "BIHARMONIC", CS%biharmonic, &
@@ -1231,7 +1260,15 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     ALLOC_(CS%n1n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n2_q(:,:) = 0.0
     ALLOC_(CS%n1n1_m_n2n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n1_m_n2n2_q(:,:) = 0.0
     select case (aniso_mode)
-      case (0) ; call align_aniso_tensor_to_grid(CS, 1., 0.)
+      case (0)
+        call align_aniso_tensor_to_grid(CS, aniso_grid_dir(1), aniso_grid_dir(2))
+      case (1)
+      ! call align_aniso_tensor_to_grid(CS, aniso_grid_dir(1), aniso_grid_dir(2))
+      case (2)
+        CS%dynamic_aniso = .true.
+      case default
+        call MOM_error(FATAL, "MOM_hor_visc: "//&
+             "Runtime parameter ANISOTROPIC_MODE is out of range.")
     end select
   endif
 
