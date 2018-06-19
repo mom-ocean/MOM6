@@ -10,10 +10,12 @@ module mom_cap_methods
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
   use MOM_domains,         only: pass_var
+  use MOM_error_handler,   only: is_root_pe
   use mpp_domains_mod,     only: mpp_get_compute_domain
 
   ! By default make data private
-  implicit none; private
+  implicit none
+  private
 
   ! Public member functions
   public :: ocn_export
@@ -22,6 +24,8 @@ module mom_cap_methods
   integer :: rc,dbrc
   integer :: import_cnt = 0
   character(len=1024) :: tmpstr
+
+  logical, parameter :: debug=.false.
 
 !-----------------------------------------------------------------------
 contains
@@ -279,17 +283,21 @@ contains
   !! See \ref section_ocn_import for a summary of the surface fluxes that are
   !! passed from MCT to MOM6, including fluxes that need to be included in
   !! the future.
-  subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary, rc)
+  subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary, logunit, clock, rc)
     type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
     type(ocean_grid_type)         , intent(in)    :: grid               !< Ocean model grid
     type(ESMF_State)              , intent(inout) :: importState        !< incoming data
     type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
+    type(ESMF_Clock)              , intent(in)    :: clock
+    integer                       , intent(in)    :: logunit 
     integer                       , intent(inout) :: rc 
 
-    integer :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec  !< Grid indices
-    real(ESMF_KIND_R8) :: c1,c2,c3,c4
-    integer :: lbnd1, lbnd2, ubnd1, ubnd2
-
+    ! Local Variables
+    integer                     :: i, j, i1, j1, ig, jg  ! Grid indices
+    integer                     :: isc, iec, jsc, jec    ! Grid indices
+    integer                     :: isc_bnd, jsc_bnd, ise_bnd, jse_bnd 
+    integer                     :: lbnd1, lbnd2, ubnd1, ubnd2
+    integer                     :: i0, j0, is, js, ie, je
     real(ESMF_KIND_R8), pointer :: dataPtr_p(:,:) 
     real(ESMF_KIND_R8), pointer :: dataPtr_ifrac(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_duu10n(:,:)
@@ -319,6 +327,9 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_prec(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rain(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_snow(:,:)
+    integer                     :: day, secs
+    type(ESMF_time)             :: currTime 
+    character(len=*), parameter :: F01  = "('(ocn_import) ',a,4(i6,2x),d21.14)"
     character(len=*), parameter :: subname = '(ocn_import)'
     !-----------------------------------------------------------------------
 
@@ -537,21 +548,44 @@ contains
              ice_ocean_boundary%lw_flux(i,j)         = (dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)) * GRID%mask2dT(ig,jg)
              ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)  * GRID%mask2dT(ig,jg) 
              ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)  * GRID%mask2dT(ig,jg) 
-             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndf(i1,j1)  * GRID%mask2dT(ig,jg) 
+             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)  * GRID%mask2dT(ig,jg) 
              ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)  * GRID%mask2dT(ig,jg) 
              ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1) * GRID%mask2dT(ig,jg)
+             ice_ocean_boundary%runoff(i,j)          = (dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)) * GRID%mask2dT(ig,jg)
              !ice_ocean_boundary%salt_flux(i,j)      = (dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)) * GRID%mask2dT(ig,jg)
              !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)  * GRID%mask2dT(ig,jg)
-             !ice_ocean_boundary%runoff(i,j)         = (dataPtr_rofl(i1,j1)+dataPtr_rofi(i1,j1)) * GRID%mask2dT(ig,jg)
-             !ice_ocean_boundary%u_flux(i,j) = (GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) + &
-             !                                  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1))
-             !ice_ocean_boundary%v_flux(i,j) = (GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) + &
-             !                                  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1))
-
+             !ice_ocean_boundary%u_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1))
+             !ice_ocean_boundary%v_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1))
           endif
-
        enddo
     enddo
+
+    ! debug output
+    if (import_cnt > 2 .and. debug .and. is_root_pe()) then
+       call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
+       call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
+
+       i0 = GRID%isc - isc 
+       j0 = GRID%jsc - jsc
+       do j = GRID%jsc, GRID%jec
+          do i = GRID%isc, GRID%iec
+             write(logunit,F01)'import: day, secs, j, i, u_flux          = ',day,secs,j,i,ice_ocean_boundary%u_flux(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, v_flux          = ',day,secs,j,i,ice_ocean_boundary%v_flux(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, lprec           = ',day,secs,j,i,ice_ocean_boundary%lprec(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i-i0,j-j0)
+            !write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, runoff          = ',day,secs,j,i,ice_ocean_boundary%runoff(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, psurf           = ',day,secs,j,i,ice_ocean_boundary%p(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, salt_flux       = ',day,secs,j,i,ice_ocean_boundary%salt_flux(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dir(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dif(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
+          end do
+       end do
+    end if
 
   end subroutine ocn_import
 

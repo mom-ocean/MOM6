@@ -400,6 +400,9 @@ module mom_cap_mod
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_SetScalar
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_GetScalar
   use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_Diagnose
+  use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit, shr_file_setIO
+  use shr_file_mod,             only: shr_file_getLogUnit, shr_file_getLogLevel
+  use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
 #endif
   use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
   use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
@@ -456,6 +459,7 @@ module mom_cap_mod
 
   type(ESMF_Grid)         :: mom_grid_i
 #ifdef CESMCOUPLED
+  integer                 :: logunit  ! logging unit number
   logical                 :: write_diagnostics = .false.
 #else
   logical                 :: write_diagnostics = .true.
@@ -474,6 +478,8 @@ module mom_cap_mod
   !-----------------------------------------------------------------------
   !------------------- Solo Ocean code starts here -----------------------
   !-----------------------------------------------------------------------
+
+  !===============================================================================
 
   !> NUOPC SetService method is the only public entry point.
   !! SetServices registers all of the user-provided subroutines
@@ -545,7 +551,7 @@ module mom_cap_mod
 
   end subroutine SetServices
 
-  !-----------------------------------------------------------------------------
+  !===============================================================================
 
   !> First initialize subroutine called by NUOPC.  The purpose
   !! is to set which version of the Initialize Phase Definition (IPD)
@@ -582,7 +588,7 @@ module mom_cap_mod
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-!    write_diagnostics=(trim(value)=="true")
+    !    write_diagnostics=(trim(value)=="true")
     call ESMF_LogWrite('MOM_CAP:DumpFields = '//trim(value), ESMF_LOGMSG_INFO, rc=dbrc)  
 
     call ESMF_AttributeGet(gcomp, name="ProfileMemory", value=value, defaultValue="true", &
@@ -637,7 +643,7 @@ module mom_cap_mod
     
   end subroutine
   
-  !-----------------------------------------------------------------------------
+  !===============================================================================
 
   !> Called by NUOPC to advertise import and export fields.  "Advertise"
   !! simply means that the standard names of all import and export
@@ -754,6 +760,7 @@ module mom_cap_mod
     !tcx    call data_override_init(ocean_domain_in = ocean_public%domain)
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+    write(6,*)'DEBUG: isc,iec,jsc,jec= ',isc,iec,jsc,jec
     call IOB_allocate(ice_ocean_boundary, isc, iec, jsc, jec)
 
     call external_coupler_sbc_init(ocean_public%domain, dt_cpld, Run_len)
@@ -827,7 +834,7 @@ module mom_cap_mod
 
   end subroutine InitializeAdvertise
   
-  !-----------------------------------------------------------------------------
+  !===============================================================================
 
   !> Called by NUOPC to realize import and export fields.  "Realizing" a field
   !! means that its grid has been defined and an ESMF_Field object has been
@@ -859,9 +866,10 @@ module mom_cap_mod
     integer                                :: nxg, nyg, cnt
     integer                                :: isc,iec,jsc,jec
     integer, allocatable                   :: xb(:),xe(:),yb(:),ye(:),pe(:)
-    integer, allocatable                   :: deBlockList(:,:,:), &
-                                              petMap(:),deLabelList(:), &
-                                              indexList(:)
+    integer, allocatable                   :: deBlockList(:,:,:)
+    integer, allocatable                   :: petMap(:)
+    integer, allocatable                   :: deLabelList(:)
+    integer, allocatable                   :: indexList(:)
     integer                                :: ioff, joff
     integer                                :: i, j, n, i1, j1, n1, icount
     integer                                :: lbnd1,ubnd1,lbnd2,ubnd2
@@ -878,9 +886,26 @@ module mom_cap_mod
     real(ESMF_KIND_R8), pointer            :: dataPtr_ycor(:,:)
     type(ESMF_Field)                       :: field_t_surf
     integer                                :: mpicom
+    integer                                :: localPet
+#ifdef CESMCOUPLED
+    integer            :: shrlogunit       ! original log unit
+    integer            :: shrloglev        ! original log level
+    integer            :: inst_index       ! number of current instance (ie. 1)
+    character(len=16)  :: inst_name        ! fullname of current instance (ie. "lnd_0001")
+    character(len=16)  :: inst_suffix = "" ! char string associated with instance (ie. "_0001" or "")
+    character(len=64)  :: cvalue
+    character(len=512) :: diro
+    character(len=512) :: logfile
+    logical            :: isPresent
+#endif
     character(len=*),parameter  :: subname='(mom_cap:InitializeRealize)'
+    !--------------------------------
     
     rc = ESMF_SUCCESS
+
+    !----------------------------------------------------------------------------
+    ! Get pointers to ocean internal state
+    !----------------------------------------------------------------------------
 
     call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -889,8 +914,12 @@ module mom_cap_mod
       return  ! bail out
 
     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
-    ocean_public          => ocean_internalstate%ptr%ocean_public_type_ptr
+    ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
+
+    !----------------------------------------------------------------------------
+    ! Get mpi information
+    !----------------------------------------------------------------------------
 
     call ESMF_VMGetCurrent(vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -898,11 +927,65 @@ module mom_cap_mod
       file=__FILE__)) &
       return  ! bail out
 
-    call ESMF_VMGet(vm, petCount=npet, mpiCommunicator=mpicom, rc=rc)
+    call ESMF_VMGet(vm, petCount=npet, mpiCommunicator=mpicom, localPet=localPet, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+#ifdef CESMCOUPLED
+    ! determine instance information 
+    call NUOPC_CompAttributeGet(gcomp, name="inst_name", value=inst_name, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+
+    call NUOPC_CompAttributeGet(gcomp, name="inst_index", value=cvalue, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    read(cvalue,*) inst_index 
+
+    call ESMF_AttributeGet(gcomp, name="inst_suffix", isPresent=isPresent, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    if (isPresent) then
+       call NUOPC_CompAttributeGet(gcomp, name="inst_suffix", value=inst_suffix, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+    else
+       inst_suffix = ''
+    end if
+
+    ! reset shr logging to my log file
+    if (localPet == 0) then
+       call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       logunit = shr_file_getUnit()
+       open(logunit,file=trim(diro)//"/"//trim(logfile))
+    else
+       logunit = 6
+    endif
+
+    call shr_file_getLogUnit (shrlogunit)
+    call shr_file_getLogLevel(shrloglev)
+    call shr_file_setLogLevel(max(shrloglev,1))
+    call shr_file_setLogUnit (logunit)
+#endif
 
     !---------------------------------
     ! global mom grid size
@@ -1389,9 +1472,15 @@ module mom_cap_mod
 
     write(*,*) '----- MOM initialization phase Realize completed'
 
+#ifdef CESMCOUPLED
+    ! Reset shr logging to original values
+    call shr_file_setLogUnit (shrlogunit)
+    call shr_file_setLogLevel(shrloglev)
+#endif
+
   end subroutine InitializeRealize
   
-  !-----------------------------------------------------------------------------
+  !===============================================================================
 
   subroutine DataInitialize(gcomp, rc)
     type(ESMF_GridComp)  :: gcomp
@@ -1400,14 +1489,18 @@ module mom_cap_mod
     ! local variables
     type(ESMF_Clock)                       :: clock
     type(ESMF_State)                       :: importState, exportState
-    type (ocean_public_type),      pointer :: ocean_public          => NULL()
+    type (ocean_public_type),      pointer :: ocean_public       => NULL()
     type (ocean_state_type),       pointer :: ocean_state        => NULL()
     type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
     type(ocean_internalstate_wrapper)      :: ocean_internalstate
-    type(ocean_grid_type), pointer :: ocean_grid
-    character(240)                 :: msgString
-    integer                        :: fieldCount, n
-    type(ESMF_Field)               :: field
+    type(ocean_grid_type), pointer         :: ocean_grid
+    character(240)                         :: msgString
+    integer                                :: fieldCount, n
+    type(ESMF_Field)                       :: field
+#ifdef CESMCOUPLED
+    integer            :: shrlogunit       ! original log unit
+    integer            :: shrloglev        ! original log level
+#endif
     character(len=64),allocatable  :: fieldNameList(:)
     character(len=*),parameter  :: subname='(mom_cap:DataInitialize)'
 
@@ -1485,7 +1578,8 @@ module mom_cap_mod
 
   end subroutine DataInitialize
 
-  !-----------------------------------------------------------------------------
+  !===============================================================================
+
   !> Called by NUOPC to advance the model a single timestep.
   !!  
   !! @param gcomp an ESMF_GridComp object
@@ -1503,38 +1597,35 @@ module mom_cap_mod
     type(ESMF_TimeInterval)                :: time_elapsed
     integer(ESMF_KIND_I8)                  :: n_interval, time_elapsed_sec
     character(len=64)                      :: timestamp
-
-    type (ocean_public_type),      pointer :: ocean_public          => NULL()
+    type (ocean_public_type),      pointer :: ocean_public       => NULL()
     type (ocean_state_type),       pointer :: ocean_state        => NULL()
     type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
     type(ocean_internalstate_wrapper)      :: ocean_internalstate
-
-    ! define some time types 
     type(time_type)                        :: Time        
     type(time_type)                        :: Time_step_coupled
     type(time_type)                        :: Time_restart_current
-
-    integer :: dth, dtm, dts, dt_cpld  = 86400
-    integer :: isc,iec,jsc,jec,lbnd1,ubnd1,lbnd2,ubnd2
-    integer :: i,j,i1,j1
-    integer :: nc
+    integer                                :: dth, dtm, dts, dt_cpld  = 86400
+    integer                                :: isc,iec,jsc,jec,lbnd1,ubnd1,lbnd2,ubnd2
+    integer                                :: i,j,i1,j1
+    integer                                :: nc
 #ifdef CESMCOUPLED
-    ! in ocn_import, ocn_export
+    integer                                :: shrlogunit       ! original log unit
+    integer                                :: shrloglev        ! original log level
 #else
     real(ESMF_KIND_R8), allocatable        :: ofld(:,:), ocz(:,:), ocm(:,:)
     real(ESMF_KIND_R8), allocatable        :: mmmf(:,:), mzmf(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_mask(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_mmmf(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_mzmf(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_ocz(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_ocm(:,:) 
-    real(ESMF_KIND_R8), pointer :: dataPtr_frazil(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_evap(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_sensi(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_mask(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_mmmf(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_mzmf(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_ocz(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_ocm(:,:) 
+    real(ESMF_KIND_R8), pointer            :: dataPtr_frazil(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_evap(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_sensi(:,:)
 #endif
-    type(ocean_grid_type), pointer :: ocean_grid
-    character(240)              :: msgString
-    character(len=*),parameter  :: subname='(mom_cap:ModelAdvance)'
+    type(ocean_grid_type), pointer         :: ocean_grid
+    character(240)                         :: msgString
+    character(len=*),parameter             :: subname='(mom_cap:ModelAdvance)'
 
     rc = ESMF_SUCCESS
     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
@@ -1554,8 +1645,16 @@ module mom_cap_mod
       return  ! bail out
 
     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
-    ocean_public          => ocean_internalstate%ptr%ocean_public_type_ptr
+    ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
+
+#ifdef CESMCOUPLED
+    ! Reset shr logging to my log file
+    call shr_file_getLogUnit (shrlogunit)
+    call shr_file_getLogLevel(shrloglev)
+    call shr_file_setLogLevel(max(shrloglev,1))
+    call shr_file_setLogUnit (logunit)
+#endif
 
     ! HERE THE MODEL ADVANCES: currTime -> currTime + timeStep
     
@@ -1642,12 +1741,7 @@ module mom_cap_mod
 !#endif
 
 #ifdef CESMCOUPLED
-    call ESMF_LogWrite(subname//' tcx call ocn_import', ESMF_LOGMSG_INFO, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call ocn_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
+    call ocn_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, logunit, clock, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -1892,7 +1986,15 @@ module mom_cap_mod
 
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
 
+#ifdef CESMCOUPLED
+    ! reset shr logging to my original values
+    call shr_file_setLogUnit (shrlogunit)
+    call shr_file_setLogLevel(shrloglev)
+#endif
+
   end subroutine ModelAdvance
+
+  !===============================================================================
 
   !> Called by NUOPC at the end of the run to clean up.
   !!
@@ -1950,8 +2052,9 @@ module mom_cap_mod
 
   end subroutine ocean_model_finalize
 
-!====================================================================
-! get forcing data from data_overide 
+  !====================================================================
+
+  ! get forcing data from data_overide 
   subroutine ice_ocn_bnd_from_data(x, Time, Time_step_coupled)
 
       type (ice_ocean_boundary_type) :: x
@@ -1979,7 +2082,6 @@ module mom_cap_mod
       !call data_override('OCN', 'p',               x%p              , Time_next)
             
   end subroutine ice_ocn_bnd_from_data
-
 
 !-----------------------------------------------------------------------------------------
 ! 
