@@ -828,12 +828,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%gradient = .true.
       OBC%segment(l_seg)%open = .true.
       OBC%open_u_BCs_exist_globally = .true.
-    elseif (trim(action_str(a_loop)) == 'LEGACY') then
-      OBC%segment(l_seg)%Flather = .true.
-      OBC%segment(l_seg)%radiation = .true.
-      OBC%Flather_u_BCs_exist_globally = .true.
-      OBC%open_u_BCs_exist_globally = .true.
-      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
@@ -944,12 +938,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%gradient = .true.
       OBC%segment(l_seg)%open = .true.
       OBC%open_v_BCs_exist_globally = .true.
-    elseif (trim(action_str(a_loop)) == 'LEGACY') then
-      OBC%segment(l_seg)%radiation = .true.
-      OBC%segment(l_seg)%Flather = .true.
-      OBC%Flather_v_BCs_exist_globally = .true.
-      OBC%open_v_BCs_exist_globally = .true.
-      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
