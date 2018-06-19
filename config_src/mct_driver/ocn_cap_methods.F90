@@ -1,9 +1,11 @@
 module ocn_cap_methods
 
+  use ESMF
   use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
   use MOM_domains,         only: pass_var
+  use MOM_error_handler,   only: is_root_pe
   use mpp_domains_mod,     only: mpp_get_compute_domain
   use ocn_cpl_indices,     only: cpl_indices_type
 
@@ -13,22 +15,28 @@ module ocn_cap_methods
   public :: ocn_import
   public :: ocn_export
 
-  logical, parameter :: debug=.true.
+  logical, parameter :: debug=.false.
 
 !=======================================================================
 contains
 !=======================================================================
 
-  subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, c1, c2, c3, c4)
-    real(kind=8)                  , intent(in)    :: x2o(:,:)           !< incoming data
-    type(cpl_indices_type)        , intent(in)    :: ind                !< Structure with MCT attribute vectors and indices
-    type(ocean_grid_type)         , intent(in)    :: grid               !< Ocean model grid
-    type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
-    real(kind=8), optional        , intent(in)    :: c1, c2, c3, c4     !< Coeffs. used in the shortwave decomposition
+  subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit, Eclock, c1, c2, c3, c4)
+    real(kind=8)                  , intent(in)    :: x2o(:,:)           ! incoming data
+    type(cpl_indices_type)        , intent(in)    :: ind                ! Structure with MCT attribute vects and indices
+    type(ocean_grid_type)         , intent(in)    :: grid               ! Ocean model grid
+    type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary ! Ocean boundary forcing
+    type(ocean_public_type)       , intent(in)    :: ocean_public       ! Ocean surface state
+    integer                       , intent(in)    :: logunit            ! Unit for stdout output
+    type(ESMF_Clock)              , intent(in)    :: EClock             ! Time and time step ? \todo Why must this
+    real(kind=8), optional        , intent(in)    :: c1, c2, c3, c4     ! Coeffs. used in the shortwave decomposition
 
     ! Local variables
-    integer :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec  !< Grid indices
-    integer :: k !< temporary
+    integer         :: i, j, ig, jg, isc, iec, jsc, jec  ! Grid indices
+    integer         :: k        
+    integer         :: day, secs, rc
+    type(ESMF_time) :: currTime 
+    character(*), parameter :: F01  = "('(ocn_import) ',a,4(i6,2x),d21.14)"
     !-----------------------------------------------------------------------
 
     isc = GRID%isc; iec = GRID%iec ; jsc = GRID%jsc; jec = GRID%jec
@@ -94,6 +102,30 @@ contains
           end if
        end do
     end do
+
+    if (debug .and. is_root_pe()) then
+       call ESMF_ClockGet(EClock, CurrTime=CurrTime, rc=rc)
+       call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
+
+       do j = GRID%jsc, GRID%jec
+          do i = GRID%isc, GRID%iec
+             write(logunit,F01)'import: day, secs, j, i, u_flux          = ',day,secs,j,i,ice_ocean_boundary%u_flux(i,j)
+             write(logunit,F01)'import: day, secs, j, i, v_flux          = ',day,secs,j,i,ice_ocean_boundary%v_flux(i,j)
+             write(logunit,F01)'import: day, secs, j, i, lprec           = ',day,secs,j,i,ice_ocean_boundary%lprec(i,j)
+             write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i,j)
+             write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i,j)
+             write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i,j)
+             write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',day,secs,j,i,ice_ocean_boundary%latent_flux(i,j)
+             write(logunit,F01)'import: day, secs, j, i, runoff          = ',day,secs,j,i,ice_ocean_boundary%rofl_flux(i,j) + ice_ocean_boundary%rofi_flux(i,j) 
+             write(logunit,F01)'import: day, secs, j, i, psurf           = ',day,secs,j,i,ice_ocean_boundary%p(i,j)
+             write(logunit,F01)'import: day, secs, j, i, salt_flux       = ',day,secs,j,i,ice_ocean_boundary%salt_flux(i,j)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dir(i,j)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dif(i,j)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i,j)
+             write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i,j)
+          end do
+       end do
+    end if
 
   end subroutine ocn_import
 
