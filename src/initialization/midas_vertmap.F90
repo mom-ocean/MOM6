@@ -158,6 +158,7 @@ contains
   end function beta_wright_eos_2d
 !< End stand-alone functions
 ! -----------------------------------------------------------------------------
+#endif
 
 !> Layer model routine for remapping tracers
   function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,i_debug,j_debug) result(tr)
@@ -334,7 +335,6 @@ contains
 !>  insert just after the rightmost x already there.
 !>  Optional args lo (default 1) and hi (default len(a)) bound the
 !>  slice of a to be searched.
-
   function bisect_fast(a, x, lo, hi) result(bi_r)
     real, dimension(:,:), intent(in) :: a !< a - sorted list
     real, dimension(:), intent(in) :: x !< x - item to be inserted
@@ -531,25 +531,9 @@ contains
 !> of each layer that overlaps that depth range.
 !> Note that by convention, e decreases with increasing k and Z_top > Z_bot.
   subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
-
-    !
-    ! Arguments: e - A column's interface heights, in m.
-    !  (in)      Z_top -
-    !  (in)      Z_bot -
-    !  (in)      k_max -
-    !  (in)      k_start -
-    !  (out)     k_top, k_bot -
-    !
-
-    !  (out)     wt -
-    !  (out)     z1, z2 -
-    !
-    !
-    !
-
-    real, dimension(:), intent(in) :: e
+    real, dimension(:), intent(in) :: e !< the interface positions, in m.
     real, intent(in)   :: Z_top !< The top of the range being mapped to, in m.
-    real, intent(in)   :: Zbot !< The bottom of the range being mapped to, in m.
+    real, intent(in)   :: Z_bot !< The bottom of the range being mapped to, in m.
     integer, intent(in) :: k_max !< The number of valid layers.
     integer, intent(in) :: k_start !< The layer at which to start searching.
     integer, intent(out) :: k_top, k_bot !< The indices of the top and bottom layers that overlap with the depth range.
@@ -638,6 +622,7 @@ contains
 
   end function find_limited_slope
 
+!> Find interface positions corresponding to density profile
   function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
     real, dimension(:,:,:), &
          intent(in) :: rho !< potential density in z-space (kg m-3)
@@ -863,7 +848,7 @@ contains
 !> fill grid edges
   function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
     integer, dimension(:,:), intent(in) :: m !< input array
-    logical, intent(in) :: cyclic_x
+    logical, intent(in) :: cyclic_x !< zonal cyclic condition
     logical, intent(in) :: tripolar_n  !< northern fold condition
     real, dimension(size(m,1),size(m,2)) :: m_real
     real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
@@ -881,8 +866,8 @@ contains
 
 !> fill grid edges
   function fill_boundaries_real(m,cyclic_x,tripolar_n) result(mp)
-    integer, dimension(:,:), intent(in) :: m !< input array
-    logical, intent(in) :: cyclic_x
+    real, dimension(:,:), intent(in) :: m !< input array
+    logical, intent(in) :: cyclic_x !< zonal cyclic condition
     logical, intent(in) :: tripolar_n  !< northern fold condition
     real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp !< output filled array
 
