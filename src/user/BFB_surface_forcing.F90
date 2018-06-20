@@ -23,6 +23,7 @@ use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
+use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
@@ -53,29 +54,34 @@ type, public :: BFB_surface_forcing_CS ; private
                              ! forcing ramp
   real :: SST_n              ! SST at the northern edge of the linear
                              ! forcing ramp
-  real :: lfrslat              ! Southern latitude where the linear forcing ramp
+  real :: lfrslat            ! Southern latitude where the linear forcing ramp
                              ! begins
-  real :: lfrnlat              ! Northern latitude where the linear forcing ramp
+  real :: lfrnlat            ! Northern latitude where the linear forcing ramp
                              ! ends
   real :: drho_dt            ! Rate of change of density with temperature.
                              ! Note that temperature is being used as a dummy
                              ! variable here. All temperatures are converted
                              ! into density.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
 end type BFB_surface_forcing_CS
 
 contains
 
 subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
-  type(forcing),                 intent(inout) :: fluxes
-  type(time_type),               intent(in)    :: day
-  real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply, in s
-  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(BFB_surface_forcing_CS),  pointer       :: CS
+  type(surface),                intent(inout) :: state  !< A structure containing fields that
+                                                      !! describe the surface state of the ocean.
+  type(forcing),                intent(inout) :: fluxes !< A structure containing pointers to any
+                                                      !! possible forcing fields. Unused fields
+                                                      !! have NULL ptrs.
+  type(time_type),              intent(in)    :: day  !< Time of the fluxes.
+  real,                         intent(in)    :: dt   !< The amount of time over which
+                                                      !! the fluxes apply, in s
+  type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure
+  type(BFB_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure
+                                                      !! returned by a previous call to
+                                                      !! BFB_surface_forcing_init.
 
 !    This subroutine specifies the current surface fluxes of buoyancy or
 !  temperature and fresh water.  It may also be modified to add
@@ -123,19 +129,19 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
   if (CS%use_temperature) then
-    call alloc_if_needed(fluxes%evap, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%fprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lrunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%frunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%vprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%evap, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%fprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lrunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%frunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%vprec, isd, ied, jsd, jed)
 
-    call alloc_if_needed(fluxes%sw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%latent, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%sens, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%latent, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sens, isd, ied, jsd, jed)
   else ! This is the buoyancy only mode.
-    call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%buoy, isd, ied, jsd, jed)
   endif
 
 
@@ -169,7 +175,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
-      call alloc_if_needed(fluxes%heat_added, isd, ied, jsd, jed)
+      call safe_alloc_ptr(fluxes%heat_added, isd, ied, jsd, jed)
       !   When modifying the code, comment out this error message.  It is here
       ! so that the original (unmodified) version is not accidentally used.
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
@@ -219,24 +225,13 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 
 end subroutine BFB_buoyancy_forcing
 
-subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
-  ! If ptr is not associated, this routine allocates it with the given size
-  ! and zeros out its contents.  This is equivalent to safe_alloc_ptr in
-  ! MOM_diag_mediator, but is here so as to be completely transparent.
-  real, pointer :: ptr(:,:)
-  integer :: isd, ied, jsd, jed
-  if (.not.associated(ptr)) then
-    allocate(ptr(isd:ied,jsd:jed))
-    ptr(:,:) = 0.0
-  endif
-end subroutine alloc_if_needed
-
 subroutine BFB_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),                            intent(in) :: Time
-  type(ocean_grid_type),                      intent(in) :: G    !< The ocean's grid structure
-  type(param_file_type),                      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,                    intent(in) :: diag
-  type(BFB_surface_forcing_CS), pointer    :: CS
+  type(time_type),              intent(in) :: Time !< The current model time.
+  type(ocean_grid_type),        intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(diag_ctrl), target,      intent(in) :: diag !< A structure that is used to
+                                                   !! regulate diagnostic output.
+  type(BFB_surface_forcing_CS), pointer    :: CS   !< A pointer to the control structure for this module
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for

@@ -868,7 +868,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (CS%SW_METHOD == SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
       elseif (CS%SW_METHOD == SW_METHOD_MXL_SW) then
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1) ! We know the actual buoyancy flux into the OBL
+         ! We know the actual buoyancy flux into the OBL
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1)
       elseif (CS%SW_METHOD == SW_METHOD_LV1_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
@@ -1158,10 +1159,8 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   GoRho = GV%g_Earth / GV%Rho0
   nonLocalTrans(:,:) = 0.0
 
-!$OMP parallel do default(private) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho, &
-!$OMP                                  Waves,buoyFlux)                             &
-
   ! loop over horizontal points on processor
+  !$OMP parallel do default(shared)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -1505,8 +1504,10 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
 
   ! local
   real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_original ! Original OBL depths computed by CVMix
-  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m) (negative in ocean)
+  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m)
+                                                        ! (negative in the ocean)
+  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m)
+                                                        ! (negative in the ocean)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   real :: dh                 ! The local thickness used for calculating interface positions (m)
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers (m)

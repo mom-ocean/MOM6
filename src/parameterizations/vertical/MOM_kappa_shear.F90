@@ -85,8 +85,8 @@ type, public :: Kappa_shear_CS ; private
                              ! no good reason why this should be false.
   logical :: layer_stagger = .false.
   logical :: debug = .false.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                            ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                             ! regulate the timing of diagnostic output.
   integer :: id_Kd_shear = -1, id_TKE = -1
   integer :: id_ILd2 = -1, id_dz_Int = -1
 end type Kappa_shear_CS
@@ -129,8 +129,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface
                                                    !! (not layer!) in m2 s-1. This discards any
-                                                   !! previous value i.e. intent(out) and simply
-                                                   !! sets Kv = Prandtl * Kd_shear
+                                                   !! previous value (i.e. it is intent out) and
+                                                   !! simply sets Kv = Prandtl * Kd_shear
   real,                    intent(in)    :: dt     !< Time increment, in s.
   type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to kappa_shear_init.
@@ -156,7 +156,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !                     the iteration toward convergence.
 !  (in/out)  kv_io - The vertical viscosity at each interface
 !                    (not layer!) in m2 s-1. This discards any previous value
-!                    i.e. intent(out) and simply sets Kv = Prandtl * Kd_shear
+!                    (i.e. it is intent out) and simply sets Kv = Prandtl * Kd_shear
 !  (in)      dt - Time increment, in s.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.

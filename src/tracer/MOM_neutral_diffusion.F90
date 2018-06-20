@@ -80,8 +80,8 @@ type, public :: neutral_diffusion_CS ; private
   integer, allocatable, dimension(:,:)     :: ns     ! Number of interfacs in a column
   logical, allocatable, dimension(:,:,:) :: stable_cell  ! True if the cell is stably stratified wrt
                                                          ! to the next cell
-
-  type(diag_ctrl), pointer :: diag ! structure to regulate output
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   integer :: id_uhEff_2d = -1
   integer :: id_vhEff_2d = -1
 

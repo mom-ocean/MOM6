@@ -26,8 +26,8 @@ type, public :: user_change_diff_CS ; private
                         ! Kd_add is added, in kg m-3.
   logical :: use_abs_lat  ! If true, use the absolute value of latitude when
                           ! setting lat_range.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                          ! regulate the timing of diagnostic output.
 end type user_change_diff_CS
 
 contains

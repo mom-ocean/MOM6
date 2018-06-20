@@ -171,7 +171,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
   integer :: IsdB, IedB, JsdB, JedB
   real    :: fac, x, y, x1, y1
   real    :: val1, val2, sina, cosa
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed

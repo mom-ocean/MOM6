@@ -399,7 +399,7 @@ end subroutine alloc_BT_cont_type
 
 !> dealloc_BT_cont_type deallocates the arrays contained within a BT_cont_type.
 subroutine dealloc_BT_cont_type(BT_cont)
-  type(BT_cont_type), pointer :: BT_cont
+  type(BT_cont_type), pointer :: BT_cont !< The BT_cont_type whose elements will be deallocated.
 
   if (.not.associated(BT_cont)) return
 

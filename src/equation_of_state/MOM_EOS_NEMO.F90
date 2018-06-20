@@ -337,9 +337,13 @@ end subroutine calculate_density_derivs_array_nemo
 
 !> Wrapper to calculate_density_derivs_array for scalar inputs
 subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
-  real,    intent(in)  :: T, S, pressure
-  real,    intent(out) :: drho_dt
-  real,    intent(out) :: drho_ds
+  real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,    intent(in)  :: S        !< Salinity in PSU.
+  real,    intent(in)  :: pressure !< Pressure in Pa.
+  real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                   !! temperature, in kg m-3 K-1.
+  real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                   !! in kg m-3 psu-1.
   ! Local variables
   real :: al0, p0, lambda
   integer :: j

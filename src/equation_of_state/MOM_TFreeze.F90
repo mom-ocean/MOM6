@@ -26,11 +26,20 @@ end interface calculate_TFreeze_teos10
 
 contains
 
+!>  This subroutine computes the freezing point potential temparature
+!!  (in deg C) from salinity (in psu), and pressure (in Pa) using a simple
+!!  linear expression, with coefficients passed in as arguments.
 subroutine calculate_TFreeze_linear_scalar(S, pres, T_Fr, TFr_S0_P0, &
                                            dTFr_dS, dTFr_dp)
-  real,    intent(in)  :: S, pres
-  real,    intent(out) :: T_Fr
-  real,    intent(in)  :: TFr_S0_P0, dTFr_dS, dTFr_dp
+  real,  intent(in)  :: S         !< salinity in PSU.
+  real,  intent(in)  :: pres      !< pressure in Pa.
+  real,  intent(out) :: T_Fr      !< Freezing point potential temperature in deg C.
+  real,  intent(in)  :: TFr_S0_P0 !< The freezing point at S=0, p=0, in deg C.
+  real,  intent(in)  :: dTFr_dS   !< The derivative of freezing point with salinity,
+                                  !! in deg C PSU-1.
+  real,  intent(in)  :: dTFr_dp   !< The derivative of freezing point with pressure,
+                                  !! in deg C Pa-1.
+
 !    This subroutine computes the freezing point potential temparature
 !  (in deg C) from salinity (in psu), and pressure (in Pa) using a simple
 !  linear expression, with coefficients passed in as arguments.
@@ -48,7 +57,7 @@ subroutine calculate_TFreeze_linear_scalar(S, pres, T_Fr, TFr_S0_P0, &
 
 end subroutine calculate_TFreeze_linear_scalar
 
-!>  This subroutine computes the freezing point potential temparature
+!>  This subroutine computes an array of freezing point potential temparatures
 !!  (in deg C) from salinity (in psu), and pressure (in Pa) using a simple
 !!  linear expression, with coefficients passed in as arguments.
 subroutine calculate_TFreeze_linear_array(S, pres, T_Fr, start, npts, &

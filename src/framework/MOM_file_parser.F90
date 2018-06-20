@@ -146,7 +146,7 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   logical :: file_exists, unit_in_use, Netcdf_file, may_check
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
 
   may_check = .true. ; if (present(checkable)) may_check = checkable
 
@@ -1248,11 +1248,12 @@ end subroutine flag_line_as_read
 
 !> Returns true if an override warning has been issued for the variable varName
 function overrideWarningHasBeenIssued(chain, varName)
-  type(link_parameter), pointer    :: chain
+  type(link_parameter), pointer    :: chain   !< The linked list of variables that have already had
+                                              !! override warnings issued
   character(len=*),     intent(in) :: varName !< The name of the variable being queried for warnings
   logical                          :: overrideWarningHasBeenIssued
 ! Returns true if an override warning has been issued for the variable varName
-  type(link_parameter), pointer :: newLink, this
+  type(link_parameter), pointer :: newLink => NULL(), this => NULL()
   overrideWarningHasBeenIssued = .false.
   this => chain
   do while( associated(this) )
@@ -2023,7 +2024,7 @@ subroutine clearParameterBlock(CS)
   type(param_file_type), intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
 ! Resets the parameter block name to blank
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = ''
@@ -2040,7 +2041,7 @@ subroutine openParameterBlock(CS,blockName,desc)
   character(len=*),           intent(in) :: blockName !< The name of a parameter block being added
   character(len=*), optional, intent(in) :: desc    !< A description of the parameter block being added
 ! Tags blockName onto the end of the active parameter block name
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = pushBlockLevel(block%name,blockName)
@@ -2056,7 +2057,7 @@ subroutine closeParameterBlock(CS)
   type(param_file_type), intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
 ! Remove the lowest level of recursion from the active block name
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
 
   if (associated(CS%blockName)) then
     block => CS%blockName

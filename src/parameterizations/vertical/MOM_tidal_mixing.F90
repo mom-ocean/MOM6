@@ -643,18 +643,32 @@ end function tidal_mixing_init
 !! diffusivities.
 subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     N2_lay, N2_int, Kd, Kd_int, Kd_max)
-  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G)),                 intent(in)    :: N2_bot
-  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(in)    :: N2_int
-  integer,                                  intent(in)    :: j
-  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: TKE_to_Kd, max_TKE
-  type(tidal_mixing_cs),                    pointer       :: CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
-  real,                                     intent(inout) :: Kd_max
+  type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
+  type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy
+                                                            !! frequency, in s-2.
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
+                                                            !! layers, in s-2.
+  real, dimension(SZI_(G),SZK_(G)+1), intent(in)  :: N2_int !< The squared buoyancy frequency at the
+                                                            !! interfaces, in s-2.
+  integer,                          intent(in)    :: j      !< The j-index to work on
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
+                                                            !! TKE dissipated within  a layer and the
+                                                            !! diapycnal diffusivity witin that layer,
+                                                            !! usually (~Rho_0 / (G_Earth * dRho_lay)),
+                                                            !! in m2 s-1 / m3 s-3 = s2 m-1
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
+                                                            !! to its maximum realizable thickness, in m3 s-3
+  type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(inout) :: Kd     !< The diapycnal diffusvity in layers, in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in m2 s-1.
+  real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
+                                                            !! diffusivity due to TKE-based processes, in m2 s-1.
+                                                            !! Set this to a negative value to have no limit.
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
@@ -670,13 +684,17 @@ end subroutine
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
 !! mixing to the interface diffusivities.
 subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
-  integer,                                  intent(in)    :: j
-  type(ocean_grid_type),                    intent(in)    :: G     !< Grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV    !< ocean vertical grid structure
-  type(tidal_mixing_cs),                    pointer       :: CS    !< This module's control structure.
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(in)    :: N2_int
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
+  integer,                 intent(in)    :: j     !< The j-index to work on
+  type(ocean_grid_type),   intent(in)    :: G     !< Grid structure.
+  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  type(tidal_mixing_cs),   pointer       :: CS    !< This module's control structure.
+  real, dimension(SZI_(G),SZK_(G)+1), &
+                           intent(in)    :: N2_int !< The squared buoyancy frequency at the
+                                                                   !! interfaces, in s-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: Kd    !< The diapycnal diffusivities in the layers, in m2 s-1
 
   ! local
   real, dimension(SZK_(G)+1) :: Kd_tidal    !< tidal diffusivity [m2/s]
@@ -685,7 +703,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   real, dimension(SZK_(G)+1) :: SchmittnerSocn
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
-  real, dimension(SZK_(G))   :: tidal_qe_md !< Tidal dissipation energy interpolated from 3d input to model coordinates
+  real, dimension(SZK_(G))   :: tidal_qe_md !< Tidal dissipation energy interpolated from 3d input
+                                            !! to model coordinates
   real, dimension(SZK_(G))   :: Schmittner_coeff
   real, dimension(SZK_(G))   :: h_m         !< Cell thickness [m]
   real, allocatable, dimension(:,:) :: exp_hab_zetar
@@ -695,7 +714,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3]
                                      ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
   real :: h_neglect, h_neglect_edge
-  type(tidal_mixing_diags), pointer :: dd
+  type(tidal_mixing_diags), pointer :: dd => NULL()
 
   is  = G%isc ; ie  = G%iec
   dd => CS%dd
@@ -877,17 +896,30 @@ end subroutine calculate_CVMix_tidal
 !! Froude-number-depending breaking, PSI, etc.).
 subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     N2_lay, Kd, Kd_int, Kd_max)
-  type(ocean_grid_type),                      intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G)),                   intent(in)    :: N2_bot
-  real, dimension(SZI_(G),SZK_(G)),           intent(in)    :: N2_lay
-  integer,                                    intent(in)    :: j
-  real, dimension(SZI_(G),SZK_(G)),           intent(in)    :: TKE_to_Kd, max_TKE
-  type(tidal_mixing_cs),                      pointer       :: CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Kd
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
-  real,                                       intent(inout) :: Kd_max
+  type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
+  type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy frequency
+                                                            !! frequency, in s-2.
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
+                                                            !! layers, in s-2.
+  integer,                          intent(in)    :: j      !< The j-index to work on
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
+                                                            !! TKE dissipated within  a layer and the
+                                                            !! diapycnal diffusivity witin that layer,
+                                                            !! usually (~Rho_0 / (G_Earth * dRho_lay)),
+                                                            !! in m2 s-1 / m3 s-3 = s2 m-1
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
+                                                            !! to its maximum realizable thickness, in m3 s-3
+  type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(inout) :: Kd     !< The diapycnal diffusvity in layers, in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in m2 s-1.
+  real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
+                                                            !! diffusivity due to TKE-based processes, in m2 s-1.
+                                                            !! Set this to a negative value to have no limit.
 
   ! This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
   ! The mechanisms considered are (1) local dissipation of internal waves generated by the
@@ -934,9 +966,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   real :: TKE_lowmode_tot ! TKE from all low modes (W/m2) (BDM)
 
   logical :: use_Polzin, use_Simmons
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, k, is, ie, nz
   integer :: a, fr, m
-  type(tidal_mixing_diags), pointer :: dd
+  type(tidal_mixing_diags), pointer :: dd => NULL()
 
   is = G%isc ; ie = G%iec ; nz = G%ke
   dd => CS%dd
@@ -1084,8 +1117,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
       ! TODO: uncomment the following call and fix it
       !call get_lowmode_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
-      print *, "========", __FILE__, __LINE__
-      call MOM_error(FATAL,"this block not supported yet. (aa)")
+      write (mesg,*) "========", __FILE__, __LINE__
+      call MOM_error(FATAL,trim(mesg)//": this block not supported yet. (aa)")
 
       TKE_lowmode_bot(i) = CS%Mu_itides * I_rho0 * TKE_lowmode_tot
     endif
@@ -1269,12 +1302,12 @@ end subroutine add_int_tide_diffusivity
 
 !> Sets up diagnostics arrays for tidal mixing.
 subroutine setup_tidal_diagnostics(G,CS)
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
-  type(tidal_mixing_cs),    pointer       :: CS
+  type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure
+  type(tidal_mixing_cs), pointer    :: CS !< The control structure for this module
 
   ! local
   integer :: isd, ied, jsd, jed, nz
-  type(tidal_mixing_diags), pointer :: dd
+  type(tidal_mixing_diags), pointer :: dd => NULL()
 
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = G%ke
   dd => CS%dd
@@ -1355,18 +1388,19 @@ subroutine setup_tidal_diagnostics(G,CS)
   endif
 end subroutine setup_tidal_diagnostics
 
-subroutine post_tidal_diagnostics(G,GV,h,CS)
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),   intent(in)   :: GV   !< The ocean's vertical grid structure.
+!> This subroutine offers up diagnostics of the tidal mixing.
+subroutine post_tidal_diagnostics(G, GV, h ,CS)
+  type(ocean_grid_type),    intent(in)   :: G   !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in)   :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)   :: h   !< Layer thicknesses, in H (usually m or kg m-2).
-  type(tidal_mixing_cs),    pointer       :: CS
+                            intent(in)   :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+  type(tidal_mixing_cs),    pointer      :: CS  !< The control structure for this module
 
   ! local
   integer :: num_z_diags
   integer   :: z_ids(6)     ! id numbers of diagns to be interpolated to depth space
   type(p3d) :: z_ptrs(6)    ! pointers to diagns to be interpolated into depth space
-  type(tidal_mixing_diags), pointer :: dd
+  type(tidal_mixing_diags), pointer :: dd => NULL()
 
   num_z_diags = 0
   dd => CS%dd
@@ -1446,11 +1480,12 @@ subroutine post_tidal_diagnostics(G,GV,h,CS)
 end subroutine post_tidal_diagnostics
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
+!> This subroutine read tidal energy inputs from a file.
 subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
-  type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure
-  character(len=20),      intent(in)  :: tidal_energy_type
-  character(len=200),     intent(in)  :: tidal_energy_file
-  type(tidal_mixing_cs),  pointer     :: CS
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  character(len=20),     intent(in) :: tidal_energy_type !< The type of tidal energy inputs to read
+  character(len=200),    intent(in) :: tidal_energy_file !< The file from which to read tidalinputs
+  type(tidal_mixing_cs), pointer    :: CS   !< The control structure for this module
   ! local
   integer :: isd, ied, jsd, jed, nz
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
@@ -1465,19 +1500,18 @@ subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
     CS%tidal_qe_2d = (CS%Gamma_itides) * tidal_energy_flux_2d
     deallocate(tidal_energy_flux_2d)
   case ('ER03') ! Egbert & Ray 2003
-    call read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
+    call read_tidal_constituents(G, tidal_energy_file, CS)
   case default
     call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
   end select
 
 end subroutine read_tidal_energy
 
-
-subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
-  type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure
-  character(len=20),      intent(in)  :: tidal_energy_type
-  character(len=200),     intent(in)  :: tidal_energy_file
-  type(tidal_mixing_cs),  pointer     :: CS
+!> This subroutine reads tidal input energy from a file by constituent.
+subroutine read_tidal_constituents(G, tidal_energy_file, CS)
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  character(len=200),    intent(in) :: tidal_energy_file !< The file from which to read tidal energy inputs
+  type(tidal_mixing_cs), pointer    :: CS   !< The control structure for this module
 
   ! local
   integer               :: k, isd, ied, jsd, jed, i,j
@@ -1542,7 +1576,7 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
   !do j=G%jsd,G%jed
   !  do i=isd,ied
   !    if ( i+G%idg_offset .eq. 90 .and. j+G%jdg_offset .eq. 126) then
-  !      print *, "-------------------------------------------"
+  !      write(1905,*) "-------------------------------------------"
   !      do k=50,nz_in(1)
   !          write(1905,*) i,j,k
   !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)
@@ -1579,10 +1613,10 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
 
 end subroutine read_tidal_constituents
 
-
 !> Clear pointers and deallocate memory
 subroutine tidal_mixing_end(CS)
-  type(tidal_mixing_cs), pointer :: CS ! This module's control structure
+  type(tidal_mixing_cs), pointer :: CS !< This module's control structure, which
+                                       !! will be deallocated in this routine.
 
   if (.not.associated(CS)) return
 

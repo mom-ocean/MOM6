@@ -219,10 +219,9 @@ end subroutine calculate_density_derivs_array_wright
 !> The scalar version of calculate_density_derivs which promotes scalar inputs to a 1-element array and then
 !! demotes the output back to a scalar
 subroutine calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_dS)
-  real,    intent(in) :: T        !< Potential temperature relative to the surface
-                                  !! in C.
-  real,    intent(in) :: S        !< Salinity in PSU.
-  real,    intent(in) :: pressure !< Pressure in Pa.
+  real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,    intent(in)  :: S        !< Salinity in PSU.
+  real,    intent(in)  :: pressure !< Pressure in Pa.
   real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
                                    !! temperature, in kg m-3 K-1.
   real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
@@ -409,7 +408,8 @@ end subroutine calculate_compress_wright
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa, &
                                  bathyT, dz_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HII, HIO
+  type(hor_index_type), intent(in)  :: HII      !< The horizontal index type for the input arrays.
+  type(hor_index_type), intent(in)  :: HIO      !< The horizontal index type for the output arrays.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: T        !< Potential temperature relative to the surface
                                                 !! in C.
@@ -613,7 +613,7 @@ end subroutine int_density_dz_wright
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, &
                                   bathyP, dP_neglect, useMassWghtInterp)
-  type(hor_index_type), intent(in)  :: HI
+  type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! in C.

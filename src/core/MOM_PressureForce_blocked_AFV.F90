@@ -839,7 +839,8 @@ end subroutine PressureForce_blk_AFV_init
 
 !> Deallocates the finite volume pressure gradient control structure
 subroutine PressureForce_blk_AFV_end(CS)
-  type(PressureForce_blk_AFV_CS), pointer :: CS
+  type(PressureForce_blk_AFV_CS), pointer :: CS !< Blocked AFV pressure control structure that
+                                                !! will be deallocated in this subroutine.
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_blk_AFV_end
 

@@ -341,21 +341,14 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
 
 end subroutine tracer_flow_control_init
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine extracts the chlorophyll concentrations from the model state, if possible
 subroutine get_chl_from_model(Chl_array, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: Chl_array !< The array into which the
-                                                                  !! model's Chlorophyll-A
-                                                                  !! concentrations in mg m-3 are
-                                                                  !! to be read.
-  type(ocean_grid_type),                 intent(in)  :: G         !< The ocean's grid structure.
-  type(tracer_flow_control_CS),          pointer     :: CS        !< The control structure returned
-                                                                  !! by a previous call to
-                                                                  !! call_tracer_register.
-! Arguments: Chl_array - The array into which the model's Chlorophyll-A
-!                        concentrations in mg m-3 are to be read.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), &
+                                intent(out) :: Chl_array !< The array in which to store the model's
+                                                         !! Chlorophyll-A concentrations in mg m-3.
+  type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
+  type(tracer_flow_control_CS), pointer     :: CS        !< The control structure returned by a
+                                                         !! previous call to call_tracer_register.
 
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) then

@@ -15,7 +15,7 @@ module MOM_write_cputime
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : sum_across_PEs, pe_here, num_pes
-use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_io, only : open_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_time_manager, only : time_type, get_time, operator(>)
@@ -134,6 +134,7 @@ subroutine write_cputime(day, n, nmax, CS)
                            ! this subroutine.
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
   real    :: reday         ! A real version of day.
+  character(len=256) :: mesg  ! The text of an error message
   integer :: start_of_day, num_days
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -167,9 +168,8 @@ subroutine write_cputime(day, n, nmax, CS)
       nmax = n + INT( CS%dn_dcpu_min * &
           (0.95*CS%maxcpu * REAL(num_pes())*CLOCKS_PER_SEC - &
            (CS%startup_cputime + CS%cputime2)) )
-!     if (is_root_pe() ) then
-!       write(*,*) "Resetting nmax to ",nmax," at day",reday
-!     endif
+!     write(mesg,*) "Resetting nmax to ",nmax," at day",reday
+!     call MOM_mesg(mesg)
     endif
   endif
   CS%prev_cputime = new_cputime ; CS%prev_n = n

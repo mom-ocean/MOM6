@@ -61,9 +61,9 @@ type, public :: geothermal_CS ; private
                              ! otherwise GEOTHERMAL_SCALE has been set to 0 and
                              ! there is no heat to apply.
 
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
 end type geothermal_CS
 
 contains
@@ -362,6 +362,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 
 end subroutine geothermal
 
+!> Initialize parameters and allocate memory associated with the geothermal heating module.
 subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -370,14 +371,6 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
   type(geothermal_CS),     pointer       :: CS   !< Pointer pointing to the module control
                                                  !! structure.
-
-! Arguments:
-!  (in)      Time       - current model time
-!  (in)      G          - ocean grid structure
-!  (in)      param_file - structure indicating the open file to parse for
-!                         model parameter values
-!  (in)      diag       - structure used to regulate diagnostic output
-!  (in/out)  CS         - pointer pointing to the module control structure
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -452,8 +445,10 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
 
 end subroutine geothermal_init
 
+!> Clean up and deallocate memory associated with the geothermal heating module.
 subroutine geothermal_end(CS)
-  type(geothermal_CS), pointer :: CS
+  type(geothermal_CS), pointer :: CS !< Geothermal heating control structure that
+                                     !! will be deallocated in this subroutine.
 
   if (associated(CS%geo_heat)) deallocate(CS%geo_heat)
   if (associated(CS)) deallocate(CS)

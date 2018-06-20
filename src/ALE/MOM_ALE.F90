@@ -1163,9 +1163,9 @@ end subroutine ALE_update_regrid_weights
 !> Update the vertical grid type with ALE information.
 !! This subroutine sets information in the verticalGrid_type to be
 !! consistent with the use of ALE mode.
-subroutine ALE_updateVerticalGridType( CS, GV )
-  type(ALE_CS),            pointer :: CS  ! module control structure
-  type(verticalGrid_type), pointer :: GV  ! vertical grid information
+subroutine ALE_updateVerticalGridType(CS, GV)
+  type(ALE_CS),            pointer :: CS  !< ALE control structure
+  type(verticalGrid_type), pointer :: GV  !< vertical grid information
 
   integer :: nk
 
