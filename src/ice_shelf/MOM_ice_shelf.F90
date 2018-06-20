@@ -254,6 +254,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                             ! coupled ice-ocean dynamics.
 
   real, parameter :: c2_3 = 2.0/3.0
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3
   real, parameter :: rho_fw = 1000.0 ! fresh water density
 
@@ -380,14 +381,16 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                   state%sst(i,j))-LF*CS%Gamma_T_3EQ/35.0
             S_c = LF*(CS%Gamma_T_3EQ/35.0)*state%sss(i,j)
 
+            !### Depending on the sign of S_b, one of these will be inaccurate!
             Sbdry1 = (-S_b + SQRT(S_b*S_b-4*S_a*S_c))/(2*S_a)
             Sbdry2 = (-S_b - SQRT(S_b*S_b-4*S_a*S_c))/(2*S_a)
             Sbdry(i,j) = MAX(Sbdry1, Sbdry2)
             ! Safety check
             if (Sbdry(i,j) < 0.) then
-              write(*,*)'state%sss(i,j)',state%sss(i,j)
-              write(*,*)'S_a, S_b, S_c',S_a, S_b, S_c
-              write(*,*)'I,J,Sbdry1,Sbdry2',i,j,Sbdry1,Sbdry2
+              write(mesg,*) 'state%sss(i,j) = ',state%sss(i,j), 'S_a, S_b, S_c', S_a, S_b, S_c
+              call MOM_error(WARNING, mesg, .true.)
+              write(mesg,*) 'I,J,Sbdry1,Sbdry2',i,j,Sbdry1,Sbdry2
+              call MOM_error(WARNING, mesg, .true.)
               call MOM_error(FATAL, "shelf_calc_flux: Negative salinity (Sbdry).")
             endif
           else
@@ -593,20 +596,18 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
       ! haline_driving = state%sss - Sbdry
       !if (fluxes%iceshelf_melt(i,j) /= 0.0) then
       !   if (haline_driving(i,j) /= (state%sss(i,j) - Sbdry(i,j))) then
-      !      write(*,*)'Something is wrong at i,j',i,j
-      !      write(*,*)'haline_driving, sss-Sbdry',haline_driving(i,j), &
-      !                (state%sss(i,j) - Sbdry(i,j))
+      !     write(mesg,*) 'at i,j=',i,j,' haline_driving, sss-Sbdry',haline_driving(i,j), &
+      !                   (state%sss(i,j) - Sbdry(i,j))
       !     call MOM_error(FATAL, &
-      !            "shelf_calc_flux: Inconsistency in melt and haline_driving")
+      !            "shelf_calc_flux: Inconsistency in melt and haline_driving"//trim(mesg))
       !   endif
       !endif
 
-      ! 2) check if |melt| > 0 when star_shelf = 0.
+      ! 2) check if |melt| > 0 when ustar_shelf = 0.
       ! this should never happen
       if ((abs(fluxes%iceshelf_melt(i,j))>0.0) .and. (fluxes%ustar_shelf(i,j) == 0.0)) then
-        write(*,*)'Something is wrong at i,j',i,j
-        call MOM_error(FATAL, &
-            "shelf_calc_flux: |melt| > 0 and star_shelf = 0.")
+        write(mesg,*) "|melt| = ",fluxes%iceshelf_melt(i,j)," > 0 and ustar_shelf = 0. at i,j", i, j
+        call MOM_error(FATAL, "shelf_calc_flux: "//trim(mesg))
       endif
     endif ! area_shelf_h
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!!
@@ -867,6 +868,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
   real, parameter :: rho_fw = 1000.0 ! fresh water density
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -1000,7 +1002,8 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
         delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
 !          delta_mass_shelf = (shelf_mass1 - shelf_mass0)* &
 !                         (rho_fw/CS%density_ice)/CS%time_step
-!          if (is_root_pe()) write(*,*)'delta_mass_shelf',delta_mass_shelf
+!        write(mesg,*)'delta_mass_shelf = ',delta_mass_shelf
+!        call MOM_mesg(mesg,5)
       else! first time step
         delta_mass_shelf = 0.0
       endif
@@ -1025,7 +1028,8 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     enddo ; enddo
 
     if (CS%DEBUG) then
-      if (is_root_pe()) write(*,*)'Mean melt flux (kg/(m^2 s)),dt',mean_melt_flux,CS%time_step
+      write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux, CS%time_step
+      call MOM_mesg(mesg)
       call MOM_forcing_chksum("After constant sea level", fluxes, G, haloshift=0)
     endif
 

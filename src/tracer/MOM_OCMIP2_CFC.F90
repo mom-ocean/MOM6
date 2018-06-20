@@ -85,7 +85,7 @@ type, public :: OCMIP2_CFC_CS ; private
   character(len=200) :: IC_file ! The file in which the CFC initial values can
                     ! be found, or an empty string for internal initilaization.
   logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false..
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer, dimension(:,:,:) :: &
     CFC11 => NULL(), &     ! The CFC11 concentration in mol m-3.
@@ -113,8 +113,8 @@ type, public :: OCMIP2_CFC_CS ; private
   integer :: ind_cfc_12_flux  ! are used to pack and unpack surface boundary
                               ! condition arrays.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   ! The following vardesc types contain a package of metadata about each tracer.
@@ -146,7 +146,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_OCMIP2_CFC" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  real, dimension(:,:,:), pointer :: tr_ptr
+  real, dimension(:,:,:), pointer :: tr_ptr => NULL()
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
   real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
   real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
@@ -518,7 +518,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   real, dimension(SZI_(G),SZJ_(G)) :: &
     CFC11_flux, &    ! The fluxes of CFC11 and CFC12 into the ocean, in the
     CFC12_flux       ! units of CFC concentrations times meters per second.
-  real, pointer, dimension(:,:,:) :: CFC11, CFC12
+  real, pointer, dimension(:,:,:) :: CFC11 => NULL(), CFC12 => NULL()
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   integer :: i, j, k, m, is, ie, js, je, nz, idim(4), jdim(4)
 

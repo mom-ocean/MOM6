@@ -383,33 +383,37 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
 
 end subroutine tidal_forcing_init
 
-! #@# This subroutine needs a doxygen description.
-subroutine find_in_files(tidal_input_files,varname,array,G)
-  character(len=*),                 intent(in)  :: tidal_input_files(:)
-  character(len=*),                 intent(in)  :: varname
-  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: array
+!> This subroutine finds a named variable in a list of files and reads its
+!! values into a domain-decomposed 2-d array
+subroutine find_in_files(filenames, varname, array, G)
+  character(len=*), dimension(:), &
+                         intent(in)  :: filenames !< The names of the files to search
+                                                  !! for the named variable
+  character(len=*),      intent(in)  :: varname   !< The name of the variable to read
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(out) :: array     !< The array to fill with the data
 
   integer :: nf
 
-  do nf=1,size(tidal_input_files)
-    if (LEN_TRIM(tidal_input_files(nf)) == 0) cycle
-    if (field_exists(tidal_input_files(nf), varname, G%Domain%mpp_domain)) then
-      call MOM_read_data(tidal_input_files(nf), varname, array, G%Domain)
+  do nf=1,size(filenames)
+    if (LEN_TRIM(filenames(nf)) == 0) cycle
+    if (field_exists(filenames(nf), varname, G%Domain%mpp_domain)) then
+      call MOM_read_data(filenames(nf), varname, array, G%Domain)
       return
     endif
   enddo
 
-  do nf=size(tidal_input_files),1,-1
-    if (file_exists(tidal_input_files(nf), G%Domain)) then
+  do nf=size(filenames),1,-1
+    if (file_exists(filenames(nf), G%Domain)) then
       call MOM_error(FATAL, "MOM_tidal_forcing.F90: Unable to find "// &
          trim(varname)//" in any of the tidal input files, last tried "// &
-         trim(tidal_input_files(nf)))
+         trim(filenames(nf)))
     endif
   enddo
 
   call MOM_error(FATAL, "MOM_tidal_forcing.F90: Unable to find any of the "// &
-                  "tidal input files, including "//trim(tidal_input_files(1)))
+                  "tidal input files, including "//trim(filenames(1)))
 
 end subroutine find_in_files
 
@@ -545,8 +549,10 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta)
 
 end subroutine calc_tidal_forcing
 
+!> This subroutine deallocates memory associated with the tidal forcing module.
 subroutine tidal_forcing_end(CS)
-  type(tidal_forcing_CS), pointer   :: CS
+  type(tidal_forcing_CS), pointer :: CS !< The control structure returned by a previous call
+                                        !! to tidal_forcing_init; it is deallocated here.
 
   if (associated(CS%sin_struct)) deallocate(CS%sin_struct)
   if (associated(CS%cos_struct)) deallocate(CS%cos_struct)

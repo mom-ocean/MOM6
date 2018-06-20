@@ -136,11 +136,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                     !! directory paths.
   type(MOM_restart_CS),       pointer       :: restart_CS !< A pointer to the restart control
                                                     !! structure.
-  type(ALE_CS),               pointer       :: ALE_CSp
-  type(tracer_registry_type), pointer       :: tracer_Reg
-  type(sponge_CS),            pointer       :: sponge_CSp
-  type(ALE_sponge_CS),        pointer       :: ALE_sponge_CSp
-  type(ocean_OBC_type),       pointer       :: OBC
+  type(ALE_CS),               pointer       :: ALE_CSp !< The ALE control structure for remapping
+  type(tracer_registry_type), pointer       :: tracer_Reg !< A pointer to the tracer registry
+  type(sponge_CS),            pointer       :: sponge_CSp !< The layerwise sponge control structure.
+  type(ALE_sponge_CS),        pointer       :: ALE_sponge_CSp !< The ALE sponge control structure.
+  type(ocean_OBC_type),       pointer       :: OBC   !< The open boundary condition control structure.
   type(time_type), optional,  intent(in)    :: Time_in !< Time at the start of the run segment.
                                                      !! Time_in overrides any value set for Time.
 
@@ -1186,7 +1186,8 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
   real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer
   real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
   real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
-  type(remapping_CS),    pointer       :: remap_CS ! Remapping structure for remapping T and S, if associated
+  type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
+                                                   !! if associated
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
   real, dimension(nk) :: h0, S0, T0, h1, S1, T1
@@ -2022,7 +2023,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   integer :: nkd ! number of levels to use for regridding input arrays
   real    :: PI_180             ! for conversion from degrees to radians
 
-  real, dimension(:,:), pointer :: shelf_area
+  real, dimension(:,:), pointer :: shelf_area => NULL()
   real    :: min_depth
   real    :: dilate
   real    :: missing_value_temp, missing_value_salt
@@ -2192,7 +2193,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   allocate(area_shelf_h(isd:ied,jsd:jed))
   allocate(frac_shelf_h(isd:ied,jsd:jed))
 
-  press(:)=tv%p_ref
+  press(:) = tv%p_ref
 
   !Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
   call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
@@ -2222,7 +2223,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
       if (G%areaT(i,j) > 0.0) &
         frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
     enddo ; enddo
-    ! pass to the pointer
+    ! pass to the pointer for use as an argument to regridding_main
     shelf_area => frac_shelf_h
 
   endif
@@ -2412,6 +2413,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   endif
 
   deallocate(z_in,z_edges_in,temp_z,salt_z,mask_z)
+  deallocate(rho_z) ; deallocate(area_shelf_h, frac_shelf_h)
 
   call pass_var(h, G%Domain)
   call pass_var(tv%T, G%Domain)

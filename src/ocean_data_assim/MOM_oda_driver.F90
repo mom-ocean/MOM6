@@ -31,7 +31,7 @@ module MOM_oda_driver_mod
   ! MOM Modules
   use MOM_io, only : slasher, MOM_read_data
   use MOM_diag_mediator, only : diag_ctrl, set_axes_info
-  use MOM_error_handler, only : FATAL, WARNING, MOM_error, is_root_pe
+  use MOM_error_handler, only : FATAL, WARNING, MOM_error, MOM_mesg, is_root_pe
   use MOM_get_input, only : get_MOM_input, directories
   use MOM_variables, only : thermo_var_ptrs
   use MOM_grid, only : ocean_grid_type, MOM_grid_init
@@ -64,7 +64,7 @@ module MOM_oda_driver_mod
                                                                      !! or increments to prior in DA space
      integer :: nk !< number of vertical layers used for DA
      type(ocean_grid_type), pointer :: Grid => NULL() !< MOM6 grid type and decomposition for the DA
-     type(pointer_mpp_domain), pointer, dimension(:) :: domains => NULL() !< Pointer to mpp_domain objects
+     type(ptr_mpp_domain), pointer, dimension(:) :: domains => NULL() !< Pointer to mpp_domain objects
                                                                           !! for ensemble members
      type(verticalGrid_type), pointer :: GV => NULL() !< vertical grid for DA
      type(domain2d), pointer :: mpp_domain => NULL() !< Pointer to a mpp domain object for DA
@@ -85,7 +85,7 @@ module MOM_oda_driver_mod
      ! Profiles local to the analysis domain
      type(ocean_profile_type), pointer :: Profiles => NULL() !< pointer to linked list of all available profiles
      type(ocean_profile_type), pointer :: CProfiles => NULL()!< pointer to linked list of current profiles
-     type(kd_root), pointer :: kdroot
+     type(kd_root), pointer :: kdroot => NULL()
      type(ALE_CS), pointer :: ALE_CS=>NULL() !< ALE control structure for DA
      logical :: use_ALE_algorithm !< true is using ALE remapping
      type(regridding_CS) :: regridCS !< ALE control structure for regridding
@@ -95,9 +95,9 @@ module MOM_oda_driver_mod
   end type ODA_CS
 
   !> pointer to a mpp_domain object
-  type :: pointer_mpp_domain
-     type(domain2d), pointer :: mpp_domain => NULL()
-  end type pointer_mpp_domain
+  type :: ptr_mpp_domain
+    type(domain2d), pointer :: mpp_domain => NULL()
+  end type ptr_mpp_domain
 
   !>@{
   !! DA parameters
@@ -337,7 +337,7 @@ contains
 
     !! switch to global pelist
     call set_current_pelist(CS%filter_pelist)
-    if (is_root_pe()) print *, 'Setting prior'
+    call MOM_mesg('Setting prior')
 
     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
     call mpp_get_compute_domain(CS%domains(CS%ensemble_id)%mpp_domain,is,ie,js,je)
@@ -390,7 +390,7 @@ contains
 
      !! switch to global pelist
      call set_current_pelist(CS%filter_pelist)
-     if (is_root_pe()) print *, 'Getting posterior'
+     call MOM_mesg('Getting posterior')
 
      get_inc = .true.
      if (present(increment)) get_inc = increment
@@ -487,20 +487,23 @@ contains
     type(time_type), intent(in) :: Time !< the current model time
     type(ODA_CS), pointer, intent(inout) :: CS !< the DA control structure
 
+    character(len=160) :: mesg  ! The text of an error message
     integer :: yr, mon, day, hr, min, sec
 
     if (Time >= CS%Time) then
       CS%Time=increment_time(CS%Time,CS%assim_frequency*3600)
 
       call get_date(Time, yr, mon, day, hr, min, sec)
-      if (pe() == mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
+      write(mesg,*) 'Model Time: ', yr, mon, day, hr, min, sec
+      call MOM_mesg("set_analysis_time: "//trim(mesg))
       call get_date(CS%time, yr, mon, day, hr, min, sec)
-      if (pe() == mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
+      write(mesg,*) 'Assimilation Time: ', yr, mon, day, hr, min, sec
+      call MOM_mesg("set_analysis_time: "//trim(mesg))
     endif
     if (CS%Time < Time) then
-        call MOM_error(FATAL, " set_analysis_time: " // &
-             "assimilation interval appears to be shorter than " // &
-             "the model timestep")
+      call MOM_error(FATAL, " set_analysis_time: " // &
+           "assimilation interval appears to be shorter than " // &
+           "the model timestep")
     endif
     return
 
@@ -535,12 +538,12 @@ contains
 
   !> Apply increments to tracers
   subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
-    real, intent(in) :: dt ! the tracer timestep (seconds)
-    type(ocean_grid_type),    intent(in)    :: G      !< ocean grid structure
-    type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
+    real,                     intent(in)    :: dt !< The tracer timestep (seconds)
+    type(ocean_grid_type),    intent(in)    :: G  !< ocean grid structure
+    type(thermo_var_ptrs),    intent(inout) :: tv !< A structure pointing to various thermodynamic variables
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                              intent(in)    :: h      !< layer thickness (m or kg/m2)
-    type(ODA_CS),              intent(inout) :: CS     !< the data assimilation structure
+                              intent(in)    :: h  !< layer thickness (m or kg/m2)
+    type(ODA_CS),             intent(inout) :: CS !< the data assimilation structure
 
   end subroutine apply_oda_tracer_increments
 

@@ -123,14 +123,14 @@ type, public :: MOM_dyn_unsplit_CS ; private
   integer :: id_uh = -1, id_vh = -1
   integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                                   ! timing of diagnostic output.
-  type(accel_diag_ptrs), pointer :: ADp ! A structure pointing to the various
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
+  type(accel_diag_ptrs), pointer :: ADp => NULL() ! A structure pointing to the
                                    ! accelerations in the momentum equations,
                                    ! which can later be used to calculate
                                    ! derived diagnostics like energy budgets.
-  type(cont_diag_ptrs), pointer :: CDp ! A structure with pointers to various
-                                   ! terms in the continuity equations,
+  type(cont_diag_ptrs), pointer :: CDp => NULL() ! A structure with pointers to
+                                   ! various terms in the continuity equations,
                                    ! which can later be used to calculate
                                    ! derived diagnostics like energy budgets.
 ! The remainder of the structure is pointers to child subroutines' control strings.
@@ -246,7 +246,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp
-  real, dimension(:,:), pointer :: p_surf
+  real, dimension(:,:), pointer :: p_surf => NULL()
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping.
   logical :: dyn_p_surf
@@ -583,6 +583,7 @@ subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS, restart_CS)
 
 end subroutine register_restarts_dyn_unsplit
 
+!> Initialize parameters and allocate memory associated with the unsplit dynamics module.
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
                                   restart_CS, Accel_diag, Cont_diag, MIS, &
                                   OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
@@ -748,9 +749,10 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
 
 end subroutine initialize_dyn_unsplit
 
+!> Clean up and deallocate memory associated with the unsplit dynamics module.
 subroutine end_dyn_unsplit(CS)
-  type(MOM_dyn_unsplit_CS), pointer :: CS
-!  (inout)    CS - The control structure set up by initialize_dyn_unsplit.
+  type(MOM_dyn_unsplit_CS), pointer :: CS !< unsplit dynamics control structure that
+                                          !! will be deallocated in this subroutine.
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)

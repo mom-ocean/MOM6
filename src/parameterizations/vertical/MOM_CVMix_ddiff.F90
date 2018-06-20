@@ -229,7 +229,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
       pRef = pRef + GV%H_to_Pa * h(i,j,k-1)
     enddo ! k-loop finishes
 
-    call calculate_density_derivs(temp_int(:), salt_int(:), pres_int(:), drho_dT(:), drho_dS(:), 1, G%ke, TV%EQN_OF_STATE)
+    call calculate_density_derivs(temp_int(:), salt_int(:), pres_int(:), drho_dT(:), drho_dS(:), 1, &
+                                  G%ke, TV%EQN_OF_STATE)
 
     ! The "-1.0" below is needed so that the following criteria is satisfied:
     ! if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then "salt finger"
@@ -291,7 +292,8 @@ end function CVMix_ddiff_is_used
 
 !> Clear pointers and dealocate memory
 subroutine CVMix_ddiff_end(CS)
-  type(CVMix_ddiff_cs), pointer :: CS ! Control structure
+  type(CVMix_ddiff_cs), pointer :: CS !< Control structure for this module that
+                                      !! will be deallocated in this subroutine
 
   deallocate(CS)
 
