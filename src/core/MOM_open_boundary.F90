@@ -227,10 +227,6 @@ type, public :: ocean_OBC_type
                    !! velocities (or speed of characteristics) at the
                    !! new time level (1) or the running mean (0) for velocities.
                    !! Valid values range from 0 to 1, with a default of 0.3.
-  real :: gamma_h  !< The relative weighting for the baroclinic radiation
-                   !! velocities (or speed of characteristics) at the
-                   !! new time level (1) or the running mean (0) for thicknesses.
-                   !! Valid values range from 0 to 1, with a default of 0.2.
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
@@ -442,13 +438,6 @@ subroutine open_boundary_config(G, param_file, OBC)
                    "Valid values range from 0 to 1. This is only used if \n"//&
                    "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.3)
-      call get_param(param_file, mdl, "OBC_RAD_THICK_WT", OBC%gamma_h, &
-                   "The relative weighting for the baroclinic radiation \n"//&
-                   "velocities (or speed of characteristics) at the new \n"//&
-                   "time level (1) or the running mean (0) for thicknesses. \n"//&
-                   "Valid values range from 0 to 1. This is only used if \n"//&
-                   "one of the open boundary segments is using Orlanski.", &
-                   units="nondim",  default=0.2)
     endif
 
     Lscale_in = 0.
@@ -1472,7 +1461,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
-  real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v, gamma_2
+  real :: dhdt, dhdx, dhdy, gamma_u, gamma_v, gamma_2
   real :: cff, Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
@@ -1531,7 +1520,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
     endif
   enddo
 
-  gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
+  gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv
   rx_max = OBC%rx_max ; ry_max = OBC%rx_max
   do n=1,OBC%number_of_segments
      segment=>OBC%segment(n)
@@ -1559,11 +1548,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
            dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
            if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
-             ry_new = segment%grad_normal(J-1,1,k)
+             dhdy = segment%grad_normal(J-1,1,k)
            elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
-             ry_new = 0.0
+             dhdy = 0.0
            else
-             ry_new = segment%grad_normal(J,1,k)
+             dhdy = segment%grad_normal(J,1,k)
            endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
            Cx = dhdt*dhdx
