@@ -120,6 +120,9 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   type(bkgnd_mixing_cs),    pointer      :: CS        !< This module's control structure.
 
   ! Local variables
+  real :: Kv                    ! The interior vertical viscosity (m2/s) - read to set prandtl
+                                ! number unless it is provided as a parameter
+  real :: prandtl_bkgnd_default ! Default prandtl number computed according to CS%Kd and Kv
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -139,6 +142,11 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                  "The background diapycnal diffusivity of density in the \n"//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, \n"//&
                  "may be used.", units="m2 s-1", fail_if_missing=.true.)
+
+  call get_param(param_file, mdl, "KV", Kv, &
+                 "The background kinematic viscosity in the interior. \n"//&
+                 "The molecular value, ~1e-6 m2 s-1, may be used.", &
+                 units="m2 s-1", fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
@@ -171,10 +179,17 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
+  prandtl_bkgnd_default = Kv/CS%Kd
   call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
                  "Turbulent Prandtl number used to convert vertical \n"//&
                  "background diffusivities into viscosities.", &
-                 units="nondim", default=1.0)
+                 units="nondim", default=prandtl_bkgnd_default)
+
+  if ( abs(Kv-CS%Kd*CS%prandtl_bkgnd)>1.e-14) then
+    call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
+                         "and PRANDTL_BKGND values are incompatible. The following "//&
+                         "must hold: KD*PRANDTL_BKGND==KV")
+  endif
 
 !  call openParameterBlock(param_file,'MOM_BACKGROUND_MIXING')
 
@@ -493,8 +508,8 @@ subroutine check_bkgnd_scheme(CS,str)
   if (trim(CS%bkgnd_scheme_str)=="none") then
     CS%bkgnd_scheme_str = str
   else
-     call MOM_error(FATAL, "set_diffusivity_init: Cannot activate "//trim(str)//" while \n"//&
-          trim(CS%bkgnd_scheme_str)//" is already activated.")
+     call MOM_error(FATAL, "set_diffusivity_init: Cannot activate both "//trim(str)//" and "//&
+          trim(CS%bkgnd_scheme_str)//".")
   endif
 
 end subroutine
