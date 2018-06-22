@@ -271,7 +271,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
   if (CS%Kd>1.e-14 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
-    call MOM_error(FATAL, "set_diffusivity_init: a nonzero constant background "//&
+    call MOM_error(WARNING, "set_diffusivity_init: a nonzero constant background "//&
          "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
   endif
 
@@ -334,7 +334,7 @@ subroutine sfc_bkgnd_mixing(G, CS)
   epsilon = 1.e-10
 
 
-  if (.not. CS%Bryan_Lewis_diffusivity) then
+  if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,CS)
     do j=js,je ; do i=is,ie
       CS%Kd_sfc(i,j) = CS%Kd
@@ -396,6 +396,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
   real :: deg_to_rad !< factor converting degrees to radians, pi/180.
   real :: abs_sin    !< absolute value of sine of latitude (nondim)
   real :: epsilon
+  real :: bckgrnd_vdc_psin !< PSI diffusivity in northern hemisphere
+  real :: bckgrnd_vdc_psis !< PSI diffusivity in southern hemisphere
   integer :: i, k, is, ie, js, je, nz
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
@@ -434,7 +436,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
     enddo ! i loop
 
   elseif ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
-     (CS%Kd/= CS%Kdml)) then
+     (.not. CS%horiz_varying_background) .and. (CS%Kd/= CS%Kdml)) then
     I_Hmix = 1.0 / CS%Hmix
     do i=is,ie ; depth(i) = 0.0 ; enddo
     do k=1,nz ; do i=is,ie
@@ -448,6 +450,49 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
 
       depth(i) = depth(i) + GV%H_to_m*h(i,j,k)
     enddo ; enddo
+
+  elseif (CS%horiz_varying_background) then
+    do i=is,ie
+      bckgrnd_vdc_psis= CS%bckgrnd_vdc_psim*exp(-(0.4*(G%geoLatT(i,j)+28.9))**2.0)
+      bckgrnd_vdc_psin= CS%bckgrnd_vdc_psim*exp(-(0.4*(G%geoLatT(i,j)-28.9))**2.0)
+      CS%kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin + bckgrnd_vdc_psis
+
+      if (G%geoLatT(i,j) < -10.0) then
+        CS%kd_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
+      elseif (G%geoLatT(i,j) <= 10.0) then
+        CS%kd_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1 * (G%geoLatT(i,j)/10.0)**2.0
+      else
+        CS%kd_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
+      endif
+
+      ! North Banda Sea
+      if ( (G%geoLatT(i,j) < -1.0)  .and. (G%geoLatT(i,j) > -4.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0,360.0) > 103.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0,360.0) < 134.0) ) then
+        CS%kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_ban
+      endif
+
+      ! Middle Banda Sea
+      if ( (G%geoLatT(i,j) <= -4.0) .and. (G%geoLatT(i,j) > -7.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0,360.0) > 106.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0,360.0) < 140.0) ) then
+        CS%kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_ban
+      endif
+
+      ! South Banda Sea
+      if ( (G%geoLatT(i,j) <= -7.0) .and. (G%geoLatT(i,j) > -8.3) .and. &
+           ( mod(G%geoLonT(i,j)+360.0,360.0) > 111.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0,360.0) < 142.0) ) then
+        CS%kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_ban
+      endif
+
+      ! Compute kv_bkgnd
+      CS%kv_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) * CS%prandtl_bkgnd
+
+      ! Update Kd (uniform profile; no interpolation needed)
+      kd_lay(i,j,:) = CS%kd_bkgnd(i,j,1)
+
+    enddo
 
   elseif (CS%Henyey_IGW_background_new) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
@@ -466,7 +511,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
   endif
 
   ! Update CS%kd_bkgnd and CS%kv_bkgnd for diagnostic purposes
-  if (.not. CS%Bryan_Lewis_diffusivity) then
+  if (.not. (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background)) then
     do i=is,ie
       CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
       CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
@@ -485,6 +530,9 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
       enddo
     enddo
   endif
+
+  ! TODO: In both CS%Bryan_Lewis_diffusivity and CS%horiz_varying_background, KV and KD at surface
+  ! and bottom interfaces are set to be nonzero. Make sure this is not problematic.
 
 end subroutine calculate_bkgnd_mixing
 
