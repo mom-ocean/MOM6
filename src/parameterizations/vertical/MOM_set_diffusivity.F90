@@ -1989,6 +1989,11 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
 
+  if (CS%Kv>1.e-14 .and. CS%bkgnd_mixing_csp%prandtl_bkgnd>1.e-14) then
+    call MOM_error(FATAL,"set_diffusivity_init: Cannot set both KV and PRANDTL_BKGND "//&
+                         "to nonzero values.")
+  endif
+
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the \n"//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, \n"//&
