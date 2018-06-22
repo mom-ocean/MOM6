@@ -527,8 +527,6 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   if (CS%id_Sigma > 0)    CS%sigma(:,:,:) = 0.
   if (CS%id_Ws > 0)       allocate( CS%Ws( SZI_(G), SZJ_(G), SZK_(G) ) )
   if (CS%id_Ws > 0)       CS%Ws(:,:,:) = 0.
-  if (CS%id_N > 0)        allocate( CS%N( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
-  if (CS%id_N > 0)        CS%N(:,:,:) = 0.
   if (CS%id_N2 > 0)       allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   if (CS%id_N2 > 0)       CS%N2(:,:,:) = 0.
   if (CS%id_Kt_KPP > 0)   allocate( CS%Kt_KPP( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
