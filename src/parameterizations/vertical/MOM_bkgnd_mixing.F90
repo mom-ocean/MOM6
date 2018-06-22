@@ -42,6 +42,14 @@ type, public :: bkgnd_mixing_cs
                                     !! Bryan-Lewis diffusivity profile (1/m)
   real    :: Bryan_Lewis_c4         !< The depth where diffusivity is Bryan_Lewis_bl1 in the
                                     !! Bryan-Lewis profile (m)
+  real    :: bckgrnd_vdc1           !< Background diffusivity (Ledwell) when
+                                    !! horiz_varying_background=.true.
+  real    :: bckgrnd_vdc_eq         !! Equatorial diffusivity (Gregg) when
+                                    !! horiz_varying_background=.true.
+  real    :: bckgrnd_vdc_psim       !< Max. PSI induced diffusivity (MacKinnon) when
+                                    !! horiz_varying_background=.true.
+  real    :: bckgrnd_vdc_ban        !< Banda Sea diffusivity (Gordon) when
+                                    !! horiz_varying_background=.true.
   real    :: Kd_min                 !< minimum diapycnal diffusivity (m2/s)
   real    :: Kd                     !< interior diapycnal diffusivity (m2/s)
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
@@ -62,6 +70,8 @@ type, public :: bkgnd_mixing_cs
                                     !! not be used with Henyey_IGW_background.
   logical :: Bryan_Lewis_diffusivity!< If true, background vertical diffusivity
                                     !! uses Bryan-Lewis (1979) like tanh profile.
+  logical :: horiz_varying_background !< If true, apply vertically uniform, latitude-dependent
+                                    !! background diffusivity, as described in Danabasoglu et al., 2012
   logical :: Henyey_IGW_background  !< If true, use a simplified variant of the
              !! Henyey et al, JGR (1986) latitudinal scaling for the background diapycnal diffusivity,
              !! which gives a marked decrease in the diffusivity near the equator.  The simplification
@@ -91,6 +101,8 @@ type, public :: bkgnd_mixing_cs
   real, allocatable, dimension(:,:,:) :: kd_bkgnd !< Background diffusivity (m2/s)
   real, allocatable, dimension(:,:,:) :: kv_bkgnd !< Background viscosity  (m2/s)
 
+  character(len=40)  :: bkgnd_scheme_str = "none" !< Background scheme identifier
+
 end type bkgnd_mixing_cs
 
 character(len=40)  :: mdl = "MOM_bkgnd_mixing" !< This module's name.
@@ -105,7 +117,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(bkgnd_mixing_cs),    pointer        :: CS        !< This module's control structure.
+  type(bkgnd_mixing_cs),    pointer      :: CS        !< This module's control structure.
 
   ! Local variables
 
@@ -173,6 +185,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                  "This is done via CVMix.", default=.false.)
 
   if (CS%Bryan_Lewis_diffusivity) then
+    call check_bkgnd_scheme(CS, "BRYAN_LEWIS_DIFFUSIVITY")
 
     call get_param(param_file, mdl, "BRYAN_LEWIS_C1", &
                    CS%Bryan_Lewis_c1, &
@@ -196,21 +209,56 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
   endif ! CS%Bryan_Lewis_diffusivity
 
+  call get_param(param_file, mdl, "HORIZ_VARYING_BACKGROUND", &
+                                CS%horiz_varying_background, &
+                 "If true, apply vertically uniform, latitude-dependent background\n"//&
+                 "diffusivity, as described in Danabasoglu et al., 2012", &
+                 default=.false.)
+
+  if (CS%horiz_varying_background) then
+    call check_bkgnd_scheme(CS, "HORIZ_VARYING_BACKGROUND")
+
+    call get_param(param_file, mdl, "BCKGRND_VDC1", &
+                   CS%bckgrnd_vdc1, &
+                   "Background diffusivity (Ledwell) when HORIZ_VARYING_BACKGROUND=True", &
+                   units="m2 s-1",default = 0.16e-04)
+
+    call get_param(param_file, mdl, "BCKGRND_VDC_EQ", &
+                   CS%bckgrnd_vdc_eq, &
+                   "Equatorial diffusivity (Gregg) when HORIZ_VARYING_BACKGROUND=True", &
+                   units="m2 s-1",default = 0.01e-04)
+
+    call get_param(param_file, mdl, "BCKGRND_VDC_PSIM", &
+                   CS%bckgrnd_vdc_psim, &
+                   "Max. PSI induced diffusivity (MacKinnon) when HORIZ_VARYING_BACKGROUND=True", &
+                   units="m2 s-1",default = 0.13e-4)
+
+    call get_param(param_file, mdl, "BCKGRND_VDC_BAN", &
+                   CS%bckgrnd_vdc_ban, &
+                   "Banda Sea diffusivity (Gordon) when HORIZ_VARYING_BACKGROUND=True", &
+                   units="m2 s-1",default = 1.0e-4)
+  endif
+
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", &
                                 CS%Henyey_IGW_background, &
                  "If true, use a latitude-dependent scaling for the near \n"//&
                  "surface background diffusivity, as described in \n"//&
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
+  if (CS%Henyey_IGW_background) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND")
+
 
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", &
                                 CS%Henyey_IGW_background_new, &
                  "If true, use a better latitude-dependent scaling for the\n"//&
                  "background diffusivity, as described in \n"//&
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
+  if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
 
-  if (CS%Henyey_IGW_background .and. CS%Henyey_IGW_background_new) &
-     call MOM_error(FATAL, "set_diffusivity_init: HENYEY_IGW_BACKGROUND and \n"//&
-          "HENYEY_IGW_BACKGROUND_NEW are mutually exclusive. Set only one or none.")
+  if (CS%Kd>1.e-14 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
+                          trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
+    call MOM_error(FATAL, "set_diffusivity_init: a nonzero constant background "//&
+         "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
+  endif
 
   if (CS%Henyey_IGW_background) &
     call get_param(param_file, mdl, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
@@ -434,6 +482,22 @@ logical function CVMix_bkgnd_is_used(param_file)
                  default=.false., do_not_log = .true.)
 
 end function CVMix_bkgnd_is_used
+
+!> Sets CS%bkgnd_scheme_str to check whether multiple background diffusivity schemes are activated.
+!! The string is also for error/log messages.
+subroutine check_bkgnd_scheme(CS,str)
+  type(bkgnd_mixing_cs), pointer :: CS  !< Control structure
+  character(len=*), intent(in)   :: str !< Background scheme identifier deducted from MOM_input
+                                        !! parameters
+
+  if (trim(CS%bkgnd_scheme_str)=="none") then
+    CS%bkgnd_scheme_str = str
+  else
+     call MOM_error(FATAL, "set_diffusivity_init: Cannot activate "//trim(str)//" while \n"//&
+          trim(CS%bkgnd_scheme_str)//" is already activated.")
+  endif
+
+end subroutine
 
 !> Clear pointers and dealocate memory
 subroutine bkgnd_mixing_end(CS)
