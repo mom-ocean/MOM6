@@ -2236,8 +2236,8 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     if (segment%nudged) then
       allocate(segment%nudged_normal_vel(IsdB:IedB,jsd:jed,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
     endif
-    if (OBC%computed_vorticity .or. segment%nudged_tan .or. segment%specified_tan .or. &
-        OBC%computed_strain) then
+    if (segment%radiation_tan .or. segment%nudged_tan .or. segment%specified_tan .or. &
+        OBC%computed_vorticity .or. OBC%computed_strain) then
       allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_vel(:,:,:)=0.0
     endif
     if (segment%nudged_tan) then
@@ -2271,8 +2271,8 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     if (segment%nudged) then
       allocate(segment%nudged_normal_vel(isd:ied,JsdB:JedB,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
     endif
-    if (OBC%computed_vorticity .or. segment%nudged_tan .or. segment%specified_tan .or. &
-        OBC%computed_strain) then
+    if (segment%radiation_tan .or. segment%nudged_tan .or. segment%specified_tan .or. &
+        OBC%computed_vorticity .or. OBC%computed_strain) then
       allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_vel(:,:,:)=0.0
     endif
     if (segment%nudged_tan) then
