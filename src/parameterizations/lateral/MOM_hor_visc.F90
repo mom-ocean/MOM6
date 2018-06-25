@@ -730,10 +730,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
         if (CS%Leith_Kh) Kh = max( Kh,  CS%LAPLAC3_CONST_xy(I,J) * Vort_mag)
+        if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
         ! Older method of bounding for stability
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xy(i,j))
-        ! All viscosity contributions above are subject to resolution scaling
-        if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
         if (use_MEKE_Ku) then ! *Add* the MEKE contribution (might be negative)
           Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
