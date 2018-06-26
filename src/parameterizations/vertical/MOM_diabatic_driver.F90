@@ -1608,9 +1608,6 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   ! Differential diffusion done here.
   ! Changes: tv%T, tv%S
-  ! If using matching within the KPP scheme, then this step needs to provide
-  ! a diffusivity and happen before KPP.  But generally in MOM, we do not match
-  ! KPP boundary layer to interior, so this diffusivity can be computed when convenient.
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
     call cpu_clock_begin(id_clock_differential_diff)
 
