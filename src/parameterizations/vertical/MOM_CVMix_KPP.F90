@@ -932,10 +932,10 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! safety check, Kviscosity and Kdiffusivity must be >= 0
       do k=1, G%ke+1
-        if (Kviscosity(k) < 0. .or Kdiffusivity(k,1) < 0.) then
-          call MOM_error(FATAL,"KPP_calculate, after CVMix_coeffs_kpp: \n "// &
-                   "Negative vertical viscosity or diffusivity has been detected. \n" // &
-                   "This is likely related to the choice of MATCH_TECHNIQUE and INTERP_TYPE2. \n" //&
+        if (Kviscosity(k) < 0. .or. Kdiffusivity(k,1) < 0.) then
+          call MOM_error(FATAL,"KPP_calculate, after CVMix_coeffs_kpp: "// &
+                   "Negative vertical viscosity or diffusivity has been detected. " // &
+                   "This is likely related to the choice of MATCH_TECHNIQUE and INTERP_TYPE2." //&
                    "You might consider using the default options for these parameters." )
         endif
       enddo
