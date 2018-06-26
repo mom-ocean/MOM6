@@ -590,7 +590,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
-    ! total vertical viscosity in the interior
+    ! total vertical viscosity in the interior is represented via visc%Kv_shear
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
       visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + visc%Kv_slow(i,j,k)
     enddo ; enddo ; enddo
