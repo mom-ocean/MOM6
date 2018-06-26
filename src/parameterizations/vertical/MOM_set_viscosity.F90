@@ -1994,6 +1994,16 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "be removed in the future since this option should always be true.", &
                   default=.false.)
 
+  call get_param(param_file, mdl, "USE_KPP", use_KPP, &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.",     &
+                 do_not_log=.true., default=.false.)
+
+  if (use_KPP .and. visc%add_Kv_slow) call MOM_error(FATAL,"set_visc_init: "//&
+         "When USE_KPP=True, ADD_KV_SLOW must be false. Otherwise vertical \n"//&
+         "vertical visc. due to slow processes will be double counted. Please set \n"//&
+         "ADD_KV_SLOW=False".)
+
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
                  units="m2 s-1", default=Kv_background)
