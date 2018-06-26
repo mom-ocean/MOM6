@@ -224,15 +224,18 @@ type, public :: vertvisc_type
                         ! Kd_extra_S is positive for salt fingering; Kd_extra_T
                         ! is positive for double diffusive convection.  These
                         ! are only allocated if DOUBLE_DIFFUSION is true.
-    Kd_shear => NULL(), &!< The shear-driven turbulent diapycnal diffusivity
-                         !! at the interfaces between each layer, in m2 s-1.
-    Kv_shear => NULL(), &!< The shear-driven turbulent vertical viscosity
-                         !! at the interfaces between each layer, in m2 s-1.
+    Kd_shear => NULL(), &!< The shear-driven turbulent diapycnal diffusivity at the
+                         !! interfaces between layers in tracer columns, in m2 s-1.
+    Kv_shear => NULL(), &!< The shear-driven turbulent vertical viscosity at the
+                         !! interfaces between layers in tracer columns, in m2 s-1.
+    Kv_shear_Bu => NULL(), &!< The shear-driven turbulent vertical viscosity at the
+                         !! interfaces between layers in corner columns, in m2 s-1.
     Kv_slow  => NULL(), &!< The turbulent vertical viscosity component due to
                          !! "slow" processes (e.g., tidal, background,
                          !! convection etc).
-    TKE_turb => NULL()  !< The turbulent kinetic energy per unit mass defined
-                        !! at the interfaces between each layer, in m2 s-2.
+    TKE_turb => NULL()  !< The turbulent kinetic energy per unit mass at the
+                        !! interfaces, in m2 s-2.  This may be at the tracer or
+                        !! corner points
     logical :: add_Kv_slow !< If True, adds Kv_slow when calculating the
                         !! 'coupling coefficient' (a[k]) at the interfaces.
                         !! This is done in find_coupling_coef.

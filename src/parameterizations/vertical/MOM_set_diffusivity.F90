@@ -7,13 +7,14 @@ use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROU
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : post_data, register_diag_field
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_debugging,           only : hchksum, uvchksum
+use MOM_debugging,           only : hchksum, uvchksum, Bchksum
 use MOM_EOS,                 only : calculate_density, calculate_density_derivs
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_error_handler,       only : callTree_showQuery
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,        only : forcing, optics_type
+use MOM_full_convection,     only : full_convection
 use MOM_grid,                only : ocean_grid_type
 use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
 use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing
@@ -21,6 +22,7 @@ use MOM_tidal_mixing,        only : setup_tidal_diagnostics, post_tidal_diagnost
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
+use MOM_kappa_shear,         only : calc_kappa_shear_vertex, kappa_shear_at_vertex
 use MOM_CVMix_shear,         only : calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_cs
 use MOM_CVMix_shear,         only : CVMix_shear_end
 use MOM_CVMix_ddiff,         only : CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddiff_cs
@@ -128,6 +130,8 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff !< If true, call user-defined code to change diffusivity.
   logical :: useKappaShear    !< If true, use the kappa_shear module to find the
                               !! shear-driven diapycnal diffusivity.
+  logical :: Vertex_Shear     !< If true, do the calculations of the shear-driven mixing
+                              !! at the cell vertices (i.e., the vorticity points).
   logical :: use_CVMix_shear  !< If true, use one of the CVMix modules to find
                               !! shear-driven diapycnal diffusivity.
   logical :: double_diffusion !< If true, enable double-diffusive mixing using an old method.
@@ -233,8 +237,11 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   type(diffusivity_diags)  :: dd ! structure w/ arrays of pointers to avail diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_f, S_f      ! temperature and salinity (deg C and ppt)
+    T_f, S_f      ! Temperature and salinity (in deg C and ppt) with
                   ! massless layers filled vertically by diffusion.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    T_adj, S_adj  ! Temperature and salinity (in deg C and ppt)
+                  ! after full convective adjustment.
 
   real, dimension(SZI_(G),SZK_(G)) :: &
     N2_lay, &     !< squared buoyancy frequency associated with layers (1/s2)
@@ -344,26 +351,40 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(v_h, "before calc_KS v_h",G%HI)
     endif
     call cpu_clock_begin(id_clock_kappaShear)
-    ! Changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????)
-    ! Sets visc%Kv_shear
-    call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
-                               visc%Kv_shear, dt, G, GV, CS%kappaShear_CSp)
-    call cpu_clock_end(id_clock_kappaShear)
-    if (CS%debug) then
-      call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear",G%HI)
-      call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear",G%HI)
-      call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
+    if (CS%Vertex_shear) then
+      call full_convection(G, GV, h, tv, T_adj, S_adj, fluxes%p_surf, &
+                           kappa_fill*dt_fill, halo=1)
+
+      call calc_kappa_shear_vertex(u, v, h, T_adj, S_adj, tv, fluxes%p_surf, visc%Kd_shear, &
+                                   visc%TKE_turb, visc%Kv_shear_Bu, dt, G, GV, CS%kappaShear_CSp)
+      if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
+      if (CS%debug) then
+        call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear",G%HI)
+        call Bchksum(visc%Kv_shear, "after calc_KS_vert visc%Kv_shear_Bu",G%HI)
+        call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb",G%HI)
+      endif
+    else
+      ! Changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????)
+      ! Sets visc%Kv_shear
+      call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
+                                 visc%Kv_shear, dt, G, GV, CS%kappaShear_CSp)
+      if (CS%debug) then
+        call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear",G%HI)
+        call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear",G%HI)
+        call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
+      endif
     endif
+    call cpu_clock_end(id_clock_kappaShear)
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
   elseif (CS%use_CVMix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
-    call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%CVMix_shear_csp)
+    call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear, G, GV, CS%CVMix_shear_CSp)
     if (CS%debug) then
       call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear",G%HI)
       call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear",G%HI)
     endif
   elseif (associated(visc%Kv_shear)) then
-    visc%Kv_shear(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
+    visc%Kv_shear(:,:,:) = 0.0 ! needed if calculate_kappa_shear is not enabled
   endif
 
   !   Calculate the diffusivity, Kd, for each layer.  This would be
@@ -373,10 +394,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! set surface diffusivities (CS%bkgnd_mixing_csp%Kd_sfc)
   call sfc_bkgnd_mixing(G, CS%bkgnd_mixing_csp)
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
-!$OMP                                  Kd,visc,Kd_int,dt,u,v,Omega2)   &
-!$OMP                          private(dRho_int, N2_lay, N2_int, N2_bot,        &
-!$OMP                                  KT_extra, KS_extra, TKE_to_Kd,maxTKE,dissip,kb)
+  !$OMP parallel do default(shared) private(dRho_int, N2_lay, N2_int, N2_bot, KT_extra, &
+  !$OMP                                     KS_extra, TKE_to_Kd,maxTKE, dissip, kb)
   do j=js,je
 
     ! Set up variables related to the stratification.
@@ -2200,6 +2219,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
          "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
 
   CS%useKappaShear = kappa_shear_init(Time, G, GV, param_file, CS%diag, CS%kappaShear_CSp)
+  if (CS%useKappaShear) CS%Vertex_Shear = kappa_shear_at_vertex(param_file)
+
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
 

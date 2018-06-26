@@ -675,12 +675,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-!$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,forces,hML_u, &
-!$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
-!$OMP                     firstprivate(i_hbbl)                                             &
-!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,   &
-!$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,zi_dir, &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt,z_clear)
+  !$OMP parallel do default(private) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,forces,hML_u, &
+  !$OMP                                     OBC,h_neglect,dt,m_to_H,I_valBL,Kv_u) &
+  !$OMP                     firstprivate(i_hbbl)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -845,12 +842,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
 
 
   ! Now work on v-points.
-!$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
-!$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
-!$OMP                     firstprivate(i_hbbl)                                                &
-!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,zi_dir, &
-!$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt,z_clear)
+  !$OMP parallel do default(private) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
+  !$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL,Kv_v) &
+  !$OMP                     firstprivate(i_hbbl)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -1184,6 +1178,18 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         a(i,K) = a(i,K) + Kv_add(i,K)
+      endif ; enddo ; enddo
+    endif
+  endif
+
+  if (associated(visc%Kv_shear_Bu)) then
+    if (work_on_u) then
+      do K=2,nz ; do I=Is,Ie ; If (do_i(I)) then
+        a(I,K) = a(I,K) + (2.*0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
+      endif ; enddo ; enddo
+    else
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        a(i,K) = a(i,K) + (2.*0.5)*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     endif
   endif
