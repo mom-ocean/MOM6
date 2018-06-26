@@ -58,7 +58,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   call get_param(param_file, mdl, "DISK_X_OFFSET", xOffset, &
                  "The x-offset of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=G%x_axis_units, &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 default = 0.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
