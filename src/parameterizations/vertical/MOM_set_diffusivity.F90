@@ -180,13 +180,12 @@ contains
 !! 1) Shear-driven mixing: two options, Jackson et at. and KPP interior;
 !! 2) Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
 !! Harrison & Hallberg, JPO 2008;
-!! 3) Double-diffusion aplpied via CVMix;
+!! 3) Double-diffusion, old method and new method via CVMix;
 !! 4) Tidal mixing: many options available, see MOM_tidal_mixing.F90;
 !! In addition, this subroutine has the option to set the interior vertical
-!! viscosity associated with processes 2-4 listed above, which is stored in
+!! viscosity associated with processes 1,2 and 4 listed above, which is stored in
 !! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
 !! visc%Kv_shear
-!! GMM, TODO: add contribution from tidal mixing into visc%Kv_slow
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, CS, Kd, Kd_int)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
