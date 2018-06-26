@@ -1779,7 +1779,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   if (useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv .or. &
       (use_kappa_shear .and. .not.KS_at_vertex )) then
     call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
-    call register_restart_field(visc%Kd_shear, "Kv_shear", .false., restart_CS, &
+    call register_restart_field(visc%Kv_shear, "Kv_shear", .false., restart_CS, &
                   "Shear-driven turbulent viscosity at interfaces", "m2 s-1", z_grid='i')
   endif
   if (use_kappa_shear .and. KS_at_vertex) then
