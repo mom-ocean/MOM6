@@ -11,7 +11,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_kappa_shear, only : kappa_shear_is_used
+use MOM_kappa_shear, only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
@@ -1742,7 +1742,8 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 !  (out)     visc - A structure containing vertical viscosities and related
 !                   fields.  Allocated here.
 !  (in)      restart_CS - A pointer to the restart control structure.
-  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
+  logical :: use_kappa_shear, KS_at_vertex
+  logical :: adiabatic, useKPP, useEPBL
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
@@ -1756,6 +1757,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
+    KS_at_vertex = kappa_shear_at_vertex(param_file)
     use_CVMix_shear = CVMix_shear_is_used(param_file)
     use_CVMix_conv = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
@@ -1770,15 +1772,28 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
   if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
     call safe_alloc_ptr(visc%Kd_shear, isd, ied, jsd, jed, nz+1)
-    call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
-    call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
-
     call register_restart_field(visc%Kd_shear, "Kd_shear", .false., restart_CS, &
                   "Shear-driven turbulent diffusivity at interfaces", "m2 s-1", z_grid='i')
-    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
-                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", z_grid='i')
+  endif
+  if (useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv .or. &
+      (use_kappa_shear .and. .not.KS_at_vertex )) then
+    call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
     call register_restart_field(visc%Kd_shear, "Kv_shear", .false., restart_CS, &
                   "Shear-driven turbulent viscosity at interfaces", "m2 s-1", z_grid='i')
+  endif
+  if (use_kappa_shear .and. KS_at_vertex) then
+    call safe_alloc_ptr(visc%TKE_turb, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
+    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
+                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", &
+                  hor_grid="Bu", z_grid='i')
+    call safe_alloc_ptr(visc%Kv_shear_Bu, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
+    call register_restart_field(visc%Kv_shear_Bu, "Kv_shear_Bu", .false., restart_CS, &
+                  "Shear-driven turbulent viscosity at vertex interfaces", "m2 s-1", &
+                  hor_grid="Bu", z_grid='i')
+  elseif (use_kappa_shear) then
+    call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
+    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
+                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", z_grid='i')
   endif
 
   ! MOM_bkgnd_mixing is always used, so always allocate visc%Kv_slow. GMM
@@ -2066,6 +2081,7 @@ subroutine set_visc_end(visc, CS)
   if (associated(visc%Kv_slow)) deallocate(visc%Kv_slow)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
   if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
+  if (associated(visc%Kv_shear_Bu)) deallocate(visc%Kv_shear_Bu)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)
