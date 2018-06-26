@@ -572,9 +572,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xx(i,j) * Shear_mag )
         if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xx(i,j) * Vort_mag )
+        ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
         ! Older method of bounding for stability
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xx(i,j))
+        Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
         if (use_MEKE_Ku) Kh = Kh + MEKE%Ku(i,j) ! *Add* the MEKE contribution (might be negative)
         if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * ( 1. - CS%n1n2_h(i,j)**2 ) ! *Add* the tension component
                                                                                ! of anisotropic viscosity
@@ -622,9 +624,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
-       else
-         Ah = CS%Ah_bg_xx(i,j)
-       endif ! Smagorinsky_Ah or Leith_Ah
+        else
+          Ah = CS%Ah_bg_xx(i,j)
+        endif ! Smagorinsky_Ah or Leith_Ah
 
         if (CS%better_bound_Ah) then
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
@@ -729,15 +731,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh,  CS%LAPLAC3_CONST_xy(I,J) * Vort_mag)
+        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xy(I,J) * Vort_mag)
+        ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
         ! Older method of bounding for stability
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xy(i,j))
+        Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
         if (use_MEKE_Ku) then ! *Add* the MEKE contribution (might be negative)
           Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
         endif
-        Kh = max(Kh,CS%Kh_bg_min) ! Place a floor on the viscosity, if desired.
         if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * CS%n1n2_q(I,J)**2 ! *Add* the shear component
                                                                       ! of anisotropic viscosity
 
@@ -769,7 +772,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if (CS%biharmonic) then
       ! Determine the biharmonic viscosity at q points, using the
       ! largest value from several parameterizations.
-      AhSm = 0.0; AhLth = 0.0
+        AhSm = 0.0 ; AhLth = 0.0
         if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
           if (CS%Smagorinsky_Ah) then
             if (CS%bound_Coriolis) then
