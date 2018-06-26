@@ -552,8 +552,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
-  ! Also changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????
-  ! And sets visc%Kv_shear
+  ! Also changes: visc%Kd_shear, visc%Kv_slow and visc%TKE_turb (not clear that TKE_turb is used as input ????
   call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, CS%set_diff_CSp, Kd, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
@@ -591,6 +590,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
+    ! total vertical viscosity in the interior
+    do k=1,nz+1 ; do j=js,je ; do i=is,ie
+      visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + visc%Kv_slow(i,j,k)
+    enddo ; enddo ; enddo
+
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.
     ! Sets: CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux
@@ -599,9 +603,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call calculateBuoyancyFlux2d(G, GV, fluxes, CS%optics, h, tv%T, tv%S, tv, &
                                  CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
     ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
-    ! MOM6 implementation of KPP matches the boundary layer to zero interior diffusivity,
-    ! since the matching to nonzero interior diffusivity can be problematic.
-    ! Changes: Kd_int. Sets: KPP_NLTheat, KPP_NLTscalar
 
     call KPP_compute_BLD(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
       fluxes%ustar, CS%KPP_buoy_flux)
@@ -609,35 +610,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call KPP_calculate(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
       fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, &
       CS%KPP_NLTscalar, Waves=Waves)
-!$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,G,Kd_heat,Hml)
 
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
       call pass_var(Hml, G%domain, halo=1)
     endif
-
-! GMM, I believe the following can be deleted???
-    if (.not. CS%KPPisPassive) then
-!$OMP do
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,k) = min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
-      enddo ; enddo ; enddo
-      if (associated(visc%Kd_extra_S)) then
-!$OMP do
-        do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          visc%Kd_extra_S(i,j,k) = Kd_salt(i,j,k) - Kd_int(i,j,k)
-        enddo ; enddo ; enddo
-      endif
-      if (associated(visc%Kd_extra_T)) then
-!$OMP do
-        do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          visc%Kd_extra_T(i,j,k) = Kd_heat(i,j,k) - Kd_int(i,j,k)
-        enddo ; enddo ; enddo
-      endif
-    endif ! not passive
-
-!$OMP end parallel
-!!!!!!! delete above ?? !!!!!!!!!!!!!
 
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
@@ -675,14 +652,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     endif
   endif ! endif for KPP
 
-  ! GMM, this is the "old" method for applying differential diffusion.
-  ! TODO\ the following will not work with KPP. We need to add a FATAL
-  ! error to avoid that.
-
+  ! This is the "old" method for applying differential diffusion.
   ! Changes: tv%T, tv%S
-  ! If using matching within the KPP scheme, then this step needs to provide
-  ! a diffusivity and happen before KPP.  But generally in MOM, we do not match
-  ! KPP boundary layer to interior, so this diffusivity can be computed when convenient.
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T) .and. .not. &
      CS%use_CVMix_ddiff) then
 
@@ -716,7 +687,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
       Kd_heat(i,j,k) = Kd_heat(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
       Kd_salt(i,j,k) = Kd_salt(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
-      visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
+      if (CS%useKPP) then
+        visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
+      else
+        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
+      endif
     enddo ; enddo ; enddo
 !$OMP end parallel
   endif
@@ -1553,7 +1528,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       fluxes%ustar, CS%KPP_buoy_flux)
 
     call KPP_calculate(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, &
+      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_slow, CS%KPP_NLTheat, &
       CS%KPP_NLTscalar, Waves=Waves)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,G,Kd_heat,Hml)
 
@@ -3096,6 +3071,12 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     allocate( CS%KPP_buoy_flux(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_buoy_flux(:,:,:) = 0.
     allocate( CS%KPP_temp_flux(isd:ied,jsd:jed) )      ; CS%KPP_temp_flux(:,:)   = 0.
     allocate( CS%KPP_salt_flux(isd:ied,jsd:jed) )      ; CS%KPP_salt_flux(:,:)   = 0.
+  endif
+
+  if (CS%useKPP .and. differentialDiffusion) then
+    call MOM_error(FATAL, 'diabatic_driver_init: '// &
+           'DOUBLE_DIFFUSION (old method) does not work with KPP. Please'//&
+           'set DOUBLE_DIFFUSION=False and USE_CVMIX_DDIFF=True.')
   endif
 
   call get_param(param_file, mod, "SALT_REJECT_BELOW_ML", CS%salt_reject_below_ML, &
