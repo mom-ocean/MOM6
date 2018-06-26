@@ -6,6 +6,7 @@ use MOM_debugging, only : uvchksum, hchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_domains, only : pass_var, CORNER
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
@@ -1752,14 +1753,14 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
 
-  use_kappa_shear = .false. ; use_CVMix_shear = .false.
+  use_kappa_shear = .false. ; KS_at_vertex = .false. ; use_CVMix_shear = .false.
   useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false.
 
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
-    KS_at_vertex = kappa_shear_at_vertex(param_file)
+    KS_at_vertex    = kappa_shear_at_vertex(param_file)
     use_CVMix_shear = CVMix_shear_is_used(param_file)
-    use_CVMix_conv = CVMix_conv_is_used(param_file)
+    use_CVMix_conv  = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
@@ -1832,7 +1833,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   real    :: Kv_background
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
-  logical :: use_kappa_shear, adiabatic, use_omega
+  logical :: adiabatic, use_omega
   logical :: use_CVMix_ddiff, differential_diffusion
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
@@ -1857,7 +1858,6 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
-  use_kappa_shear = .false. !; adiabatic = .false.  ! Needed? -AJA
   differential_diffusion = .false.
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
@@ -1883,8 +1883,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   endif
 
   if (.not.adiabatic) then
-    use_kappa_shear = kappa_shear_is_used(param_file)
-    CS%RiNo_mix = use_kappa_shear
+    CS%RiNo_mix = kappa_shear_is_used(param_file)
     call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differential_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
@@ -2014,6 +2013,12 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "also 0.15 if the specified value is negative.", &
                  units="nondim", default=cSmag_chan_dflt)
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
+  endif
+
+  if (CS%RiNo_mix .and. kappa_shear_at_vertex(param_file)) then
+    ! These are necessary for reproduciblity across restarts in non-symmetric mode.
+    call pass_var(visc%TKE_turb, G%Domain, position=CORNER, complete=.false.)
+    call pass_var(visc%Kv_shear_Bu, G%Domain, position=CORNER, complete=.true.)
   endif
 
   if (CS%bottomdraglaw) then
