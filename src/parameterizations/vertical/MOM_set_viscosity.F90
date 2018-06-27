@@ -6,17 +6,18 @@ use MOM_debugging, only : uvchksum, hchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_domains, only : pass_var, CORNER
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_kappa_shear, only : kappa_shear_is_used
+use MOM_kappa_shear, only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
-use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
+use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -1184,26 +1185,11 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   if (associated(forces%frac_shelf_u)) then
     ! This configuration has ice shelves, and the appropriate variables need to
     ! be allocated.
-    if (.not.associated(visc%tauy_shelf)) then
-      allocate(visc%tauy_shelf(G%isd:G%ied,G%JsdB:G%JedB))
-      visc%tauy_shelf(:,:) = 0.0
-    endif
-    if (.not.associated(visc%tbl_thick_shelf_u)) then
-      allocate(visc%tbl_thick_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed))
-      visc%tbl_thick_shelf_u(:,:) = 0.0
-    endif
-    if (.not.associated(visc%tbl_thick_shelf_v)) then
-      allocate(visc%tbl_thick_shelf_v(G%isd:G%ied,G%JsdB:G%JedB))
-      visc%tbl_thick_shelf_v(:,:) = 0.0
-    endif
-    if (.not.associated(visc%kv_tbl_shelf_u)) then
-      allocate(visc%kv_tbl_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed))
-      visc%kv_tbl_shelf_u(:,:) = 0.0
-    endif
-    if (.not.associated(visc%kv_tbl_shelf_v)) then
-      allocate(visc%kv_tbl_shelf_v(G%isd:G%ied,G%JsdB:G%JedB))
-      visc%kv_tbl_shelf_v(:,:) = 0.0
-    endif
+    call safe_alloc_ptr(visc%tauy_shelf, G%isd, G%ied, G%JsdB, G%JedB)
+    call safe_alloc_ptr(visc%tbl_thick_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
+    call safe_alloc_ptr(visc%tbl_thick_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
+    call safe_alloc_ptr(visc%kv_tbl_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
+    call safe_alloc_ptr(visc%kv_tbl_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
 
     !  With a linear drag law, the friction velocity is already known.
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
@@ -1757,8 +1743,8 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 !  (out)     visc - A structure containing vertical viscosities and related
 !                   fields.  Allocated here.
 !  (in)      restart_CS - A pointer to the restart control structure.
-  type(vardesc) :: vd
-  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
+  logical :: use_kappa_shear, KS_at_vertex
+  logical :: adiabatic, useKPP, useEPBL
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
@@ -1767,13 +1753,14 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
 
-  use_kappa_shear = .false. ; use_CVMix_shear = .false.
+  use_kappa_shear = .false. ; KS_at_vertex = .false. ; use_CVMix_shear = .false.
   useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false.
 
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
+    KS_at_vertex    = kappa_shear_at_vertex(param_file)
     use_CVMix_shear = CVMix_shear_is_used(param_file)
-    use_CVMix_conv = CVMix_conv_is_used(param_file)
+    use_CVMix_conv  = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
@@ -1785,37 +1772,44 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   endif
 
   if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
-    allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
-    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
-    allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
+    call safe_alloc_ptr(visc%Kd_shear, isd, ied, jsd, jed, nz+1)
+    call register_restart_field(visc%Kd_shear, "Kd_shear", .false., restart_CS, &
+                  "Shear-driven turbulent diffusivity at interfaces", "m2 s-1", z_grid='i')
+  endif
+  if (useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv .or. &
+      (use_kappa_shear .and. .not.KS_at_vertex )) then
+    call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
+    call register_restart_field(visc%Kv_shear, "Kv_shear", .false., restart_CS, &
+                  "Shear-driven turbulent viscosity at interfaces", "m2 s-1", z_grid='i')
+  endif
+  if (use_kappa_shear .and. KS_at_vertex) then
+    call safe_alloc_ptr(visc%TKE_turb, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
+    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
+                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", &
+                  hor_grid="Bu", z_grid='i')
+    call safe_alloc_ptr(visc%Kv_shear_Bu, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
+    call register_restart_field(visc%Kv_shear_Bu, "Kv_shear_Bu", .false., restart_CS, &
+                  "Shear-driven turbulent viscosity at vertex interfaces", "m2 s-1", &
+                  hor_grid="Bu", z_grid='i')
+  elseif (use_kappa_shear) then
+    call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
+    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
+                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", z_grid='i')
+  endif
 
   ! MOM_bkgnd_mixing is always used, so always allocate visc%Kv_slow. GMM
-  allocate(visc%Kv_slow(isd:ied,jsd:jed,nz+1)) ; visc%Kv_slow(:,:,:) = 0.0
-
-    vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
-                  hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kd_shear, vd, .false., restart_CS)
-
-    vd = var_desc("TKE_turb","m2 s-2","Turbulent kinetic energy per unit mass at interfaces", &
-                  hor_grid='h', z_grid='i')
-    call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
-    vd = var_desc("Kv_shear","m2 s-1","Shear-driven turbulent viscosity at interfaces", &
-                  hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kv_shear, vd, .false., restart_CS)
-    vd = var_desc("Kv_slow","m2 s-1","Vertical turbulent viscosity at interfaces due \n" // &
-                  " to slow processes", hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kv_slow, vd, .false., restart_CS)
-
-  endif
+  call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
+  call register_restart_field(visc%Kv_slow, "Kv_slow", .false., restart_CS, &
+                "Vertical turbulent viscosity at interfaces due to slow processes", &
+                "m2 s-1", z_grid='i')
 
   ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
                  default=.false., do_not_log=.true.)
   if (MLE_use_PBL_MLD) then
-    allocate(visc%MLD(isd:ied,jsd:jed)) ; visc%MLD(:,:) = 0.0
-    vd = var_desc("MLD","m","Instantaneous active mixing layer depth", &
-                  hor_grid='h', z_grid='1')
-    call register_restart_field(visc%MLD, vd, .false., restart_CS)
+    call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
+    call register_restart_field(visc%MLD, "MLD", .false., restart_CS, &
+                  "Instantaneous active mixing layer depth", "m")
   endif
 
 end subroutine set_visc_register_restarts
@@ -1839,7 +1833,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   real    :: Kv_background
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
-  logical :: use_kappa_shear, adiabatic, use_omega
+  logical :: adiabatic, use_omega
   logical :: use_CVMix_ddiff, differential_diffusion
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
@@ -1864,7 +1858,6 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
-  use_kappa_shear = .false. !; adiabatic = .false.  ! Needed? -AJA
   differential_diffusion = .false.
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
@@ -1890,8 +1883,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   endif
 
   if (.not.adiabatic) then
-    use_kappa_shear = kappa_shear_is_used(param_file)
-    CS%RiNo_mix = use_kappa_shear
+    CS%RiNo_mix = kappa_shear_is_used(param_file)
     call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differential_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
@@ -2023,6 +2015,12 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
   endif
 
+  if (CS%RiNo_mix .and. kappa_shear_at_vertex(param_file)) then
+    ! These are necessary for reproduciblity across restarts in non-symmetric mode.
+    call pass_var(visc%TKE_turb, G%Domain, position=CORNER, complete=.false.)
+    call pass_var(visc%Kv_shear_Bu, G%Domain, position=CORNER, complete=.true.)
+  endif
+
   if (CS%bottomdraglaw) then
     allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed)) ; visc%bbl_thick_u = 0.0
     allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed)) ; visc%kv_bbl_u = 0.0
@@ -2088,6 +2086,7 @@ subroutine set_visc_end(visc, CS)
   if (associated(visc%Kv_slow)) deallocate(visc%Kv_slow)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
   if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
+  if (associated(visc%Kv_shear_Bu)) deallocate(visc%Kv_shear_Bu)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)
