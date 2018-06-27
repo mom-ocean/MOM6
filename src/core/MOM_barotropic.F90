@@ -1999,7 +1999,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       endif
 
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
-           ubt_trans, vbt_trans, eta, eta_pred, ubt_old, vbt_old, CS%BT_OBC, &
+           ubt_trans, vbt_trans, eta, ubt_old, vbt_old, CS%BT_OBC, &
            G, MS, iev-ie, dtbt, bebt, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v, &
            uhbt0, vhbt0)
       if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
@@ -2397,7 +2397,7 @@ end subroutine set_dtbt
 !! This subroutine applies the open boundary conditions on barotropic
 !! velocities and mass transports, as developed by Mehmet Ilicak.
 subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, &
-                               eta, eta_pred, ubt_old, vbt_old, BT_OBC, &
+                               eta, ubt_old, vbt_old, BT_OBC, &
                                G, MS, halo, dtbt, bebt, use_BT_cont, Datu, Datv, &
                                BTCL_u, BTCL_v, uhbt0, vhbt0)
   type(ocean_OBC_type),                  pointer       :: OBC     !< An associated pointer to an OBC type.
@@ -2414,8 +2414,6 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! m s-1.
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta     !< The barotropic free surface height anomaly or
                                                                   !! column mass anomaly, in m or kg m-2.
-  real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta_pred !< The new barotropic free surface height
-                                                                  !! anomaly or column mass anomaly, in m or kg m-2.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old !< The starting value of ubt in a barotropic step,
                                                                   !! m s-1.
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of vbt in a barotropic step,
@@ -2462,7 +2460,6 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real, dimension(SZIB_(G),SZJB_(G)) :: grad
   real, parameter :: eps = 1.0e-20
   real :: rx_max, ry_max ! coefficients for radiation
-  real :: rx_new
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
@@ -2476,14 +2473,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         if (OBC%segment(OBC%segnum_u(I,j))%Flather) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
-          ! Now find estimate of eta on the boundary with Orlanski
-          dhdt = eta(i,j)-eta_pred(i,j) !old-new
-          dhdx = eta_pred(i,j)-eta_pred(i-1,j)   !in new time backward sasha for I-1
-          rx_new = 0.0
-          if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-          cfl = dtbt * rx_new * G%IdxCu(I,j)
           h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
-
           H_u = BT_OBC%H_u(I,j)
           vel_prev = ubt(I,j)
           ubt(I,j) = 0.5*((u_inlet + BT_OBC%ubt_outer(I,j)) + &
@@ -2497,12 +2487,6 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         if (OBC%segment(OBC%segnum_u(I,j))%Flather) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
-          ! Now find estimate of eta on the boundary with Orlanski
-          dhdt = eta(i+1,j)-eta_pred(i+1,j) !old-new
-          dhdx = eta_pred(i+1,j)-eta_pred(i+2,j)     !in new time backward sasha for I-1
-          rx_new = 0.0
-          if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-          cfl = dtbt * rx_new * G%IdxCu(I,j)
           h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! external
 
           H_u = BT_OBC%H_u(I,j)
@@ -2537,14 +2521,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vel_trans = vbt(i,J)
       elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
         if (OBC%segment(OBC%segnum_v(i,J))%Flather) then
-          cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J)            ! CFL
+          cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
-          ! Now find estimate of eta on the boundary with Orlanski
-          dhdt = eta(i,j)-eta_pred(i,j) !old-new
-          dhdx = eta_pred(i,j)-eta_pred(i,j-1)   !in new time backward sasha for I-1
-          rx_new = 0.0
-          if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-          cfl = dtbt * rx_new * G%IdyCv(i,J)
           h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1))      ! internal
 
           H_v = BT_OBC%H_v(i,J)
@@ -2559,14 +2537,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
       elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
         if (OBC%segment(OBC%segnum_v(i,J))%Flather) then
-          cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J)            ! CFL
+          cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
-          ! Now find estimate of eta on the boundary with Orlanski
-          dhdt = eta(i,j+1)-eta_pred(i,j+1) !old-new
-          dhdx = eta_pred(i,j+1)-eta_pred(i,j+2)     !in new time backward sasha for I-1
-          rx_new = 0.0
-          if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-          cfl = dtbt * rx_new * G%IdyCv(i,J)
           h_in = eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2))  ! internal
 
           H_v = BT_OBC%H_v(i,J)
