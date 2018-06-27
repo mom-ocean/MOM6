@@ -1,5 +1,5 @@
 !> Provides the K-Profile Parameterization (KPP) of Large et al., 1994, via CVMix.
-module MOM_KPP
+module MOM_CVMix_KPP
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -73,7 +73,8 @@ type, public :: KPP_CS ; private
   real    :: cs2                       !< Parameter for multiplying by non-local term
                                        !   This is active for NLT_SHAPE_CUBIC_LMD only
   logical :: enhance_diffusion         !< If True, add enhanced diffusivity at base of boundary layer.
-  character(len=10) :: interpType      !< Type of interpolation in determining OBL depth
+  character(len=10) :: interpType      !< Type of interpolation to compute bulk Richardson number
+  character(len=10) :: interpType2     !< Type of interpolation to compute diff and visc at OBL_depth
   logical :: computeEkman              !< If True, compute Ekman depth limit for OBLdepth
   logical :: computeMoninObukhov       !< If True, compute Monin-Obukhov limit for OBLdepth
   logical :: passiveMode               !< If True, makes KPP passive meaning it does NOT alter the diffusivity
@@ -185,11 +186,11 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
 
   ! Local variables
 #include "version_variable.h"
-  character(len=40) :: mdl = 'MOM_KPP' ! name of this module
+  character(len=40) :: mdl = 'MOM_CVMix_KPP' ! name of this module
   character(len=20) :: string          ! local temporary string
   logical :: CS_IS_ONE=.false.         ! Logical for setting Cs based on Non-local
 
-  if (associated(CS)) call MOM_error(FATAL, 'MOM_KPP, KPP_init: '// &
+  if (associated(CS)) call MOM_error(FATAL, 'MOM_CVMix_KPP, KPP_init: '// &
            'Control structure has already been initialized')
   allocate(CS)
 
@@ -239,7 +240,11 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   call get_param(paramFile, mdl, 'INTERP_TYPE', CS%interpType,           &
                  'Type of interpolation to determine the OBL depth.\n'// &
                  'Allowed types are: linear, quadratic, cubic.',         &
-                 default='cubic')
+                 default='quadratic')
+  call get_param(paramFile, mdl, 'INTERP_TYPE2', CS%interpType2,           &
+                 'Type of interpolation to compute diff and visc at OBL_depth.\n'// &
+                 'Allowed types are: linear, quadratic, cubic or LMD94.',         &
+                 default='LMD94')
   call get_param(paramFile, mdl, 'COMPUTE_EKMAN', CS%computeEkman,             &
                  'If True, limit OBL depth to be no deeper than Ekman depth.', &
                  default=.False.)
@@ -324,6 +329,15 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
      !  May be used during CVMix initialization.
      Cs_is_one=.true.
   endif
+
+  ! safety check to avoid negative diff/visc
+  if (CS%MatchTechnique == 'MatchBoth' .and. (CS%interpType2 == 'cubic' .or. &
+     CS%interpType2 == 'quadratic')) then
+     call MOM_error(FATAL,"If MATCH_TECHNIQUE=MatchBoth, INTERP_TYPE2 must be set to \n"//&
+               "linear or LMD94 (recommended) to avoid negative viscosity and diffusivity.\n"//&
+               "Please select one of these valid options." )
+  endif
+
   call get_param(paramFile, mdl, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity,            &
                  'If True, zeroes the KPP diffusivity and viscosity; for testing purpose.',&
                  default=.False.)
@@ -428,12 +442,13 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                        vonKarman=CS%vonKarman,             &
                        surf_layer_ext=CS%surf_layer_ext,   &
                        interp_type=CS%interpType,          &
-                       interp_type2=CS%interpType,        &
+                       interp_type2=CS%interpType2,        &
                        lEkman=CS%computeEkman,             &
                        lMonOb=CS%computeMoninObukhov,      &
                        MatchTechnique=CS%MatchTechnique,   &
                        lenhanced_diff=CS%enhance_diffusion,&
                        lnonzero_surf_nonlocal=Cs_is_one   ,&
+                       lnoDGat1=.false.                   ,&
                        CVMix_kpp_params_user=CS%KPP_params )
 
   ! Register diagnostics
@@ -658,12 +673,12 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
          Kviscosity(:)=Kv(i,j,:)
       endif
 
-      call CVMix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
+      call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
                             Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)
                             iFaceHeight,       & ! (in) Height of interfaces (m)
                             cellHeight,        & ! (in) Height of level centers (m)
-                            Kviscosity,        & ! (in) Original viscosity (m2/s)
+                            Kviscosity(:),        & ! (in) Original viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (in) Original heat diffusivity (m2/s)
                             Kdiffusivity(:,2), & ! (in) Original salt diffusivity (m2/s)
                             CS%OBLdepth(i,j),  & ! (in) OBL depth (m)
@@ -676,6 +691,16 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
                             G%ke,              & ! (in) Number of levels in array shape
                             CVMix_kpp_params_user=CS%KPP_params )
 
+      ! safety check, Kviscosity and Kdiffusivity must be >= 0
+      do k=1, G%ke+1
+        if (Kviscosity(k) < 0. .or. Kdiffusivity(k,1) < 0.) then
+          call MOM_error(FATAL,"KPP_calculate, after CVMix_coeffs_kpp: "// &
+                   "Negative vertical viscosity or diffusivity has been detected. " // &
+                   "This is likely related to the choice of MATCH_TECHNIQUE and INTERP_TYPE2." //&
+                   "You might consider using the default options for these parameters." )
+        endif
+      enddo
+
       IF (CS%LT_K_ENHANCEMENT) then
         if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
            LangEnhK = CS%KPP_K_ENH_FAC
@@ -686,7 +711,7 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
            LangEnhK = min(2.25, 1. + 1./WAVES%LangNum(i,j))
         else
            !This shouldn't be reached.
-           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in LT_K_ENHANCEMENT")
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in LT_K_ENHANCEMENT")
            LangEnhK = 1.0
         endif
         do k=1,G%ke
@@ -1104,7 +1129,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
           enddo
         else
            !This shouldn't be reached.
-           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in Vt2")
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in Vt2")
            LangEnhVT2(:) = 1.0
         endif
       else
@@ -1158,7 +1183,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 
 ! Following "correction" step has been found to be unnecessary.
 ! Code should be removed after further testing.
-! BGR: 03/15/2018-> Restructured code (Vt2 changed to compute from call in MOM_KPP now)
+! BGR: 03/15/2018-> Restructured code (Vt2 changed to compute from call in MOM_CVMix_KPP now)
 !      I have not taken this restructuring into account here.
 !      Do we ever run with correctSurfLayerAvg?
 !      smg's suggested testing and removal is advised, in the meantime
@@ -1294,6 +1319,7 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   real :: dh                 ! The local thickness used for calculating interface positions (m)
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers (m)
+  real :: pref
   integer :: i, j, k, s
 
   do s=1,CS%n_smooth
@@ -1308,8 +1334,22 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
 
-        ! skip land points
+         ! skip land points
         if (G%mask2dT(i,j)==0.) cycle
+
+        iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
+        pRef = 0.
+        hcorr = 0.
+        do k=1,G%ke
+
+          ! cell center and cell bottom in meters (negative values in the ocean)
+          dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+          dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
+          hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+          dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+          cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+          iFaceHeight(k+1) = iFaceHeight(k) - dh
+        enddo
 
         ! compute weights
         ww = 0.125 * G%mask2dT(i-1,j)
@@ -1324,26 +1364,14 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
                           + ws * OBLdepth_original(i,j-1) &
                           + wn * OBLdepth_original(i,j+1)
 
-        iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
-        hcorr = 0.
-        do k=1,G%ke
+        ! Apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper via smoothing.
+        if (CS%deepen_only) CS%OBLdepth(i,j) = max(CS%OBLdepth(i,j),CS%OBLdepth_original(i,j))
 
-          ! cell center and cell bottom in meters (negative values in the ocean)
-          dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
-          dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
-          hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
-          dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
-          cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
-          iFaceHeight(k+1) = iFaceHeight(k) - dh
-        enddo
-
+        ! prevent OBL depths deeper than the bathymetric depth
         CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(G%ke+1) ) ! no deeper than bottom
-
+        CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
       enddo
     enddo
-
-    ! Apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper via smoothing.
-    if (CS%deepen_only) CS%OBLdepth = max(CS%OBLdepth,CS%OBLdepth_original)
 
   enddo ! s-loop
 
@@ -1575,4 +1603,4 @@ end subroutine KPP_end
 !!
 !! \sa
 !! kpp_calculate(), kpp_applynonlocaltransport()
-end module MOM_KPP
+end module MOM_CVMix_KPP
