@@ -39,7 +39,7 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   type(param_file_type),  intent(in)  :: param_file !< Parameter file structure
   real,                   intent(in)  :: max_depth  !< Maximum depth of model in m
   ! Local variables
-  integer :: i, j, dome2d_angle
+  integer :: i, j
   real    :: x, bay_depth, l1, l2
   real    :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
 ! This include declares and sets the variable "version".
@@ -55,9 +55,6 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  'Depth of shelf, as fraction of basin depth, in 2d DOME configuration.', &
                  units='nondim',default=0.2)
-  call get_param(param_file, mdl, "DOME2D_SHELF_ANGLE", dome2d_angle, &
-                 'Angle of the downslope direction. Valid choices are 0, 90, 180 and 270', &
-                 units='degrees',default=0)
 
   ! location where downslope starts
   l1 = dome2d_width_bay
@@ -70,16 +67,7 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
 
     ! Compute normalized zonal coordinate
-    select case (dome2d_angle)
-      case (0)
-        x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
-      case (90)
-        x = (G%len_lat - (G%geoLatT(i,j) - G%south_lat) ) / G%len_lat
-      case (180)
-        x = (G%len_lon - (G%geoLonT(i,j) - G%west_lon) ) / G%len_lon
-      case (270)
-        x = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat
-    end select
+    x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
 
     if ( x <= l1 ) then
       D(i,j) = bay_depth * max_depth

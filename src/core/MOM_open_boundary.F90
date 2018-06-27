@@ -797,9 +797,11 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%open_u_BCs_exist_globally = .true.
       OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI_TAN') then
+      OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%radiation_tan = .true.
       OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI_GRAD') then
+      OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%radiation_grad = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
@@ -907,9 +909,11 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%open_v_BCs_exist_globally = .true.
       OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI_TAN') then
+      OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%radiation_tan = .true.
       OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI_GRAD') then
+      OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%radiation_grad = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
