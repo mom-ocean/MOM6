@@ -186,10 +186,11 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
 
   ! Local variables
 #include "version_variable.h"
-  character(len=40) :: mdl = 'MOM_CVMix_KPP' ! name of this module
-  character(len=20) :: string          ! local temporary string
-  logical :: CS_IS_ONE=.false.         ! Logical for setting Cs based on Non-local
-
+  character(len=40) :: mdl = 'MOM_CVMix_KPP' !< name of this module
+  character(len=20) :: string          !< local temporary string
+  logical :: CS_IS_ONE=.false.         !< Logical for setting Cs based on Non-local
+  logical :: lnoDGat1=.false.          !< True => G'(1) = 0 (shape function)
+                                       !! False => compute G'(1) as in LMD94
   if (associated(CS)) call MOM_error(FATAL, 'MOM_CVMix_KPP, KPP_init: '// &
            'Control structure has already been initialized')
   allocate(CS)
@@ -329,6 +330,10 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
      !  May be used during CVMix initialization.
      Cs_is_one=.true.
   endif
+  if (CS%MatchTechnique == 'ParabolicNonLocal' .or. CS%MatchTechnique == 'SimpleShapes') then
+     ! if gradient won't be matched, lnoDGat1=.true.
+     lnoDGat1=.true.
+  endif
 
   ! safety check to avoid negative diff/visc
   if (CS%MatchTechnique == 'MatchBoth' .and. (CS%interpType2 == 'cubic' .or. &
@@ -448,7 +453,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                        MatchTechnique=CS%MatchTechnique,   &
                        lenhanced_diff=CS%enhance_diffusion,&
                        lnonzero_surf_nonlocal=Cs_is_one   ,&
-                       lnoDGat1=.false.                   ,&
+                       lnoDGat1=lnoDGat1                  ,&
                        CVMix_kpp_params_user=CS%KPP_params )
 
   ! Register diagnostics
