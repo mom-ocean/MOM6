@@ -1,53 +1,14 @@
+!> Functions that calculate the surface wind stresses and fluxes of buoyancy
+!! or temperature/salinity andfresh water, in ocean-only (solo) mode.
+!!
+!! These functions are called every time step, even if the wind stresses
+!! or buoyancy fluxes are constant in time - in that case these routines
+!! return quickly without doing anything.  In addition, any I/O of forcing
+!! fields is controlled by surface_forcing_init, located in this file.
 module MOM_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, November 1998 - May 2002                       *
-!*  Edited by Stephen Griffies, June 2014                              *
-!*                                                                     *
-!*    This program contains the subroutines that calculate the         *
-!*  surface wind stresses and fluxes of buoyancy or temp/saln and      *
-!*  fresh water.  These subroutines are called every time step,        *
-!*  even if the wind stresses or buoyancy fluxes are constant in time  *
-!*  - in that case these routines return quickly without doing         *
-!*  anything.  In addition, any I/O of forcing fields is controlled    *
-!*  by surface_forcing_init, located in this file.                     *
-!*                                                                     *
-!*    set_forcing is a small entry subroutine for the subroutines in   *
-!*  this file.  It provides the external access to these subroutines.  *
-!*                                                                     *
-!*    wind_forcing determines the wind stresses and places them into   *
-!*  forces%taux and forces%tauy.  Often wind_forcing must be tailored  *
-!*  for a particular application - either by specifying file and input *
-!*  variable names or by providing appropriate internal expressions    *
-!*  for the stresses within a modified version of USER_wind_forcing.   *
-!*                                                                     *
-!*    buoyancy_forcing determines the surface fluxes of heat, fresh    *
-!*  water and salt, as appropriate.  A restoring boundary              *
-!*  condition plus a specified flux from a file is implemented here,   *
-!*  but a user-provided internal expression can be set by modifying    *
-!*  and calling USER_buoyancy_forcing.                                 *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, fluxes.                               *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-!### use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
-!### use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end
-!### use MOM_controlled_forcing, only : ctrl_forcing_CS
 use MOM_constants,           only : hlv, hlf
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE
@@ -104,7 +65,7 @@ public set_forcing
 public surface_forcing_init
 public forcing_save_restart
 
-! surface_forcing_CS is a structure containing pointers to the forcing fields
+! Structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive into the ocean.
 type, public :: surface_forcing_CS ; private
 
@@ -217,7 +178,8 @@ integer :: id_clock_forcing
 
 contains
 
-!> This subroutine calls other subroutines in this file to get surface forcing fields.
+!> Calls subroutines in this file to get surface forcing fields.
+!!
 !! It also allocates and initializes the fields in the forcing and mech_forcing types
 !! the first time it is called.
 subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS)
@@ -230,18 +192,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
-
-! This subroutine calls other subroutines in this file to get surface forcing fields.
-! It also allocates and initializes the fields in the flux type.
-
-! Arguments:
-!  (inout)   state        = structure describing ocean surface state
-!  (inout)   fluxes       = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day_start    = Start time of the fluxes
-!  (in)      day_interval = Length of time over which these fluxes applied
-!  (in)      G            = ocean grid structure
-!  (in)      CS           = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   real :: dt                     ! length of time in seconds over which fluxes applied
   type(time_type) :: day_center  ! central time of the fluxes.
   integer :: intdt
@@ -373,7 +324,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
 
 end subroutine set_forcing
 
-!> This subroutine sets the surface wind stresses to constant values
+!> Sets the surface wind stresses to constant values
 subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
@@ -384,16 +335,7 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
-
-! subroutine sets the surface wind stresses to zero
-
-! Arguments:
-!            state        = structure describing ocean surface state
-!  (out)     fluxes       = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day          = time of the fluxes
-!  (in)      G            = ocean grid structure
-!  (in)      CS           = pointer to control returned by previous surface_forcing_init call
-
+  ! Local variables
   real :: mag_tau
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -429,7 +371,7 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, CS)
 end subroutine wind_forcing_const
 
 
-!> This subroutine sets the surface wind stresses to set up two idealized gyres.
+!> Sets the surface wind stresses to set up two idealized gyres.
 subroutine wind_forcing_2gyre(sfc_state, forces, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
@@ -438,16 +380,7 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
-
-! This subroutine sets the surface wind stresses according to double gyre.
-
-! Arguments:
-!            state   = structure describing ocean surface state
-!  (out)     fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day     = time of the fluxes
-!  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -474,7 +407,7 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, CS)
 end subroutine wind_forcing_2gyre
 
 
-!> This subroutine sets the surface wind stresses to set up a single idealized gyre.
+!> Sets the surface wind stresses to set up a single idealized gyre.
 subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
@@ -483,16 +416,7 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
-
-! This subroutine sets the surface wind stresses according to single gyre.
-
-! Arguments:
-!            state   = structure describing ocean surface state
-!  (out)     fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day     = time of the fluxes
-!  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -517,8 +441,7 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
   call callTree_leave("wind_forcing_1gyre")
 end subroutine wind_forcing_1gyre
 
-
-!> This subroutine sets the surface wind stresses to set up idealized gyres.
+!> Sets the surface wind stresses to set up idealized gyres.
 subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
@@ -527,8 +450,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
-
-! This subroutine sets the surface wind stresses according to gyres.
+  ! Local variables
   real :: PI, y
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -564,7 +486,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
 end subroutine wind_forcing_gyres
 
 
-! This subroutine sets the surface wind stresses from input files.
+! Sets the surface wind stresses from input files.
 subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
@@ -573,16 +495,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
-
-! This subroutine sets the surface wind stresses.
-
-! Arguments:
-!            state  = structure describing ocean surface state
-!  (out)     fluxes = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day    = time of the fluxes
-!  (in)      G      = ocean grid structure
-!  (in)      CS     = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   character(len=200) :: filename  ! The name of the input file.
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real    :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
@@ -725,7 +638,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
 end subroutine wind_forcing_from_file
 
 
-! This subroutine sets the surface wind stresses via the data override facility.
+! Sets the surface wind stresses via the data override facility.
 subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
@@ -734,15 +647,7 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, CS)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
-! This subroutine sets the surface wind stresses
-
-! Arguments:
-!            state  = structure describing ocean surface state
-!  (out)     fluxes = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day    = time of the fluxes
-!  (in)      G      = ocean grid structure
-!  (in)      CS     = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
   integer :: i, j, is_in, ie_in, js_in, je_in
@@ -798,7 +703,7 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, CS)
 end subroutine wind_forcing_by_data_override
 
 
-!> This subroutine specifies zero surface bouyancy fluxes from input files.
+!> Specifies zero surface bouyancy fluxes from input files.
 subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
@@ -809,12 +714,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
-
-!  This subroutine specifies the current surface fluxes of buoyancy
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-!  This case has surface buoyancy forcing from input files.
-
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     temp, &       ! A 2-d temporary work array with various units.
     SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
@@ -1081,7 +981,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   call callTree_leave("buoyancy_forcing_from_files")
 end subroutine buoyancy_forcing_from_files
 
-!> This subroutine specifies zero surface bouyancy fluxes from data over-ride.
+!> Specifies zero surface bouyancy fluxes from data over-ride.
 subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                   !! describe the surface state of the ocean.
@@ -1092,20 +992,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
-
-!  This subroutine specifies the current surface fluxes of buoyancy
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-!  This case has surface buoyancy forcing from data over-ride.
-
-! Arguments:
-!            state   = structure describing ocean surface state
-!  (out)     fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day     = time of the fluxes
-!  (in)      dt      = amount of time over which the fluxes apply
-!  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     temp, &       ! A 2-d temporary work array with various units.
     SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
@@ -1271,20 +1158,7 @@ subroutine buoyancy_forcing_zero(sfc_state, fluxes, day, dt, G, CS)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
-
-!  This subroutine specifies the current surface fluxes of buoyancy
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-!  This case has zero surface buoyancy forcing.
-
-! Arguments:
-!  (inout)   state   = structure describing ocean surface state
-!  (inout)   fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day     = time of the fluxes
-!  (in)      dt      = amount of time over which the fluxes apply
-!  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   integer :: i, j, is, ie, js, je
 
   call callTree_enter("buoyancy_forcing_zero, MOM_surface_forcing.F90")
@@ -1316,7 +1190,7 @@ subroutine buoyancy_forcing_zero(sfc_state, fluxes, day, dt, G, CS)
 end subroutine buoyancy_forcing_zero
 
 
-!>  This subroutine sets up spatially and temporally constant surface heat fluxes.
+!> Sets up spatially and temporally constant surface heat fluxes.
 subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
@@ -1327,20 +1201,7 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
-
-!  This subroutine specifies the current surface fluxes of buoyancy
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-!  We here define a constant surface heat flux.
-
-! Arguments:
-!  (inout)   state   = structure describing ocean surface state
-!  (inout)   fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day     = time of the fluxes
-!  (in)      dt      = amount of time over which the fluxes apply
-!  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   integer :: i, j, is, ie, js, je
   call callTree_enter("buoyancy_forcing_const, MOM_surface_forcing.F90")
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
@@ -1370,9 +1231,8 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
   call callTree_leave("buoyancy_forcing_const")
 end subroutine buoyancy_forcing_const
 
-
-!>  This subroutine sets surface fluxes of heat and salinity by restoring to temperature and
-!! saliinty profiles that vary linearly with latitude.
+!> Sets surface fluxes of heat and salinity by restoring to temperature and
+!! salinity profiles that vary linearly with latitude.
 subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
@@ -1383,19 +1243,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
-
-!    This subroutine specifies the current surface fluxes of buoyancy
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-
-! Arguments:
-!  (inout)   state   = structure describing ocean surface state
-!  (inout)   fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
-!  (in)      day     = time of the fluxes
-!  (in)      dt      = amount of time over which the fluxes apply
-!  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
-
+  ! Local variables
   real :: y, T_restore, S_restore
   integer :: i, j, is, ie, js, je
 
@@ -1477,15 +1325,6 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
   character(len=*), optional, intent(in)    :: filename_suffix !< optional suffix (e.g., a time-stamp)
                                                     !! to append to the restart fname
 
-! Arguments:
-!            CS              = pointer to control structure from previous surface_forcing_init call
-!  (in)      G               = ocean grid structure
-!  (in)      Time            = model time at this call; needed for mpp_write calls
-!  (in, opt) directory       = optional directory into which to write these restart files
-!  (in, opt) time_stamped    = if true, the restart file names include a unique time stamp
-!                              default is false.
-!  (in, opt) filename_suffix = optional suffix (e.g., a time-stamp) to append to the restart fname
-
   if (.not.associated(CS)) return
   if (.not.associated(CS%restart_CSp)) return
 
@@ -1501,16 +1340,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(diag_ctrl), target,      intent(inout) :: diag !< structure used to regulate diagnostic output
   type(surface_forcing_CS),     pointer       :: CS   !< pointer to control struct returned by
                                                       !! a previous surface_forcing_init call
-  type(tracer_flow_control_CS), pointer       :: tracer_flow_CSp
-
-! Arguments:
-!            Time            = current model time
-!  (in)      G               = ocean grid structure
-!  (in)      param_file      = structure indicating the open file to parse for model parameter values
-!  (in)      diag            = structure used to regulate diagnostic output
-!  (in/out)  CS              = pointer set to point to the control structure for this module
-!  (in)      tracer_flow_CSp = pointer to the control structure of the tracer flow control module
-
+  type(tracer_flow_control_CS), pointer       :: tracer_flow_CSp !< Forcing for tracers?
+  ! Local variables
   type(directories)  :: dirs
   logical            :: new_sim
   type(time_type)    :: Time_frc
