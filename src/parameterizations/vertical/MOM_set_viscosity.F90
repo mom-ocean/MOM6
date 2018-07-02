@@ -934,7 +934,9 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
                          intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,               intent(in) :: i, j, k !< The indices of the u-location to work on.
+  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZI_(G),SZJB_(G)),&
                          intent(in) :: mask2dCv !< A multiplicative mask of the v-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
@@ -975,7 +977,9 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
                          intent(in) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,               intent(in) :: i, j, k !< The indices of the v-location to work on.
+  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZIB_(G),SZJ_(G)), &
                          intent(in) :: mask2dCu !< A multiplicative mask of the u-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
