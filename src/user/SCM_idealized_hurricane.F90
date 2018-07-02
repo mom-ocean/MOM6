@@ -95,9 +95,9 @@ end subroutine SCM_idealized_hurricane_TS_init
 
 !> Initializes wind profile for the SCM idealized hurricane example
 subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
-  type(time_type),              intent(in) :: Time       !< Time
-  type(ocean_grid_type),        intent(in) :: G          !< Grid structure
-  type(param_file_type),        intent(in) :: param_file !< Input parameter structure
+  type(time_type),                  intent(in) :: Time       !< Model time
+  type(ocean_grid_type),            intent(in) :: G          !< Grid structure
+  type(param_file_type),            intent(in) :: param_file !< Input parameter structure
   type(SCM_idealized_hurricane_CS), pointer    :: CS         !< Parameter container
 
 ! This include declares and sets the variable "version".
