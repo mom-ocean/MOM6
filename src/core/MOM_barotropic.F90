@@ -3547,7 +3547,8 @@ end subroutine BT_cont_to_face_areas
 
 !> Swap the values of two real variables
 subroutine swap(a,b)
-  real, intent(inout) :: a, b !< The varaibles to be swapped.
+  real, intent(inout) :: a !< The first variable to be swapped.
+  real, intent(inout) :: b !< The second variable to be swapped.
   real :: tmp
   tmp = a ; a = b ; b = tmp
 end subroutine swap
