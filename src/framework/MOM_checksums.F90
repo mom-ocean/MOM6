@@ -78,7 +78,8 @@ contains
 subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, scale)
   character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayB !< The second array to be checksummed
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
@@ -96,7 +97,8 @@ end subroutine chksum_pair_h_2d
 subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, scale)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI   !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayB !< The second array to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
@@ -191,8 +193,9 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, bc
     subchk = 0
     do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
@@ -234,7 +237,8 @@ end subroutine chksum_h_2d
 subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit_corners, scale)
   character(len=*),                 intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayB !< The second array to be checksummed
   logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                             !! symmetric computational domain.
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
@@ -260,7 +264,8 @@ end subroutine chksum_pair_B_2d
 subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit_corners, scale)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%JsdB:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  real, dimension(HI%IsdB:,HI%JsdB:, :), intent(in) :: arrayA !< The first array to be checksummed
+  real, dimension(HI%IsdB:,HI%JsdB:, :), intent(in) :: arrayB !< The second array to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                                !! symmetric computational domain.
@@ -377,8 +382,9 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -565,8 +571,9 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -710,8 +717,9 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -837,8 +845,9 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, k, bc
     subchk = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
@@ -978,8 +987,9 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -1123,8 +1133,9 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -1341,8 +1352,9 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
-    integer, intent(in) :: di, dj  !< i- and j- direction array shifts for this checksum
-    real, intent(in) ::  scale     !< A scaling factor for this array.
+    integer, intent(in) :: di    !< i- direction array shift for this checksum
+    integer, intent(in) :: dj    !< j- direction array shift for this checksum
+    real, intent(in)    :: scale !< A scaling factor for this array.
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -1603,7 +1615,10 @@ subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
   character(len=*), intent(in) :: mesg !< An identifying message supplied by top-level caller
   integer,          intent(in) :: bc0  !< The bitcount of the non-shifted array
-  integer,          intent(in) :: bcSW,bcSE,bcNW,bcNE !< The bitcounts for 4 diagonal array shifts
+  integer,          intent(in) :: bcSW !< The bitcount for SW shifted array
+  integer,          intent(in) :: bcSE !< The bitcount for SE shifted array
+  integer,          intent(in) :: bcNW !< The bitcount for NW shifted array
+  integer,          intent(in) :: bcNE !< The bitcount for NE shifted array
   if (is_root_pe()) write(0,'(A,5(A,I10,1X),A)') &
      fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,trim(mesg)
 end subroutine chk_sum_msg5
@@ -1614,7 +1629,10 @@ subroutine chk_sum_msg_NSEW(fmsg,bc0,bcN,bcS,bcE,bcW,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
   character(len=*), intent(in) :: mesg !< An identifying message supplied by top-level caller
   integer,          intent(in) :: bc0  !< The bitcount of the non-shifted array
-  integer,          intent(in) :: bcN, bcS, bcE, bcW !< The bitcounts including 4 lateral array shifts
+  integer,          intent(in) :: bcN !< The bitcount for N shifted array
+  integer,          intent(in) :: bcS !< The bitcount for S shifted array
+  integer,          intent(in) :: bcE !< The bitcount for E shifted array
+  integer,          intent(in) :: bcW !< The bitcount for W shifted array
   if (is_root_pe()) write(0,'(A,5(A,I10,1X),A)') &
      fmsg," c=",bc0,"N=",bcN,"S=",bcS,"E=",bcE,"W=",bcW,trim(mesg)
 end subroutine chk_sum_msg_NSEW
@@ -1657,7 +1675,9 @@ end subroutine chk_sum_msg2
 subroutine chk_sum_msg3(fmsg,aMean,aMin,aMax,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
   character(len=*), intent(in) :: mesg !< An identifying message supplied by top-level caller
-  real,             intent(in) :: aMean,aMin,aMax !< The mean, minimum and maximum of the array
+  real,             intent(in) :: aMean !< The mean value of the array
+  real,             intent(in) :: aMin !< The minimum value of the array
+  real,             intent(in) :: aMax !< The maximum value of the array
   if (is_root_pe()) write(0,'(A,3(A,ES25.16,1X),A)') &
      fmsg," mean=",aMean,"min=",aMin,"max=",aMax,trim(mesg)
 end subroutine chk_sum_msg3
