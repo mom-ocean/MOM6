@@ -1,3 +1,4 @@
+!> Configures the model for the idealized dumbbell test case.
 module dumbbell_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -22,18 +23,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mdl = "dumbbell_initialization" ! This module's name.
+character(len=40) :: mdl = "dumbbell_initialization" !< This module's name.
 
-! -----------------------------------------------------------------------------
-! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public dumbbell_initialize_topography
 public dumbbell_initialize_thickness
 public dumbbell_initialize_temperature_salinity
 public dumbbell_initialize_sponges
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
+
 contains
 
 !> Initialization of topography.
@@ -44,7 +40,6 @@ subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
                                       intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
-
   ! Local variables
   integer   :: i, j
   real      :: x, y, delta, dblen, dbfrac
@@ -74,8 +69,7 @@ subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
 
 end subroutine dumbbell_initialize_topography
 
-!> Initialization of thicknesses.
-!! This subroutine initializes the layer thicknesses to be uniform.
+!> Initializes the layer thicknesses to be uniform in the dumbbell test case
 subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
@@ -183,7 +177,7 @@ end select
 
 end subroutine dumbbell_initialize_thickness
 
-!> Initial values for temperature and salinity
+!> Initial values for temperature and salinity for the dumbbell test case
 subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                   eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
@@ -251,7 +245,7 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
 end subroutine dumbbell_initialize_temperature_salinity
 
-!> Initialize the restoring sponges for the dense water experiment
+!> Initialize the restoring sponges for the dumbbell test case
 subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G !< Horizontal grid control structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid control structure
@@ -349,8 +343,4 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
 
 end subroutine dumbbell_initialize_sponges
 
-!> \namespace dumbbell_initialization
-!!
-!! The module configures the model for the idealized dumbbell
-!! test case.
 end module dumbbell_initialization
