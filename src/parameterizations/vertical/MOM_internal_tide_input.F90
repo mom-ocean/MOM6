@@ -1,27 +1,7 @@
+!> Calculates energy input to the internal tides
 module MOM_int_tide_input
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, January 2013                                   *
-!*                                                                     *
-!*    This file contains the subroutines that sets the energy input    *
-!*  to the internal tides.                                             *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, buoy, ustar, T, S, Kd, ea, eb, etc.   *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
@@ -71,7 +51,7 @@ end type int_tide_input_type
 
 contains
 
-!> This subroutine sets the model-state dependent internal tide energy sources.
+!> Sets the model-state dependent internal tide energy sources.
 subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
@@ -85,20 +65,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
                                                                  !! to the internal tide sources.
   real,                                      intent(in)    :: dt !< The time increment in s.
   type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
-
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      fluxes - A structure of surface fluxes that may be used.
-!  (inout)   itide - A structure containing fields related to the internal
-!                    tide sources.
-!  (in)      dt - The time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - This module's control structure.
-
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     N2_bot        ! The bottom squared buoyancy frequency, in s-2.
 
@@ -148,7 +115,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
 
 end subroutine set_int_tide_input
 
-!> This subroutine estimates the near-bottom buoyancy frequency (N^2).
+!> Estimates the near-bottom buoyancy frequency (N^2).
 subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
@@ -164,7 +131,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
   type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
   real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: N2_bot !< The squared buoyancy freqency at the
                                                                  !! ocean bottom, in s-2.
-
+  ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces.
   real, dimension(SZI_(G)) :: &
@@ -262,7 +229,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
 
 end subroutine find_N2_bottom
 
-!> This subroutine initializes the data related to the internal tide input module
+!> Initializes the data related to the internal tide input module
 subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   type(time_type),           intent(in)    :: Time !< The current model time
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure
@@ -272,15 +239,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   type(int_tide_input_CS),   pointer       :: CS   !< This module's control structure, which is initialized here.
   type(int_tide_input_type), pointer       :: itide !< A structure containing fields related
                                                    !! to the internal tide sources.
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      diag_to_Z_CSp - A pointer to the Z-diagnostics control structure.
+  ! Local variables
   type(vardesc) :: vd
   logical :: read_tideamp
 ! This include declares and sets the variable "version".
@@ -397,7 +356,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
 
 end subroutine int_tide_input_init
 
-!> This subroutine deallocates any memory related to the internal tide input module.
+!> Deallocates any memory related to the internal tide input module.
 subroutine int_tide_input_end(CS)
   type(int_tide_input_CS), pointer :: CS !< This module's control structure, which is deallocated here.
 
