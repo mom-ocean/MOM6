@@ -1053,34 +1053,29 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real,                                      intent(in)    :: dt   !< Time increment in s.
   type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
   type(loop_bounds_type),                    intent(in)    :: LB   !< Loop bounds structure.
-  type(ocean_OBC_type),            optional, pointer       :: OBC   !<
-         !! This open boundary condition type specifies whether, where,
-         !! and what open boundary conditions are used.
+  type(ocean_OBC_type),            optional, pointer       :: OBC  !< Open boundary condition type
+                                   !! specifies whether, where, and what open boundary conditions are used.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                   optional, intent(in)    :: visc_rem_v !<
-         !! Both the fraction of the momentum originally in a
-         !! layer that remains after a time-step of viscosity,
-         !! and the fraction of a time-step's worth of a
-         !! barotropic acceleration that a layer experiences
-         !! after viscosity is applied.  Nondimensional between
-         !! 0 (at the bottom) and 1 (far above the bottom).
+                                   optional, intent(in)    :: visc_rem_v !< Both the fraction of the momentum
+                                   !! originally in a layer that remains after a time-step of viscosity,
+                                   !! and the fraction of a time-step's worth of a barotropic acceleration
+                                   !! that a layer experiences after viscosity is applied.  Nondimensional between
+                                   !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)), &
-                                   optional, intent(in)    :: vhbt !<
-         !! The summed volume flux through meridional faces, H m2 s-1.
+                                   optional, intent(in)    :: vhbt !< The summed volume flux through meridional
+                                   !! faces, H m2 s-1.
   real, dimension(SZI_(G),SZJB_(G)), &
-                                   optional, intent(in)    :: vhbt_aux !<
-         !! A second set of summed volume fluxes through meridional
-         !! faces, in H m2 s-1.
+                                   optional, intent(in)    :: vhbt_aux !< A second set of summed volume fluxes
+                                   !! through meridional faces, in H m2 s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                   optional, intent(out)   :: v_cor !<
-         !! The meridional velocitiess (v with a barotropic correction)
-         !! that give vhbt as the depth-integrated transport, m s-1.
+                                   optional, intent(out)   :: v_cor !< The meridional velocitiess (v with a
+                                   !! barotropic correction) that give vhbt as the depth-integrated transport, m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                   optional, intent(out)   :: v_cor_aux !<
-         !! The meridional velocities (v with a barotropic correction)
-         !! that give vhbt_aux as the depth-integrated transports, in m s-1.
-  type(BT_cont_type),              optional, pointer       :: BT_cont !<
-         !! A structure with elements that describe the effective
+                                   optional, intent(out)   :: v_cor_aux !< The meridional velocities (v with a
+                                   !! barotropic correction) that give vhbt_aux as the depth-integrated transports,
+                                   !! in m s-1.
+  type(BT_cont_type),              optional, pointer       :: BT_cont !< A structure with elements that describe
+                                   !! the effective open face areas as a function of barotropic flow.
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
     dvhdv      ! Partial derivative of vh with v, in m2.
