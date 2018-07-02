@@ -176,7 +176,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   type(param_file_type),   intent(in)    :: paramFile !< File parser
   type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
-  type(time_type),         intent(in)    :: Time      !< Time
+  type(time_type),         intent(in)    :: Time      !< Model time
   type(KPP_CS),            pointer       :: CS        !< Control structure
   logical,       optional, intent(out)   :: passive   !< Copy of %passiveMode
   type(wave_parameters_CS), optional, pointer :: Waves !< Wave CS
