@@ -1,4 +1,4 @@
-!> Initialize state variables, u, v, h, T and S.
+!> Initialization functions for state variables, u, v, h, T and S.
 module MOM_state_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -1382,9 +1382,13 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
 
   contains
 
-  real function my_psi(ig,jg) ! in-line function
-    integer :: ig, jg
+  !> Returns the value of a circular stream function at (ig,jg)
+  real function my_psi(ig,jg)
+    integer :: ig !< Global i-index
+    integer :: jg !< Global j-index
+    ! Local variables
     real :: x, y, r
+
     x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon)/G%len_lon-1.0  ! -1<x<1
     y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat)/G%len_lat-1.0 ! -1<y<1
     r = sqrt( x**2 + y**2 ) ! Circulat stream fn nis fn of radius only
