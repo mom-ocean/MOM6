@@ -110,7 +110,6 @@ character(len=40)  :: mdl = "MOM_state_initialization" ! This module's name.
 
 contains
 
-! -----------------------------------------------------------------------------
 !> Initialize temporally evolving fields, either as initial
 !! conditions or by reading them from a restart (or saves) file.
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
@@ -143,8 +142,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   type(ocean_OBC_type),       pointer       :: OBC   !< The open boundary condition control structure.
   type(time_type), optional,  intent(in)    :: Time_in !< Time at the start of the run segment.
                                                      !! Time_in overrides any value set for Time.
-
-! Local variables
+  ! Local variables
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
@@ -599,10 +597,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call callTree_leave('MOM_initialize_state()')
 
 end subroutine MOM_initialize_state
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
-!>  This subroutine reads the layer thicknesses or interface heights from a file.
+!> Reads the layer thicknesses or interface heights from a file.
 subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickness, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
@@ -688,24 +684,20 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
   endif
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_thickness_from_file
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
+!!
 !! If the bottom most interface is below the topography then the bottom-most
 !! layers are contracted to GV%Angstrom_z.
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the
 !! criteria for adjustment must equal or exceed 10cm.}
-!!   @param[in]     G   Grid type
-!!   @param[in,out] eta Interface heights
-!!   @param[out]    h   Layer thicknesses
 subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
-  type(ocean_grid_type),                          intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                        intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),    intent(inout) :: eta  !< Interface heights, in m
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),      intent(inout) :: h    !< Layer thicknesses, in H
+  type(ocean_grid_type),                      intent(in)    :: G   !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV  !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: eta !< Interface heights, in m
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h   !< Layer thicknesses, in H
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
   real, parameter :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
@@ -771,9 +763,8 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
   endif
 
 end subroutine adjustEtaToFitBathymetry
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Initializes thickness to be uniform
 subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
@@ -783,8 +774,7 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
-!  This subroutine initializes the layer thicknesses to be uniform.
+  ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_uniform" ! This subroutine's name.
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
@@ -828,9 +818,8 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_thickness_uniform
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Initialize thickness from a 1D list
 subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
@@ -840,14 +829,7 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!  This subroutine initializes the layer thicknesses to be uniform.
+  ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_list" ! This subroutine's name.
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
@@ -914,27 +896,23 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_thickness_list
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Search density space for location of layers (not implemented!)
 subroutine initialize_thickness_search
-! search density space for location of layers
   call MOM_error(FATAL,"  MOM_state_initialization.F90, initialize_thickness_search: NOT IMPLEMENTED")
 end subroutine initialize_thickness_search
-! -----------------------------------------------------------------------------
 
+!> Converts thickness from geometric to pressure units
 subroutine convert_thickness(h, G, GV, tv)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: h    !< Input eometric layer thicknesses (in H units),
+                           intent(inout) :: h    !< Input geometric layer thicknesses (in H units),
                                                  !! being converted to layer pressure
                                                  !! thicknesses (also in H units).
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     p_top, p_bot
   real :: dz_geo(SZI_(G),SZJ_(G))      ! The change in geopotential height
@@ -1002,6 +980,7 @@ subroutine convert_thickness(h, G, GV, tv)
 
 end subroutine convert_thickness
 
+!> Depress the sea-surface based on an initial condition file
 subroutine depress_surface(h, G, GV, param_file, tv, just_read_params)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -1011,12 +990,7 @@ subroutine depress_surface(h, G, GV, param_file, tv, just_read_params)
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     eta_sfc  ! The free surface height that the model should use, in m.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
@@ -1104,7 +1078,6 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
                            intent(inout) :: h !< Layer thickness (H units, m or Pa)
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
   ! Local variables
   character(len=200) :: mdl = "trim_for_ice"
   real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface (Pa)
@@ -1251,9 +1224,9 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
 
 end subroutine cut_off_column_top
 
-! -----------------------------------------------------------------------------
+!> Initialize horizontal velocity components from file
 subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
-  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure
+  type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1262,12 +1235,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-! Arguments: u - The zonal velocity that is being initialized.
-!  (out)     v - The meridional velocity that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file -  parameter file type
-
-!   This subroutine reads the initial velocity components from file
+  ! Local variables
   character(len=40)  :: mdl = "initialize_velocity_from_file" ! This subroutine's name.
   character(len=200) :: filename,velocity_file,inputdir ! Strings for file/path
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -1295,11 +1263,10 @@ subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_from_file
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Initialize horizontal velocity components to zero.
 subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
-  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
+  type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1308,12 +1275,7 @@ subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-! Arguments: u - The zonal velocity that is being initialized.
-!  (out)     v - The meridional velocity that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file -  parameter file type
-
-!   This subroutine sets the initial velocity components to zero
+  ! Local variables
   character(len=200) :: mdl = "initialize_velocity_zero" ! This subroutine's name.
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -1335,11 +1297,10 @@ subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_zero
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Sets the initial velocity components to uniform
 subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
-  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
+  type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1348,12 +1309,7 @@ subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-! Arguments: u - The zonal velocity that is being initialized.
-!  (out)     v - The meridional velocity that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file -  parameter file type
-
-!   This subroutine sets the initial velocity components to uniform
+  ! Local variables
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   real    :: initial_u_const, initial_v_const
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -1380,11 +1336,11 @@ subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
   enddo ; enddo ; enddo
 
 end subroutine initialize_velocity_uniform
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Sets the initial velocity components to be circular with
+!! no flow at edges of domain and center.
 subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
-  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
+  type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1393,13 +1349,7 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-! Arguments: u - The zonal velocity that is being initialized.
-!  (out)     v - The meridional velocity that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file -  parameter file type
-
-!   This subroutine sets the initial velocity components to be circular with
-! no flow at edges of domain and center.
+  ! Local variables
   character(len=200) :: mdl = "initialize_velocity_circular"
   real :: circular_max_u
   real :: dpi, psi1, psi2
@@ -1444,9 +1394,8 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   end function my_psi
 
 end subroutine initialize_velocity_circular
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Initializes temperature and salinity from file
 subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is being initialized.
@@ -1454,17 +1403,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-!  This function puts the initial layer temperatures and salinities  !
-! into T(:,:,:) and S(:,:,:).                                        !
-
-! Arguments: T - The potential temperature that is being initialized.
-!  (out)     S - The salinity that is being initialized.
-!  (in)      from_file - .true. if the variables that are set here are to
-!                        be read from a file; .false. to be set internally.
-!  (in)      filename - The name of the file to read.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  ! Local variables
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, salt_filename ! Full paths to input files
   character(len=200) :: ts_file, salt_file, inputdir ! Strings for file/path
@@ -1509,9 +1448,8 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_from_file
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Initializes temperature and salinity from a 1D profile
 subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_params)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is being initialized.
@@ -1519,17 +1457,7 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-!  This function puts the initial layer temperatures and salinities  !
-! into T(:,:,:) and S(:,:,:).                                        !
-
-! Arguments: T - The potential temperature that is being initialized.
-!  (out)     S - The salinity that is being initialized.
-!  (in)      from_file - .true. if the variables that are set here are to
-!                        be read from a file; .false. to be set internally.
-!  (in)      filename - The name of the file to read.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  ! Local variables
   real, dimension(SZK_(G)) :: T0, S0
   integer :: i, j, k
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -1563,10 +1491,8 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_from_profile
-! -----------------------------------------------------------------------------
 
-
-! -----------------------------------------------------------------------------
+!> Initializes temperature and salinity by fitting to density
 subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
@@ -1579,17 +1505,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
                                                        !! in Pa.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                        !! only read parameters without changing h.
-!  This function puts the initial layer temperatures and salinities  !
-! into T(:,:,:) and S(:,:,:).                                        !
-
-! Arguments: T - The potential temperature that is being initialized.
-!  (out)     S - The salinity that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      eqn_of_state - integer that selects the equatio of state
-!  (in)      P_Ref - The coordinate-density reference pressure in Pa.
+  ! Local variables
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: T_Ref         ! Reference Temperature
   real :: S_Ref         ! Reference Salinity
@@ -1661,9 +1577,12 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_fit
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
+!> Initializes T and S with linear profiles according to reference surface
+!! layer salinity and temperature and a specified range.
+!!
+!! \remark Note that the linear distribution is set up with respect to the layer
+!! number, not the physical position).
 subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
   type(ocean_grid_type),                    intent(in)  :: G          !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is being initialized.
@@ -1675,10 +1594,6 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
                                                                       !! parameters without
                                                                       !! changing h.
 
-  ! This subroutine initializes linear profiles for T and S according to
-  ! reference surface layer salinity and temperature and a specified range.
-  ! Note that the linear distribution is set up with respect to the layer
-  ! number, not the physical position).
   integer :: k
   real  :: delta_S, delta_T
   real  :: S_top, T_top ! Reference salinity and temerature within surface layer
@@ -1727,13 +1642,11 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_linear
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
 !> This subroutine sets the inverse restoration time (Idamp), and
 !! the values towards which the interface heights and an arbitrary
 !! number of tracers should be restored within each sponge. The
-!!interface height is always subject to damping, and must always be
+!! interface height is always subject to damping, and must always be
 !! the first registered field.
 subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, ALE_CSp, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
@@ -1748,8 +1661,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
                                                   !! structure for this module (in ALE mode).
   type(time_type),         intent(in) :: Time !< Time at the start of the run segment. Time_in
                                               !! overrides any value set for Time.
-
-! Local variables
+  ! Local variables
   real, allocatable, dimension(:,:,:) :: eta ! The target interface heights, in m.
   real, allocatable, dimension(:,:,:) :: h   ! The target interface thicknesses, in m.
 
@@ -1916,16 +1828,13 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, tv%S, ALE_CSp)
   endif
 
-
-
 end subroutine initialize_sponges_file
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
 !> This subroutine sets the 4 bottom depths at velocity points to be the
 !! maximum of the adjacent depths.
 subroutine set_velocity_depth_max(G)
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(ocean_grid_type), intent(inout) :: G !< The ocean's grid structure
+  ! Local variables
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
@@ -1937,13 +1846,12 @@ subroutine set_velocity_depth_max(G)
     G%Dopen_v(I,J) = G%Dblock_v(I,J)
   enddo ; enddo
 end subroutine set_velocity_depth_max
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
 !> Subroutine to pre-compute global integrals of grid quantities for
 !! later use in reporting diagnostics
 subroutine compute_global_grid_integrals(G)
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(ocean_grid_type), intent(inout) :: G !< The ocean's grid structure
+  ! Local variables
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
   integer :: i,j
 
@@ -1956,11 +1864,11 @@ subroutine compute_global_grid_integrals(G)
   G%IareaT_global = 1. / G%areaT_global
 end subroutine compute_global_grid_integrals
 
-! -----------------------------------------------------------------------------
 !> This subroutine sets the 4 bottom depths at velocity points to be the
 !! minimum of the adjacent depths.
 subroutine set_velocity_depth_min(G)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  ! Local variables
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
@@ -1972,9 +1880,7 @@ subroutine set_velocity_depth_min(G)
     G%Dopen_v(I,J) = G%Dblock_v(I,J)
   enddo ; enddo
 end subroutine set_velocity_depth_min
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
 !> This subroutine determines the isopycnal or other coordinate interfaces and
 !! layer potential temperatures and salinities directly from a z-space file on
 !! a latitude-longitude grid.
@@ -1991,7 +1897,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
                                                  !! to parse for model parameter values.
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
+  ! Local variables
   character(len=200) :: filename   !< The name of an input file containing temperature
                                    !! and salinity in z-space; also used for  ice shelf area.
   character(len=200) :: tfilename  !< The name of an input file containing only temperature
@@ -2046,7 +1952,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi  ! Interface heights in m.
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press
-
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget
