@@ -16,51 +16,62 @@ public :: hchksum_pair, uvchksum, Bchksum_pair
 public :: chksum_general
 public :: MOM_checksums_init
 
+!> Checksums a pair of arrays (2d or 3d) staggered at tracer points
 interface hchksum_pair
   module procedure chksum_pair_h_2d, chksum_pair_h_3d
 end interface
 
+!> Checksums a pair velocity arrays (2d or 3d) staggered at C-grid locations
 interface uvchksum
   module procedure chksum_uv_2d, chksum_uv_3d
 end interface
 
+!> Checksums an array (2d or 3d) staggered at C-grid u points.
 interface uchksum
   module procedure chksum_u_2d, chksum_u_3d
 end interface
 
+!> Checksums an array (2d or 3d) staggered at C-grid v points.
 interface vchksum
   module procedure chksum_v_2d, chksum_v_3d
 end interface
 
+!> Checksums a pair of arrays (2d or 3d) staggered at corner points
 interface Bchksum_pair
   module procedure chksum_pair_B_2d, chksum_pair_B_3d
 end interface
 
+!> Checksums an array (2d or 3d) staggered at tracer points.
 interface hchksum
   module procedure chksum_h_2d, chksum_h_3d
 end interface
 
+!> Checksums an array (2d or 3d) staggered at corner points.
 interface Bchksum
   module procedure chksum_B_2d, chksum_B_3d
 end interface
 
-! This is an older interface that has been renamed Bchksum
+!> This is an older interface that has been renamed Bchksum
 interface qchksum
   module procedure chksum_B_2d, chksum_B_3d
 end interface
 
+!> This is an older interface for 1-, 2-, or 3-D checksums
 interface chksum
   module procedure chksum1d, chksum2d, chksum3d
 end interface
 
+!> Write a message with either checksums or numerical statistics of arrays
 interface chk_sum_msg
   module procedure chk_sum_msg1, chk_sum_msg2, chk_sum_msg3, chk_sum_msg5
 end interface
 
+!> Returns .true. if any element of x is a NaN, and .false. otherwise.
 interface is_NaN
   module procedure is_NaN_0d, is_NaN_1d, is_NaN_2d, is_NaN_3d
 end interface
 
+!> Return the bitcount of an array
 interface chksum_general
   module procedure chksum_general_1d, chksum_general_2d, chksum_general_3d
 end interface
@@ -73,8 +84,7 @@ logical :: checkForNaNs=.true. ! If true, checks array for NaNs and cause
 
 contains
 
-! =====================================================================
-
+!> Checksums on a pair of 2d arrays staggered at tracer points.
 subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, scale)
   character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
@@ -94,6 +104,7 @@ subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, s
 
 end subroutine chksum_pair_h_2d
 
+!> Checksums on a pair of 3d arrays staggered at tracer points.
 subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, scale)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI   !< A horizontal index type
@@ -113,7 +124,7 @@ subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, s
 
 end subroutine chksum_pair_h_3d
 
-!> chksum_h_2d performs checksums on a 2d array staggered at tracer points.
+!> Checksums a 2d array staggered at tracer points.
 subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
   type(hor_index_type),            intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
@@ -232,8 +243,7 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
 
 end subroutine chksum_h_2d
 
-! =====================================================================
-
+!> Checksums on a pair of 2d arrays staggered at q-points.
 subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit_corners, scale)
   character(len=*),                 intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
@@ -261,6 +271,7 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
 
 end subroutine chksum_pair_B_2d
 
+!> Checksums on a pair of 3d arrays staggered at q-points.
 subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit_corners, scale)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
@@ -286,7 +297,7 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
 
 end subroutine chksum_pair_B_3d
 
-!> chksum_B_2d performs checksums on a 2d array staggered at corner points.
+!> Checksums a 2d array staggered at corner points.
 subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
   type(hor_index_type), intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:), &
@@ -426,8 +437,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
 end subroutine chksum_B_2d
 
-! =====================================================================
-
+!> Checksums a pair of 2d velocity arrays staggered at C-grid locations
 subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_corners, scale)
   character(len=*),                  intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),              intent(in) :: HI     !< A horizontal index type
@@ -449,6 +459,7 @@ subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
 
 end subroutine chksum_uv_2d
 
+!> Checksums a pair of 3d velocity arrays staggered at C-grid locations
 subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_corners, scale)
   character(len=*),                    intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
@@ -470,7 +481,7 @@ subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
 
 end subroutine chksum_uv_3d
 
-!> chksum_u_2d performs checksums on a 2d array staggered at C-grid u points.
+!> Checksums a 2d array staggered at C-grid u points.
 subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
   type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
@@ -614,9 +625,7 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
 end subroutine chksum_u_2d
 
-! =====================================================================
-
-!> chksum_v_2d performs checksums on a 2d array staggered at C-grid v points.
+!> Checksums a 2d array staggered at C-grid v points.
 subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
   type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
@@ -760,9 +769,7 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
 end subroutine chksum_v_2d
 
-! =====================================================================
-
-!> chksum_h_3d performs checksums on a 3d array staggered at tracer points.
+!> Checksums a 3d array staggered at tracer points.
 subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
   type(hor_index_type),             intent(in) :: HI !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:),  intent(in) :: array !< The array to be checksummed
@@ -884,9 +891,7 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
 
 end subroutine chksum_h_3d
 
-! =====================================================================
-
-!> chksum_B_3d performs checksums on a 3d array staggered at corner points.
+!> Checksums a 3d array staggered at corner points.
 subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
   type(hor_index_type),              intent(in) :: HI !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
@@ -1030,9 +1035,7 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
 end subroutine chksum_B_3d
 
-! =====================================================================
-
-!> chksum_u_3d performs checksums on a 3d array staggered at C-grid u points.
+!> Checksums a 3d array staggered at C-grid u points.
 subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
   type(hor_index_type),             intent(in) :: HI !< A horizontal index type
   real, dimension(HI%isdB:,HI%Jsd:,:), intent(in) :: array !< The array to be checksummed
@@ -1176,7 +1179,6 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
 end subroutine chksum_u_3d
 
-!---chksum_general interface routines
 !> Return the bitcount of an arbitrarily sized 3d array
 integer function chksum_general_3d( array, scale_factor, istart, iend, jstart, jend, kstart, kend ) &
                             result(subchk)
@@ -1249,9 +1251,7 @@ integer function chksum_general_1d( array_1d, scale_factor, istart, iend )
   deallocate(array_3d)
 end function chksum_general_1d
 
-! =====================================================================
-
-!> chksum_v_3d performs checksums on a 3d array staggered at C-grid v points.
+!> Checksums a 3d array staggered at C-grid v points.
 subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
   type(hor_index_type),             intent(in) :: HI !< A horizontal index type
   real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
@@ -1395,9 +1395,6 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
 
 end subroutine chksum_v_3d
 
-
-! =====================================================================
-
 !   These are the older version of chksum that do not take the grid staggering
 ! into account.
 
@@ -1456,7 +1453,6 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
 
 end subroutine chksum1d
 
-! =====================================================================
 !   These are the older version of chksum that do not take the grid staggering
 ! into account.
 
@@ -1517,8 +1513,6 @@ subroutine chksum3d(array, mesg)
 
 end subroutine chksum3d
 
-! =====================================================================
-
 !> This function returns .true. if x is a NaN, and .false. otherwise.
 function is_NaN_0d(x)
   real, intent(in) :: x !< The value to be checked for NaNs.
@@ -1535,9 +1529,7 @@ function is_NaN_0d(x)
 
 end function is_NaN_0d
 
-! =====================================================================
-
-!> This function returns .true. if any element of x is a NaN, and .false. otherwise.
+!> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_1d(x, skip_mpp)
   real, dimension(:), intent(in) :: x !< The array to be checked for NaNs.
   logical,  optional, intent(in) :: skip_mpp  !< If true, only check this array only
@@ -1560,9 +1552,7 @@ function is_NaN_1d(x, skip_mpp)
 
 end function is_NaN_1d
 
-! =====================================================================
-
-!> This function returns .true. if any element of x is a NaN, and .false. otherwise.
+!> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_2d(x)
   real, dimension(:,:), intent(in) :: x !< The array to be checked for NaNs.
   logical :: is_NaN_2d
@@ -1579,9 +1569,7 @@ function is_NaN_2d(x)
 
 end function is_NaN_2d
 
-! =====================================================================
-
-!> This function returns .true. if any element of x is a NaN, and .false. otherwise.
+!> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_3d(x)
   real, dimension(:,:,:), intent(in) :: x !< The array to be checked for NaNs.
   logical :: is_NaN_3d
@@ -1600,7 +1588,6 @@ function is_NaN_3d(x)
 
 end function is_NaN_3d
 
-! =====================================================================
 !> Write a message including the checksum of the non-shifted array
 subroutine chk_sum_msg1(fmsg,bc0,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
@@ -1609,7 +1596,6 @@ subroutine chk_sum_msg1(fmsg,bc0,mesg)
   if (is_root_pe()) write(0,'(A,1(A,I10,X),A)') fmsg," c=",bc0,trim(mesg)
 end subroutine chk_sum_msg1
 
-! =====================================================================
 !> Write a message including checksums of non-shifted and diagonally shifted arrays
 subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
@@ -1623,7 +1609,6 @@ subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
      fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,trim(mesg)
 end subroutine chk_sum_msg5
 
-! =====================================================================
 !> Write a message including checksums of non-shifted and laterally shifted arrays
 subroutine chk_sum_msg_NSEW(fmsg,bc0,bcN,bcS,bcE,bcW,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
@@ -1637,7 +1622,6 @@ subroutine chk_sum_msg_NSEW(fmsg,bc0,bcN,bcS,bcE,bcW,mesg)
      fmsg," c=",bc0,"N=",bcN,"S=",bcS,"E=",bcE,"W=",bcW,trim(mesg)
 end subroutine chk_sum_msg_NSEW
 
-! =====================================================================
 !> Write a message including checksums of non-shifted and southward shifted arrays
 subroutine chk_sum_msg_S(fmsg,bc0,bcS,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
@@ -1648,7 +1632,6 @@ subroutine chk_sum_msg_S(fmsg,bc0,bcS,mesg)
      fmsg," c=",bc0,"S=",bcS,trim(mesg)
 end subroutine chk_sum_msg_S
 
-! =====================================================================
 !> Write a message including checksums of non-shifted and westward shifted arrays
 subroutine chk_sum_msg_W(fmsg,bc0,bcW,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
@@ -1659,7 +1642,6 @@ subroutine chk_sum_msg_W(fmsg,bc0,bcW,mesg)
      fmsg," c=",bc0,"W=",bcW,trim(mesg)
 end subroutine chk_sum_msg_W
 
-! =====================================================================
 !> Write a message including checksums of non-shifted and southwestward shifted arrays
 subroutine chk_sum_msg2(fmsg,bc0,bcSW,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
@@ -1670,7 +1652,6 @@ subroutine chk_sum_msg2(fmsg,bc0,bcSW,mesg)
      fmsg," c=",bc0,"s/w=",bcSW,trim(mesg)
 end subroutine chk_sum_msg2
 
-! =====================================================================
 !> Write a message including the global mean, maximum and minimum of an array
 subroutine chk_sum_msg3(fmsg,aMean,aMin,aMax,mesg)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
@@ -1681,8 +1662,6 @@ subroutine chk_sum_msg3(fmsg,aMean,aMin,aMax,mesg)
   if (is_root_pe()) write(0,'(A,3(A,ES25.16,1X),A)') &
      fmsg," mean=",aMean,"min=",aMin,"max=",aMax,trim(mesg)
 end subroutine chk_sum_msg3
-
-! =====================================================================
 
 !> MOM_checksums_init initializes the MOM_checksums module. As it happens, the
 !! only thing that it does is to log the version of this module.
@@ -1696,7 +1675,6 @@ subroutine MOM_checksums_init(param_file)
 
 end subroutine MOM_checksums_init
 
-! =====================================================================
 !> A wrapper for MOM_error used in the checksum code
 subroutine chksum_error(signal, message)
   ! Wrapper for MOM_error to help place specific break points in debuggers
@@ -1723,6 +1701,5 @@ integer function bitcount( x )
   enddo
 
 end function bitcount
-! =====================================================================
 
 end module MOM_checksums
