@@ -173,7 +173,8 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff,
   real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz),   intent(in)    :: T_col, S_col !< T and S for column
+  real, dimension(nz),   intent(in)    :: T_col !< T for column
+  real, dimension(nz),   intent(in)    :: S_col !< S for column
   real, dimension(nz),   intent(in)    :: h_col !< Layer thicknesses, in m
   real, dimension(nz),   intent(in)    :: p_col !< Layer quantities
   real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H units (m or kg m-2)
@@ -184,7 +185,6 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff,
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                              !! for the purpose of edge value calculations
                                              !! in the same units as h_col.
-
   ! Local variables
   real, dimension(nz) :: rho_col ! Layer quantities
   real, dimension(nz) :: T_f, S_f  ! Filtered ayer quantities
