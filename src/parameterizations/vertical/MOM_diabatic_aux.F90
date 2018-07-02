@@ -487,7 +487,10 @@ end subroutine insert_brine
 subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  integer,                                  intent(in)    :: is, ie, js, je !< The range of indices to work on.
+  integer,                                  intent(in)    :: is   !< The start i-index to work on.
+  integer,                                  intent(in)    :: ie   !< The end i-index to work on.
+  integer,                                  intent(in)    :: js   !< The start j-index to work on.
+  integer,                                  intent(in)    :: je   !< The end j-index to work on.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment, in H.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: ea !< The amount of fluid entrained from the layer
                                                  !! above within this time step, in units of H.
