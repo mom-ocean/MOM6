@@ -1,6 +1,5 @@
-!> Implements the thermodynamic aspects of ocean / ice-shelf interactions,
-!!  along with a crude placeholder for a later implementation of full
-!!  ice shelf dynamics, all using the MOM framework and coding style.
+!> Implements a crude placeholder for a later implementation of full
+!! ice shelf dynamics.
 module MOM_ice_shelf_dynamics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -4067,95 +4066,5 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
   enddo ! i loop
 
 end subroutine ice_shelf_advect_temp_y
-
-!> \namespace mom_ice_shelf_dynamics
-!!
-!! \section section_ICE_SHELF_dynamics
-!!
-!! This module implements the thermodynamic aspects of ocean/ice-shelf
-!! inter-actions, along with a crude placeholder for a later implementation of full
-!! ice shelf dynamics, all using the MOM framework and coding style.
-!!
-!! Derived from code by Chris Little, early 2010.
-!!
-!!   The ice-sheet dynamics subroutines do the following:
-!!  initialize_shelf_mass - Initializes the ice shelf mass distribution.
-!!      - Initializes h_shelf, h_mask, area_shelf_h
-!!      - CURRENTLY: initializes mass_shelf as well, but this is unnecessary, as mass_shelf is initialized based on
-!!             h_shelf and density_ice immediately afterwards. Possibly subroutine should be renamed
-!!  update_shelf_mass - updates ice shelf mass via netCDF file
-!!                      USER_update_shelf_mass (TODO).
-!!  ice_shelf_solve_outer - Orchestrates the calls to calculate the shelf
-!!      - outer loop calls ice_shelf_solve_inner
-!!         stresses and checks for error tolerances.
-!!         Max iteration count for outer loop currently fixed at 100 iteration
-!!      - tolerance (and error evaluation) can be set through input file
-!!      - updates u_shelf, v_shelf, ice_visc, taub_beta_eff
-!!  ice_shelf_solve_inner - Conjugate Gradient solve of matrix solve for ice_shelf_solve_outer
-!!      - Jacobi Preconditioner - basically diagonal of matrix (not sure if it is effective at all)
-!!      - modifies u_shelf and v_shelf only
-!!      - max iteration count can be set through input file
-!!      - tolerance (and error evaluation) can be set through input file
-!!                  (ISSUE:  Too many sum_across_PEs calls?)
-!!    calc_shelf_driving_stress - Determine the driving stresses using h_shelf, (water) column thickness, bathymetry
-!!            - does not modify any permanent arrays
-!!    init_boundary_values -
-!!    bilinear_shape_functions - shape function for FEM solve using (convex) quadrilateral elements and
-!!                               bilinear nodal basis
-!!    calc_shelf_visc - Glen's law viscosity and nonlinear sliding law (called by ice_shelf_solve_outer)
-!!    apply_boundary_values - same as CG_action, but input is zero except for dirichlet bdry conds
-!!    CG_action - Effect of matrix (that is never explicitly constructed)
-!!        on vector space of Degrees of Freedom (DoFs) in velocity solve
-!!  ice_shelf_advect - Given the melt rate and velocities, it advects the ice shelf THICKNESS
-!!      - modified h_shelf, area_shelf_h, hmask
-!!        (maybe should updater mass_shelf as well ???)
-!!    ice_shelf_advect_thickness_x, ice_shelf_advect_thickness_y - These
-!!        subroutines determine the mass fluxes through the faces.
-!!                  (ISSUE: duplicative flux calls for shared faces?)
-!!    ice_shelf_advance_front - Iteratively determine the ice-shelf front location.
-!!           - IF ice_shelf_advect_thickness_x,y are modified to avoid
-!!       dupe face processing, THIS NEEDS TO BE MODIFIED TOO
-!!       as it depends on arrays modified in those functions
-!!       (if in doubt consult DNG)
-!!    update_velocity_masks - Controls which elements of u_shelf and v_shelf are considered DoFs in linear solve
-!!    solo_time_step - called only in ice-only mode.
-!!    shelf_calc_flux - after melt rate & fluxes are calculated, ice dynamics are done. currently mass_shelf is
-!! updated immediately after ice_shelf_advect.
-!!
-!!
-!!   NOTES: be aware that hmask(:,:) has a number of functions; it is used for front advancement,
-!! for subroutines in the velocity solve, and for thickness boundary conditions (this last one may be removed).
-!! in other words, interfering with its updates will have implications you might not expect.
-!!
-!!  Overall issues: Many variables need better documentation and units and the
-!!                  subgrid on which they are discretized.
-!!
-!! \subsection section_ICE_SHELF_equations ICE_SHELF equations
-!!
-!! The three fundamental equations are:
-!! Heat flux
-!! \f[ \qquad \rho_w  C_{pw} \gamma_T (T_w - T_b) = \rho_i  \dot{m}  L_f \f]
-!! Salt flux
-!! \f[  \qquad \rho_w \gamma_s (S_w - S_b) =  \rho_i \dot{m} S_b \f]
-!! Freezing temperature
-!! \f[  \qquad T_b = a S_b + b + c P \f]
-!!
-!! where ....
-!!
-!! \subsection section_ICE_SHELF_references References
-!!
-!! Asay-Davis, Xylar S., Stephen L. Cornford, Benjamin K. Galton-Fenzi, Rupert M. Gladstone, G. Hilmar Gudmundsson,
-!! David M. Holland, Paul R. Holland, and Daniel F. Martin. Experimental design for three interrelated marine ice sheet
-!! and ocean model intercomparison projects: MISMIP v. 3 (MISMIP+), ISOMIP v. 2 (ISOMIP+) and MISOMIP v. 1 (MISOMIP1).
-!! Geoscientific Model Development 9, no. 7 (2016): 2471.
-!!
-!! Goldberg, D. N., et al. Investigation of land ice-ocean interaction with a fully coupled ice-ocean model: 1.
-!!  Model description and behavior. Journal of Geophysical Research: Earth Surface 117.F2 (2012).
-!!
-!! Goldberg, D. N., et al. Investigation of land ice-ocean interaction with a fully coupled ice-ocean model: 2.
-!! Sensitivity to external forcings. Journal of Geophysical Research: Earth Surface 117.F2 (2012).
-!!
-!! Holland, David M., and Adrian Jenkins. Modeling thermodynamic ice-ocean interactions at the base of an ice shelf.
-!! Journal of Physical Oceanography 29.8 (1999): 1787-1800.
 
 end module MOM_ice_shelf_dynamics

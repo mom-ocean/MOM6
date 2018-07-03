@@ -439,7 +439,8 @@ subroutine boundary_impulse_tracer_end(CS)
 end subroutine boundary_impulse_tracer_end
 
 !> \namespace boundary_impulse_tracer
-!! \section Boundary Impulse Response Tracer and Transit Time Distributions
+!!
+!! \section section_BIT_desc Boundary Impulse Response Tracer and Transit Time Distributions
 !! Transit time distributions (TTD) are the Green's function solution of the passive tracer equation between
 !! the oceanic surface and interior. The name derives from the idea that the 'age' (e.g. time since last
 !! contact with the atmosphere) of a water parcel is best characterized as a distribution of ages
@@ -456,18 +457,18 @@ end subroutine boundary_impulse_tracer_end
 !! In the References section, both the theoretical discussion of TTDs and BIRs are listed along with
 !! modeling studies which have this used framework in scientific investigations
 !!
-!! \section Run-time parameters
+!! \section section_BIT_params Run-time parameters
 !! -DO_BOUNDARY_IMPULSE_TRACER: Enables the boundary impulse tracer model
 !! -IMPULSE_SOURCE_TIME: Length of time that the surface layer acts as a source of the BIR tracer
 !!
-!! \section References
+!! \section section_BIT_refs References
 !! \subsection TTD and BIR Theory
 !!  -Holzer, M., and T.M. Hall, 2000: Transit-time and tracer-age distributions in geophysical flows.
 !!    J. Atmos. Sci., 57, 3539-3558, doi:10.1175/1520-0469(2000)057<3539:TTATAD>2.0.CO;2.
 !!  -T.W.N. Haine, H. Zhang, D.W. Waugh, M. Holzer, On transit-time distributions in unsteady circulation
 !!    models, Ocean Modelling, Volume 21, Issues 1–2, 2008, Pages 35-45, ISSN 1463-5003
 !!    http://dx.doi.org/10.1016/j.ocemod.2007.11.004.
-!! \subsection BIR Modelling applications
+!! \subsection section_BIT_apps Modelling applications
 !!  -Peacock, S., and M. Maltrud (2006), Transit-time distributions in a global ocean model,
 !!    J. Phys. Oceanogr., 36(3), 474–495, doi:10.1175/JPO2860.1.
 !!  -Maltrud, M., Bryan, F. & Peacock, Boundary impulse response functions in a century-long eddying global

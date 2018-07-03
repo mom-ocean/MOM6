@@ -2002,43 +2002,40 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
 
 end subroutine clone_MD_to_d2D
 
-!> get_domain_extent returns various data that has been stored in a MOM_domain_type.
+!> Returns various data that has been stored in a MOM_domain_type
 subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
                              symmetric, local_indexing, index_offset)
   type(MOM_domain_type), &
-           intent(in)  :: Domain                 !< The MOM domain from which to extract information
-  integer, intent(out) :: isc, iec, jsc, jec     !< The start & end indices of the computational
-                                                 !! domain.
-  integer, intent(out) :: isd, ied, jsd, jed     !< The start & end indices of the data domain.
-  integer, intent(out) :: isg, ieg, jsg, jeg     !< The start & end indices of the global domain.
-  integer, intent(out) :: idg_offset, jdg_offset !< The offset between the corresponding global and
-                                                 !! data index spaces.
-  logical, intent(out) :: symmetric              !< True if symmetric memory is used.
+           intent(in)  :: Domain         !< The MOM domain from which to extract information
+  integer, intent(out) :: isc            !< The start i-index of the computational domain
+  integer, intent(out) :: iec            !< The end i-index of the computational domain
+  integer, intent(out) :: jsc            !< The start j-index of the computational domain
+  integer, intent(out) :: jec            !< The end j-index of the computational domain
+  integer, intent(out) :: isd            !< The start i-index of the data domain
+  integer, intent(out) :: ied            !< The end i-index of the data domain
+  integer, intent(out) :: jsd            !< The start j-index of the data domain
+  integer, intent(out) :: jed            !< The end j-index of the data domain
+  integer, intent(out) :: isg            !< The start i-index of the global domain
+  integer, intent(out) :: ieg            !< The end i-index of the global domain
+  integer, intent(out) :: jsg            !< The start j-index of the global domain
+  integer, intent(out) :: jeg            !< The end j-index of the global domain
+  integer, intent(out) :: idg_offset     !< The offset between the corresponding global and
+                                         !! data i-index spaces.
+  integer, intent(out) :: jdg_offset     !< The offset between the corresponding global and
+                                         !! data j-index spaces.
+  logical, intent(out) :: symmetric      !< True if symmetric memory is used.
   logical, optional, &
-            intent(in) :: local_indexing         !< If true, local tracer array indices start at 1,
-                                                 !! as in most MOM6 or GOLD code.
+           intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
+                                         !! as in most MOM6 code.
   integer, optional, &
-            intent(in) :: index_offset           !< A fixed additional offset to all indices. This
-                                                 !! can be useful for some types of debugging with
-                                                 !! dynamic memory allocation.
-
-! Arguments: Domain - The MOM_domain_type from which the indices are extracted.
-!  (out)     isc, iec, jsc, jec - the start & end indices of the
-!                                 computational domain.
-!  (out)     isd, ied, jsd, jed - the start & end indices of the data domain.
-!  (out)     isg, ieg, jsg, jeg - the start & end indices of the global domain.
-!  (out)     idg_offset, jdg_offset - the offset between the corresponding
-!                                     global and data index spaces.
-!  (out)     symmetric - true if symmetric memory is used.
-!  (in,opt)  local_indexing - if true, local tracer array indices start at 1, as
-!                             in most MOM6 or GOLD code.
-!  (in,opt)  index_offset - A fixed additional offset to all indices.  This can
-!                           be useful for some types of debugging with dynamic
-!                           memory allocation.
-
+           intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
+                                         !! can be useful for some types of debugging with
+                                         !! dynamic memory allocation.
+  ! Local variables
   integer :: ind_off
   logical :: local
+
   local = .true. ; if (present(local_indexing)) local = local_indexing
   ind_off = 0 ; if (present(index_offset)) ind_off = index_offset
 
