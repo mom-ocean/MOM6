@@ -680,7 +680,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
 
 end subroutine calculate_Z_transport
 
-!>   This subroutine determines the layers bounded by interfaces e that overlap
+!> Determines the layers bounded by interfaces e that overlap
 !! with the depth range between Z_top and Z_bot, and the fractional weights
 !! of each layer. It also calculates the normalized relative depths of the range
 !! of each layer that overlaps that depth range.
@@ -695,31 +695,13 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   integer,            intent(inout) :: k_bot  !< Indices of bottom layers that overlap with the
                                               !! depth range.
   real, dimension(:), intent(out)   :: wt     !< Relative weights of each layer from k_top to k_bot.
-  real, dimension(:), intent(out)   :: z1, z2 !< Depths of the top and bottom limits of the part of
+  real, dimension(:), intent(out)   :: z1     !< Depth of the top limits of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
        !! by the cell thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
-
-!   This subroutine determines the layers bounded by interfaces e that overlap
-! with the depth range between Z_top and Z_bot, and the fractional weights
-! of each layer. It also calculates the normalized relative depths of the range
-! of each layer that overlaps that depth range.
-
-!   Note that by convention, e decreases with increasing k and Z_top > Z_bot.
-!
-! Arguments:
-!  (in)          e        - column interface heights (meter or kg/m2)
-!  (in)      Z_top        - top of range being mapped to (meter or kg/m2)
-!  (in)      Z_bot        - bottom of range being mapped to (meter or kg/m2)
-!  (in)      k_max        - number of valid layers
-!  (in)      k_start      - layer at which to start searching
-!  (out)     k_top, k_bot - indices of top and bottom layers that
-!                           overlap with the depth range
-!  (out)     wt           - relative weights of each layer from k_top to k_bot
-!  (out)     z1, z2       - depths of the top and bottom limits of
-!                           the part of a layer that contributes to a depth level,
-!                           relative to the cell center and normalized by the cell
-!                           thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
-
+  real, dimension(:), intent(out)   :: z2     !< Depths of the bottom limit of the part of
+       !! a layer that contributes to a depth level, relative to the cell center and normalized
+       !! by the cell thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
+  ! Local variables
   real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k
 

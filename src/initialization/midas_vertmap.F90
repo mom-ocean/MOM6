@@ -166,12 +166,14 @@ contains
     real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input z* data (m)
     integer, intent(in)                          :: nlay !< The number of vertical layers in the target grid
     real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), intent(in) :: e !< The depths of the target layer interfaces (m)
-    integer, intent(in)                          :: nkml,nkbl !< The number of mixed and buffer layers respectively
+    integer, intent(in)                          :: nkml !< The number of mixed layers
+    integer, intent(in)                          :: nkbl !< The number of buffer layers
     real, intent(in)                             :: land_fill !< fill in data over land (1)
     real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet !< The wet mask for the source data (valid points)
     real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs !< The number of input levels with valid data
     logical, optional, intent(in)                :: debug !< optional debug flag
-    integer, optional, intent(in)                :: i_debug, j_debug !< points for debugging
+    integer, optional, intent(in)                :: i_debug !< i-index of point for debugging
+    integer, optional, intent(in)                :: j_debug !< j-index of point for debugging
     real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr !< tracers in layer space
 
     real, dimension(size(tr_in,3)) :: tr_1d !< a copy of the input tracer concentrations in a column.
@@ -336,9 +338,10 @@ contains
 !>  Optional args lo (default 1) and hi (default len(a)) bound the
 !>  slice of a to be searched.
   function bisect_fast(a, x, lo, hi) result(bi_r)
-    real, dimension(:,:), intent(in) :: a !< a - sorted list
-    real, dimension(:), intent(in) :: x !< x - item to be inserted
-    integer, dimension(size(a,1)), optional, intent(in) :: lo,hi !< lo, hi - optional range to search
+    real, dimension(:,:), intent(in) :: a !< Sorted list
+    real, dimension(:), intent(in) :: x !< Item to be inserted
+    integer, dimension(size(a,1)), optional, intent(in) :: lo !< Lower bracket of optional range to search
+    integer, dimension(size(a,1)), optional, intent(in) :: hi !< Upper bracket of optional range to search
     integer, dimension(size(a,1),size(x,1))  :: bi_r
 
     integer :: mid,num_x,num_a,i
@@ -536,12 +539,12 @@ contains
     real, intent(in)   :: Z_bot !< The bottom of the range being mapped to, in m.
     integer, intent(in) :: k_max !< The number of valid layers.
     integer, intent(in) :: k_start !< The layer at which to start searching.
-    integer, intent(out) :: k_top, k_bot !< The indices of the top and bottom layers that overlap with the depth range.
+    integer, intent(out) :: k_top !< The index of the top layer that overlap with the depth range.
+    integer, intent(out) :: k_bot !< The index of the bottom layer that overlap with the depth range.
     real, dimension(:), intent(out) :: wt !< The relative weights of each layer from k_top to k_bot.
-    real, dimension(:), intent(out) :: z1, z2 !< z1 and z2 are the depths of the top and bottom limits of
-    !! the part of a layer that contributes to a depth level,
-    !! relative to the cell center and normalized by the cell
-    !! thickness, nondim.  Note that -1/2 <= z1 < z2 <= 1/2.
+    real, dimension(:), intent(out) :: z1 !< Depth of the top limit of layer that contributes to a level
+    real, dimension(:), intent(out) :: z2 !< Depth of the bottom limit of layer that contributes to a level
+
     real :: Ih, e_c, tot_wt, I_totwt
     integer :: k
 
@@ -755,10 +758,12 @@ contains
 
   end function find_interfaces
 
-!>  create a 2d-mesh of grid coordinates from 1-d arrays
+!> Create a 2d-mesh of grid coordinates from 1-d arrays
   subroutine meshgrid(x,y,x_T,y_T)
-    real, dimension(:), intent(in) :: x,y !< input x,y coordinates
-    real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T,y_T !< output 2-d version
+    real, dimension(:), intent(in) :: x !< input x coordinates
+    real, dimension(:), intent(in) :: y !< input y coordinates
+    real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T !< output 2-d version
+    real, dimension(size(x,1),size(y,1)), intent(inout) :: y_T !< output 2-d version
 
     integer :: ni,nj,i,j
 
