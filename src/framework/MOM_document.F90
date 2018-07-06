@@ -17,6 +17,7 @@ implicit none ; private
 public doc_param, doc_subroutine, doc_function, doc_module, doc_init, doc_end
 public doc_openBlock, doc_closeBlock
 
+!> Document parameter values
 interface doc_param
   module procedure doc_param_none, &
                    doc_param_logical, doc_param_logical_array, &
@@ -30,28 +31,29 @@ integer, parameter :: mLen = 1240 ! Length of interface/message strings
 
 !> A structure that controls where the documentation occurs, its veborsity and formatting.
 type, public :: doc_type ; private
-  integer :: unitAll = -1           ! The open unit number for docFileBase + .all.
-  integer :: unitShort = -1         ! The open unit number for docFileBase + .short.
-  integer :: unitLayout = -1        ! The open unit number for docFileBase + .layout.
-  integer :: unitDebugging  = -1    ! The open unit number for docFileBase + .debugging.
-  logical :: filesAreOpen = .false. ! True if any files were successfully opened.
-  character(len=mLen) :: docFileBase = '' ! The basename of the files where run-time
-                                    ! parameters, settings and defaults are documented.
-  logical :: complete = .true.      ! If true, document all parameters.
-  logical :: minimal = .true.       ! If true, document non-default parameters.
-  logical :: layout = .true.        ! If true, document layout parameters.
-  logical :: debugging = .true.     ! If true, document debugging parameters.
-  logical :: defineSyntax = .false. ! If true, use #def syntax instead of a=b syntax
-  logical :: warnOnConflicts = .false. ! Cause a WARNING error if defaults differ.
-  integer :: commentColumn = 32     ! Number of spaces before the comment marker.
-  type(link_msg), pointer :: chain_msg => NULL() ! Db of messages
-  character(len=240) :: blockPrefix = '' ! The full name of the current block.
+  integer :: unitAll = -1           !< The open unit number for docFileBase + .all.
+  integer :: unitShort = -1         !< The open unit number for docFileBase + .short.
+  integer :: unitLayout = -1        !< The open unit number for docFileBase + .layout.
+  integer :: unitDebugging  = -1    !< The open unit number for docFileBase + .debugging.
+  logical :: filesAreOpen = .false. !< True if any files were successfully opened.
+  character(len=mLen) :: docFileBase = '' !< The basename of the files where run-time
+                                    !! parameters, settings and defaults are documented.
+  logical :: complete = .true.      !< If true, document all parameters.
+  logical :: minimal = .true.       !< If true, document non-default parameters.
+  logical :: layout = .true.        !< If true, document layout parameters.
+  logical :: debugging = .true.     !< If true, document debugging parameters.
+  logical :: defineSyntax = .false. !< If true, use '\#def' syntax instead of a=b syntax
+  logical :: warnOnConflicts = .false. !< Cause a WARNING error if defaults differ.
+  integer :: commentColumn = 32     !< Number of spaces before the comment marker.
+  type(link_msg), pointer :: chain_msg => NULL() !< Database of messages
+  character(len=240) :: blockPrefix = '' !< The full name of the current block.
 end type doc_type
 
+!> A linked list of the parameter documentation messages that have been issued so far.
 type :: link_msg ; private
-  type(link_msg), pointer :: next => NULL()  ! Facilitates linked list
-  character(len=80) :: name                  ! Parameter name
-  character(len=620) :: msg                  ! Parameter value and default
+  type(link_msg), pointer :: next => NULL()  !< Facilitates linked list
+  character(len=80) :: name                  !< Parameter name
+  character(len=620) :: msg                  !< Parameter value and default
 end type link_msg
 
 character(len=4), parameter :: STRING_TRUE = 'True'
@@ -737,6 +739,7 @@ end subroutine doc_function
 
 ! ----------------------------------------------------------------------
 
+!> Initialize the parameter documentation
 subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
   character(len=*),  intent(in)  :: docFileBase !< The base file name for this set of parameters,
                                              !! for example MOM_parameter_doc
@@ -750,8 +753,6 @@ subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
                                              !! the layout parameters
   logical, optional, intent(in)  :: debugging !< If present and true, write out the (.debugging) files documenting
                                              !! the debugging parameters
-! Arguments: docFileBase - The name of the doc file.
-!  (inout)   doc - The doc_type to populate.
 
   if (.not. associated(doc)) then
     allocate(doc)
@@ -765,7 +766,7 @@ subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
 
 end subroutine doc_init
 
-!< This subroutine allocates and populates a structure that controls where the
+!> This subroutine allocates and populates a structure that controls where the
 !! documentation occurs and its formatting, and opens up the files controlled
 !! by this structure
 subroutine open_doc_file(doc)
@@ -865,7 +866,7 @@ subroutine open_doc_file(doc)
 
 end subroutine open_doc_file
 
-! Find an unused unit number, returning >0 if found, and triggering a FATAL error if not.
+!> Find an unused unit number, returning >0 if found, and triggering a FATAL error if not.
 function find_unused_unit_number()
 ! Find an unused unit number.
 ! Returns >0 if found. FATAL if not.
@@ -879,7 +880,7 @@ function find_unused_unit_number()
     "doc_init failed to find an unused unit number.")
 end function find_unused_unit_number
 
-!< This subroutine closes the the files controlled by doc, and sets flags in
+!> This subroutine closes the the files controlled by doc, and sets flags in
 !! doc to indicate that parameterization is no longer permitted.
 subroutine doc_end(doc)
   type(doc_type), pointer :: doc !< A pointer to a structure that controls where the
