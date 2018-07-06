@@ -353,7 +353,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   BT_cont_BT_thick = .false.
   if (associated(CS%BT_cont)) BT_cont_BT_thick = &
-    (associated(CS%BT_cont%h_u) .and. associated(CS%BT_cont%h_v))
+    (allocated(CS%BT_cont%h_u) .and. allocated(CS%BT_cont%h_v))
 
   if (CS%split_bottom_stress) then
     taux_bot => CS%taux_bot ; tauy_bot => CS%tauy_bot
