@@ -55,25 +55,29 @@ logical, parameter :: log_to_stdout_default = .false.
 logical, parameter :: complete_doc_default = .true.
 logical, parameter :: minimal_doc_default = .true.
 
+!> The valid lines extracted from an input parameter file without comments
 type, private :: file_data_type ; private
-  integer :: num_lines = 0
-  character(len=INPUT_STR_LENGTH), pointer, dimension(:) :: line => NULL()
-  logical,                         pointer, dimension(:) :: line_used => NULL()
+  integer :: num_lines = 0 !< The number of lines in this type
+  character(len=INPUT_STR_LENGTH), pointer, dimension(:) :: line => NULL() !< The line content
+  logical,                         pointer, dimension(:) :: line_used => NULL() !< If true, the line has been read
 end type file_data_type
 
+!> A link in the list of variables that have already had override warnings issued
 type :: link_parameter ; private
-  type(link_parameter), pointer :: next => NULL() ! Facilitates linked list
-  character(len=80) :: name                       ! Parameter name
-  logical :: hasIssuedOverrideWarning = .false.   ! Has a default value
+  type(link_parameter), pointer :: next => NULL() !< Facilitates linked list
+  character(len=80) :: name                       !< Parameter name
+  logical :: hasIssuedOverrideWarning = .false.   !< Has a default value
 end type link_parameter
 
+!> Specify the active parameter block
 type :: parameter_block ; private
-  character(len=240) :: name = ''                 ! Parameter name
+  character(len=240) :: name = ''   !< The active parameter block name
 end type parameter_block
 
+!> A structure that can be parsed to read and document run-time parameters.
 type, public :: param_file_type ; private
   integer  :: nfiles = 0            !< The number of open files.
-  integer  :: iounit(MAX_PARAM_FILES)  !< The unit numbers of open files.
+  integer  :: iounit(MAX_PARAM_FILES) !< The unit numbers of open files.
   character(len=FILENAME_LENGTH)  :: filename(MAX_PARAM_FILES) !< The names of the open files.
   logical  :: NetCDF_file(MAX_PARAM_FILES) !< If true, the input file is in NetCDF.
                                     ! This is not yet implemented.
@@ -88,7 +92,8 @@ type, public :: param_file_type ; private
   logical  :: log_to_stdout = log_to_stdout_default !< If true, all log
                                     !! messages are also sent to stdout.
   logical  :: log_open = .false.    !< True if the log file has been opened.
-  integer  :: stdout, stdlog        !< The units from stdout() and stdlog().
+  integer  :: stdout                !< The unit number from stdout().
+  integer  :: stdlog                !< The unit number from stdlog().
   character(len=240) :: doc_file    !< A file where all run-time parameters, their
                                     !! settings and defaults are documented.
   logical  :: complete_doc = complete_doc_default !< If true, document all
@@ -117,7 +122,7 @@ interface log_param
                    log_param_char, log_param_time, &
                    log_param_int_array, log_param_real_array
 end interface
-!> An overloaded interface to log the values of various types of parameters
+!> An overloaded interface to read and log the values of various types of parameters
 interface get_param
   module procedure get_param_int, get_param_real, get_param_logical, &
                    get_param_char, get_param_char_array, get_param_time, &
@@ -263,10 +268,7 @@ subroutine close_param_file(CS, quiet_close, component)
                                          !! logging with this call.
   character(len=*), optional, intent(in) :: component   !< If present, this component name is used
                                          !! to generate parameter documentation file names
-! Arguments: CS - the param_file_type to close
-!  (in,opt)  quiet_close - if present and true, do not do any logging with this
-!                          call.
-
+  ! Local variables
   character(len=128) :: docfile_default
   character(len=40)  :: mdl   ! This module's name.
 ! This include declares and sets the variable "version".
