@@ -1832,13 +1832,13 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                                                  !! structure for this module
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 
-  ! local variables
+  ! Local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
-  logical :: adiabatic, use_omega
-  logical :: use_CVMix_ddiff, differential_diffusion
+  logical :: use_kappa_shear, adiabatic, use_omega
+  logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1995,6 +1995,16 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "flag is to be able to recover previous answers and it will likely \n"// &
                  "be removed in the future since this option should always be true.", &
                   default=.false.)
+
+  call get_param(param_file, mdl, "USE_KPP", use_KPP, &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.",     &
+                 do_not_log=.true., default=.false.)
+
+  if (use_KPP .and. visc%add_Kv_slow) call MOM_error(FATAL,"set_visc_init: "//&
+         "When USE_KPP=True, ADD_KV_SLOW must be false. Otherwise vertical "//&
+         "viscosity due to slow processes will be double counted. Please set "//&
+         "ADD_KV_SLOW=False.")
 
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
