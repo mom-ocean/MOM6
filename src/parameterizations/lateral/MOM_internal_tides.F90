@@ -36,104 +36,94 @@ public internal_tides_init, internal_tides_end
 public get_lowmode_loss
 
 type, public :: int_tide_CS ; private
-  logical :: do_int_tides    ! If true, use the internal tide code.
-  integer :: nFreq = 0
-  integer :: nMode = 1
-  integer :: nAngle = 24
-  integer :: energized_angle = -1
-  logical :: corner_adv      ! If true, use a corner advection rather than PPM.
-  logical :: upwind_1st      ! If true, use a first-order upwind scheme.
-  logical :: simple_2nd      ! If true, use a simple second order (arithmetic
-                             ! mean) interpolation of the edge values instead
-                             ! of the higher order interpolation.
-  logical :: vol_CFL         ! If true, use the ratio of the open face lengths
-                             ! to the tracer cell areas when estimating CFL
-                             ! numbers.  Without aggress_adjust, the default is
-                             ! false; it is always true with.
-  logical :: use_PPMang      ! If true, use PPM for advection of energy in
-                             ! angular space.
+  logical :: do_int_tides    !< If true, use the internal tide code.
+  integer :: nFreq = 0       !< The number of internal tide frequency bands
+  integer :: nMode = 1       !< The number of internal tide vertical modes
+  integer :: nAngle = 24     !< The number of internal tide angular orientations
+  integer :: energized_angle = -1 !< If positive, only this angular band is energized for debugging purposes
+  logical :: corner_adv      !< If true, use a corner advection rather than PPM.
+  logical :: upwind_1st      !< If true, use a first-order upwind scheme.
+  logical :: simple_2nd      !< If true, use a simple second order (arithmetic mean) interpolation
+                             !! of the edge values instead of the higher order interpolation.
+  logical :: vol_CFL         !< If true, use the ratio of the open face lengths to the tracer cell
+                             !! areas when estimating CFL numbers.  Without aggress_adjust,
+                             !! the default is false; it is always true with aggress_adjust.
+  logical :: use_PPMang      !< If true, use PPM for advection of energy in angular space.
 
   real, allocatable, dimension(:,:) :: refl_angle
-                        ! local coastline/ridge/shelf angles read from file
+                        !< local coastline/ridge/shelf angles read from file
                         ! (could be in G control structure)
   real :: nullangle = -999.9 ! placeholder value in cell with no reflection
   real, allocatable, dimension(:,:) :: refl_pref
-                        ! partial reflection coeff for each ``coast cell"
+                        !< partial reflection coeff for each "coast cell"
                         ! (could be in G control structure)
   logical, allocatable, dimension(:,:) :: refl_pref_logical
-                        ! true if reflecting cell with partial reflection
+                        !< true if reflecting cell with partial reflection
                         ! (could be in G control structure)
   logical, allocatable, dimension(:,:) :: refl_dbl
-                        ! identifies reflection cells where double reflection
-                        ! is possible (i.e. ridge cells)
+                        !< identifies reflection cells where double reflection
+                        !! is possible (i.e. ridge cells)
                         ! (could be in G control structure)
   real, allocatable, dimension(:,:,:,:) :: cp
-                        ! horizontal phase speed [m s-1]
+                        !< horizontal phase speed [m s-1]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_leak_loss
-                        ! energy lost due to misc background processes [W m-2]
+                        !< energy lost due to misc background processes [W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_quad_loss
-                        ! energy lost due to quadratic bottom drag [W m-2]
+                        !< energy lost due to quadratic bottom drag [W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_Froude_loss
-                        ! energy lost due to wave breaking [W m-2]
+                        !< energy lost due to wave breaking [W m-2]
   real, allocatable, dimension(:,:) :: TKE_itidal_loss_fixed
-                        ! fixed part of the energy lost due to small-scale drag
-                        ! [kg m-2] here; will be multiplied by N and En to get
-                        ! into [W m-2]
+                        !< fixed part of the energy lost due to small-scale drag
+                        !! [kg m-2] here; will be multiplied by N and En to get into [W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss
-                        ! energy lost due to small-scale wave drag [W m-2]
-  real, allocatable, dimension(:,:) :: tot_leak_loss, tot_quad_loss, &
-                                       tot_itidal_loss, tot_Froude_loss, tot_allprocesses_loss
-                        ! energy loss rates summed over angle, freq, and mode
-  real :: q_itides      ! fraction of local dissipation (nondimensional)
-  real :: En_sum        ! global sum of energy for use in debugging
-  type(time_type), pointer :: Time => NULL()
-                        ! A pointer to the model's clock.
-  character(len=200) :: inputdir
-                        ! directory to look for coastline angle file
-  real :: decay_rate    ! A constant rate at which internal tide energy is
-                        ! lost to the interior ocean internal wave field.
-  real :: cdrag         ! The bottom drag coefficient for MEKE (non-dim).
+                        !< energy lost due to small-scale wave drag [W m-2]
+  real, allocatable, dimension(:,:) :: tot_leak_loss !< Energy loss rates due to misc bakground processes,
+                        !! summed over angle, frequency and mode [W m-2]
+  real, allocatable, dimension(:,:) :: tot_quad_loss !< Energy loss rates due to quadratic bottom drag,
+                        !! summed over angle, frequency and mode [W m-2]
+  real, allocatable, dimension(:,:) :: tot_itidal_loss !< Energy loss rates due to small-scale drag,
+                        !! summed over angle, frequency and mode [W m-2]
+  real, allocatable, dimension(:,:) :: tot_Froude_loss !< Energy loss rates due to wave breaking,
+                        !! summed over angle, frequency and mode [W m-2]
+  real, allocatable, dimension(:,:) :: tot_allprocesses_loss !< Energy loss rates due to all processes,
+                        !! summed over angle, frequency and mode [W m-2]
+  real :: q_itides      !< fraction of local dissipation (nondimensional)
+  real :: En_sum        !< global sum of energy for use in debugging
+  type(time_type), pointer :: Time => NULL() !< A pointer to the model's clock.
+  character(len=200) :: inputdir !< directory to look for coastline angle file
+  real :: decay_rate    !< A constant rate at which internal tide energy is
+                        !! lost to the interior ocean internal wave field.
+  real :: cdrag         !< The bottom drag coefficient (non-dim).
   logical :: apply_background_drag
-                        ! If true, apply a drag due to background processes as a sink.
+                        !< If true, apply a drag due to background processes as a sink.
   logical :: apply_bottom_drag
-                        ! If true, apply a quadratic bottom drag as a sink.
+                        !< If true, apply a quadratic bottom drag as a sink.
   logical :: apply_wave_drag
-                        ! If true, apply scattering due to small-scale
-                        ! roughness as a sink.
+                        !< If true, apply scattering due to small-scale roughness as a sink.
   logical :: apply_Froude_drag
-                        ! If true, apply wave breaking as a sink.
-  real, dimension(:,:,:,:,:), pointer :: &
-    En                  ! The internal wave energy density as a function of
-                        ! (i,j,angle,frequency,mode)
-  real, dimension(:,:,:), pointer :: &
-    En_restart          ! The internal wave energy density as a function of
-                        ! (i,j,angle); temporary for restart
-  real, allocatable, dimension(:) :: &
-    frequency           ! The frequency of each band.
+                        !< If true, apply wave breaking as a sink.
+  real, dimension(:,:,:,:,:), pointer :: En => NULL()
+                        !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
+  real, dimension(:,:,:), pointer :: En_restart => NULL()
+                        !< The internal wave energy density as a function of (i,j,angle); temporary for restart
+  real, allocatable, dimension(:) :: frequency  !< The frequency of each band, in s-1.
 
-  real    :: int_tide_source_x ! delete later
-                               ! X Location of generation site
-                               ! for internal tide for testing
-  real    :: int_tide_source_y ! delete later
-                               ! Y Location of generation site
-                               ! for internal tide for testing
+  !### Delete later
+  real    :: int_tide_source_x !< X Location of generation site for internal tide testing
+  real    :: int_tide_source_y !< Y Location of generation site for internal tide testing
 
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to regulate the
-                        ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
+                        !! timing of diagnostic output.
   type(wave_structure_CS),  pointer :: wave_structure_CSp => NULL()
 
+  !>@{ Diag handles
   ! Diag handles relevant to all modes, frequencies, and angles
-  integer :: id_itide_drag = -1
+  integer :: id_tot_En = -1, id_TKE_itidal_input = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1
   integer :: id_dx_Cv = -1, id_dy_Cu = -1
-  integer :: id_TKE_itidal_input = -1
   ! Diag handles considering: sums over all modes, frequencies, and angles
-  integer :: id_tot_En = -1, &
-             id_tot_leak_loss = -1, &
-             id_tot_quad_loss = -1, &
-             id_tot_itidal_loss = -1, &
-             id_tot_Froude_loss = -1, &
-             id_tot_allprocesses_loss = -1
+  integer :: id_tot_leak_loss = -1, id_tot_quad_loss = -1, id_tot_itidal_loss = -1
+  integer :: id_tot_Froude_loss = -1, id_tot_allprocesses_loss = -1
   ! Diag handles considering: all modes & freqs; summed over angles
   integer, allocatable, dimension(:,:) :: &
              id_En_mode, &
@@ -145,12 +135,15 @@ type, public :: int_tide_CS ; private
   integer, allocatable, dimension(:,:) :: &
              id_En_ang_mode, &
              id_itidal_loss_ang_mode
+  !!@}
 
 end type int_tide_CS
 
 !> A structure with the active energy loop bounds.
 type :: loop_bounds_type ; private
+  !>@{ The active loop bounds
   integer :: ish, ieh, jsh, jeh
+  !!@}
 end type loop_bounds_type
 
 contains
@@ -2028,7 +2021,7 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   call PPM_limit_pos(h_in, h_l, h_r, 0.0, G, isl, iel, jsl, jel)
 end subroutine PPM_reconstruction_y
 
-!> This subroutine limits the left/right edge values of the PPM reconstruction
+!> Limits the left/right edge values of the PPM reconstruction
 !! to give a reconstruction that is positive-definite.  Here this is
 !! reinterpreted as giving a constant thickness if the mean thickness is less
 !! than h_min, with a minimum of h_min otherwise.
@@ -2078,12 +2071,6 @@ end subroutine PPM_limit_pos
 
 !   ! This subroutine is not currently in use!!
 
-!   ! Arguments: G - The ocean's grid structure.
-!   !  (in)      param_file - A structure indicating the open file to parse for
-!   !                         model parameter values.
-!   !  (in/out)  CS - A pointer that is set to point to the control structure
-!   !                 for this module.
-!   !  (in)      restart_CS - A pointer to the restart control structure.
 !   ! This subroutine is used to allocate and register any fields in this module
 !   ! that should be written to or read from the restart file.
 !   logical :: use_int_tides
