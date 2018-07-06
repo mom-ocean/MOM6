@@ -41,20 +41,24 @@ real, parameter, dimension(ni) :: &
 logical :: overflow_error = .false., NaN_error = .false.
 logical :: debug = .false.    ! Making this true enables debugging output.
 
+!> Find an accurate and order-invariant sum of distributed 2d or 3d fields
 interface reproducing_sum
   module procedure reproducing_sum_2d, reproducing_sum_3d
 end interface reproducing_sum
 
-! The Extended Fixed Point (EFP) type provides a public interface for doing sums
-! and taking differences with this type.  The use of this type is documented in
-!   Hallberg, R. & A. Adcroft, 2014: An Order-invariant Real-to-Integer Conversion Sum.
-!      Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
+!> The Extended Fixed Point (EFP) type provides a public interface for doing sums
+!! and taking differences with this type.  The use of this type is documented in
+!!   Hallberg, R. & A. Adcroft, 2014: An Order-invariant Real-to-Integer Conversion Sum.
+!!      Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
 type, public :: EFP_type ; private
-  integer(kind=8), dimension(ni) :: v
+  integer(kind=8), dimension(ni) :: v !< The value in this type
 end type EFP_type
 
+!> Add two extended-fixed-point numbers
 interface operator (+) ; module procedure EFP_plus  ; end interface
+!> Subtract one extended-fixed-point number from another
 interface operator (-) ; module procedure EFP_minus ; end interface
+!> Copy the value of one extended-fixed-point number into another
 interface assignment(=); module procedure EFP_assign ; end interface
 
 contains
