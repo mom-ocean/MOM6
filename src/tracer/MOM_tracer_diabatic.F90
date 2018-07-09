@@ -15,13 +15,13 @@ implicit none ; private
 #include <MOM_memory.h>
 public tracer_vertdiff
 public applyTracerBoundaryFluxesInOut
+
+contains
+
 !> This subroutine solves a tridiagonal equation for the final tracer
 !! concentrations after the dual-entrainments, and possibly sinking or surface
 !! and bottom sources, are applied.  The sinking is implemented with an
 !! fully implicit upwind advection scheme.
-
-contains
-
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate, convert_flux_in)
   type(ocean_grid_type),                     intent(in)    :: G      !< ocean grid structure
@@ -43,27 +43,28 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
-  real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
+  ! local variables
+  real :: sink_dist !< The distance the tracer sinks in a time step, in m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    sfc_src, &      ! The time-integrated surface source of the tracer, in
-                    ! units of m or kg m-2 times a concentration.
-    btm_src         ! The time-integrated bottom source of the tracer, in
-                    ! units of m or kg m-2  times a concentration.
+    sfc_src, &      !< The time-integrated surface source of the tracer, in
+                    !! units of m or kg m-2 times a concentration.
+    btm_src         !< The time-integrated bottom source of the tracer, in
+                    !! units of m or kg m-2  times a concentration.
   real, dimension(SZI_(G)) :: &
-    b1, &           ! b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
-    d1              ! d1=1-c1 is used by the tridiagonal solver, nondimensional.
-  real :: c1(SZI_(G),SZK_(GV))    ! c1 is used by the tridiagonal solver, ND.
-  real :: h_minus_dsink(SZI_(G),SZK_(GV)) ! The layer thickness minus the
-                    ! difference in sinking rates across the layer, in m or kg m-2.
-                    ! By construction, 0 <= h_minus_dsink < h_work.
-  real :: sink(SZI_(G),SZK_(GV)+1) ! The tracer's sinking distances at the
-                    ! interfaces, limited to prevent characteristics from
-                    ! crossing within a single timestep, in m or kg m-2.
-  real :: b_denom_1 ! The first term in the denominator of b1, in m or kg m-2.
-  real :: h_tr      ! h_tr is h at tracer points with a h_neglect added to
-                    ! ensure positive definiteness, in m or kg m-2.
-  real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in m.
+    b1, &           !< b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
+    d1              !! d1=1-c1 is used by the tridiagonal solver, nondimensional.
+  real :: c1(SZI_(G),SZK_(GV))    !< c1 is used by the tridiagonal solver, ND.
+  real :: h_minus_dsink(SZI_(G),SZK_(GV)) !< The layer thickness minus the
+                    !! difference in sinking rates across the layer, in m or kg m-2.
+                    !! By construction, 0 <= h_minus_dsink < h_work.
+  real :: sink(SZI_(G),SZK_(GV)+1) !< The tracer's sinking distances at the
+                    !! interfaces, limited to prevent characteristics from
+                    !! crossing within a single timestep, in m or kg m-2.
+  real :: b_denom_1 !< The first term in the denominator of b1, in m or kg m-2.
+  real :: h_tr      !< h_tr is h at tracer points with a h_neglect added to
+                    !! ensure positive definiteness, in m or kg m-2.
+  real :: h_neglect !< A thickness that is so small it is usually lost
+                    !! in roundoff and can be neglected, in m.
   logical :: convert_flux = .true.
 
 
