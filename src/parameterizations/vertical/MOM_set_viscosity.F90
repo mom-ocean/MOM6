@@ -1,3 +1,5 @@
+!> Calculates various values related to the bottom boundary layer, such as the viscosity and
+!! thickness of the BBL (set_viscous_BBL).
 module MOM_set_visc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -32,65 +34,66 @@ implicit none ; private
 public set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_end
 public set_visc_register_restarts
 
+!> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
-  real    :: Hbbl           ! The static bottom boundary layer thickness, in
-                            ! the same units as thickness (m or kg m-2).
-  real    :: cdrag          ! The quadratic drag coefficient.
-  real    :: c_Smag         ! The Laplacian Smagorinsky coefficient for
-                            ! calculating the drag in channels.
-  real    :: drag_bg_vel    ! An assumed unresolved background velocity for
-                            ! calculating the bottom drag, in m s-1.
-  real    :: BBL_thick_min  ! The minimum bottom boundary layer thickness in
-                            ! the same units as thickness (m or kg m-2).
-                            ! This might be Kv / (cdrag * drag_bg_vel) to give
-                            ! Kv as the minimum near-bottom viscosity.
-  real    :: Htbl_shelf     ! A nominal thickness of the surface boundary layer
-                            ! for use in calculating the near-surface velocity,
-                            ! in units of m.
-  real    :: Htbl_shelf_min ! The minimum surface boundary layer thickness in m.
-  real    :: KV_BBL_min     ! The minimum viscosities in the bottom and top
-  real    :: KV_TBL_min     ! boundary layers, both in m2 s-1.
-
-  logical :: bottomdraglaw  ! If true, the  bottom stress is calculated with a
-                            ! drag law c_drag*|u|*u. The velocity magnitude
-                            ! may be an assumed value or it may be based on the
-                            ! actual velocity in the bottommost HBBL, depending
-                            ! on whether linear_drag is true.
-  logical :: BBL_use_EOS    ! If true, use the equation of state in determining
-                            ! the properties of the bottom boundary layer.
-  logical :: linear_drag    ! If true, the drag law is cdrag*DRAG_BG_VEL*u.
-  logical :: Channel_drag   ! If true, the drag is exerted directly on each
-                            ! layer according to what fraction of the bottom
-                            ! they overlie.
-  logical :: RiNo_mix       ! If true, use Richardson number dependent mixing.
-  logical :: dynamic_viscous_ML  ! If true, use a bulk Richardson number criterion to
-                            ! determine the mixed layer thickness for viscosity.
-  real    :: bulk_Ri_ML     ! The bulk mixed layer used to determine the
-                            ! thickness of the viscous mixed layer.  Nondim.
-  real    :: omega          !   The Earth's rotation rate, in s-1.
-  real    :: ustar_min      ! A minimum value of ustar to avoid numerical
-                            ! problems, in m s-1.  If the value is small enough,
-                            ! this should not affect the solution.
-  real    :: TKE_decay      ! The ratio of the natural Ekman depth to the TKE
-                            ! decay scale, nondimensional.
-  real    :: omega_frac     !   When setting the decay scale for turbulence, use
-                            ! this fraction of the absolute rotation rate blended
-                            ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
-  logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                            ! regulate the timing of diagnostic output.
+  real    :: Hbbl           !< The static bottom boundary layer thickness, in
+                            !! the same units as thickness (m or kg m-2).
+  real    :: cdrag          !< The quadratic drag coefficient.
+  real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
+                            !! calculating the drag in channels.
+  real    :: drag_bg_vel    !< An assumed unresolved background velocity for
+                            !! calculating the bottom drag, in m s-1.
+  real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness in
+                            !! the same units as thickness (m or kg m-2).
+                            !! This might be Kv / (cdrag * drag_bg_vel) to give
+                            !! Kv as the minimum near-bottom viscosity.
+  real    :: Htbl_shelf     !< A nominal thickness of the surface boundary layer
+                            !! for use in calculating the near-surface velocity,
+                            !! in units of m.
+  real    :: Htbl_shelf_min !< The minimum surface boundary layer thickness in m.
+  real    :: KV_BBL_min     !< The minimum viscosities in the bottom and top
+  real    :: KV_TBL_min     !< boundary layers, both in m2 s-1.
+  logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
+                            !! drag law c_drag*|u|*u. The velocity magnitude
+                            !! may be an assumed value or it may be based on the
+                            !! actual velocity in the bottommost HBBL, depending
+                            !! on whether linear_drag is true.
+  logical :: BBL_use_EOS    !< If true, use the equation of state in determining
+                            !! the properties of the bottom boundary layer.
+  logical :: linear_drag    !< If true, the drag law is cdrag*DRAG_BG_VEL*u.
+  logical :: Channel_drag   !< If true, the drag is exerted directly on each
+                            !! layer according to what fraction of the bottom
+                            !! they overlie.
+  logical :: RiNo_mix       !< If true, use Richardson number dependent mixing.
+  logical :: dynamic_viscous_ML !< If true, use a bulk Richardson number criterion to
+                            !! determine the mixed layer thickness for viscosity.
+  real    :: bulk_Ri_ML     !< The bulk mixed layer used to determine the
+                            !! thickness of the viscous mixed layer.  Nondim.
+  real    :: omega          !<   The Earth's rotation rate, in s-1.
+  real    :: ustar_min      !< A minimum value of ustar to avoid numerical
+                            !! problems, in m s-1.  If the value is small enough,
+                            !! this should not affect the solution.
+  real    :: TKE_decay      !< The ratio of the natural Ekman depth to the TKE
+                            !! decay scale, nondimensional.
+  real    :: omega_frac     !<   When setting the decay scale for turbulence, use
+                            !! this fraction of the absolute rotation rate blended
+                            !! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
+  logical :: debug          !< If true, write verbose checksums for debugging purposes.
+  type(ocean_OBC_type), pointer :: OBC => NULL() !< Open boundaries control structure
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                            !! regulate the timing of diagnostic output.
+  !>@{ Diagnostics handles
   integer :: id_bbl_thick_u = -1, id_kv_bbl_u = -1
   integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1
   integer :: id_nkml_visc_u = -1, id_nkml_visc_v = -1
-  type(ocean_OBC_type), pointer :: OBC => NULL()
+  !!@}
 end type set_visc_CS
 
 contains
 
-!>   The following subroutine calculates the thickness of the bottom
-!! boundary layer and the viscosity within that layer.  A drag law is
-!! used, either linearized about an assumed bottom velocity or using
+!> Calculates the thickness of the bottom boundary layer and the viscosity within that layer.
+!! A drag law is used, either linearized about an assumed bottom velocity or using
 !! the actual near-bottom velocities combined with an assumed
 !! unresolved velocity.  The bottom boundary layer thickness is
 !! limited by a combination of stratification and rotation, as in the
@@ -1013,11 +1016,11 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
 
 end function set_u_at_v
 
-!>   The following subroutine calculates the thickness of the surface boundary
-!! layer for applying an elevated viscosity.  A bulk Richardson criterion or
-!! the thickness of the topmost NKML layers (with a bulk mixed layer) are
-!! currently used.  The thicknesses are given in terms of fractional layers, so
-!! that this thickness will move as the thickness of the topmost layers change.
+!> Calculates the thickness of the surface boundary layer for applying an elevated viscosity.
+!!
+!! A bulk Richardson criterion or the thickness of the topmost NKML layers (with a bulk mixed layer)
+!! are currently used.  The thicknesses are given in terms of fractional layers, so that this
+!! thickness will move as the thickness of the topmost layers change.
 subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -1039,29 +1042,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
                                                   !! of those values in visc that would be
                                                   !! calculated with symmetric memory.
-
-!   The following subroutine calculates the thickness of the surface boundary
-! layer for applying an elevated viscosity.  A bulk Richardson criterion or
-! the thickness of the topmost NKML layers (with a bulk mixed layer) are
-! currently used.  The thicknesses are given in terms of fractional layers, so
-! that this thickness will move as the thickness of the topmost layers change.
-!
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.  In the comments below,
-!                the units of h are denoted as H.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      forces - A structure containing pointers to mechanical
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (out)     visc - A structure containing vertical viscosities and related
-!                   fields.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 vertvisc_init.
-
+  ! Local variables
   real, dimension(SZIB_(G)) :: &
     htot, &     !   The total depth of the layers being that are within the
                 ! surface mixed layer, in H.
@@ -1726,8 +1707,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
 
 end subroutine set_viscous_ML
 
-!>   This subroutine is used to register any fields associated with the
-!! vertvisc_type.
+!> Register any fields associated with the vertvisc_type.
 subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   type(hor_index_type),    intent(in)    :: HI         !< A horizontal index type structure.
   type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure.
@@ -1738,15 +1718,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                                                        !! Allocated here.
   type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control
                                                        !! structure.
-!   This subroutine is used to register any fields associated with the
-! vertvisc_type.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (out)     visc - A structure containing vertical viscosities and related
-!                   fields.  Allocated here.
-!  (in)      restart_CS - A pointer to the restart control structure.
+  ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
@@ -1818,6 +1790,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
 end subroutine set_visc_register_restarts
 
+!> Initializes the MOM_set_visc control structure
 subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -1831,7 +1804,6 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
-
   ! Local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
@@ -1859,7 +1831,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
   CS%diag => diag
 
-! Set default, read and log parameters
+  ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
   differential_diffusion = .false.
@@ -2113,37 +2085,12 @@ subroutine set_visc_end(visc, CS)
   deallocate(CS)
 end subroutine set_visc_end
 
-!> \namespace MOM_set_visc
-!!********+*********+*********+*********+*********+*********+*********+**
-!!*                                                                     *
-!!*  By Robert Hallberg, April 1994 - October 2006                      *
-!!*  Quadratic Bottom Drag by James Stephens and R. Hallberg.           *
-!!*                                                                     *
-!!*    This file contains the subroutine that calculates various values *
-!!*  related to the bottom boundary layer, such as the viscosity and    *
-!!*  thickness of the BBL (set_viscous_BBL).  This would also be the    *
-!!*  module in which other viscous quantities that are flow-independent *
-!!*  might be set.  This information is transmitted to other modules    *
-!!*  via a vertvisc type structure.                                     *
-!!*                                                                     *
-!!*    The same code is used for the two velocity components, by        *
-!!*  indirectly referencing the velocities and defining a handful of    *
-!!*  direction-specific defined variables.                              *
-!!*                                                                     *
-!!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!!*                                                                     *
-!!*     A small fragment of the grid is shown below:                    *
-!!*                                                                     *
-!!*    j+1  x ^ x ^ x   At x:  q                                        *
-!!*    j+1  > o > o >   At ^:  v, frhatv, tauy                          *
-!!*    j    x ^ x ^ x   At >:  u, frhatu, taux                          *
-!!*    j    > o > o >   At o:  h                                        *
-!!*    j-1  x ^ x ^ x                                                   *
-!!*        i-1  i  i+1  At x & ^:                                       *
-!!*           i  i+1    At > & o:                                       *
-!!*                                                                     *
-!!*  The boundaries always run through q grid points (x).               *
-!!*                                                                     *
-!!********+*********+*********+*********+*********+*********+*********+**
+!> \namespace mom_set_visc
+!!
+!! This would also be the module in which other viscous quantities that are flow-independent might be set.
+!! This information is transmitted to other modules via a vertvisc type structure.
+!!
+!! The same code is used for the two velocity components, by indirectly referencing the velocities and
+!! defining a handful of direction-specific defined variables.
 
 end module MOM_set_visc
