@@ -2416,11 +2416,8 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
   type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness
-! real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: e    !< Layer interface height
-! real, dimension(SZI_(G),SZJ_(G))         , intent(inout) :: eta  !< Thickness
-  type(time_type),                           intent(in)    :: Time !< Time
+  type(time_type),                           intent(in)    :: Time !< Model time
   ! Local variables
-
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB, n, m, nz
   character(len=40)  :: mdl = "set_OBC_segment_data" ! This subroutine's name.

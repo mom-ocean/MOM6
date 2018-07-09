@@ -642,7 +642,7 @@ end function tidal_mixing_init
 !! tidal dissipation and to add the effect of internal-tide-driven mixing to the layer or interface
 !! diffusivities.
 subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
-                                    N2_lay, N2_int, Kd, Kd_int, Kd_max)
+                                    N2_lay, N2_int, Kd, Kd_int, Kd_max, Kv)
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -669,10 +669,12 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
                                                             !! diffusivity due to TKE-based processes, in m2 s-1.
                                                             !! Set this to a negative value to have no limit.
+  real, dimension(:,:,:),           pointer       :: Kv     !< The "slow" vertical viscosity at each interface
+                                                            !! (not layer!) in m2 s-1.
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
-      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
+      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
     else
       call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     N2_lay, Kd, Kd_int, Kd_max)
@@ -683,7 +685,7 @@ end subroutine
 
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
 !! mixing to the interface diffusivities.
-subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
+subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
   integer,                 intent(in)    :: j     !< The j-index to work on
   type(ocean_grid_type),   intent(in)    :: G     !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
@@ -695,18 +697,19 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
                            intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: Kd    !< The diapycnal diffusivities in the layers, in m2 s-1
-
-  ! local
-  real, dimension(SZK_(G)+1) :: Kd_tidal    !< tidal diffusivity [m2/s]
-  real, dimension(SZK_(G)+1) :: Kv_tidal    !< tidal viscosity [m2/s]
-  real, dimension(SZK_(G)+1) :: vert_dep    !< vertical deposition
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
+  real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
+                                                  !! (not layer!) in m2 s-1.
+  ! Local variables
+  real, dimension(SZK_(G)+1) :: Kd_tidal    ! tidal diffusivity [m2/s]
+  real, dimension(SZK_(G)+1) :: Kv_tidal    ! tidal viscosity [m2/s]
+  real, dimension(SZK_(G)+1) :: vert_dep    ! vertical deposition
+  real, dimension(SZK_(G)+1) :: iFaceHeight ! Height of interfaces (m)
   real, dimension(SZK_(G)+1) :: SchmittnerSocn
-  real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
-  real, dimension(SZK_(G))   :: tidal_qe_md !< Tidal dissipation energy interpolated from 3d input
-                                            !! to model coordinates
+  real, dimension(SZK_(G))   :: cellHeight  ! Height of cell centers (m)
+  real, dimension(SZK_(G))   :: tidal_qe_md ! Tidal dissipation energy interpolated from 3d input
+                                            ! to model coordinates
   real, dimension(SZK_(G))   :: Schmittner_coeff
-  real, dimension(SZK_(G))   :: h_m         !< Cell thickness [m]
+  real, dimension(SZK_(G))   :: h_m         ! Cell thickness [m]
   real, allocatable, dimension(:,:) :: exp_hab_zetar
 
   integer :: i, k, is, ie
@@ -763,10 +766,17 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
                                CVMix_params            = CS%CVMix_glb_params, &
                                CVMix_tidal_params_user = CS%CVMix_tidal_params)
 
+      ! Update diffusivity
       do k=1,G%ke
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
-        !TODO: Kv(i,j,k) = ????????????
       enddo
+
+      ! Update viscosity
+      if (associated(Kv)) then
+        do k=1,G%ke+1
+          Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
+        enddo
+      endif
 
       ! diagnostics
       if (associated(dd%Kd_itidal)) then
@@ -855,10 +865,17 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
                                           CVmix_params            = CS%CVMix_glb_params,  &
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
 
+      ! Update diffusivity
       do k=1,G%ke
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
-        !TODO: Kv(i,j,k) = ????????????
       enddo
+
+      ! Update viscosity
+      if (associated(Kv)) then
+        do k=1,G%ke+1
+          Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
+        enddo
+      endif
 
       ! diagnostics
       if (associated(dd%Kd_itidal)) then
@@ -921,12 +938,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
                                                             !! diffusivity due to TKE-based processes, in m2 s-1.
                                                             !! Set this to a negative value to have no limit.
 
-  ! This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
-  ! The mechanisms considered are (1) local dissipation of internal waves generated by the
-  ! barotropic flow ("itidal"), (2) local dissipation of internal waves generated by the propagating
-  ! low modes (rays) of the internal tide ("lowmode"), and (3) local dissipation of internal lee waves.
-  ! Will eventually need to add diffusivity due to other wave-breaking processes (e.g. Bottom friction,
-  ! Froude-number-depending breaking, PSI, etc.).
+  ! local
 
   real, dimension(SZI_(G)) :: &
     htot,             & ! total thickness above or below a layer, or the

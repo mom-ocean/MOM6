@@ -1268,9 +1268,9 @@ real function absolute_position(n,ns,Pint,Karr,NParr,k_surface)
   real,    intent(in) :: Pint(n+1)    !< Position of interfaces (Pa)
   integer, intent(in) :: Karr(ns)     !< Index of interface above position
   real,    intent(in) :: NParr(ns)    !< Non-dimensional position within layer Karr(:)
-
+  integer, intent(in) :: k_surface    !< k-interface to query
   ! Local variables
-  integer :: k_surface, k
+  integer :: k
 
   k = Karr(k_surface)
   if (k>n) stop 'absolute_position: k>nk is out of bounds!'

@@ -104,7 +104,8 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
-  integer,                                     intent(in)    :: i, j !< The indices of the column to work on
+  integer,                                     intent(in)    :: i    !< The i-index of the column to work on
+  integer,                                     intent(in)    :: j    !< The j-index of the column to work on
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt !< Interface heights, in H (m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: tInt !< Interface temperatures, in C
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: sInt !< Interface salinities, in psu

@@ -456,7 +456,7 @@ end function ints_to_real
 subroutine increment_ints(int_sum, int2, prec_error)
   integer(kind=8), dimension(ni), intent(inout) :: int_sum !< The array of EFP integers being incremented
   integer(kind=8), dimension(ni), intent(in)    :: int2    !< The array of EFP integers being added
-  integer(kind=8), optional,      intent(in)    :: prec_error  !!< The PE-count dependent precision of the
+  integer(kind=8), optional,      intent(in)    :: prec_error !< The PE-count dependent precision of the
                                               !! integers that is safe from overflows during global
                                               !! sums.  This will be larger than the compile-time
                                               !! precision parameter, and is used to detect overflows.

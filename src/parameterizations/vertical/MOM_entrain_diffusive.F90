@@ -1269,7 +1269,8 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
                                                               !! around the buffer layers, in H.
   real, dimension(SZI_(G)),           intent(in)    :: E_kb   !< The entrainment by the top interior
                                                               !! layer, in H.
-  integer,                            intent(in)    :: is, ie !< The range of i-indices to work on.
+  integer,                            intent(in)    :: is     !< The start of the i-index range to work on.
+  integer,                            intent(in)    :: ie     !< The end of the i-index range to work on.
   integer,                            intent(in)    :: kmb    !< The number of mixed and buffer layers.
   logical,                            intent(in)    :: limit  !< If true, limit dSkb and dSlay to
                                                               !! avoid negative values.
@@ -1672,7 +1673,8 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real, dimension(SZI_(G)),         intent(in)  :: max_eakb !< The maximum permissible rate of
                                                             !! entrainment, in H.
   integer,                          intent(in)  :: kmb      !< The number of mixed and buffer layers.
-  integer,                          intent(in)  :: is, ie   !< The range of i-indices to work on.
+  integer,                          intent(in)  :: is       !< The start of the i-index range to work on.
+  integer,                          intent(in)  :: ie       !< The end of the i-index range to work on.
   logical, dimension(SZI_(G)),      intent(in)  :: do_i     !< A logical variable indicating which
                                                             !! i-points to work on.
   type(entrain_diffusive_CS),       pointer     :: CS       !< This module's control structure.
@@ -1682,11 +1684,12 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real, dimension(SZI_(G)), optional, intent(out) :: error  !< The error (locally defined in this
                                                             !! routine) associated with the returned
                                                             !! solution.
-  real, dimension(SZI_(G)), optional, intent(in)  :: err_min_eakb0, err_max_eakb0 !< The errors
-                                                            !! (locally defined) associated with
-                                                            !! min_eakb and max_eakb when ea_kbp1
-                                                            !! = 0, returned from a previous call
-                                                            !! to this routine.
+  real, dimension(SZI_(G)), optional, intent(in)  :: err_min_eakb0 !< The errors (locally defined)
+                                                            !! associated with min_eakb when ea_kbp1 = 0,
+                                                            !! returned from a previous call to this fn.
+  real, dimension(SZI_(G)), optional, intent(in)  :: err_max_eakb0 !< The errors (locally defined)
+                                                            !! associated with min_eakb when ea_kbp1 = 0,
+                                                            !! returned from a previous call to this fn.
   real, dimension(SZI_(G)), optional, intent(out) :: F_kb   !< The entrainment from below by the
                                                             !! uppermost interior layer
                                                             !! corresponding to the returned
@@ -1904,7 +1907,8 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
   real, dimension(SZI_(G)),   intent(in)  :: max_ent_in !< The maximum value of ent to search,
                                                       !! in H.
   integer,                    intent(in)  :: kmb      !< The number of mixed and buffer layers.
-  integer,                    intent(in)  :: is, ie   !< The range of i-indices to work on.
+  integer,                    intent(in)  :: is       !< The start of the i-index range to work on.
+  integer,                    intent(in)  :: ie       !< The end of the i-index range to work on.
   type(entrain_diffusive_CS), pointer     :: CS       !< This module's control structure.
   real, dimension(SZI_(G)),   intent(out) :: maxF     !< The maximum value of F
                                                       !! = ent*ds_kb*I_dSkbp1 found in the range
