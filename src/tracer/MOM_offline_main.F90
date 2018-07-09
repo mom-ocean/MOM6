@@ -42,32 +42,46 @@ implicit none ; private
 #include "MOM_memory.h"
 #include "version_variable.h"
 
+!> The control structure for the offline transport module
 type, public :: offline_transport_CS ; private
 
-  !> Pointers to relevant fields from the main MOM control structure
+  ! Pointers to relevant fields from the main MOM control structure
   type(ALE_CS),                  pointer :: ALE_CSp         => NULL()
+          !< A pointer to the ALE control structure
   type(diabatic_CS),             pointer :: diabatic_CSp    => NULL()
+          !< A pointer to the diabatic control structure
   type(diag_ctrl),               pointer :: diag            => NULL()
+          !< Structure that regulates diagnostic output
   type(ocean_OBC_type),          pointer :: OBC             => NULL()
+          !< A pointer to the open boundary condition control structure
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp  => NULL()
-  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp => NULL()
-  type(tracer_registry_type),    pointer :: tracer_Reg      => NULL()
-  type(thermo_var_ptrs),         pointer :: tv              => NULL()
-  type(ocean_grid_type),         pointer :: G               => NULL()
-  type(verticalGrid_type),       pointer :: GV              => NULL()
-  type(optics_type),             pointer :: optics          => NULL()
+          !< A pointer to the tracer advection control structure
   type(opacity_CS),              pointer :: opacity_CSp     => NULL()
+          !< A pointer to the opacity control structure
+  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp => NULL()
+          !< A pointer to control structure that orchestrates the calling of tracer packages
+  type(tracer_registry_type),    pointer :: tracer_Reg      => NULL()
+          !< A pointer to the tracer registry
+  type(thermo_var_ptrs),         pointer :: tv              => NULL()
+          !< A structure pointing to various thermodynamic variables
+  type(ocean_grid_type),         pointer :: G               => NULL()
+          !< Pointer to a structure containing metrics and related information
+  type(verticalGrid_type),       pointer :: GV              => NULL()
+          !< Pointer to structure containing information about the vertical grid
+  type(optics_type),             pointer :: optics          => NULL()
+          !< Pointer to the optical properties type
 
   !> Variables related to reading in fields from online run
   integer :: start_index  !< Timelevel to start
   integer :: iter_no      !< Timelevel to start
   integer :: numtime      !< How many timelevels in the input fields
   integer :: accumulated_time !< Length of time accumulated in the current offline interval
-  integer :: &            !< Index of each of the variables to be read in
-    ridx_sum = -1, &      !! Separate indices for each variable if they are
-    ridx_snap = -1        !! setoff from each other in time
-  integer :: nk_input     !! Number of input levels in the input fields
-  character(len=200) :: offlinedir  ! Directory where offline fields are stored
+  ! Index of each of the variables to be read in with separate indices for each variable if they
+  ! are set off from each other in time
+  integer :: ridx_sum = -1 !< Read index offset of the summed variables
+  integer :: ridx_snap = -1 !< Read index offset of the snapshot variables
+  integer :: nk_input     !< Number of input levels in the input fields
+  character(len=200) :: offlinedir  !< Directory where offline fields are stored
   character(len=200) :: & ! Names of input files
     surf_file,  &         !< Contains surface fields (2d arrays)
     snap_file,  &         !< Snapshotted fields (layer thicknesses)
@@ -79,7 +93,7 @@ type, public :: offline_transport_CS ; private
                                             !! 'both' if both methods are used
   character(len=20) :: mld_var_name !< Name of the mixed layer depth variable to use
   logical :: fields_are_offset !< True if the time-averaged fields and snapshot fields are
-                               ! offset by one time level
+                               !! offset by one time level
   logical :: x_before_y        !< Which horizontal direction is advected first
   logical :: print_adv_offline !< Prints out some updates each advection sub interation
   logical :: skip_diffusion    !< Skips horizontal diffusion of tracers
@@ -98,13 +112,13 @@ type, public :: offline_transport_CS ; private
   integer :: num_off_iter   !< Number of advection iterations per offline step
   integer :: num_vert_iter  !< Number of vertical iterations per offline step
   integer :: off_ale_mod    !< Sets how frequently the ALE step is done during the advection
-  real :: dt_offline ! Timestep used for offline tracers
-  real :: dt_offline_vertical ! Timestep used for calls to tracer vertical physics
-  real :: evap_CFL_limit, minimum_forcing_depth !< Copied from diabatic_CS controlling how tracers
-                                                !! follow freshwater fluxes
+  real :: dt_offline        !< Timestep used for offline tracers
+  real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics
+  real :: evap_CFL_limit    !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
+  real :: minimum_forcing_depth !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
   real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity
   real :: min_residual  !< The minimum amount of total mass flux before exiting the main advection routine
-  !> Diagnostic manager IDs for some fields that may be of interest when doing offline transport
+  !>@{ Diagnostic manager IDs for some fields that may be of interest when doing offline transport
   integer :: &
     id_uhr = -1, &
     id_vhr = -1, &
@@ -121,30 +135,32 @@ type, public :: offline_transport_CS ; private
     id_h_redist = -1, &
     id_eta_diff_end = -1
 
-  !> Diagnostic IDs for the regridded/remapped input fields
+  ! Diagnostic IDs for the regridded/remapped input fields
   integer :: &
     id_uhtr_regrid = -1, &
     id_vhtr_regrid = -1, &
     id_temp_regrid = -1, &
     id_salt_regrid = -1, &
     id_h_regrid = -1
+  !!@}
 
-  !> IDs for timings of various offline components
-  integer ::  &
-    id_clock_read_fields = -1,      &
-    id_clock_offline_diabatic = -1, &
-    id_clock_offline_adv  = -1,  &
-    id_clock_redistribute = -1
+  ! IDs for timings of various offline components
+  integer :: id_clock_read_fields = -1   !< A CPU time clock
+  integer :: id_clock_offline_diabatic = -1  !< A CPU time clock
+  integer :: id_clock_offline_adv  = -1  !< A CPU time clock
+  integer :: id_clock_redistribute = -1  !< A CPU time clock
 
-  !> Variables that may need to be stored between calls to step_MOM
+  !> Zonal transport that may need to be stored between calls to step_MOM
   real, allocatable, dimension(:,:,:) :: uhtr
+  !> Meridional transport that may need to be stored between calls to step_MOM
   real, allocatable, dimension(:,:,:) :: vhtr
 
   ! Fields at T-point
-  real, allocatable, dimension(:,:,:) :: &
-      eatr,     &  !< Amount of fluid entrained from the layer above within
+  real, allocatable, dimension(:,:,:) :: eatr
+                   !< Amount of fluid entrained from the layer above within
                    !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-      ebtr         !< Amount of fluid entrained from the layer below within
+  real, allocatable, dimension(:,:,:) :: ebtr
+                   !< Amount of fluid entrained from the layer below within
                    !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
   ! Fields at T-points on interfaces
   real, allocatable, dimension(:,:,:) :: Kd     !< Vertical diffusivity
@@ -154,9 +170,12 @@ type, public :: offline_transport_CS ; private
   real, allocatable, dimension(:,:) :: netMassOut !< Freshwater fluxes out of the ocean
   real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points, in H.
 
-  !> Allocatable arrays to read in entire fields during initialization
-  real, allocatable, dimension(:,:,:,:) :: &
-    uhtr_all, vhtr_all, hend_all, temp_all, salt_all
+  ! Allocatable arrays to read in entire fields during initialization
+  real, allocatable, dimension(:,:,:,:) :: uhtr_all !< Entire field of zonal transport
+  real, allocatable, dimension(:,:,:,:) :: vhtr_all !< Entire field of mericional transport
+  real, allocatable, dimension(:,:,:,:) :: hend_all !< Entire field of layer thicknesses
+  real, allocatable, dimension(:,:,:,:) :: temp_all !< Entire field of temperatures
+  real, allocatable, dimension(:,:,:,:) :: salt_all !< Entire field of salinities
 
 end type offline_transport_CS
 
