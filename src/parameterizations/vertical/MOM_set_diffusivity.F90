@@ -152,22 +152,11 @@ type, public :: set_diffusivity_CS ; private
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
   type(tidal_mixing_cs),     pointer :: tm_csp               => NULL()
 
-  integer :: id_maxTKE      = -1
-  integer :: id_TKE_to_Kd   = -1
-
-  integer :: id_Kd_user        = -1
-  integer :: id_Kd_layer       = -1
-  integer :: id_Kd_BBL         = -1
-  integer :: id_Kd_BBL_z       = -1
-  integer :: id_Kd_user_z      = -1
-  integer :: id_Kd_Work        = -1
-
-  integer :: id_N2       = -1
-  integer :: id_N2_z     = -1
-  integer :: id_KT_extra   = -1
-  integer :: id_KS_extra   = -1
-  integer :: id_KT_extra_z = -1
-  integer :: id_KS_extra_z = -1
+  integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
+  integer :: id_Kd_layer   = -1, id_Kd_BBL      = -1, id_Kd_BBL_z   = -1
+  integer :: id_Kd_user_z  = -1, id_N2          = -1, id_N2_z       = -1
+  integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1
+  integer :: id_KT_extra_z = -1, id_KS_extra_z  = -1
 
 end type set_diffusivity_CS
 
@@ -195,13 +184,12 @@ contains
 !! 1) Shear-driven mixing: two options, Jackson et at. and KPP interior;
 !! 2) Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
 !! Harrison & Hallberg, JPO 2008;
-!! 3) Double-diffusion aplpied via CVMix;
+!! 3) Double-diffusion, old method and new method via CVMix;
 !! 4) Tidal mixing: many options available, see MOM_tidal_mixing.F90;
 !! In addition, this subroutine has the option to set the interior vertical
-!! viscosity associated with processes 2-4 listed above, which is stored in
+!! viscosity associated with processes 1,2 and 4 listed above, which is stored in
 !! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
 !! visc%Kv_shear
-!! GMM, TODO: add contribution from tidal mixing into visc%Kv_slow
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, CS, Kd, Kd_int)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
@@ -484,7 +472,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
     call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, CS%tm_csp, &
-                                N2_lay, N2_int, Kd, Kd_int, CS%Kd_max)
+                                N2_lay, N2_int, Kd, Kd_int, CS%Kd_max, visc%Kv_slow)
 
     ! This adds the diffusion sustained by the energy extracted from the flow
     ! by the bottom drag.
@@ -2208,7 +2196,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                     "Bottom Boundary Layer Diffusivity", z_grid='z')
       CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
-  endif
+  endif ! old double-diffusion
 
   if (CS%user_change_diff) then
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)

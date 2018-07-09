@@ -934,7 +934,9 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
                          intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,               intent(in) :: i, j, k !< The indices of the u-location to work on.
+  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZI_(G),SZJB_(G)),&
                          intent(in) :: mask2dCv !< A multiplicative mask of the v-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
@@ -975,7 +977,9 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
                          intent(in) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,               intent(in) :: i, j, k !< The indices of the v-location to work on.
+  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZIB_(G),SZJ_(G)), &
                          intent(in) :: mask2dCu !< A multiplicative mask of the u-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
@@ -1828,13 +1832,13 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                                                  !! structure for this module
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 
-  ! local variables
+  ! Local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
-  logical :: adiabatic, use_omega
-  logical :: use_CVMix_ddiff, differential_diffusion
+  logical :: use_kappa_shear, adiabatic, use_omega
+  logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1991,6 +1995,16 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "flag is to be able to recover previous answers and it will likely \n"// &
                  "be removed in the future since this option should always be true.", &
                   default=.false.)
+
+  call get_param(param_file, mdl, "USE_KPP", use_KPP, &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.",     &
+                 do_not_log=.true., default=.false.)
+
+  if (use_KPP .and. visc%add_Kv_slow) call MOM_error(FATAL,"set_visc_init: "//&
+         "When USE_KPP=True, ADD_KV_SLOW must be false. Otherwise vertical "//&
+         "viscosity due to slow processes will be double counted. Please set "//&
+         "ADD_KV_SLOW=False.")
 
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &

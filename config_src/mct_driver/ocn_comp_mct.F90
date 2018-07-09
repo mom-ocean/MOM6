@@ -1774,7 +1774,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, S%restart_CSp)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
 
   call disable_averaging(OS%diag)
