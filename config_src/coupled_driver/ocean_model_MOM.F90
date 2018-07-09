@@ -85,6 +85,7 @@ public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
 
+!> This interface extracts a named scalar field or array from the ocean surface or public type
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
   module procedure ocean_model_data2D_get
@@ -1140,6 +1141,7 @@ subroutine ocean_model_data1D_get(OS, Ocean, name, value)
 
 end subroutine ocean_model_data1D_get
 
+!> Write out FMS-format checsums on fields from the ocean surface state
 subroutine ocean_public_type_chksum(id, timestep, ocn)
 
   character(len=*),        intent(in) :: id  !< An identifying string for this call
