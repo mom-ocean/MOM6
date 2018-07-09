@@ -61,10 +61,13 @@ interface calculate_spec_vol
   module procedure calculate_spec_vol_scalar, calculate_spec_vol_array
 end interface calculate_spec_vol
 
+!> Calculate the derivatives of density with temperature and salinity from T, S, and P
 interface calculate_density_derivs
   module procedure calculate_density_derivs_scalar, calculate_density_derivs_array
 end interface calculate_density_derivs
 
+!> Calculates the second derivatives of density with various combinations of temperature,
+!! salinity, and pressure from T, S and P
 interface calculate_density_second_derivs
   module procedure calculate_density_second_derivs_scalar, calculate_density_second_derivs_array
 end interface calculate_density_second_derivs
@@ -92,30 +95,31 @@ type, public :: EOS_type ; private
   real :: dTFr_dS   !< The derivative of freezing point with salinity, in deg C PSU-1.
   real :: dTFr_dp   !< The derivative of freezing point with pressure, in deg C Pa-1.
 
-  logical :: test_EOS = .true.
+!  logical :: test_EOS = .true. ! If true, test the equation of state
 end type EOS_type
 
 ! The named integers that might be stored in eqn_of_state_type%form_of_EOS.
-integer, parameter, public :: EOS_LINEAR = 1
-integer, parameter, public :: EOS_UNESCO = 2
-integer, parameter, public :: EOS_WRIGHT = 3
-integer, parameter, public :: EOS_TEOS10 = 4
-integer, parameter, public :: EOS_NEMO   = 5
+integer, parameter, public :: EOS_LINEAR = 1 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_UNESCO = 2 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_WRIGHT = 3 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_TEOS10 = 4 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_NEMO   = 5 !< A named integer specifying an equation of state
 
-character*(10), parameter :: EOS_LINEAR_STRING = "LINEAR"
-character*(10), parameter :: EOS_UNESCO_STRING = "UNESCO"
-character*(10), parameter :: EOS_WRIGHT_STRING = "WRIGHT"
-character*(10), parameter :: EOS_TEOS10_STRING = "TEOS10"
-character*(10), parameter :: EOS_NEMO_STRING   = "NEMO"
-character*(10), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING
+character*(10), parameter :: EOS_LINEAR_STRING = "LINEAR" !< A string for specifying the equation of state
+character*(10), parameter :: EOS_UNESCO_STRING = "UNESCO" !< A string for specifying the equation of state
+character*(10), parameter :: EOS_WRIGHT_STRING = "WRIGHT" !< A string for specifying the equation of state
+character*(10), parameter :: EOS_TEOS10_STRING = "TEOS10" !< A string for specifying the equation of state
+character*(10), parameter :: EOS_NEMO_STRING   = "NEMO"   !< A string for specifying the equation of state
+character*(10), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING !< The default equation of state
 
-integer, parameter :: TFREEZE_LINEAR = 1
-integer, parameter :: TFREEZE_MILLERO = 2
-integer, parameter :: TFREEZE_TEOS10 = 3
-character*(10), parameter :: TFREEZE_LINEAR_STRING = "LINEAR"
-character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78"
-character*(10), parameter :: TFREEZE_TEOS10_STRING = "TEOS10"
-character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING
+integer, parameter :: TFREEZE_LINEAR = 1  !< A named integer specifying a freezing point expression
+integer, parameter :: TFREEZE_MILLERO = 2 !< A named integer specifying a freezing point expression
+integer, parameter :: TFREEZE_TEOS10 = 3  !< A named integer specifying a freezing point expression
+character*(10), parameter :: TFREEZE_LINEAR_STRING = "LINEAR" !< A string for specifying the freezing point expression
+character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78" !< A string for specifying 
+                                                              !! freezing point expression
+character*(10), parameter :: TFREEZE_TEOS10_STRING = "TEOS10" !< A string for specifying the freezing point expression
+character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING !< The default freezing point expression
 
 contains
 
