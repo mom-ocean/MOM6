@@ -1,26 +1,7 @@
+!> Initialization of the boundary-forced-basing configuration
 module BFB_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This subroutine initializes the fields for the simulations.      *
-!*  The one argument passed to initialize, Time, is set to the         *
-!*  current time of the simulation.  The fields which are initialized  *
-!*  here are:                                                          *
-!*    G%g_prime - The reduced gravity at each interface, in m s-2.     *
-!*    G%Rlay - Layer potential density (coordinate variable) in kg m-3.*
-!*  If SPONGE is defined:                                              *
-!*    A series of subroutine calls are made to set up the damping      *
-!*    rates and reference profiles for all variables that are damped   *
-!*    in the sponge.                                                   *
-!*                                                                     *
-!*    These variables are all set in the set of subroutines (in this   *
-!*  file) BFB_initialize_sponges_southonly and BFB_set_coord.          *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -38,6 +19,8 @@ implicit none ; private
 public BFB_set_coord
 public BFB_initialize_sponges_southonly
 
+!> Unsafe model variable
+!! \todo Remove this module variable
 logical :: first_call = .true.
 
 contains
@@ -54,8 +37,7 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
                                                      !! equation of state.
-
-
+  ! Local variables
   real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
   integer                              :: k, nz
   character(len=40)  :: mdl = "BFB_set_coord" ! This subroutine's name.
@@ -71,9 +53,6 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
   rho_bot = GV%rho0 + drho_dt*T_bot
   nz = GV%ke
 
-  !call MOM_error(FATAL, &
-  ! "BFB_initialization.F90, BFB_set_coord: " // &
-  ! "Unmodified user routine called - you must edit the routine to use it")
   do k = 1,nz
     Rlay(k) = (rho_bot - rho_top)/(nz-1)*real(k-1) + rho_top
     if (k >1) then
