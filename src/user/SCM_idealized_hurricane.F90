@@ -40,7 +40,7 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mdl = "SCM_idealized_hurricane" ! This module's name.
+character(len=40)  :: mdl = "SCM_idealized_hurricane" !< This module's name.
 
 contains
 

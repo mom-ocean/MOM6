@@ -1,5 +1,4 @@
-!> Initial conditions and forcing for the single column model (SCM) CVMix
-!! test set.
+!> Initial conditions and forcing for the single column model (SCM) CVMix test set.
 module SCM_CVMix_tests
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -42,7 +41,7 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mdl = "SCM_CVMix_tests" ! This module's name.
+character(len=40)  :: mdl = "SCM_CVMix_tests" !< This module's name.
 
 contains
 
