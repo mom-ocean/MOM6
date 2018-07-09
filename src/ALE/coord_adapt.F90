@@ -12,6 +12,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+!> Control structure for adaptive coordinates (coord_adapt).
 type, public :: adapt_CS ; private
 
   !> Number of layers/levels
@@ -77,15 +78,15 @@ subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoom
   type(adapt_CS),    pointer    :: CS  !< The control structure for this module
   real,    optional, intent(in) :: adaptTimeRatio !< Ratio of optimisation and diffusion timescales
   real,    optional, intent(in) :: adaptAlpha     !< Nondimensional coefficient determining
-                                       !! how much optimisation to apply
+                                                  !! how much optimisation to apply
   real,    optional, intent(in) :: adaptZoom      !< Near-surface zooming depth, in m
   real,    optional, intent(in) :: adaptZoomCoeff !< Near-surface zooming coefficient
   real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient
   real,    optional, intent(in) :: adaptDrho0  !< Reference density difference for
-                                       !! stratification-dependent diffusion
+                                               !! stratification-dependent diffusion
   logical, optional, intent(in) :: adaptDoMin  !< If true, form a HYCOM1-like mixed layer by
-                                       !! preventing interfaces from becoming shallower than
-                                       !! the depths set by coordinateResolution
+                                               !! preventing interfaces from becoming shallower than
+                                               !! the depths set by coordinateResolution
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_adapt_params: CS not associated")
 
