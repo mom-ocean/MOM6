@@ -44,32 +44,36 @@ implicit none ; private
 
 public write_u_accel, write_v_accel, PointAccel_init
 
+!> The control structure for the MOM_PointAccel module
 type, public :: PointAccel_CS ; private
-  character(len=200) :: u_trunc_file ! The complete path to files in which a
-  character(len=200) :: v_trunc_file ! column's worth of accelerations are
-                                     ! written if velocity truncations occur.
-  integer :: u_file, v_file ! The unit numbers for opened u- or v- truncation
-                            ! files, or -1 if they have not yet been opened.
-  integer :: cols_written   ! The number of columns whose output has been
-                            ! written by this PE during the current run.
-  integer :: max_writes     ! The maximum number of times any PE can write out
-                            ! a column's worth of accelerations during a run.
-  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                                   ! regulate the timing of diagnostic output.
+  character(len=200) :: u_trunc_file !< The complete path to the file in which a column's worth of
+                                     !! u-accelerations are written if u-velocity truncations occur.
+  character(len=200) :: v_trunc_file !< The complete path to the file in which a column's worth of
+                                     !! v-accelerations are written if v-velocity truncations occur.
+  integer :: u_file         !< The unit number for an opened u-truncation files, or -1 if it has not yet been opened.
+  integer :: v_file         !< The unit number for an opened v-truncation files, or -1 if it has not yet been opened.
+  integer :: cols_written   !< The number of columns whose output has been
+                            !! written by this PE during the current run.
+  integer :: max_writes     !< The maximum number of times any PE can write out
+                            !! a column's worth of accelerations during a run.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
 ! The following are pointers to many of the state variables and accelerations
 ! that are used to step the physical model forward.  They all use the same
 ! names as the variables they point to in MOM.F90
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), v_av => NULL(), & ! Time average velocities in m s-1.
-    u_prev => NULL(), v_prev => NULL(), & ! Previous velocities in m s-1.
-    T => NULL(), S => NULL(), &     ! Temperature and salinity in C and psu.
-    pbce => NULL(), &               ! pbce times eta gives the baroclinic
-                                    ! pressure anomaly in each layer due to
-                                    ! free surface height anomalies.
-                                    ! pbce has units of m s-2.
-    u_accel_bt => NULL(), &         ! Barotropic acclerations in m s-2.
-    v_accel_bt => NULL()
+    u_av => NULL(), &       !< Time average u-velocity in m s-1.
+    v_av => NULL(), &       !< Time average velocity in m s-1.
+    u_prev => NULL(), &     !< Previous u-velocity in m s-1.
+    v_prev => NULL(), &     !< Previous v-velocity in m s-1.
+    T => NULL(), &          !< Temperature in deg C.
+    S => NULL(), &          !< Salinity in ppt
+    u_accel_bt => NULL(), & !< Barotropic u-acclerations in m s-2.
+    v_accel_bt => NULL()    !< Barotropic v-acclerations in m s-2.
+  real, pointer, dimension(:,:,:) :: pbce => NULL() !< pbce times eta gives the baroclinic
+                            !! pressure anomaly in each layer due to free surface height anomalies.
+                            !! pbce has units of m s-2.
 
 end type PointAccel_CS
 
