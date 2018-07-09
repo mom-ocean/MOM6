@@ -38,10 +38,13 @@ type, public :: CVMix_shear_cs
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
+  real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
+                                                        !! after smoothing
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
   integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
+  integer :: id_ri_grad_smooth = -1
 
 end type CVMix_shear_cs
 
@@ -70,8 +73,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
   real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) ::  Ri_Grad !< Gradient Richardson number
-  real, parameter         :: epsln = 1.e-10 !< Threshold to identify
-                                            !! vanished layers
+  real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
+
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
 
@@ -116,7 +119,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
         DZ = ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_m)
         N2 = DRHO/DZ
         S2 = (DU*DU+DV*DV)/(DZ*DZ)
-        Ri_Grad(k) = max(0.,N2)/max(S2,1.e-16)
+        Ri_Grad(k) = max(0.,N2)/max(S2,1.e-10)
 
         ! fill 3d arrays, if user asks for diagsnostics
         if (CS%id_N2 > 0) CS%N2(i,j,k) = N2
@@ -125,6 +128,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
       enddo
 
       Ri_grad(G%ke+1) = Ri_grad(G%ke)
+
+      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
       if (CS%smooth_ri) then
         ! 1) fill Ri_grad in vanished layers with adjacent value
@@ -135,20 +140,21 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
         Ri_grad(G%ke+1) = Ri_grad(G%ke)
 
         ! 2) vertically smooth Ri with 1-2-1 filter
-        dummy =  0.25 * Ri_grad(1)
+        dummy =  0.25 * Ri_grad(2)
         Ri_grad(G%ke+1) = Ri_grad(G%ke)
-        do k = 1, G%ke
+        do k = 3, G%ke
           Ri_Grad(k) = dummy + 0.5 * Ri_Grad(k) + 0.25 * Ri_grad(k+1)
           dummy = 0.25 * Ri_grad(k)
         enddo
+
+        if (CS%id_ri_grad_smooth > 0) CS%ri_grad_smooth(i,j,:) = Ri_Grad(:)
       endif
 
-      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
       call  CVMix_coeffs_shear(Mdiff_out=kv(i,j,:), &
                                    Tdiff_out=kd(i,j,:), &
-                                   RICH=Ri_Grad, &
+                                   RICH=Ri_Grad(:), &
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
     enddo
@@ -160,6 +166,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
   if (CS%id_N2 > 0) call post_data(CS%id_N2,CS%N2, CS%diag)
   if (CS%id_S2 > 0) call post_data(CS%id_S2,CS%S2, CS%diag)
   if (CS%id_ri_grad > 0) call post_data(CS%id_ri_grad,CS%ri_grad, CS%diag)
+  if (CS%id_ri_grad_smooth > 0) call post_data(CS%id_ri_grad_smooth,CS%ri_grad_smooth, CS%diag)
 
 end subroutine calculate_CVMix_shear
 
@@ -225,7 +232,7 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
                  "Critical Richardson for KPP shear mixing,"// &
                  " NOTE this the internal mixing and this is"// &
                  " not for setting the boundary layer depth." &
-                 ,units="nondim", default=0.7)
+                 ,units="nondim", default=0.8)
   call get_param(param_file, mdl, "KPP_EXP", CS%KPP_exp, &
                  "Exponent of unitless factor of diffusivities,"// &
                  " for KPP internal shear mixing scheme." &
@@ -234,7 +241,7 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
                  "If true, vertically smooth the Richardson"// &
                  "number by applying a 1-2-1 filter once.", &
                  default = .false.)
-  call cvmix_init_shear(mix_scheme=CS%mix_scheme, &
+  call cvmix_init_shear(mix_scheme=CS%Mix_Scheme, &
                         KPP_nu_zero=CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)
@@ -256,6 +263,12 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
       'Gradient Richarson number used by MOM_CVMix_shear module','nondim')
   if (CS%id_ri_grad > 0) & !Initialize w/ large Richardson value
      allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad(:,:,:) = 1.e8
+
+  CS%id_ri_grad_smooth = register_diag_field('ocean_model', 'ri_grad_shear_smooth', &
+       diag%axesTi, Time, &
+      'Smoothed gradient Richarson number used by MOM_CVMix_shear module','nondim')
+  if (CS%id_ri_grad_smooth > 0) & !Initialize w/ large Richardson value
+     allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad_smooth(:,:,:) = 1.e8
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
       'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s')
