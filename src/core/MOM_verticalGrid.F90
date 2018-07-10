@@ -13,7 +13,7 @@ public verticalGridInit, verticalGridEnd
 public setVerticalGridAxes
 public get_flux_units, get_thickness_units, get_tr_flux_units
 
-!> Describes the ocean's vertical grid, including unit conversion factors
+!> Describes the vertical ocean grid, including unit conversion factors
 type, public :: verticalGrid_type
 
   ! Commonly used parameters
@@ -33,7 +33,7 @@ type, public :: verticalGrid_type
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq !< If true, make the Boussinesq approximation.
-  real :: Angstrom      !< A one-Angstrom thickness in the model's thickness units.
+  real :: Angstrom      !< A one-Angstrom thickness in the model thickness units.
   real :: Angstrom_z    !< A one-Angstrom thickness in m.
   real :: H_subroundoff !< A thickness that is so small that it can be added to a thickness of
                         !! Angstrom or larger without changing it at the bit level, in thickness units.
@@ -54,7 +54,7 @@ end type verticalGrid_type
 
 contains
 
-!> Allocates and initializes the model's vertical grid structure.
+!> Allocates and initializes the ocean model vertical grid structure.
 subroutine verticalGridInit( param_file, GV )
 ! This routine initializes the verticalGrid_type structure (GV).
 ! All memory is allocated but not necessarily set to meaningful values until later.
