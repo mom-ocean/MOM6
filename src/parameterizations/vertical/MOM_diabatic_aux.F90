@@ -24,12 +24,12 @@ implicit none ; private
 public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
+
 !> Control structure for diabatic_aux
 type, public :: diabatic_aux_CS ; private
   logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff
                                    !! at the river mouths to "rivermix_depth" meters
-  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if
-                                   !! do_rivermix = T, in m.
+  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T, in m.
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
                              !! to cool the topmost layer down to the freezing
                              !! point.  The default is false.
@@ -51,11 +51,11 @@ type, public :: diabatic_aux_CS ; private
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
 
   ! Diagnostic handles
-  integer :: id_createdH       = -1
-  integer :: id_brine_lay      = -1
-  integer :: id_penSW_diag     = -1 !< Penetrative shortwave heating (flux convergence) diagnostic
-  integer :: id_penSWflux_diag = -1 !< Penetrative shortwave flux diagnostic
-  integer :: id_nonpenSW_diag  = -1 !< Non-penetrative shortwave heating diagnostic
+  integer :: id_createdH       = -1 !< Diagnostic ID of mass added to avoid grounding
+  integer :: id_brine_lay      = -1 !< Diagnostic ID of which layer receives the brine
+  integer :: id_penSW_diag     = -1 !< Diagnostic ID of Penetrative shortwave heating (flux convergence)
+  integer :: id_penSWflux_diag = -1 !< Diagnostic ID of Penetrative shortwave flux
+  integer :: id_nonpenSW_diag  = -1 !< Diagnostic ID of Non-penetrative shortwave heating
 
   ! Optional diagnostic arrays
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to avoid grounding (m/s)
@@ -65,7 +65,9 @@ type, public :: diabatic_aux_CS ; private
 
 end type diabatic_aux_CS
 
+!>@{ CPU time clock IDs
 integer :: id_clock_uv_at_h, id_clock_frazil
+!!@}
 
 contains
 

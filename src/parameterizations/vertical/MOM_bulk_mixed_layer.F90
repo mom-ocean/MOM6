@@ -55,123 +55,119 @@ implicit none ; private
 
 public bulkmixedlayer, bulkmixedlayer_init
 
+!> The control structure with parameters for the MOM_bulk_mixed_layer module
 type, public :: bulkmixedlayer_CS ; private
-  integer :: nkml            ! The number of layers in the mixed layer.
-  integer :: nkbl            ! The number of buffer layers.
-  integer :: nsw             ! The number of bands of penetrating shortwave radiation.
-  real    :: mstar           ! The ratio of the friction velocity cubed to the
-                             ! TKE input to the mixed layer, nondimensional.
-  real    :: nstar           ! The fraction of the TKE input to the mixed layer
-                             ! available to drive entrainment, nondim.
-  real    :: nstar2          ! The fraction of potential energy released by
-                             ! convective adjustment that drives entrainment, ND.
-  logical :: absorb_all_SW   ! If true, all shortwave radiation is absorbed by the
-                             ! ocean, instead of passing through to the bottom mud.
-  real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
-                             ! decay scale, nondimensional.
-  real    :: bulk_Ri_ML      ! The efficiency with which mean kinetic energy
-                             ! released by mechanically forced entrainment of
-                             ! the mixed layer is converted to TKE, nondim.
-  real    :: bulk_Ri_convective ! The efficiency with which convectively
-                             ! released mean kinetic energy becomes TKE, nondim.
-  real    :: Hmix_min        ! The minimum mixed layer thickness in m.
-  real    :: H_limit_fluxes  ! When the total ocean depth is less than this
-                             ! value, in m, scale away all surface forcing to
-                             ! avoid boiling the ocean.
-  real    :: ustar_min       ! A minimum value of ustar to avoid numerical
-                             ! problems, in m s-1.  If the value is small enough,
-                             ! this should not affect the solution.
-  real    :: omega           !   The Earth's rotation rate, in s-1.
-  real    :: dT_dS_wt        !   When forced to extrapolate T & S to match the
-                             ! layer densities, this factor (in deg C / PSU) is
-                             ! combined with the derivatives of density with T & S
-                             ! to determines what direction is orthogonal to
-                             ! density contours.  It should be a typical value of
-                             ! (dR/dS) / (dR/dT) in oceanic profiles.
-                             ! 6 K psu-1 might be reasonable.
-  real    :: BL_extrap_lim   ! A limit on the density range over which
-                             ! extrapolation can occur when detraining from the
-                             ! buffer layers, relative to the density range
-                             ! within the mixed and buffer layers, when the
-                             ! detrainment is going into the lightest interior
-                             ! layer, nondimensional.
-  logical :: ML_resort       !   If true, resort the layers by density, rather than
-                             ! doing convective adjustment.
-  integer :: ML_presort_nz_conv_adj ! If ML_resort is true, do convective
-                             ! adjustment on this many layers (starting from the
-                             ! top) before sorting the remaining layers.
-  real    :: omega_frac      !   When setting the decay scale for turbulence, use
-                             ! this fraction of the absolute rotation rate blended
-                             ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
-  logical :: correct_absorption ! If true, the depth at which penetrating
-                             ! shortwave radiation is absorbed is corrected by
-                             ! moving some of the heating upward in the water
-                             ! column.  The default is false.
-  logical :: Resolve_Ekman   !   If true, the nkml layers in the mixed layer are
-                             ! chosen to optimally represent the impact of the
-                             ! Ekman transport on the mixed layer TKE budget.
-  type(time_type), pointer :: Time => NULL() ! A pointer to the ocean model's clock.
-  logical :: TKE_diagnostics = .false.
-  logical :: do_rivermix = .false. ! Provide additional TKE to mix river runoff
-                                   ! at the river mouths to "rivermix_depth" meters
-  real    :: rivermix_depth = 0.0  ! Used if "do_rivermix" = T
-  logical :: limit_det       ! If true, limit the extent of buffer layer
-                             ! detrainment to be consistent with neighbors.
-  real    :: lim_det_dH_sfc  ! The fractional limit in the change between grid
-                             ! points of the surface region (mixed & buffer
-                             ! layer) thickness, nondim.  0.5 by default.
-  real    :: lim_det_dH_bathy ! The fraction of the total depth by which the
-                             ! thickness of the surface region (mixed & buffer
-                             ! layer) is allowed to change between grid points.
-                             ! Nondimensional, 0.2 by default.
-  logical :: use_river_heat_content ! If true, use the fluxes%runoff_Hflx field
-                             ! to set the heat carried by runoff, instead of
-                             ! using SST for temperature of liq_runoff
-  logical :: use_calving_heat_content ! Use SST for temperature of froz_runoff
-  logical :: salt_reject_below_ML ! It true, add salt below mixed layer (layer mode only)
+  integer :: nkml            !< The number of layers in the mixed layer.
+  integer :: nkbl            !< The number of buffer layers.
+  integer :: nsw             !< The number of bands of penetrating shortwave radiation.
+  real    :: mstar           !< The ratio of the friction velocity cubed to the
+                             !! TKE input to the mixed layer, nondimensional.
+  real    :: nstar           !< The fraction of the TKE input to the mixed layer
+                             !! available to drive entrainment, nondim.
+  real    :: nstar2          !< The fraction of potential energy released by
+                             !! convective adjustment that drives entrainment, ND.
+  logical :: absorb_all_SW   !< If true, all shortwave radiation is absorbed by the
+                             !! ocean, instead of passing through to the bottom mud.
+  real    :: TKE_decay       !< The ratio of the natural Ekman depth to the TKE
+                             !! decay scale, nondimensional.
+  real    :: bulk_Ri_ML      !< The efficiency with which mean kinetic energy
+                             !! released by mechanically forced entrainment of
+                             !! the mixed layer is converted to TKE, nondim.
+  real    :: bulk_Ri_convective !< The efficiency with which convectively
+                             !! released mean kinetic energy becomes TKE, nondim.
+  real    :: Hmix_min        !< The minimum mixed layer thickness in m.
+  real    :: H_limit_fluxes  !< When the total ocean depth is less than this
+                             !! value, in m, scale away all surface forcing to
+                             !! avoid boiling the ocean.
+  real    :: ustar_min       !< A minimum value of ustar to avoid numerical
+                             !! problems, in m s-1.  If the value is small enough,
+                             !! this should not affect the solution.
+  real    :: omega           !<   The Earth's rotation rate, in s-1.
+  real    :: dT_dS_wt        !<   When forced to extrapolate T & S to match the
+                             !! layer densities, this factor (in deg C / PSU) is
+                             !! combined with the derivatives of density with T & S
+                             !! to determines what direction is orthogonal to
+                             !! density contours.  It should be a typical value of
+                             !! (dR/dS) / (dR/dT) in oceanic profiles.
+                             !! 6 K psu-1 might be reasonable.
+  real    :: BL_extrap_lim   !< A limit on the density range over which
+                             !! extrapolation can occur when detraining from the
+                             !! buffer layers, relative to the density range
+                             !! within the mixed and buffer layers, when the
+                             !! detrainment is going into the lightest interior
+                             !! layer, nondimensional.
+  logical :: ML_resort       !<   If true, resort the layers by density, rather than
+                             !! doing convective adjustment.
+  integer :: ML_presort_nz_conv_adj !< If ML_resort is true, do convective
+                             !! adjustment on this many layers (starting from the
+                             !! top) before sorting the remaining layers.
+  real    :: omega_frac      !<   When setting the decay scale for turbulence, use
+                             !! this fraction of the absolute rotation rate blended
+                             !! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
+  logical :: correct_absorption !< If true, the depth at which penetrating
+                             !! shortwave radiation is absorbed is corrected by
+                             !! moving some of the heating upward in the water
+                             !! column.  The default is false.
+  logical :: Resolve_Ekman   !<   If true, the nkml layers in the mixed layer are
+                             !! chosen to optimally represent the impact of the
+                             !! Ekman transport on the mixed layer TKE budget.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  logical :: TKE_diagnostics = .false. !< If true, calculate extensive diagnostics of the TKE budget
+  logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff
+                             !! at the river mouths to "rivermix_depth" meters
+  real    :: rivermix_depth = 0.0  !< Used if "do_rivermix" = T
+  logical :: limit_det       !< If true, limit the extent of buffer layer
+                             !! detrainment to be consistent with neighbors.
+  real    :: lim_det_dH_sfc  !< The fractional limit in the change between grid
+                             !! points of the surface region (mixed & buffer
+                             !! layer) thickness, nondim.  0.5 by default.
+  real    :: lim_det_dH_bathy !< The fraction of the total depth by which the
+                             !! thickness of the surface region (mixed & buffer
+                             !! layer) is allowed to change between grid points.
+                             !! Nondimensional, 0.2 by default.
+  logical :: use_river_heat_content !< If true, use the fluxes%runoff_Hflx field
+                             !! to set the heat carried by runoff, instead of
+                             !! using SST for temperature of liq_runoff
+  logical :: use_calving_heat_content !< Use SST for temperature of froz_runoff
+  logical :: salt_reject_below_ML !< It true, add salt below mixed layer (layer mode only)
 
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  real    :: Allowed_T_chg   ! The amount by which temperature is allowed
-                             ! to exceed previous values during detrainment, K.
-  real    :: Allowed_S_chg   ! The amount by which salinity is allowed
-                             ! to exceed previous values during detrainment, PSU.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
+                             !! timing of diagnostic output.
+  real    :: Allowed_T_chg   !< The amount by which temperature is allowed
+                             !! to exceed previous values during detrainment, K.
+  real    :: Allowed_S_chg   !< The amount by which salinity is allowed
+                             !! to exceed previous values during detrainment, PSU.
 
 ! These are terms in the mixed layer TKE budget, all in m3 s-2.
   real, allocatable, dimension(:,:) :: &
-    ML_depth, &        ! The mixed layer depth in m.
-    diag_TKE_wind, &   ! The wind source of TKE.
-    diag_TKE_RiBulk, & ! The resolved KE source of TKE.
-    diag_TKE_conv, &   ! The convective source of TKE.
-    diag_TKE_pen_SW, & ! The TKE sink required to mix
-                       ! penetrating shortwave heating.
-    diag_TKE_mech_decay, & ! The decay of mechanical TKE.
-    diag_TKE_conv_decay, & ! The decay of convective TKE.
-    diag_TKE_mixing, & ! The work done by TKE to deepen
-                       ! the mixed layer.
-    diag_TKE_conv_s2, &! The convective source of TKE due to
-                       ! to mixing in sigma2.
-    diag_PE_detrain, & ! The spurious source of potential
-                       ! energy due to mixed layer
-                       ! detrainment, W m-2.
-    diag_PE_detrain2   ! The spurious source of potential
-                       ! energy due to mixed layer only
-                       ! detrainment, W m-2.
-  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called
-                                        ! from inside loops that can be threaded.
-                                        ! To run with multiple threads, set to False.
-  type(group_pass_type) :: pass_h_sum_hmbl_prev ! For group halo pass
+    ML_depth, &        !< The mixed layer depth in m.
+    diag_TKE_wind, &   !< The wind source of TKE.
+    diag_TKE_RiBulk, & !< The resolved KE source of TKE.
+    diag_TKE_conv, &   !< The convective source of TKE.
+    diag_TKE_pen_SW, & !< The TKE sink required to mix penetrating shortwave heating.
+    diag_TKE_mech_decay, & !< The decay of mechanical TKE.
+    diag_TKE_conv_decay, & !< The decay of convective TKE.
+    diag_TKE_mixing, & !< The work done by TKE to deepen  the mixed layer.
+    diag_TKE_conv_s2, & !< The convective source of TKE due to to mixing in sigma2.
+    diag_PE_detrain, & !< The spurious source of potential energy due to mixed layer detrainment, W m-2.
+    diag_PE_detrain2   !< The spurious source of potential energy due to mixed layer only detrainment, W m-2.
+  logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that can
+                                        !! be threaded. To run with multiple threads, set to False.
+  type(group_pass_type) :: pass_h_sum_hmbl_prev !< For group halo pass
+
+  !>@{ Diagnostic IDs
   integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
   integer :: id_TKE_RiBulk = -1, id_TKE_conv = -1, id_TKE_pen_SW = -1
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1, id_TKE_conv_s2 = -1
   integer :: id_PE_detrain = -1, id_PE_detrain2 = -1, id_h_mismatch = -1
   integer :: id_Hsfc_used = -1, id_Hsfc_max = -1, id_Hsfc_min = -1
+  !!@}
 end type bulkmixedlayer_CS
 
+!>@{ CPU clock IDs
 integer :: id_clock_detrain=0, id_clock_mech=0, id_clock_conv=0, id_clock_adjustment=0
 integer :: id_clock_EOS=0, id_clock_resort=0, id_clock_pass=0
-
-integer :: num_msg = 0, max_msg = 2
+!!@}
 
 contains
 
