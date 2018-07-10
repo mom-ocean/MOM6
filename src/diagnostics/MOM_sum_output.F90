@@ -70,51 +70,50 @@ public write_energy, accumulate_net_input, MOM_sum_output_init
 
 integer, parameter :: NUM_FIELDS = 17
 
+!> A list of depths and corresponding globally integrated ocean area at each
+!! depth and the ocean volume below each depth.
 type :: Depth_List
-  real :: depth       ! A depth, in m.
-  real :: area        ! The cross-sectional area of the ocean at that depth, in m2.
-  real :: vol_below   ! The ocean volume below that depth, in m3.
+  real :: depth       !< A depth, in m.
+  real :: area        !< The cross-sectional area of the ocean at that depth, in m2.
+  real :: vol_below   !< The ocean volume below that depth, in m3.
 end type Depth_List
 
+!> The control structure for the MOM_sum_output module
 type, public :: sum_output_CS ; private
-  type(Depth_List), pointer, dimension(:) :: DL => NULL() ! The sorted depth list.
-  integer :: list_size          ! =niglobal*njglobal length of sorting vector
+  type(Depth_List), pointer, dimension(:) :: DL => NULL() !< The sorted depth list.
+  integer :: list_size          !< length of sorting vector <= niglobal*njglobal
 
   integer ALLOCABLE_, dimension(NKMEM_) :: lH
-                                ! This saves the entry in DL with a volume just
-                                ! less than the volume of fluid below the
-                                ! interface.
-  logical :: do_APE_calc        !   If true, calculate the available potential
-                                ! energy of the interfaces.  Disabling this
-                                ! reduces the memory footprint of high-PE-count
-                                ! models dramatically.
-  logical :: read_depth_list    !   Read the depth list from a file if it exists
-                                ! and write it if it doesn't.
-  character(len=200) :: depth_list_file  ! The name of the depth list file.
-  real    :: D_list_min_inc     !   The minimum increment, in m, between the
-                                ! depths of the entries in the depth-list file,
-                                ! 0 by default.
-  logical :: use_temperature    !   If true, temperature and salinity are state
-                                ! variables.
-  real    :: fresh_water_input  !   The total mass of fresh water added by
-                                ! surface fluxes since the last time that
-  real    :: mass_prev          !   The total ocean mass the last time that
-                                ! write_energy was called, in kg.
-  real    :: salt_prev          !   The total amount of salt in the ocean the last
-                                ! time that write_energy was called, in PSU kg.
-  real    :: net_salt_input     !   The total salt added by surface fluxes since
-                                ! the last time that write_energy was called,
-                                ! in PSU kg.
-  real    :: heat_prev          !   The total amount of heat in the ocean the last
-                                ! time that write_energy was called, in Joules.
-  real    :: net_heat_input     !   The total heat added by surface fluxes since
-                                ! the last time that write_energy was called,
-                                ! in Joules.
-  type(EFP_type) :: &
-    fresh_water_in_EFP, &       ! These are extended fixed point versions of the
-    net_salt_in_EFP, &          ! correspondingly named variables above.
-    net_heat_in_EFP, heat_prev_EFP, salt_prev_EFP, mass_prev_EFP
-  real    :: dt                 ! The baroclinic dynamics time step, in s.
+                                !< This saves the entry in DL with a volume just
+                                !! less than the volume of fluid below the interface.
+  logical :: do_APE_calc        !<   If true, calculate the available potential energy of the
+                                !! interfaces.  Disabling this reduces the memory footprint of
+                                !! high-PE-count models dramatically.
+  logical :: read_depth_list    !<   Read the depth list from a file if it exists
+                                !! and write it if it doesn't.
+  character(len=200) :: depth_list_file  !< The name of the depth list file.
+  real    :: D_list_min_inc     !<  The minimum increment, in m, between the depths of the
+                                !! entries in the depth-list file, 0 by default.
+  logical :: use_temperature    !<   If true, temperature and salinity are state variables.
+  real    :: fresh_water_input  !<   The total mass of fresh water added by surface fluxes
+                                !! since the last time that write_energy was called, in kg.
+  real    :: mass_prev          !<   The total ocean mass the last time that
+                                !! write_energy was called, in kg.
+  real    :: salt_prev          !<   The total amount of salt in the ocean the last
+                                !! time that write_energy was called, in PSU kg.
+  real    :: net_salt_input     !<   The total salt added by surface fluxes since the last
+                                !! time that write_energy was called, in PSU kg.
+  real    :: heat_prev          !<  The total amount of heat in the ocean the last
+                                !! time that write_energy was called, in Joules.
+  real    :: net_heat_input     !<  The total heat added by surface fluxes since the last
+                                !! the last time that write_energy was called, in Joules.
+  type(EFP_type) :: fresh_water_in_EFP !< An extended fixed point version of fresh_water_input
+  type(EFP_type) :: net_salt_in_EFP !< An extended fixed point version of net_salt_input
+  type(EFP_type) :: net_heat_in_EFP !< An extended fixed point version of net_heat_input
+  type(EFP_type) :: heat_prev_EFP !< An extended fixed point version of heat_prev
+  type(EFP_type) :: salt_prev_EFP !< An extended fixed point version of salt_prev
+  type(EFP_type) :: mass_prev_EFP !< An extended fixed point version of mass_prev
+  real    :: dt                 !< The baroclinic dynamics time step, in s.
 
   type(time_type) :: energysavedays            !< The interval between writing the energies
                                                !! and other integral quantities of the run.
@@ -129,27 +128,25 @@ type, public :: sum_output_CS ; private
                                                !! of calls to write_energy and revert to the standard
                                                !! energysavedays interval
 
-  real    :: timeunit           !   The length of the units for the time
-                                ! axis, in s.
-  logical :: date_stamped_output ! If true, use dates (not times) in messages to stdout.
-  type(time_type) :: Start_time ! The start time of the simulation.
+  real    :: timeunit           !<  The length of the units for the time axis, in s.
+  logical :: date_stamped_output !< If true, use dates (not times) in messages to stdout.
+  type(time_type) :: Start_time !< The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
-  integer, pointer :: ntrunc => NULL() ! The number of times the velocity has been
-                                ! truncated since the last call to write_energy.
-  real    :: max_Energy         ! The maximum permitted energy per unit mass
-                                ! If there is more energy than this, the model
-                                ! should stop, in m2 s-2.
-  integer :: maxtrunc           ! The number of truncations per energy save
-                                ! interval at which the run is stopped.
-  logical :: write_stocks       ! If true, write the integrated tracer amounts
-                                ! to stdout when the energy files are written.
-  integer :: previous_calls = 0 ! The number of times write_energy has been called.
-  integer :: prev_n = 0         ! The value of n from the last call.
-  integer :: fileenergy_nc      ! NetCDF id of the energy file.
-  integer :: fileenergy_ascii   ! The unit number of the ascii version of the energy file.
+  integer, pointer :: ntrunc => NULL() !< The number of times the velocity has been
+                                !! truncated since the last call to write_energy.
+  real    :: max_Energy         !< The maximum permitted energy per unit mass.  If there is
+                                !! more energy than this, the model should stop, in m2 s-2.
+  integer :: maxtrunc           !< The number of truncations per energy save
+                                !! interval at which the run is stopped.
+  logical :: write_stocks       !< If true, write the integrated tracer amounts
+                                !! to stdout when the energy files are written.
+  integer :: previous_calls = 0 !< The number of times write_energy has been called.
+  integer :: prev_n = 0         !< The value of n from the last call.
+  integer :: fileenergy_nc      !< NetCDF id of the energy file.
+  integer :: fileenergy_ascii   !< The unit number of the ascii version of the energy file.
   type(fieldtype), dimension(NUM_FIELDS+MAX_FIELDS_) :: &
-             fields             ! fieldtype variables for the output fields.
-  character(len=200) :: energyfile  ! The name of the energy file with path.
+             fields             !< fieldtype variables for the output fields.
+  character(len=200) :: energyfile  !< The name of the energy file with path.
 end type sum_output_CS
 
 contains
@@ -167,15 +164,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   type(time_type),        intent(in)    :: Input_start_time !< The start time of the simulation.
   type(Sum_output_CS),    pointer       :: CS         !< A pointer that is set to point to the
                                                       !! control structure for this module.
-! Arguments: G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      directory - The directory where the energy file goes.
-!  (in/out)  ntrnc - The integer that stores the number of times the velocity
-!                     has been truncated since the last call to write_energy.
-!  (in)      Input_start_time - The start time of the simulation.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+  ! Local variables
   real :: Time_unit   ! The time unit in seconds for ENERGYSAVEDAYS.
   real :: Rho_0, maxvel
 ! This include declares and sets the variable "version".
@@ -336,6 +325,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
                     optional, pointer    :: OBC !< Open boundaries control structure.
   type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
 
+  ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces, in m.
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT, in m2.
   real :: KE(SZK_(G))  ! The total kinetic energy of a layer, in J.
@@ -961,6 +951,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
                                               !! to MOM_sum_output_init.
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     FW_in, &   ! The net fresh water input, integrated over a timestep in kg.
     salt_in, & ! The total salt added by surface fluxes, integrated
@@ -1112,6 +1103,7 @@ subroutine create_depth_list(G, CS)
   type(Sum_output_CS),   pointer    :: CS !< The control structure set up in MOM_sum_output_init,
                                           !! in which the ordered depth list is stored.
 
+  ! Local variables
   real, dimension(G%Domain%niglobal*G%Domain%njglobal + 1) :: &
     Dlist, &  !< The global list of bottom depths, in m.
     AreaList  !< The global list of cell areas, in m2.
@@ -1239,8 +1231,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
   integer,               intent(in) :: list_size !< The size of the depth list.
 
-! This subroutine writes out the depth list to the specified file.
-
+  ! Local variables
   real, allocatable :: tmp(:)
   integer :: ncid, dimid(1), Did, Aid, Vid, status, k
 
@@ -1321,8 +1312,7 @@ subroutine read_depth_list(G, CS, filename)
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
 
-! This subroutine reads in the depth list to the specified file
-! and allocates and sets up CS%DL and CS%list_size .
+  ! Local variables
   character(len=32) :: mdl
   character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)

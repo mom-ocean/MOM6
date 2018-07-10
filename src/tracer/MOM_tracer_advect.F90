@@ -34,12 +34,14 @@ type, public :: tracer_advect_CS ; private
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
   logical :: usePPM                !< If true, use PPM instead of PLM
   logical :: useHuynh              !< If true, use the Huynh scheme for PPM interface values
-  type(group_pass_type) :: pass_uhr_vhr_t_hprev ! For group pass
+  type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structred used for group passes
 end type tracer_advect_CS
 
+!>@{ CPU time clocks
 integer :: id_clock_advect
 integer :: id_clock_pass
 integer :: id_clock_sync
+!!@}
 
 contains
 
