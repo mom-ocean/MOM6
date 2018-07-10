@@ -73,49 +73,54 @@ implicit none ; private
 public set_up_sponge_field, set_up_sponge_ML_density
 public initialize_sponge, apply_sponge, sponge_end, init_sponge_diags
 
-type :: p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
+!> A structure for creating arrays of pointers to 3D arrays
+type, public :: p3d
+  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array
 end type p3d
-type :: p2d
-  real, dimension(:,:), pointer :: p => NULL()
+!> A structure for creating arrays of pointers to 2D arrays
+type, public :: p2d
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array
 end type p2d
 
+!> This control structure holds memory and parameters for the MOM_sponge module
 type, public :: sponge_CS ; private
-  logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
-                             ! nkml sublayers and nkbl buffer layer.
-  integer :: nz              ! The total number of layers.
-  integer :: isc, iec, jsc, jec  ! The index ranges of the computational domain.
-  integer :: isd, ied, jsd, jed  ! The index ranges of the data domain.
-  integer :: num_col         ! The number of sponge points within the
-                             ! computational domain.
-  integer :: fldno = 0       ! The number of fields which have already been
-                             ! registered by calls to set_up_sponge_field
-  integer, pointer :: col_i(:) => NULL()  ! Arrays containing the i- and j- indicies
-  integer, pointer :: col_j(:) => NULL()  ! of each of the columns being damped.
-  real, pointer :: Iresttime_col(:) => NULL()  ! The inverse restoring time of
-                             ! each column.
-  real, pointer :: Rcv_ml_ref(:) => NULL() ! The value toward which the mixed layer
-                             ! coordinate-density is being damped, in kg m-3.
-  real, pointer :: Ref_eta(:,:) => NULL() ! The value toward which the interface
-                             ! heights are being damped, in m.
-  type(p3d) :: var(MAX_FIELDS_)  ! Pointers to the fields that are being damped.
-  type(p2d) :: Ref_val(MAX_FIELDS_)  ! The values to which the fields are damped.
+  logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
+                       !! nkml sublayers and nkbl buffer layer.
+  integer :: nz        !< The total number of layers.
+  integer :: isc       !< The starting i-index of the computational domain at h.
+  integer :: iec       !< The ending i-index of the computational domain at h.
+  integer :: jsc       !< The starting j-index of the computational domain at h.
+  integer :: jec       !< The ending j-index of the computational domain at h.
+  integer :: isd       !< The starting i-index of the data domain at h.
+  integer :: ied       !< The ending i-index of the data domain at h.
+  integer :: jsd       !< The starting j-index of the data domain at h.
+  integer :: jed       !< The ending j-index of the data domain at h.
+  integer :: num_col   !< The number of sponge points within the computational domain.
+  integer :: fldno = 0 !< The number of fields which have already been
+                       !! registered by calls to set_up_sponge_field
+  integer, pointer :: col_i(:) => NULL() !< Array of the i-indicies of each of the columns being damped.
+  integer, pointer :: col_j(:) => NULL() !< Array of the j-indicies of each of the columns being damped.
+  real, pointer :: Iresttime_col(:) => NULL() !< The inverse restoring time of each column.
+  real, pointer :: Rcv_ml_ref(:) => NULL() !< The value toward which the mixed layer
+                             !! coordinate-density is being damped, in kg m-3.
+  real, pointer :: Ref_eta(:,:) => NULL() !< The value toward which the interface
+                             !! heights are being damped, in m.
+  type(p3d) :: var(MAX_FIELDS_) !< Pointers to the fields that are being damped.
+  type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
 
-  logical :: do_i_mean_sponge     ! If true, apply sponges to the i-mean fields.
-  real, pointer :: Iresttime_im(:) => NULL()  ! The inverse restoring time of
-                             ! each row for i-mean sponges.
-  real, pointer :: Rcv_ml_ref_im(:) => NULL() ! The value toward which the i-mean
-                             ! mixed layer coordinate-density is being damped,
-                             ! in kg m-3.
-  real, pointer :: Ref_eta_im(:,:) => NULL() ! The value toward which the i-mean
-                             ! interface heights are being damped, in m.
-  type(p2d) :: Ref_val_im(MAX_FIELDS_)  ! The values toward which the i-means of
-                             ! fields are damped.
+  logical :: do_i_mean_sponge !< If true, apply sponges to the i-mean fields.
+  real, pointer :: Iresttime_im(:) => NULL() !< The inverse restoring time of
+                             !! each row for i-mean sponges.
+  real, pointer :: Rcv_ml_ref_im(:) => NULL() !! The value toward which the i-mean
+                             !< mixed layer coordinate-density is being damped, in kg m-3.
+  real, pointer :: Ref_eta_im(:,:) => NULL() !< The value toward which the i-mean
+                             !! interface heights are being damped, in m.
+  type(p2d) :: Ref_val_im(MAX_FIELDS_) !< The values toward which the i-means of
+                             !! fields are damped.
 
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                             ! regulate the timing of diagnostic output.
-  integer :: id_w_sponge = -1
-
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                             !! regulate the timing of diagnostic output.
+  integer :: id_w_sponge = -1 !< A diagnostic ID
 end type sponge_CS
 
 contains
@@ -173,8 +178,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   CS%do_i_mean_sponge = present(Iresttime_i_mean)
 
   CS%nz = G%ke
-  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
-  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
+!  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
+!  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   ! CS%bulkmixedlayer may be set later via a call to set_up_sponge_ML_density.
   CS%bulkmixedlayer = .false.
 

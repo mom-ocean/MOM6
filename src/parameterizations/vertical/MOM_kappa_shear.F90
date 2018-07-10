@@ -87,12 +87,14 @@ type, public :: Kappa_shear_CS ; private
   logical :: eliminate_massless !< If true, massless layers are merged with neighboring
                              !! massive layers in this calculation.
                              !  I can think of no good reason why this should be false. - RWH
-  logical :: layer_stagger = .false.
+!  logical :: layer_stagger = .false. ! If true, do the calculations centered at
+                             !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
-  integer :: id_Kd_shear = -1, id_TKE = -1
-  integer :: id_ILd2 = -1, id_dz_Int = -1
+  !>@{ Diagnostic IDs
+  integer :: id_Kd_shear = -1, id_TKE = -1, id_ILd2 = -1, id_dz_Int = -1
+  !!@}
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup

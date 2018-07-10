@@ -66,19 +66,19 @@ implicit none ; private
 
 public entrainment_diffusive, entrain_diffusive_init, entrain_diffusive_end
 
+!> The control structure holding parametes for the MOM_entrain_diffusive module
 type, public :: entrain_diffusive_CS ; private
-  logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
-                             ! GV%nk_rho_varies variable density mixed & buffer
-                             ! layers.
-  logical :: correct_density ! If true, the layer densities are restored toward
-                             ! their target variables by the diapycnal mixing.
-  integer :: max_ent_it      ! The maximum number of iterations that may be
-                             ! used to calculate the diapycnal entrainment.
-  real    :: Tolerance_Ent   ! The tolerance with which to solve for entrainment
-                             ! values, in m.
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                             ! regulate the timing of diagnostic output.
-  integer :: id_Kd = -1, id_diff_work = -1
+  logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
+                             !! GV%nk_rho_varies variable density mixed & buffer layers.
+  logical :: correct_density !< If true, the layer densities are restored toward
+                             !! their target variables by the diapycnal mixing.
+  integer :: max_ent_it      !< The maximum number of iterations that may be used to
+                             !! calculate the diapycnal entrainment.
+  real    :: Tolerance_Ent   !< The tolerance with which to solve for entrainment values, in m.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                             !! regulate the timing of diagnostic output.
+  integer :: id_Kd = -1      !< Diagnostic ID for diffusivity
+  integer :: id_diff_work = -1 !< Diagnostic ID for mixing work
 end type entrain_diffusive_CS
 
 contains
