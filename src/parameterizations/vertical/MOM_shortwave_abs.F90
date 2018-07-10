@@ -13,41 +13,35 @@ implicit none ; private
 
 public absorbRemainingSW, sumSWoverBands
 
+!> This type is used to exchange information about ocean optical properties
 type, public :: optics_type
   ! ocean optical properties
 
-  integer :: nbands    ! number of penetrating bands of SW radiation
+  integer :: nbands    !< number of penetrating bands of SW radiation
 
-  real, pointer, dimension(:,:,:,:) :: &
-    opacity_band => NULL()  ! SW optical depth per unit thickness (1/m)
-                            ! Number of radiation bands is most rapidly varying (first) index.
+  real, pointer, dimension(:,:,:,:) :: opacity_band => NULL() !< SW optical depth per unit thickness (1/m)
+                            !! The number of radiation bands is most rapidly varying (first) index.
 
-  real, pointer, dimension(:,:,:) :: &
-    SW_pen_band  => NULL()  ! shortwave radiation (W/m^2) at the surface in each of
-                            ! the nbands bands that penetrates beyond the surface.
-                            ! The most rapidly varying dimension is the band.
+  real, pointer, dimension(:,:,:) :: SW_pen_band  => NULL()  !< shortwave radiation (W/m^2) at the surface
+                            !! in each of the nbands bands that penetrates beyond the surface.
+                            !! The most rapidly varying dimension is the band.
 
   real, pointer, dimension(:) :: &
-    min_wavelength_band => NULL(), & ! The range of wavelengths in each band of
-    max_wavelength_band => NULL()    ! penetrating shortwave radiation (nm)
+    min_wavelength_band => NULL(), & !< The minimum wavelength in each band of penetrating shortwave radiation (nm)
+    max_wavelength_band => NULL()    !< The maximum wavelength in each band of penetrating shortwave radiation (nm)
 
 end type optics_type
 
-
 contains
 
-!> Apply shortwave heating below surface boundary layer.
+!> Apply shortwave heating below the boundary layer (when running with the bulk mixed layer inhereted
+!! from GOLD) or throughout the water column.  In addition, it causes all of the remaining SW radiation
+!! to be absorbed, provided that the total water column thickness is greater than H_limit_fluxes.
+!! For thinner water columns, the heating is scaled down proportionately, the assumption being that the
+!! remaining heating (which is left in Pen_SW) should go into an (absent for now) ocean bottom sediment layer.
 subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
                              adjustAbsorptionProfile, absorbAllSW, T, Pen_SW_bnd, &
                              eps, ksort, htot, Ttot, TKE, dSV_dT)
-
-!< This subroutine applies shortwave heating below the boundary layer (when running
-!! with the bulk mixed layer from GOLD) or throughout the water column.  In
-!! addition, it causes all of the remaining SW radiation to be absorbed,
-!! provided that the total water column thickness is greater than
-!! H_limit_fluxes.  For thinner water columns, the heating is scaled down
-!! proportionately, the assumption being that the remaining heating (which is
-!! left in Pen_SW) should go into an (absent for now) ocean bottom sediment layer.
 
   type(ocean_grid_type),            intent(in)    :: G     !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV    !< The ocean's vertical grid structure.
@@ -85,60 +79,19 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
                                                            !! will be redistributed through the
                                                            !! water column (units of K*H), size
                                                            !! nsw x SZI_(G).
-  real, dimension(SZI_(G),SZK_(G)),    &
-                          optional, intent(in)    :: eps   !< Small thickness that must remain in
+  real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: eps !< Small thickness that must remain in
                                                            !! each layer, and which will not be
                                                            !! subject to heating (units of H)
-  integer, dimension(SZI_(G),SZK_(G)), &
-                          optional, intent(in)    :: ksort !< Density-sorted k-indicies.
-  real, dimension(SZI_(G)),            &
-                          optional, intent(in)    :: htot  !< Total mixed layer thickness, in H .
-  real, dimension(SZI_(G)),            &
-                          optional, intent(inout) :: Ttot  !< Depth integrated mixed layer
+  integer, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: ksort !< Density-sorted k-indicies.
+  real, dimension(SZI_(G)), optional, intent(in)    :: htot !< Total mixed layer thickness, in H .
+  real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature (units of K H).
-  real, dimension(SZI_(G),SZK_(G)),    &
-                          optional, intent(in)    :: dSV_dT !< The partial derivative of specific
-                                                           !! volume with temperature, in m3 kg-1
-                                                           !! K-1.
-  real, dimension(SZI_(G),SZK_(G)),    &
-                          optional, intent(inout) :: TKE   !< The TKE sink from mixing the heating
+  real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
+                                                           !! volume with temperature, in m3 kg-1 K-1.
+  real, dimension(SZI_(G),SZK_(G)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
                                                            !! throughout a layer, in J m-2.
 
-! Arguments:
-!  (in)    G            = the ocean grid structure.
-!  (in)    GV           = The ocean's vertical grid structure.
-!  (in)    h            = the layer thicknesses, in m or kg m-2.
-!                         units of h are referred to as "H" below.
-!  (in)    opacity_band = opacity in each band of penetrating shortwave
-!                         radiation (1/H). The indicies are band, i, k.
-!  (in)    nsw          = number of bands of penetrating shortwave radiation
-!  (in)    j            = j-index to work on
-!  (in)    dt           = time step (seconds)
-!  (in)    H_limit_fluxes = if the total ocean depth is less than this, they
-!                         are scaled away to avoid numerical instabilities. (H)
-!                         This would not be necessary if a finite heat
-!                         capacity mud-layer were added.
-!  (in)    adjustAbsorptionProfile = if true, apply heating above the layers
-!                         in which it should have occurred to get the correct
-!                         mean depth (and potential energy change) of the
-!                         shortwave that should be absorbed by each layer.
-!  (in)    absorbAllSW  = if true, any shortwave radiation that hits the
-!                         bottom is absorbed uniformly over the water column.
-!  (inout) T            = layer potential/conservative temperatures (deg C)
-!  (inout) Pen_SW_bnd   = penetrating shortwave heating in each band that
-!                         hits the bottom and will be redistributed through
-!                         the water column (units of K*H), size nsw x SZI_(G).
-
-! These optional arguments apply when the bulk mixed layer is used
-! but are unnecessary with other schemes.
-!  (in,opt)    eps      = small thickness that must remain in each layer, and
-!                         which will not be subject to heating (units of H)
-!  (inout,opt) ksort    = density-sorted k-indicies
-!  (in,opt)    htot     = total mixed layer thickness, in H
-!  (inout,opt) Ttot     = depth integrated mixed layer temperature (units of K H)
-!  (in,opt)    dSV_dT   = the partial derivative of specific volume with temperature, in m3 kg-1 K-1.
-!  (inout,opt) TKE      = the TKE sink from mixing the heating throughout a layer, in J m-2.
-
+  ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
     T_chg_above    ! A temperature change that will be applied to all the thick
                    ! layers above a given layer, in K.  This is only nonzero if
