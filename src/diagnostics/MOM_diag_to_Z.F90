@@ -1,4 +1,4 @@
-module MOM_diag_to_Z
+Module MOM_diag_to_Z
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -55,38 +55,42 @@ public find_limited_slope
 public register_Zint_diag
 public calc_Zint_diags
 
+!> The control structure for the MOM_diag_to_Z module
 type, public :: diag_to_Z_CS ; private
   ! The following arrays are used to store diagnostics calculated in this
   ! module and unavailable outside of it.
 
   real, pointer, dimension(:,:,:) :: &
-    u_z  => NULL(), &   ! zonal velocity remapped to depth space (m/s)
-    v_z  => NULL(), &   ! meridional velocity remapped to depth space (m/s)
-    uh_z => NULL(), &   ! zonal transport remapped to depth space (m3/s or kg/s)
-    vh_z => NULL()      ! meridional transport remapped to depth space (m3/s or kg/s)
+    u_z  => NULL(), &   !< zonal velocity remapped to depth space (m/s)
+    v_z  => NULL(), &   !< meridional velocity remapped to depth space (m/s)
+    uh_z => NULL(), &   !< zonal transport remapped to depth space (m3/s or kg/s)
+    vh_z => NULL()      !< meridional transport remapped to depth space (m3/s or kg/s)
 
-  type(p3d) :: tr_z(MAX_FIELDS_)     ! array of tracers, remapped to depth space
-  type(p3d) :: tr_model(MAX_FIELDS_) ! pointers to an array of tracers
+  type(p3d) :: tr_z(MAX_FIELDS_)     !< array of tracers, remapped to depth space
+  type(p3d) :: tr_model(MAX_FIELDS_) !< pointers to an array of tracers
 
-  real    :: missing_vel             = -1.0e34
-  real    :: missing_trans           = -1.0e34
-  real    :: missing_value           = -1.0e34
-  real    :: missing_tr(MAX_FIELDS_) = -1.0e34
+  real :: missing_vel             = -1.0e34 !< Missing variable fill values for velocities
+  real :: missing_trans           = -1.0e34 !< Missing variable fill values for transports
+  real :: missing_tr(MAX_FIELDS_) = -1.0e34 !< Missing variable fill values for tracers
+  real :: missing_value           = -1.0e34 !< Missing variable fill values for other diagnostics
 
-  integer :: id_u_z  = -1
-  integer :: id_v_z  = -1
-  integer :: id_uh_Z = -1
-  integer :: id_vh_Z = -1
-  integer :: id_tr(MAX_FIELDS_) = -1
-  integer :: id_tr_xyave(MAX_FIELDS_) = -1
-  integer :: num_tr_used = 0
-  integer :: nk_zspace = -1
+  integer :: id_u_z  = -1  !< Diagnostic ID for zonal velocity
+  integer :: id_v_z  = -1  !< Diagnostic ID for meridional velocity
+  integer :: id_uh_Z = -1  !< Diagnostic ID for zonal transports
+  integer :: id_vh_Z = -1  !< Diagnostic ID for meridional transports
+  integer :: id_tr(MAX_FIELDS_) = -1  !< Diagnostic IDs for tracers
+  integer :: id_tr_xyave(MAX_FIELDS_) = -1  !< Diagnostic IDs for spatially averaged tracers
 
-  real, pointer :: Z_int(:) => NULL()  ! interface depths of the z-space file (meter)
+  integer :: num_tr_used = 0 !< Th enumber of tracers in use.
+  integer :: nk_zspace = -1 !< The number of levels in the z-space output
 
+  real, pointer :: Z_int(:) => NULL()  !< interface depths of the z-space file (meter)
+
+  !>@{ Axis groups for z-space diagnostic output
   type(axes_grp) :: axesBz,  axesTz,  axesCuz,  axesCvz
   type(axes_grp) :: axesBzi, axesTzi, axesCuzi, axesCvzi
   type(axes_grp) :: axesZ
+  !!@}
   integer, dimension(1) :: axesz_out
 
   type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
@@ -98,6 +102,7 @@ integer, parameter :: NO_ZSPACE = -1
 
 contains
 
+!> Return the global horizontal mean in z-space
 function global_z_mean(var,G,CS,tracer)
   type(ocean_grid_type), intent(in)  :: G    !< The ocean's grid structure
   type(diag_to_Z_CS),    pointer     :: CS   !< Control structure returned by
@@ -168,15 +173,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
 
 ! This subroutine maps tracers and velocities into depth space for diagnostics.
 
-! Arguments:
-!  (in)  u   - zonal velocity component (m/s)
-!  (in)  v   - meridional velocity component (m/s)
-!  (in)  h   - layer thickness (meter or kg/m2)
-!  (in)  ssh_in - sea surface height (meter or kg/m2)
-!  (in)  G   - ocean grid structure
-!  (in)  GV  - The ocean's vertical grid structure.
-!  (in)  CS  - control structure returned by previous call to diag_to_Z_init
-
+  ! Local variables
   ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
   real :: ssh(SZI_(G),SZJ_(G))   ! copy of ssh_in (meter or kg/m2)
   real :: e(SZK_(G)+2)           ! z-star interface heights (meter or kg/m2)
@@ -530,15 +527,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
 
 !   This subroutine maps horizontal transport into depth space for diagnostic output.
 
-! Arguments:
-!  (in)      uh_int - time integrated zonal transport (m3 or kg)
-!  (in)      vh_int - time integrated meridional transport (m3 or kg)
-!  (in)      h      - layer thickness (meter or kg/m2)
-!  (in)      dt     - time difference (sec) since last call to this routine
-!  (in)      G      - ocean grid structure
-!  (in)      GV     - The ocean's vertical grid structure
-!  (in)      CS     - control structure returned by previous call to diag_to_Z_init
-
+  ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: &
     htot, &        ! total layer thickness (meter or kg/m2)
     dilate         ! nondimensional factor by which to dilate layers to
@@ -701,6 +690,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real, dimension(:), intent(out)   :: z2     !< Depths of the bottom limit of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
        !! by the cell thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
+
   ! Local variables
   real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k
@@ -750,13 +740,7 @@ subroutine find_limited_slope(val, e, slope, k)
 
 !   This subroutine determines a limited slope for val to be advected with
 ! a piecewise limited scheme.
-
-! Arguments:
-!  (in)      val   - a column of values that are being interpolated
-!  (in)      e     - column interface heights (meter or kg/m2)
-!  (in)      slope - normalized slope in the intracell distribution of val
-!  (in)      k     - layer whose slope is being determined
-
+  ! Local variables
   real :: d1, d2
 
   if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
@@ -787,6 +771,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   type(diag_to_Z_CS),      pointer    :: CS   !< Control structure returned by
                                               !! previous call to diag_to_Z_init.
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),max(CS%nk_zspace+1,1),max(num_diags,1)) :: &
     diag_on_Z  ! diagnostics interpolated to depth space
   real, dimension(SZI_(G),SZK_(G)+1) :: e
@@ -892,20 +877,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
   character(len=*), optional, intent(in) :: cmor_standard_name !< cmor standardized name
                                                             !! associated with a field.
 
-!   This subroutine registers a tracer to be output in depth space.
-! Arguments:
-!  (in)      tr_ptr    - tracer for translation to Z-space
-!  (in)      name      - name for the output tracer
-!  (in)      long_name - long name for the output tracer
-!  (in)      units     - units of output tracer
-!  (in)      Time      - current model time
-!  (in)      G         - ocean grid structure
-!  (in)      CS        - control struct returned by previous call to diag_to_Z_init
-!  (in,opt)  cmor_field_name    - cmor name of a field
-!  (in,opt)  cmor_long_name     - cmor long name of a field
-!  (in,opt)  cmor_units         - cmor units of a field
-!  (in,opt)  cmor_standard_name - cmor standardized name associated with a field
-
+  ! Local variables
   character(len=256) :: posted_standard_name
   character(len=256) :: posted_cmor_units
   character(len=256) :: posted_cmor_standard_name
@@ -958,17 +930,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
   type(diag_to_Z_CS),    pointer    :: CS     !< Control struct returned by previous call to
                                               !! diag_to_Z_init.
 
-!   This subroutine registers a tracer to be output in depth space.
-
-! Arguments:
-!  (in)      tr_ptr    - tracer for translation to Z-space
-!  (in)      name      - name for the output tracer
-!  (in)      long_name - long name for output tracer
-!  (in)      units     - units of output tracer
-!  (in)      Time      - current model time
-!  (in)      G         - ocean grid structure
-!  (in)      CS        - control struct returned by previous call to diag_to_Z_init
-
+  ! Local variables
   character(len=256) :: posted_standard_name
   integer :: isd, ied, jsd, jed, nk, m, id_test
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
@@ -1016,8 +978,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
-                                                 !! parameters.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Struct to regulate diagnostic output.
   type(diag_to_Z_CS),      pointer       :: CS   !< Pointer to point to control structure for
                                                  !! this module, which is allocated and
@@ -1026,6 +987,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
+  ! Local variables
   character(len=40)  :: mdl = "MOM_diag_to_Z" ! module name
   character(len=200) :: in_dir, zgrid_file    ! strings for directory/file
   character(len=48)  :: flux_units, string
@@ -1123,11 +1085,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
   integer,            intent(out) :: edge_index  !< The interface z-axis diagnostic index handle
   integer,            intent(out) :: nk_out      !< The number of layers in the output grid
 
-!   This subroutine reads the depths of the interfaces bounding the intended
-! layers from a NetCDF file.  If no appropriate file is found, -1 is returned
-! as the number of layers in the output file.  Also, a diag_manager axis is set
-! up with the same information as this axis.
-
+  ! Local variables
   real, allocatable   :: cell_depth(:)
   character (len=200) :: units, long_name
   integer :: ncid, status, intid, intvid, layid, layvid, k, ni
@@ -1234,6 +1192,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
 
 end subroutine get_Z_depths
 
+!> Deallocate memory associated with the MOM_diag_to_Z module
 subroutine MOM_diag_to_Z_end(CS)
   type(diag_to_Z_CS), pointer :: CS !< Control structure returned by a previous call to diag_to_Z_init.
   integer :: m
@@ -1249,23 +1208,16 @@ end subroutine MOM_diag_to_Z_end
 
 !> This subroutine registers a tracer to be output in depth space.
 function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
-  type(ocean_grid_type),             intent(in) :: G      !< The ocean's grid structure.
+  type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             target, intent(in) :: tr_ptr !< Tracer for translation to Z-space.
-  type(vardesc),                     intent(in) :: vardesc_tr !< Variable descriptor.
-  type(time_type),                   intent(in) :: Time   !< Current model time.
-  type(diag_to_Z_CS),                pointer    :: CS     !< Control struct returned by a previous
-                                                          !! call to diag_to_Z_init.
-  integer                                       :: ocean_register_diag_with_z
+                 target, intent(in) :: tr_ptr !< Tracer for translation to Z-space.
+  type(vardesc),         intent(in) :: vardesc_tr !< Variable descriptor.
+  type(time_type),       intent(in) :: Time   !< Current model time.
+  type(diag_to_Z_CS),    pointer    :: CS     !< Control struct returned by a previous
+                                              !! call to diag_to_Z_init.
+  integer                           :: ocean_register_diag_with_z !< The retuned Z-space diagnostic ID
 
-!   This subroutine registers a tracer to be output in depth space.
-! Arguments:
-!  (in)      tr_ptr     - tracer for translation to Z-space
-!  (in)      vardesc_tr - variable descriptor
-!  (in)      Time       - current model time
-!  (in)      G          - ocean grid structure
-!  (in)      CS         - control struct returned by a previous call to diag_to_Z_init
-
+  ! Local variables
   type(vardesc) :: vardesc_z
   character(len=64) :: var_name         ! A variable's name.
   integer :: isd, ied, jsd, jed, nk, m, id_test
@@ -1313,6 +1265,7 @@ function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
 
 end function ocean_register_diag_with_z
 
+!> Register a diagnostic to be output in depth space.
 function register_Z_diag(var_desc, CS, day, missing)
   integer                        :: register_Z_diag !< The returned z-layer diagnostic index
   type(vardesc),      intent(in) :: var_desc !< A type with metadata for this diagnostic
@@ -1321,6 +1274,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   type(time_type),    intent(in) :: day  !< The current model time
   real,               intent(in) :: missing !< The missing value for this diagnostic
 
+  ! Local variables
   character(len=64) :: var_name         ! A variable's name.
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
@@ -1367,6 +1321,7 @@ function register_Z_diag(var_desc, CS, day, missing)
 
 end function register_Z_diag
 
+!> Register a diagnostic to be output at depth space interfaces
 function register_Zint_diag(var_desc, CS, day)
   integer                        :: register_Zint_diag !< The returned z-interface diagnostic index
   type(vardesc),      intent(in) :: var_desc !< A type with metadata for this diagnostic
@@ -1374,6 +1329,7 @@ function register_Zint_diag(var_desc, CS, day)
                                          !! previous call to diag_to_Z_init.
   type(time_type),    intent(in) :: day  !< The current model time
 
+  ! Local variables
   character(len=64) :: var_name         ! A variable's name.
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.

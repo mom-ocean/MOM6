@@ -100,64 +100,77 @@ use MOM_wave_interface, only: wave_parameters_CS
 implicit none ; private
 
 #include <MOM_memory.h>
+
+!> MOM_dynamics_unsplit module control structure
 type, public :: MOM_dyn_unsplit_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
-    PFu, &    ! PFu = -dM/dx, in m s-2.
-    diffu     ! Zonal acceleration due to convergence of the along-isopycnal
-              ! stress tensor, in m s-2.
+    CAu, &    !< CAu = f*v - u.grad(u) in m s-2.
+    PFu, &    !< PFu = -dM/dx, in m s-2.
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    ! CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &    ! PFv = -dM/dy, in m s-2.
-    diffv     ! Meridional acceleration due to convergence of the
-              ! along-isopycnal stress tensor, in m s-2.
+    CAv, &    !< CAv = -f*u - u.grad(v) in m s-2.
+    PFv, &    !< PFv = -dM/dy, in m s-2.
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL(), tauy_bot => NULL()
-    ! The frictional bottom stresses from the ocean to the seafloor, in Pa.
+  real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor (Pa)
+  real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor (Pa)
 
-  logical :: debug           ! If true, write verbose checksums for debugging purposes.
+  logical :: debug           !< If true, write verbose checksums for debugging purposes.
 
-  logical :: module_is_initialized = .false.
+  logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
 
+  !>@{ Diagnostic IDs
   integer :: id_uh = -1, id_vh = -1
   integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
+  !!@}
 
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                                   ! regulate the timing of diagnostic output.
-  type(accel_diag_ptrs), pointer :: ADp => NULL() ! A structure pointing to the
-                                   ! accelerations in the momentum equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
-  type(cont_diag_ptrs), pointer :: CDp => NULL() ! A structure with pointers to
-                                   ! various terms in the continuity equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
-! The remainder of the structure is pointers to child subroutines' control strings.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(accel_diag_ptrs), pointer :: ADp => NULL() !< A structure pointing to the
+                                   !! accelerations in the momentum equations,
+                                   !! which can later be used to calculate
+                                   !! derived diagnostics like energy budgets.
+  type(cont_diag_ptrs), pointer :: CDp => NULL() !< A structure with pointers to
+                                   !! various terms in the continuity equations,
+                                   !! which can later be used to calculate
+                                   !! derived diagnostics like energy budgets.
+
+  ! The remainder of the structure points to child subroutines' control structures.
+  !> A pointer to the horizontal viscosity control structure
   type(hor_visc_CS), pointer :: hor_visc_CSp => NULL()
+  !> A pointer to the continuity control structure
   type(continuity_CS), pointer :: continuity_CSp => NULL()
+  !> A pointer to the CoriolisAdv control structure
   type(CoriolisAdv_CS), pointer :: CoriolisAdv_CSp => NULL()
+  !> A pointer to the PressureForce control structure
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  !> A pointer to the vertvisc control structure
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
+  !> A pointer to the set_visc control structure
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
-  type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
+  !> A pointer to the tidal forcing control structure
+  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  !> A pointer to the ALE control structure.
+  type(ALE_CS), pointer :: ALE_CSp => NULL()
+
+  type(ocean_OBC_type), pointer :: OBC => NULL() !< A pointer to an open boundary
      ! condition type that specifies whether, where, and  what open boundary
      ! conditions are used.  If no open BCs are used, this pointer stays
      ! nullified.  Flather OBCs use open boundary_CS as well.
+  !> A pointer to the update_OBC control structure
   type(update_OBC_CS),    pointer :: update_OBC_CSp => NULL()
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
-
-! This is a copy of the pointer in the top-level control structure.
-  type(ALE_CS), pointer :: ALE_CSp => NULL()
 
 end type MOM_dyn_unsplit_CS
 
 public step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 public initialize_dyn_unsplit, end_dyn_unsplit
 
+!>@{ CPU time clock IDs
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
 integer :: id_clock_continuity, id_clock_horvisc, id_clock_mom_update
 integer :: id_clock_pass, id_clock_pass_init
+!!@}
 
 contains
 

@@ -82,8 +82,9 @@ type, public :: bkgnd_mixing_cs
   logical :: bulkmixedlayer !< If true, a refined bulk mixed layer scheme is used
   logical :: debug !< If true, turn on debugging in this module
   ! Daignostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
-  integer :: id_kd_bkgnd = -1, id_kv_bkgnd = -1
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that regulates diagnostic output
+  integer :: id_kd_bkgnd = -1 !< Diagnotic IDs
+  integer :: id_kv_bkgnd = -1 !< Diagnostic IDs
 
   real, allocatable, dimension(:,:)   ::  Kd_sfc !< surface value of the diffusivity (m2/s)
   ! Diagnostics arrays
