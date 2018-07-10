@@ -58,7 +58,7 @@ module MOM_oda_driver_mod
 #include <MOM_memory.h>
 
   !> Control structure that contains a transpose of the ocean state across ensemble members.
-  type, public :: ODA_CS; private
+  type, public :: ODA_CS ; private
      type(ocean_control_struct), pointer :: Ocean_prior=> NULL() !< ensemble ocean prior states in DA space
      type(ocean_control_struct), pointer :: Ocean_posterior=> NULL() !< ensemble ocean posterior states
                                                                      !! or increments to prior in DA space
@@ -71,7 +71,8 @@ module MOM_oda_driver_mod
      type(grid_type), pointer :: oda_grid !< local tracer grid
      real, pointer, dimension(:,:,:) :: h => NULL() !<layer thicknesses (m or kg/m2) for DA
      type(thermo_var_ptrs), pointer :: tv => NULL() !< pointer to thermodynamic variables
-     integer :: ni, nj !< global grid size
+     integer :: ni          !< global i-direction grid size
+     integer :: nj          !< global j-direction grid size
      logical :: reentrant_x !< grid is reentrant in the x direction
      logical :: reentrant_y !< grid is reentrant in the y direction
      logical :: tripolar_N !< grid is folded at its north edge
@@ -85,7 +86,7 @@ module MOM_oda_driver_mod
      ! Profiles local to the analysis domain
      type(ocean_profile_type), pointer :: Profiles => NULL() !< pointer to linked list of all available profiles
      type(ocean_profile_type), pointer :: CProfiles => NULL()!< pointer to linked list of current profiles
-     type(kd_root), pointer :: kdroot => NULL()
+     type(kd_root), pointer :: kdroot => NULL() !< A structure for storing nearest neighbors
      type(ALE_CS), pointer :: ALE_CS=>NULL() !< ALE control structure for DA
      logical :: use_ALE_algorithm !< true is using ALE remapping
      type(regridding_CS) :: regridCS !< ALE control structure for regridding
@@ -94,15 +95,14 @@ module MOM_oda_driver_mod
      type(diag_ctrl) :: diag_cs !<Diagnostics control structure
   end type ODA_CS
 
-  !> pointer to a mpp_domain object
+  !> A structure with a pointer to a domain2d, to allow for the creation of arrays of pointers.
   type :: ptr_mpp_domain
-    type(domain2d), pointer :: mpp_domain => NULL()
+    type(domain2d), pointer :: mpp_domain => NULL() !< pointer to an mpp domain2d
   end type ptr_mpp_domain
 
-  !>@{
-  !! DA parameters
+  !>@{  DA parameters
   integer, parameter :: NO_ASSIM = 0, OI_ASSIM=1, EAKF_ASSIM=2
-  !>@}
+  !!@}
 
 contains
 
