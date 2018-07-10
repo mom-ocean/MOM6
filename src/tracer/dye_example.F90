@@ -32,30 +32,28 @@ public dye_tracer_column_physics, dye_tracer_surface_state
 public dye_stock, regional_dyes_end
 
 
+!> The control structure for the regional dyes tracer package
 type, public :: dye_tracer_CS ; private
-  integer :: ntr    ! The number of tracers that are actually used.
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  real, allocatable, dimension(:) :: dye_source_minlon, & ! Minimum longitude of region dye will be injected.
-                                     dye_source_maxlon, & ! Maximum longitude of region dye will be injected.
-                                     dye_source_minlat, & ! Minimum latitude of region dye will be injected.
-                                     dye_source_maxlat, & ! Maximum latitude of region dye will be injected.
-                                     dye_source_mindepth, & ! Minimum depth of region dye will be injected (m).
-                                     dye_source_maxdepth  ! Maximum depth of region dye will be injected (m).
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
-                                           ! subroutine, in g m-3?
+  integer :: ntr    !< The number of tracers that are actually used.
+  logical :: coupled_tracers = .false.  !< These tracers are not offered to the coupler.
+  real, allocatable, dimension(:) :: dye_source_minlon !< Minimum longitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected (m).
+  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected (m).
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
 
-  integer, allocatable, dimension(:) :: &
-    ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
-               ! surface tracer concentrations are to be provided to the coupler.
+  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+                                               !! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                                   ! regulate the timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  type(vardesc), allocatable :: tr_desc(:)
-  logical :: tracers_may_reinit = .false. ! hard-coding here (mjh)
+  type(vardesc), allocatable :: tr_desc(:) !< Descriptions and metadata for the tracers
+  logical :: tracers_may_reinit = .false. !< If true the tracers may be initialized if not found in a restart file
 end type dye_tracer_CS
 
 contains

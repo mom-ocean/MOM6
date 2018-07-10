@@ -33,57 +33,55 @@ public shelf_advance_front, ice_shelf_min_thickness_calve, calve_to_mask
 
 !> The control structure for the ice shelf dynamics.
 type, public :: ice_shelf_dyn_CS ; private
-  real, pointer, dimension(:,:) :: &
-    u_shelf => NULL(), &                  !< the zonal (?) velocity of the ice shelf/sheet,
-                                          !! in meters per second??? on q-points (B grid)
-    v_shelf => NULL(), &                  !< the meridional velocity of the ice shelf/sheet,
-                                          !! in m/s ?? on q-points (B grid)
+  real, pointer, dimension(:,:) :: u_shelf => NULL() !< the zonal (?) velocity of the ice shelf/sheet,
+                                       !! in meters per second??? on q-points (B grid)
+  real, pointer, dimension(:,:) :: v_shelf => NULL() !< the meridional velocity of the ice shelf/sheet,
+                                       !! in m/s ?? on q-points (B grid)
 
-    u_face_mask => NULL(), &              !> masks for velocity boundary conditions
-    v_face_mask => NULL(), &              !! on *C GRID* - this is because the FEM
-                                          !! cares about FACES THAT GET INTEGRATED OVER,
-                                          !! not vertices. Will represent boundary conditions
-                                          !! on computational boundary (or permanent boundary
-                                          !! between fast-moving and near-stagnant ice
-                                          !! FOR NOW: 1=interior bdry, 0=no-flow boundary,
-                                          !! 2=stress bdry condition, 3=inhomogeneous
-                                          !! dirichlet boundary, 4=flux boundary: at these
-                                          !! faces a flux will be specified which will
-                                          !! override velocities; a homogeneous velocity
-                                          !! condition will be specified (this seems to give
-                                          !! the solver less difficulty)
-    u_face_mask_bdry => NULL(), &
-    v_face_mask_bdry => NULL(), &
-    u_flux_bdry_val => NULL(), &
-    v_flux_bdry_val => NULL(), &
+  real, pointer, dimension(:,:) :: u_face_mask => NULL() !< mask for velocity boundary conditions on the C-grid
+                                       !! u-face - this is because the FEM cares about FACES THAT GET INTEGRATED OVER,
+                                       !! not vertices. Will represent boundary conditions on computational boundary
+                                       !! (or permanent boundary between fast-moving and near-stagnant ice
+                                       !! FOR NOW: 1=interior bdry, 0=no-flow boundary, 2=stress bdry condition,
+                                       !! 3=inhomogeneous dirichlet boundary, 4=flux boundary: at these faces a flux
+                                       !! will be specified which will override velocities; a homogeneous velocity
+                                       !! condition will be specified (this seems to give the solver less difficulty)
+  real, pointer, dimension(:,:) :: v_face_mask => NULL()  !< A mask for velocity boundary conditions on the C-grid
+                                       !! v-face, with valued defined similarly to u_face_mask.
+  real, pointer, dimension(:,:) :: u_face_mask_bdry => NULL() !< A duplicate copy of u_face_mask?
+  real, pointer, dimension(:,:) :: v_face_mask_bdry => NULL() !< A duplicate copy of v_face_mask?
+  real, pointer, dimension(:,:) :: u_flux_bdry_val => NULL() !< The ice volume flux into the cell through open boundary
+                                       !! u-faces (where u_face_mask=4), in m3 s-1???
+  real, pointer, dimension(:,:) :: v_flux_bdry_val => NULL() !< The ice volume flux into the cell through open boundary
+                                       !! v-faces (where v_face_mask=4), in m3 s-1???
    ! needed where u_face_mask is equal to 4, similary for v_face_mask
-    umask => NULL(), vmask => NULL(), &   !< masks on the actual degrees of freedom (B grid)
-                                          !! 1=normal node, 3=inhomogeneous boundary node,
-                                          !!  0 - no flow node (will also get ice-free nodes)
-    calve_mask => NULL(), &               !< a mask to prevent the ice shelf front from
-                                          !! advancing past its initial position (but it may
-                                          !!  retreat)
-    t_shelf => NULL(), & !< Veritcally integrated temperature in the ice shelf/stream, in degC
-                         !< on corner-points (B grid)
-    tmask => NULL(), &
-  ! masks for temperature boundary conditions ???
-    ice_visc => NULL(), &
-    thickness_bdry_val => NULL(), &
-    u_bdry_val => NULL(), &
-    v_bdry_val => NULL(), &
-    h_bdry_val => NULL(), &
-    t_bdry_val => NULL(), &
+  real, pointer, dimension(:,:) :: umask => NULL()      !< u-mask on the actual degrees of freedom (B grid)
+                                       !! 1=normal node, 3=inhomogeneous boundary node,
+                                       !!  0 - no flow node (will also get ice-free nodes)
+  real, pointer, dimension(:,:) :: vmask => NULL()      !< v-mask on the actual degrees of freedom (B grid)
+                                       !! 1=normal node, 3=inhomogeneous boundary node,
+                                       !!  0 - no flow node (will also get ice-free nodes)
+  real, pointer, dimension(:,:) :: calve_mask => NULL() !< a mask to prevent the ice shelf front from
+                                          !! advancing past its initial position (but it may retreat)
+  real, pointer, dimension(:,:) :: t_shelf => NULL() !< Veritcally integrated temperature in the ice shelf/stream,
+                                                     !! in degC  on corner-points (B grid)
+  real, pointer, dimension(:,:) :: tmask => NULL()   !< A mask on tracer points that is 1 where there is ice.
+  real, pointer, dimension(:,:) :: ice_visc => NULL()   !< Glen's law ice viscosity, perhaps in m.
+  real, pointer, dimension(:,:) :: thickness_bdry_val => NULL() !< The ice thickness at an inflowing boundary, in m.
+  real, pointer, dimension(:,:) :: u_bdry_val => NULL() !< The zonal ice velocity at inflowing boundaries in m/s???
+  real, pointer, dimension(:,:) :: v_bdry_val => NULL() !< The meridional ice velocity at inflowing boundaries in m/s???
+  real, pointer, dimension(:,:) :: h_bdry_val => NULL() !< The ice thickness at inflowing boundaries, in m.
+  real, pointer, dimension(:,:) :: t_bdry_val => NULL() !< The ice temperature at inflowing boundaries, in deg C.
 
-    taub_beta_eff => NULL(), & ! nonlinear part of "linearized" basal stress -
-                ! exact form depends on basal law exponent
-                ! and/or whether flow is "hybridized" a la Goldberg 2011
+  real, pointer, dimension(:,:) :: taub_beta_eff => NULL() !< nonlinear part of "linearized" basal stress.
+                !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
 
-    OD_rt => NULL(), &         !< A running total for calulating OD_av.
-    float_frac_rt => NULL(), & !< A running total for calculating float_frac.
-    OD_av => NULL(), &         !< The time average open ocean depth, in m.
-    float_frac => NULL()       !< Fraction of the time a cell is "exposed", i.e. the column
+  real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av.
+  real, pointer, dimension(:,:) :: float_frac_rt => NULL() !< A running total for calculating float_frac.
+  real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth, in m.
+  real, pointer, dimension(:,:) :: float_frac => NULL()   !< Fraction of the time a cell is "exposed", i.e. the column
                                !! thickness is below a threshold.
-                       !! [if float_frac = 1 ==> grounded; obv. counterintuitive; might fix]
+                       !### [if float_frac = 1 ==> grounded; obviously counterintuitive; might fix]
   integer :: OD_rt_counter = 0 !< A counter of the number of contributions to OD_rt.
 
   real :: velocity_update_time_step !< The time in s to update the ice shelf velocity through the
@@ -105,33 +103,35 @@ type, public :: ice_shelf_dyn_CS ; private
                             !! divided into nxn equally-sized rectangles, over which
                             !!  basal contribution is integrated (iterative quadrature)
   logical :: GL_couple      !< whether to let the floatation condition be
-                            !!determined by ocean column thickness means update_OD_ffrac
+                            !! determined by ocean column thickness means update_OD_ffrac
                             !! will be called (note: GL_regularize and GL_couple
                             !! should be exclusive)
 
   real    :: CFL_factor     !< A factor used to limit subcycled advective timestep in uncoupled runs
                             !! i.e. dt <= CFL_factor * min(dx / u)
 
-  real :: A_glen_isothermal
-  real :: n_glen
-  real :: eps_glen_min
-  real :: C_basal_friction
-  real :: n_basal_friction
+  real :: A_glen_isothermal !< Ice viscosity parameter in Glen's Lawa, in Pa-1/3 a.
+  real :: n_glen            !< Nonlinearity exponent in Glen's Law
+  real :: eps_glen_min      !< Min. strain rate to avoid infinite Glen's law viscosity, in a-1.
+  real :: C_basal_friction  !< Ceofficient in sliding law tau_b = C u^(n_basal_friction), in
+                            !!  units="Pa (m-a)-(n_basal_friction)
+  real :: n_basal_friction  !< Exponent in sliding law tau_b = C u^(m_slide)
   real :: density_ocean_avg !< this does not affect ocean circulation OR thermodynamics
                             !! it is to estimate the gravitational driving force at the
                             !! shelf front(until we think of a better way to do it-
                             !! but any difference will be negligible)
-  real :: thresh_float_col_depth ! the water column depth over which the shelf if considered to be floating
-  logical :: moving_shelf_front
-  logical :: calve_to_mask
-  real :: min_thickness_simple_calve ! min. ice shelf thickness criteria for calving
+  real :: thresh_float_col_depth !< The water column depth over which the shelf if considered to be floating
+  logical :: moving_shelf_front  !< Specify whether to advance shelf front (and calve).
+  logical :: calve_to_mask       !< If true, calve off the ice shelf when it passes the edge of a mask.
+  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving, in m
 
-
-  real :: cg_tolerance
-  real :: nonlinear_tolerance
-  integer :: cg_max_iterations
-  integer :: nonlin_solve_err_mode  ! 1: exit vel solve based on nonlin residual
-                    ! 2: exit based on "fixed point" metric (|u - u_last| / |u| < tol where | | is infty-norm
+  real :: cg_tolerance !< The tolerance in the CG solver, relative to initial residual, that
+                       !! deterimnes when to stop the conguage gradient iterations.
+  real :: nonlinear_tolerance !< The fractional nonlinear tolerance, relative to the initial error,
+                              !! that sets when to stop the iterative velocity solver
+  integer :: cg_max_iterations !< The maximum number of iterations that can be used in the CG solver
+  integer :: nonlin_solve_err_mode  !< 1: exit vel solve based on nonlin residual
+                    !! 2: exit based on "fixed point" metric (|u - u_last| / |u| < tol where | | is infty-norm
   logical :: use_reproducing_sums !< use new reproducing sums of Bob & Alistair for global sums.
 
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
@@ -141,12 +141,11 @@ type, public :: ice_shelf_dyn_CS ; private
                                   !! and use reproducible sums
   logical :: module_is_initialized = .false. !< True if this module has been initialized.
 
-  !>@{
-  ! Diagnostic handles
+  !>@{ Diagnostic handles
   integer :: id_u_shelf = -1, id_v_shelf = -1, id_t_shelf = -1, &
              id_float_frac = -1, id_col_thick = -1, id_OD_av = -1, &
              id_u_mask = -1, id_v_mask = -1, id_t_mask = -1
-  !>@}
+  !!@}
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
   !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
 
@@ -3335,7 +3334,7 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
           end select
         enddo
 
-        !if (CS%u_face_mask_bdry(i-1,j).geq.0) then !left boundary
+        !if (CS%u_face_mask_bdry(i-1,j) >= 0) then !left boundary
         !  u_face_mask(i-1,j) = CS%u_face_mask_bdry(i-1,j)
         !  umask(i-1,j-1:j) = 3.
         !  vmask(i-1,j-1:j) = 0.

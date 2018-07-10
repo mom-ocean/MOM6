@@ -145,8 +145,8 @@ type, public :: ocean_grid_type
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dF_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
-    dF_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
+    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
+    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
   real :: g_Earth !< The gravitational acceleration in m s-2.
 
   ! These variables are global sums that are useful for 1-d diagnostics
@@ -154,8 +154,8 @@ type, public :: ocean_grid_type
   real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) in m2.
 
   ! These variables are for block structures.
-  integer :: nblocks
-  type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
+  integer :: nblocks  !< The number of sub-PE blocks on this PE
+  type(hor_index_type), pointer :: Block(:) => NULL() !< Index ranges for each block
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)

@@ -61,26 +61,24 @@ implicit none ; private
 
 public USER_wind_forcing, USER_buoyancy_forcing, USER_surface_forcing_init
 
+!>   This control structure should be used to store any run-time variables
+!! associated with the user-specified forcing.  It can be readily modified
+!! for a specific case, and because it is private there will be no changes
+!! needed in other code (although they will have to be recompiled).
 type, public :: user_surface_forcing_CS ; private
-  !   This control structure should be used to store any run-time variables
-  ! associated with the user-specified forcing.  It can be readily modified
-  ! for a specific case, and because it is private there will be no changes
-  ! needed in other code (although they will have to be recompiled).
   !   The variables in the cannonical example are used for some common
   ! cases, but do not need to be used.
 
-  logical :: use_temperature ! If true, temperature and salinity are used as
-                             ! state variables.
-  logical :: restorebuoy     ! If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !   The density used in the Boussinesq
-                             ! approximation, in kg m-3.
-  real :: G_Earth            !   The gravitational acceleration in m s-2.
-  real :: Flux_const         !   The restoring rate at the surface, in m s-1.
-  real :: gust_const         !   A constant unresolved background gustiness
-                             ! that contributes to ustar, in Pa.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
+  logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
+  real :: Rho0               !< The density used in the Boussinesq approximation, in kg m-3.
+  real :: G_Earth            !< The gravitational acceleration in m s-2.
+  real :: Flux_const         !< The restoring rate at the surface, in m s-1.
+  real :: gust_const         !< A constant unresolved background gustiness
+                             !! that contributes to ustar, in Pa.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                             !! timing of diagnostic output.
 end type user_surface_forcing_CS
 
 contains

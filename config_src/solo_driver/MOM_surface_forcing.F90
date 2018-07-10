@@ -65,104 +65,134 @@ public set_forcing
 public surface_forcing_init
 public forcing_save_restart
 
-! Structure containing pointers to the forcing fields
-! which may be used to drive MOM.  All fluxes are positive into the ocean.
+!> Structure containing pointers to the forcing fields that may be used to drive MOM.
+!!  All fluxes are positive into the ocean.
 type, public :: surface_forcing_CS ; private
 
-  logical :: use_temperature    ! if true, temp & salinity used as state variables
-  logical :: restorebuoy        ! if true, use restoring surface buoyancy forcing
-  logical :: adiabatic          ! if true, no diapycnal mass fluxes or surface buoyancy forcing
-  logical :: variable_winds     ! if true, wind stresses vary with time
-  logical :: variable_buoyforce ! if true, buoyancy forcing varies with time.
-  real    :: south_lat          ! southern latitude of the domain
-  real    :: len_lat            ! domain length in latitude
+  logical :: use_temperature    !< if true, temp & salinity used as state variables
+  logical :: restorebuoy        !< if true, use restoring surface buoyancy forcing
+  logical :: adiabatic          !< if true, no diapycnal mass fluxes or surface buoyancy forcing
+  logical :: variable_winds     !< if true, wind stresses vary with time
+  logical :: variable_buoyforce !< if true, buoyancy forcing varies with time.
+  real    :: south_lat          !< southern latitude of the domain
+  real    :: len_lat            !< domain length in latitude
 
-  real :: Rho0                  ! Boussinesq reference density (kg/m^3)
-  real :: G_Earth               ! gravitational acceleration (m/s^2)
-  real :: Flux_const            ! piston velocity for surface restoring (m/s)
-  real :: Flux_const_T          ! piston velocity for surface temperature restoring (m/s)
-  real :: Flux_const_S          ! piston velocity for surface salinity restoring (m/s)
-  real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
-  real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
-  real :: tau_x0, tau_y0        ! Constant wind stresses used in the WIND_CONFIG="const" forcing
+  real :: Rho0                  !< Boussinesq reference density (kg/m^3)
+  real :: G_Earth               !< gravitational acceleration (m/s^2)
+  real :: Flux_const            !< piston velocity for surface restoring (m/s)
+  real :: Flux_const_T          !< piston velocity for surface temperature restoring (m/s)
+  real :: Flux_const_S          !< piston velocity for surface salinity restoring (m/s)
+  real :: latent_heat_fusion    !< latent heat of fusion (J/kg)
+  real :: latent_heat_vapor     !< latent heat of vaporization (J/kg)
+  real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const" forcing
+  real :: tau_y0                !< Constant meridional wind stress used in the WIND_CONFIG="const" forcing
 
-  real    :: gust_const                 ! constant unresolved background gustiness for ustar (Pa)
-  logical :: read_gust_2d               ! if true, use 2-dimensional gustiness supplied from a file
-  real, pointer :: gust(:,:) => NULL()  ! spatially varying unresolved background gustiness (Pa)
-                                        ! gust is used when read_gust_2d is true.
+  real    :: gust_const                 !< constant unresolved background gustiness for ustar (Pa)
+  logical :: read_gust_2d               !< if true, use 2-dimensional gustiness supplied from a file
+  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness (Pa)
+                                        !! gust is used when read_gust_2d is true.
 
-  real, pointer :: T_Restore(:,:)    => NULL()  ! temperature to damp (restore) the SST to (deg C)
-  real, pointer :: S_Restore(:,:)    => NULL()  ! salinity to damp (restore) the SSS (g/kg)
-  real, pointer :: Dens_Restore(:,:) => NULL()  ! density to damp (restore) surface density (kg/m^3)
+  real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to (deg C)
+  real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS (g/kg)
+  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density (kg/m^3)
 
-  integer :: buoy_last_lev_read = -1 ! The last time level read from buoyancy input files
+  integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
 
-  real :: gyres_taux_const, gyres_taux_sin_amp, gyres_taux_cos_amp, gyres_taux_n_pis
-                             ! if WIND_CONFIG=='gyres' then use
-                             ! = A, B, C and n respectively for
-                             ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
+  ! if WIND_CONFIG=='gyres' then use the following as  = A, B, C and n respectively for
+  ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
+  real :: gyres_taux_const   !< A constant wind stress, in Pa.
+  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres, in Pa, if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres, in Pa, if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if  if WIND_CONFIG=='gyres'
 
-  real :: T_north, T_south   ! target temperatures at north and south used in
-                             ! buoyancy_forcing_linear
-  real :: S_north, S_south   ! target salinity at north and south used in
-                             ! buoyancy_forcing_linear
 
-  logical :: first_call_set_forcing = .true.
-  logical :: archaic_OMIP_file = .true.
-  logical :: dataOverrideIsInitialized = .false.
+  real :: T_north   !< target temperatures at north used in buoyancy_forcing_linear
+  real :: T_south   !< target temperatures at south used in buoyancy_forcing_linear
+  real :: S_north   !< target salinity at north used in buoyancy_forcing_linear
+  real :: S_south   !< target salinity at south used in buoyancy_forcing_linear
 
-  real :: wind_scale          ! value by which wind-stresses are scaled, ND.
-  real :: constantHeatForcing ! value used for sensible heat flux when buoy_config="const"
+  logical :: first_call_set_forcing = .true. !< True until after the first call to set_forcing
+  logical :: archaic_OMIP_file = .true. !< If true use the variable names and data fields from
+                                        !! a very old version of the OMIP forcing
+  logical :: dataOverrideIsInitialized = .false. !< If true, data override has been initialized
 
-  character(len=8)   :: wind_stagger
-  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
+  real :: wind_scale          !< value by which wind-stresses are scaled, ND.
+  real :: constantHeatForcing !< value used for sensible heat flux when buoy_config="const"
+
+  character(len=8)   :: wind_stagger !< A character indicating how the wind stress components
+                              !! are staggered in WIND_FILE.  Valid values are A or C for now.
+  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL() !< A pointer to the structure
+                              !! that is used to orchestrate the calling of tracer packages
 !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostic output
+  type(diag_ctrl), pointer :: diag !< structure used to regulate timing of diagnostic output
 
-  character(len=200) :: inputdir    ! directory where NetCDF input files are.
-  character(len=200) :: wind_config ! indicator for wind forcing type (2gyre, USER, FILE..)
-  character(len=200) :: wind_file   ! if wind_config is "file", file to use
-  character(len=200) :: buoy_config ! indicator for buoyancy forcing type
+  character(len=200) :: inputdir    !< directory where NetCDF input files are.
+  character(len=200) :: wind_config !< indicator for wind forcing type (2gyre, USER, FILE..)
+  character(len=200) :: wind_file   !< if wind_config is "file", file to use
+  character(len=200) :: buoy_config !< indicator for buoyancy forcing type
 
-  character(len=200) :: longwave_file     = ''
-  character(len=200) :: shortwave_file    = ''
-  character(len=200) :: evaporation_file  = ''
-  character(len=200) :: sensibleheat_file = ''
-  character(len=200) :: latentheat_file   = ''
+  character(len=200) :: longwave_file     = '' !< The file from which the longwave heat flux is read
+  character(len=200) :: shortwave_file    = '' !< The file from which the shortwave heat flux is read
+  character(len=200) :: evaporation_file  = '' !< The file from which the evaporation is read
+  character(len=200) :: sensibleheat_file = '' !< The file from which the sensible heat flux is read
+  character(len=200) :: latentheat_file   = '' !< The file from which the latent heat flux is read
 
-  character(len=200) :: rain_file   = ''
-  character(len=200) :: snow_file   = ''
-  character(len=200) :: runoff_file = ''
+  character(len=200) :: rain_file   = '' !< The file from which the rainfall is read
+  character(len=200) :: snow_file   = '' !< The file from which the snowfall is read
+  character(len=200) :: runoff_file = '' !< The file from which the runoff is read
 
-  character(len=200) :: longwaveup_file  = ''
-  character(len=200) :: shortwaveup_file = ''
+  character(len=200) :: longwaveup_file  = '' !< The file from which the upward longwave heat flux is read
+  character(len=200) :: shortwaveup_file = '' !< The file from which the upward shorwave heat flux is read
 
-  character(len=200) :: SSTrestore_file      = ''
-  character(len=200) :: salinityrestore_file = ''
+  character(len=200) :: SSTrestore_file      = '' !< The file from which to read the sea surface
+                                                  !! temperature to restore toward
+  character(len=200) :: salinityrestore_file = '' !< The file from which to read the sea surface
+                                                  !! salinity to restore toward
 
-  character(len=80)  :: & ! Variable names in the input files
-    stress_x_var    = '', stress_y_var    = '', ustar_var   = '', &
-    LW_var          = '', SW_var          = '', latent_var  = '', sens_var    = '', evap_var = '', &
-    rain_var        = '', snow_var        = '', lrunoff_var = '', frunoff_var = '', &
-    SST_restore_var = '', SSS_restore_var = ''
+  character(len=80)  :: stress_x_var  = '' !< X-windstress variable name in the input file
+  character(len=80)  :: stress_y_var  = '' !< Y-windstress variable name in the input file
+  character(len=80)  :: ustar_var     = '' !< ustar variable name in the input file
+  character(len=80)  :: LW_var        = '' !< lonngwave heat flux variable name in the input file
+  character(len=80)  :: SW_var        = '' !< shortwave heat flux variable name in the input file
+  character(len=80)  :: latent_var    = '' !< latent heat flux variable name in the input file
+  character(len=80)  :: sens_var      = '' !< sensible heat flux variable name in the input file
+  character(len=80)  :: evap_var      = '' !< evaporation variable name in the input file
+  character(len=80)  :: rain_var      = '' !< rainfall variable name in the input file
+  character(len=80)  :: snow_var      = '' !< snowfall variable name in the input file
+  character(len=80)  :: lrunoff_var   = '' !< liquid runoff variable name in the input file
+  character(len=80)  :: frunoff_var   = '' !< frozen runoff variable name in the input file
+  character(len=80)  :: SST_restore_var = '' !< target sea surface temeperature variable name in the input file
+  character(len=80)  :: SSS_restore_var = '' !< target sea surface salinity variable name in the input file
 
   ! These variables give the number of time levels in the various forcing files.
-  integer :: SW_nlev   = -1, LW_nlev   = -1, latent_nlev = -1, sens_nlev   = -1
-  integer :: wind_nlev = -1, evap_nlev = -1, precip_nlev = -1, runoff_nlev = -1
-  integer :: SST_nlev  = -1, SSS_nlev  = -1
+  integer :: wind_nlev = -1   !< The number of time levels in the file of wind stress
+  integer :: SW_nlev   = -1   !< The number of time levels in the file of shortwave heat flux
+  integer :: LW_nlev = -1     !< The number of time levels in the file of longwave heat flux
+  integer :: latent_nlev = -1 !< The number of time levels in the file of latent heat flux
+  integer :: sens_nlev = -1   !< The number of time levels in the file of sensible heat flux
+  integer :: evap_nlev = -1   !< The number of time levels in the file of evaporation
+  integer :: precip_nlev = -1 !< The number of time levels in the file of precipitation
+  integer :: runoff_nlev = -1 !< The number of time levels in the file of runoff
+  integer :: SST_nlev  = -1   !< The number of time levels in the file of target SST
+  integer :: SSS_nlev = -1    !< The number of time levels in the file of target SSS
 
   ! These variables give the last time level read for the various forcing files.
-  integer :: wind_last_lev = -1
-  integer :: SW_last_lev   = -1, LW_last_lev = -1, latent_last_lev = -1
-  integer :: sens_last_lev = -1
-  integer :: evap_last_lev = -1, precip_last_lev = -1, runoff_last_lev = -1
-  integer :: SST_last_lev  = -1, SSS_last_lev = -1
+  integer :: wind_last_lev = -1   !< The last time level read of wind stress
+  integer :: SW_last_lev   = -1   !< The last time level read of shortwave heat flux
+  integer :: LW_last_lev = -1     !< The last time level read of longwave heat flux
+  integer :: latent_last_lev = -1 !< The last time level read of latent heat flux
+  integer :: sens_last_lev = -1   !< The last time level read of sensible heat flux
+  integer :: evap_last_lev = -1   !< The last time level read of evaporation
+  integer :: precip_last_lev = -1 !< The last time level read of precipitation
+  integer :: runoff_last_lev = -1 !< The last time level read of runoff
+  integer :: SST_last_lev  = -1   !< The last time level read of target SST
+  integer :: SSS_last_lev = -1    !< The last time level read of target SSS
 
-  ! Diagnostics handles
-  type(forcing_diags), public :: handles
+  type(forcing_diags), public :: handles !< A structure with diagnostics handles
 
+  !>@{ Control structures for named forcing packages
   type(user_revise_forcing_CS),  pointer :: urf_CS => NULL()
   type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
   type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
@@ -171,10 +201,11 @@ type, public :: surface_forcing_CS ; private
   type(Neverland_surface_forcing_CS), pointer :: Neverland_forcing_CSp => NULL()
   type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()
   type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
+  !!@}
 
 end type surface_forcing_CS
 
-integer :: id_clock_forcing
+integer :: id_clock_forcing !< A CPU time clock
 
 contains
 

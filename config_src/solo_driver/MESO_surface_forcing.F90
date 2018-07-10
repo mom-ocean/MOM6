@@ -61,39 +61,34 @@ implicit none ; private
 
 public MESO_wind_forcing, MESO_buoyancy_forcing, MESO_surface_forcing_init
 
+!> This control structure is used to store parameters associated with the MESO forcing.
 type, public :: MESO_surface_forcing_CS ; private
-  !   This control structure should be used to store any run-time variables
-  ! associated with the user-specified forcing.  It can be readily modified
-  ! for a specific case, and because it is private there will be no changes
-  ! needed in other code (although they will have to be recompiled).
-  !   The variables in the cannonical example are used for some common
-  ! cases, but do not need to be used.
 
-  logical :: use_temperature ! If true, temperature and salinity are used as
-                             ! state variables.
-  logical :: restorebuoy     ! If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !   The density used in the Boussinesq
-                             ! approximation, in kg m-3.
-  real :: G_Earth            !   The gravitational acceleration in m s-2.
-  real :: Flux_const         !   The restoring rate at the surface, in m s-1.
-  real :: gust_const         !   A constant unresolved background gustiness
-                             ! that contributes to ustar, in Pa.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
+  logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
+  real :: Rho0               !< The density used in the Boussinesq approximation, in kg m-3.
+  real :: G_Earth            !< The gravitational acceleration in m s-2.
+  real :: Flux_const         !< The restoring rate at the surface, in m s-1.
+  real :: gust_const         !< A constant unresolved background gustiness
+                             !! that contributes to ustar, in Pa.
   real, dimension(:,:), pointer :: &
-    T_Restore(:,:) => NULL(), & ! The temperature to restore the SST to, in C.
-    S_Restore(:,:) => NULL(), & ! The salinity to restore the sea surface salnity
-                                ! toward, in PSU.
-    PmE(:,:) => NULL(), &       ! The prescribed precip minus evap, in  m s-1.
-    Solar(:,:) => NULL(), &     ! The shortwave forcing into the ocean, in W m-2 m s-1.
-    Heat(:,:) => NULL()         ! The prescribed longwave, latent and sensible
-                                ! heat flux into the ocean, in W m-2.
-  character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  character(len=200) :: salinityrestore_file, SSTrestore_file
-  character(len=200) :: Solar_file, heating_file, PmE_file
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+    T_Restore(:,:) => NULL(), & !< The temperature to restore the SST toward, in C.
+    S_Restore(:,:) => NULL(), & !< The salinity to restore the sea surface salnity toward, in PSU.
+    PmE(:,:) => NULL(), &       !< The prescribed precip minus evap, in  m s-1.
+    Solar(:,:) => NULL()        !< The shortwave forcing into the ocean, in W m-2 m s-1.
+  real, dimension(:,:), pointer :: Heat(:,:) => NULL() !< The prescribed longwave, latent and sensible
+                                !! heat flux into the ocean, in W m-2.
+  character(len=200) :: inputdir !< The directory where NetCDF input files are.
+  character(len=200) :: salinityrestore_file !< The file with the target sea surface salinity
+  character(len=200) :: SSTrestore_file !< The file with the target sea surface temperature
+  character(len=200) :: Solar_file !< The file with the shortwave forcing
+  character(len=200) :: heating_file !< The file with the longwave, latent, and sensible heating
+  character(len=200) :: PmE_file !< The file with precipitation minus evaporation
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                             !! timing of diagnostic output.
 end type MESO_surface_forcing_CS
 
-logical :: first_call = .true.
+logical :: first_call = .true. !< True until after the first call to the MESO forcing routines
 
 contains
 

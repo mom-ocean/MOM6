@@ -53,9 +53,11 @@ public register_temp_salt_segments
 public fill_temp_salt_segments
 public open_boundary_register_restarts
 
-integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
-integer, parameter, public :: OBC_FLATHER = 3
-integer, parameter, public :: OBC_RADIATION = 4
+integer, parameter, public :: OBC_NONE = 0      !< Indicates the use of no open boundary
+integer, parameter, public :: OBC_SIMPLE = 1    !< Indicates the use of a simple inflow open boundary
+integer, parameter, public :: OBC_WALL = 2      !< Indicates the use of a closed sall
+integer, parameter, public :: OBC_FLATHER =  3  !< Indicates the use of a Flather open boundary
+integer, parameter, public :: OBC_RADIATION = 4 !< Indicates the use of a radiation open boundary
 integer, parameter, public :: OBC_DIRECTION_N = 100 !< Indicates the boundary is an effective northern boundary
 integer, parameter, public :: OBC_DIRECTION_S = 200 !< Indicates the boundary is an effective southern boundary
 integer, parameter, public :: OBC_DIRECTION_E = 300 !< Indicates the boundary is an effective eastern boundary
@@ -213,7 +215,7 @@ type, public :: ocean_OBC_type
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
   logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
-  real :: g_Earth
+  real :: g_Earth                                     !< The gravitational acceleration in m s-2.
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     segment => NULL()   !< List of segment objects.
@@ -262,9 +264,9 @@ type, public :: OBC_registry_type
                                              !! When locked=.true.,no more boundaries can be registered.
 end type OBC_registry_type
 
-integer :: id_clock_pass
+integer :: id_clock_pass !< A CPU time clock
 
-character(len=40)  :: mdl = "MOM_open_boundary" ! This module's name.
+character(len=40)  :: mdl = "MOM_open_boundary" !< This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
