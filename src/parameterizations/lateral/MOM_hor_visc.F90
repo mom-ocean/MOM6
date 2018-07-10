@@ -70,43 +70,52 @@ type, public :: hor_visc_CS ; private
   real    :: Kh_aniso        !< The anisotropic viscosity in m2 s-1.
   logical :: dynamic_aniso   !< If true, the anisotropic viscosity is recomputed as a function
                              !! of state. This is set depending on ANISOTROPIC_MODE.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_bg_xx,        &!< The background Laplacian viscosity at h points, in units
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
+                      !< The background Laplacian viscosity at h points, in units
                       !! of m2 s-1. The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_bg_2d,        &!< The background Laplacian viscosity at h points, in units
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_2d
+                      !< The background Laplacian viscosity at h points, in units
                       !! of m2 s-1. The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-    Ah_bg_xx,        &!< The background biharmonic viscosity at h points, in units
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Ah_bg_xx
+                      !< The background biharmonic viscosity at h points, in units
                       !! of m4 s-1. The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_Max_xx,       &!< The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xx,       &!< The maximum permitted biharmonic viscosity, m4 s-1.
-    Biharm_Const2_xx,&!< A constant relating the biharmonic viscosity to the
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm_Const2_xx
+                      !< A constant relating the biharmonic viscosity to the
                       !! square of the velocity shear, in m4 s.  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
-    reduction_xx,    &!< The amount by which stresses through h points are reduced
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
+                      !< The amount by which stresses through h points are reduced
                       !! due to partial barriers. Nondimensional.
-    n1n2_h,          &!< Factor n1*n2 in the anisotropic direction tensor at h-points
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points
     n1n1_m_n2n2_h     !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
 
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_bg_xy,        &!< The background Laplacian viscosity at q points, in units
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
+                      !< The background Laplacian viscosity at q points, in units
                       !! of m2 s-1. The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-    Ah_bg_xy,        &!< The background biharmonic viscosity at q points, in units
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Ah_bg_xy
+                      !< The background biharmonic viscosity at q points, in units
                       !! of m4 s-1. The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_Max_xy,       &!< The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xy,       &!< The maximum permitted biharmonic viscosity, m4 s-1.
-    Biharm_Const2_xy,&!< A constant relating the biharmonic viscosity to the
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm_Const2_xy
+                      !< A constant relating the biharmonic viscosity to the
                       !! square of the velocity shear, in m4 s.  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
-    reduction_xy,    &!! The amount by which stresses through q points are reduced
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: reduction_xy
+                      !< The amount by which stresses through q points are reduced
                       !! due to partial barriers. Nondimensional.
-    n1n2_q,          &!< Factor n1*n2 in the anisotropic direction tensor at q-points
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
+    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points
     n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
@@ -123,7 +132,8 @@ type, public :: hor_visc_CS ; private
     Idx2dyCu, & !< 1/(dx^2 dy) at u points, in m-3
     Idxdy2u     !< 1/(dx dy^2) at u points, in m-3
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    Idx2dyCv, Idxdy2v   ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3
+    Idx2dyCv, & !< 1/(dx^2 dy) at v points, in m-3
+    Idxdy2v     !< 1/(dx dy^2) at v points, in m-3
 
   ! The following variables are precalculated time-invariant combinations of
   ! parameters and metric terms.
@@ -139,7 +149,7 @@ type, public :: hor_visc_CS ; private
     Laplac3_Const_xy, & !< Laplacian  metric-dependent constants (nondim)
     Biharm5_Const_xy    !< Biharmonic metric-dependent constants (nondim)
 
-  type(diag_ctrl), pointer :: diag => NULL() ! structure to regulate diagnostics
+  type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
   !>@{
   !! Diagnostic id
