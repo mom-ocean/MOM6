@@ -1,3 +1,4 @@
+!> Configures the ISOMIP test case.
 module ISOMIP_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -23,39 +24,26 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
-! Private (module-wise) parameters
-! -----------------------------------------------------------------------------
+character(len=40) :: mdl = "ISOMIP_initialization" !< This module's name.
 
-character(len=40) :: mdl = "ISOMIP_initialization" ! This module's name.
-
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public ISOMIP_initialize_topography
 public ISOMIP_initialize_thickness
 public ISOMIP_initialize_temperature_salinity
 public ISOMIP_initialize_sponges
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
-!> Initialization of topography
+!> Initialization of topography for the ISOMIP configuration
 subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                                       intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
-
-! This subroutine sets up the ISOMIP topography
+  ! Local variables
   real :: min_depth ! The minimum and maximum depths in m.
-
-! The following variables are used to set up the bathymetry in the ISOMIP example.
-! check this paper: http://www.geosci-model-dev-discuss.net/8/9859/2015/gmdd-8-9859-2015.pdf
-
+  ! The following variables are used to set up the bathymetry in the ISOMIP example.
   real :: bmax            ! max depth of bedrock topography
   real :: b0,b2,b4,b6     ! first, second, third and fourth bedrock topography coeff
   real :: xbar           ! characteristic along-flow lenght scale of the bedrock
@@ -65,16 +53,12 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   real :: ly              ! domain width (across ice flow)
   real :: bx, by, xtil    ! dummy vatiables
   logical :: is_2D         ! If true, use 2D setup
-
-! G%ieg and G%jeg are the last indices in the global domain
-
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "ISOMIP_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
 
   call MOM_mesg("  ISOMIP_initialization.F90, ISOMIP_initialize_topography: setting topography", 5)
 
@@ -83,7 +67,7 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
                  "The minimum depth of the ocean.", units="m", default=0.0)
   call get_param(param_file, mdl, "ISOMIP_2D",is_2D,'If true, use a 2D setup.', default=.false.)
 
-! The following variables should be transformed into runtime parameters?
+  ! The following variables should be transformed into runtime parameters?
   bmax=720.0; b0=-150.0; b2=-728.8; b4=343.91; b6=-50.57
   xbar=300.0E3; dc=500.0; fc=4.0E3; wc=24.0E3; ly=80.0E3
   bx = 0.0; by = 0.0; xtil = 0.0
@@ -131,7 +115,6 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   endif
 
 end subroutine ISOMIP_initialize_topography
-! -----------------------------------------------------------------------------
 
 !> Initialization of thicknesses
 subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_params)
@@ -146,7 +129,6 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
                                                       !! the eqn. of state.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
   ! Local variables
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
@@ -264,7 +246,6 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing T & S.
-
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
   real      :: x, ds, dt, rho_sur, rho_bot
@@ -440,8 +421,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   logical, intent(in) :: use_ALE            !< If true, indicates model is in ALE mode
   type(sponge_CS),   pointer    :: CSp      !< Layer-mode sponge structure
   type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
-
-! Local variables
+  ! Local variables
   real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp
   real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt
   real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO
@@ -680,5 +660,5 @@ end subroutine ISOMIP_initialize_sponges
 
 !> \namespace isomip_initialization
 !!
-!!  The module configures the ISOMIP test case.
+!! See this paper for details: http://www.geosci-model-dev-discuss.net/8/9859/2015/gmdd-8-9859-2015.pdf
 end module ISOMIP_initialization

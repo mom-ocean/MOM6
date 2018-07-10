@@ -116,7 +116,7 @@ integer, parameter :: TFREEZE_LINEAR = 1  !< A named integer specifying a freezi
 integer, parameter :: TFREEZE_MILLERO = 2 !< A named integer specifying a freezing point expression
 integer, parameter :: TFREEZE_TEOS10 = 3  !< A named integer specifying a freezing point expression
 character*(10), parameter :: TFREEZE_LINEAR_STRING = "LINEAR" !< A string for specifying the freezing point expression
-character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78" !< A string for specifying 
+character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78" !< A string for specifying
                                                               !! freezing point expression
 character*(10), parameter :: TFREEZE_TEOS10_STRING = "TEOS10" !< A string for specifying the freezing point expression
 character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING !< The default freezing point expression

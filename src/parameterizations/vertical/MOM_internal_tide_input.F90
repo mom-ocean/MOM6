@@ -25,28 +25,30 @@ implicit none ; private
 
 public set_int_tide_input, int_tide_input_init, int_tide_input_end
 
+!> This control structure holds parameters that regulate internal tide energy inputs.
 type, public :: int_tide_input_CS ; private
-  logical :: debug      ! If true, write verbose checksums for debugging.
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                        ! regulate the timing of diagnostic output.
-  real :: TKE_itide_max ! Maximum Internal tide conversion (W m-2)
-                        ! available to mix above the BBL
+  logical :: debug      !< If true, write verbose checksums for debugging.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                        !! regulate the timing of diagnostic output.
+  real :: TKE_itide_max !< Maximum Internal tide conversion (W m-2)
+                        !! available to mix above the BBL
 
-  real, allocatable, dimension(:,:) :: &
-    TKE_itidal_coef     ! The time-invariant field that enters the TKE_itidal
-                        ! input calculation, in J m-2.
+  real, allocatable, dimension(:,:) :: TKE_itidal_coef
+            !< The time-invariant field that enters the TKE_itidal input calculation, in J m-2.
+  character(len=200) :: inputdir !< The directory for input files.
 
+  !>@{ Diagnostic IDs
   integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
-  character(len=200) :: inputdir
+  !!@}
 end type int_tide_input_CS
 
+!> This type is used to exchange fields related to the internal tides.
 type, public :: int_tide_input_type
   real, allocatable, dimension(:,:) :: &
-    TKE_itidal_input, & ! The internal tide TKE input at the bottom of
-                        ! the ocean, in W m-2.
-    h2, &               ! The squared topographic roughness height, in m2.
-    tideamp, &          ! The amplitude of the tidal velocities, in m s-1.
-    Nb                  ! The bottom stratification, in s-1.
+    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean, in W m-2.
+    h2, &               !< The squared topographic roughness height, in m2.
+    tideamp, &          !< The amplitude of the tidal velocities, in m s-1.
+    Nb                  !< The bottom stratification, in s-1.
 end type int_tide_input_type
 
 contains

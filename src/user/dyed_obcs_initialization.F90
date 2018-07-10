@@ -1,3 +1,4 @@
+!> Dyed open boundary conditions
 module dyed_obcs_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -20,7 +21,8 @@ implicit none ; private
 
 public dyed_obcs_set_OBC_data
 
-integer :: ntr = 0
+integer :: ntr = 0 !< Number of dye tracers
+                   !! \todo This is a module variable. Move this variable into the control structure.
 
 contains
 
@@ -34,8 +36,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
                                                 !! to parse for model parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
-
-! Local variables
+  ! Local variables
   character(len=40)  :: mdl = "dyed_obcs_set_OBC_data" ! This subroutine's name.
   character(len=80)  :: name, longname
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, n, nz
@@ -81,5 +82,6 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
 end subroutine dyed_obcs_set_OBC_data
 
 !> \namespace dyed_obcs_initialization
+!!
 !! Setting dyes, one for painting the inflow on each side.
 end module dyed_obcs_initialization
