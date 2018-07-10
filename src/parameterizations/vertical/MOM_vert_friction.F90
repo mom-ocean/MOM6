@@ -118,7 +118,7 @@ type, public :: vertvisc_CS ; private
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
-                              !! for recording accelerations leading to velocity truncations 
+                              !! for recording accelerations leading to velocity truncations
 end type vertvisc_CS
 
 contains
