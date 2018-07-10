@@ -116,8 +116,8 @@ type, public :: KPP_CS ; private
   !> CVMix parameters
   type(CVMix_kpp_params_type), pointer :: KPP_params => NULL()
 
-  ! Diagnostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< Pointer to diagnostics control structure
+  !>@{ Diagnostic handles
   integer :: id_OBLdepth = -1, id_BulkRi   = -1
   integer :: id_N        = -1, id_N2       = -1
   integer :: id_Ws       = -1, id_Vt2      = -1
@@ -137,6 +137,7 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_saln_budget = -1
   integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
   integer :: id_OBLdepth_original = -1
+  !!@}
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
@@ -158,15 +159,11 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
   real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer (m/s)
   real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer (m/s)
-  real, allocatable, dimension(:,:,:)   :: EnhK      !< Enhancement for mixing coefficient
-  real, allocatable, dimension(:,:,:)   :: EnhVt2  !< Enhancement for Vt2
-
-
+  real, allocatable, dimension(:,:,:) :: EnhK      !< Enhancement for mixing coefficient
+  real, allocatable, dimension(:,:,:) :: EnhVt2    !< Enhancement for Vt2
 
 end type KPP_CS
 
-! Module data used for debugging only
-logical, parameter :: verbose = .False.
 #define __DO_SAFETY_CHECKS__
 
 contains
@@ -1552,7 +1549,7 @@ subroutine KPP_end(CS)
 
 end subroutine KPP_end
 
-!> \namespace mom_kpp
+!> \namespace mom_cvmix_kpp
 !!
 !! \section section_KPP The K-Profile Parameterization
 !!
