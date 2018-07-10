@@ -18,6 +18,7 @@ use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 
 implicit none ; private
 
+!> Control structure for regrid_interp module
 type, public :: interp_CS_type ; private
 
   !> The following parameter is only relevant when used with the target
