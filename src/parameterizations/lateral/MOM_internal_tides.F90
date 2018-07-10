@@ -35,6 +35,7 @@ public propagate_int_tide !, register_int_tide_restarts
 public internal_tides_init, internal_tides_end
 public get_lowmode_loss
 
+!> This control structure has parameters for the MOM_internal_tides module
 type, public :: int_tide_CS ; private
   logical :: do_int_tides    !< If true, use the internal tide code.
   integer :: nFreq = 0       !< The number of internal tide frequency bands
@@ -53,7 +54,7 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:,:) :: refl_angle
                         !< local coastline/ridge/shelf angles read from file
                         ! (could be in G control structure)
-  real :: nullangle = -999.9 ! placeholder value in cell with no reflection
+  real :: nullangle = -999.9 !< placeholder value in cells with no reflection
   real, allocatable, dimension(:,:) :: refl_pref
                         !< partial reflection coeff for each "coast cell"
                         ! (could be in G control structure)
@@ -114,7 +115,8 @@ type, public :: int_tide_CS ; private
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                         !! timing of diagnostic output.
-  type(wave_structure_CS),  pointer :: wave_structure_CSp => NULL()
+  type(wave_structure_CS), pointer :: wave_structure_CSp => NULL()
+                        !< A pointer to the wave_structure module control structure
 
   !>@{ Diag handles
   ! Diag handles relevant to all modes, frequencies, and angles
