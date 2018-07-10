@@ -27,8 +27,8 @@ type, public :: verticalGrid_type
   character(len=40) :: zAxisUnits !< The units that vertical coordinates are written in
   character(len=40) :: zAxisLongName !< Coordinate name to appear in files,
                                   !! e.g. "Target Potential Density" or "Height"
-  real ALLOCABLE_, dimension(NKMEM_) :: sLayer !< Coordinate values of layer centers
-  real ALLOCABLE_, dimension(NK_INTERFACE_) :: sInterface !< Coordinate values on interfaces
+  real, allocatable, dimension(:) :: sLayer !< Coordinate values of layer centers
+  real, allocatable, dimension(:) :: sInterface !< Coordinate values on interfaces
   integer :: direction = 1 !< Direction defaults to 1, positive up.
 
   ! The following variables give information about the vertical grid.
@@ -38,7 +38,7 @@ type, public :: verticalGrid_type
   real :: H_subroundoff !< A thickness that is so small that it can be added to a thickness of
                         !! Angstrom or larger without changing it at the bit level, in thickness units.
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
-  real ALLOCABLE_, dimension(NK_INTERFACE_) :: &
+  real, allocatable, dimension(:) :: &
     g_prime, &          !< The reduced gravity at each interface, in m s-2.
     Rlay                !< The target coordinate value (potential density) in each layer in kg m-3.
   integer :: nkml = 0   !< The number of layers at the top that should be treated
@@ -140,11 +140,11 @@ subroutine verticalGridInit( param_file, GV )
   call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H)
   call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m)
 
-  ALLOC_( GV%sInterface(nk+1) )
-  ALLOC_( GV%sLayer(nk) )
-  ALLOC_( GV%g_prime(nk+1) ) ; GV%g_prime(:) = 0.0
+  allocate( GV%sInterface(nk+1) )
+  allocate( GV%sLayer(nk) )
+  allocate( GV%g_prime(nk+1) ) ; GV%g_prime(:) = 0.0
   ! The extent of Rlay should be changed to nk?
-  ALLOC_( GV%Rlay(nk+1) )    ; GV%Rlay(:) = 0.0
+  allocate( GV%Rlay(nk+1) )    ; GV%Rlay(:) = 0.0
 
 end subroutine verticalGridInit
 
@@ -279,9 +279,8 @@ subroutine verticalGridEnd( GV )
 ! Arguments: G - The ocean's grid structure.
   type(verticalGrid_type), pointer :: GV   !< The ocean's vertical grid structure
 
-  DEALLOC_(GV%g_prime) ; DEALLOC_(GV%Rlay)
-  DEALLOC_( GV%sInterface )
-  DEALLOC_( GV%sLayer )
+  deallocate( GV%g_prime, GV%Rlay )
+  deallocate( GV%sInterface , GV%sLayer )
   deallocate( GV )
 
 end subroutine verticalGridEnd

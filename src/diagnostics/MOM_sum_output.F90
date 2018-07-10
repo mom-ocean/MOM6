@@ -83,7 +83,7 @@ type, public :: sum_output_CS ; private
   type(Depth_List), pointer, dimension(:) :: DL => NULL() !< The sorted depth list.
   integer :: list_size          !< length of sorting vector <= niglobal*njglobal
 
-  integer ALLOCABLE_, dimension(NKMEM_) :: lH
+  integer, allocatable, dimension(:) :: lH
                                 !< This saves the entry in DL with a volume just
                                 !! less than the volume of fluid below the interface.
   logical :: do_APE_calc        !<   If true, calculate the available potential energy of the
@@ -256,7 +256,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
     endif
 
-    ALLOC_(CS%lH(G%ke))
+    allocate(CS%lH(G%ke))
     call depth_list_setup(G, CS)
   else
     CS%list_size = 0
@@ -293,8 +293,7 @@ subroutine MOM_sum_output_end(CS)
                                       !! previous call to MOM_sum_output_init.
   if (associated(CS)) then
     if (CS%do_APE_calc) then
-      DEALLOC_(CS%lH)
-      deallocate(CS%DL)
+      deallocate(CS%lH, CS%DL)
     endif
 
     deallocate(CS)
