@@ -22,21 +22,23 @@ implicit none ; private
 
 public diapyc_energy_req_init, diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_end
 
+!> This control structure holds parameters for the MOM_diapyc_energy_req module
 type, public :: diapyc_energy_req_CS ; private
-  logical :: initialized = .false. ! A variable that is here because empty
-                               ! structures are not permitted by some compilers.
-  real :: test_Kh_scaling      ! A scaling factor for the diapycnal diffusivity.
-  real :: ColHt_scaling        ! A scaling factor for the column height change
-                               ! correction term.
-  logical :: use_test_Kh_profile   ! If true, use the internal test diffusivity
-                               ! profile in place of any that might be passed
-                               ! in as an argument.
-  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
-                               ! regulate the timing of diagnostic output.
+  logical :: initialized = .false. !< A variable that is here because empty
+                               !! structures are not permitted by some compilers.
+  real :: test_Kh_scaling      !< A scaling factor for the diapycnal diffusivity.
+  real :: ColHt_scaling        !< A scaling factor for the column height change correction term.
+  logical :: use_test_Kh_profile !< If true, use the internal test diffusivity profile in place of
+                               !! any that might be passed in as an argument.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                               !! regulate the timing of diagnostic output.
+
+  !>@{ Diagnostic IDs
   integer :: id_ERt=-1, id_ERb=-1, id_ERc=-1, id_ERh=-1, id_Kddt=-1, id_Kd=-1
   integer :: id_CHCt=-1, id_CHCb=-1, id_CHCc=-1, id_CHCh=-1
   integer :: id_T0=-1, id_Tf=-1, id_S0=-1, id_Sf=-1, id_N2_0=-1, id_N2_f=-1
   integer :: id_h=-1, id_zInt=-1
+  !!@}
 end type diapyc_energy_req_CS
 
 contains
