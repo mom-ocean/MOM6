@@ -16,11 +16,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mdl = "shelfwave_initialization" ! This module's name.
+character(len=40) :: mdl = "shelfwave_initialization" !< This module's name.
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public shelfwave_initialize_topography
 public shelfwave_set_OBC_data
 public register_shelfwave_OBC, shelfwave_OBC_end
