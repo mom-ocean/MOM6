@@ -8,8 +8,6 @@ use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval
 use ESMF,                only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
 use seq_cdata_mod,       only: seq_cdata, seq_cdata_setptrs
 use seq_flds_mod,        only: seq_flds_x2o_fields, seq_flds_o2x_fields 
-!use seq_flds_mod,       only: shr_flds_dom_coord=>seq_flds_dom_coord, shr_flds_dom_other=>seq_flds_dom_other
-use seq_flds_mod,       only: shr_flds_dom_coord, shr_flds_dom_other
 use mct_mod,             only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, &
                                mct_gsmap_orderedpoints
 use mct_mod,             only: mct_aVect, mct_aVect_init, mct_aVect_zero, &
@@ -638,8 +636,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   grid => glb%grid ! for convenience
 
   ! set coords to lat and lon, and areas to rad^2
-  call mct_gGrid_init(GGrid=dom_ocn, CoordChars=trim(shr_flds_dom_coord), &
-                      OtherChars=trim(shr_flds_dom_other), lsize=lsize )
+  call mct_gGrid_init(GGrid=dom_ocn, CoordChars='lat:lon:hgt', OtherChars='area:aream:mask:frac', lsize=lsize )
 
   call mct_avect_zero(dom_ocn%data)
   allocate(data(lsize))
