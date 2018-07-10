@@ -63,11 +63,13 @@ type, public :: vardesc
                                            !! convert from intensive to extensive
 end type vardesc
 
+!> Indicate whether a file exists, perhaps with domain decomposition
 interface file_exists
   module procedure file_exist
   module procedure MOM_file_exists
 end interface
 
+!> Read a data field from a file
 interface MOM_read_data
   module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
@@ -75,6 +77,7 @@ interface MOM_read_data
   module procedure MOM_read_data_1d
 end interface
 
+!> Read a pair of data fields representing the two components of a vector from a file
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d

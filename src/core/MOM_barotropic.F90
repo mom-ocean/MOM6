@@ -128,78 +128,82 @@ implicit none ; private
 public btcalc, bt_mass_source, btstep, barotropic_init, barotropic_end
 public register_barotropic_restarts, set_dtbt
 
+!> The barotropic stepping open boundary condition type
 type, private :: BT_OBC_type
-  real, dimension(:,:), pointer :: &
-    Cg_u => NULL(), &     ! The external wave speed at u-points, in m s-1.
-    Cg_v => NULL(), &     ! The external wave speed at u-points, in m s-1.
-    H_u => NULL(), &      ! The total thickness at the u-points, in m or kg m-2.
-    H_v => NULL(), &      ! The total thickness at the v-points, in m or kg m-2.
-    uhbt => NULL(), &     ! The zonal and meridional barotropic thickness fluxes
-    vhbt => NULL(), &     ! specified for open boundary conditions (if any),
-                          ! in units of m3 s-1.
-    ubt_outer => NULL(), & ! The zonal and meridional velocities just outside
-    vbt_outer => NULL(), & ! the domain, as set by the open boundary conditions,
-                           ! in units of m s-1.
-    eta_outer_u => NULL(), & ! The surface height outside of the domain at a
-    eta_outer_v => NULL()    ! u- or v- point with an open boundary condition,
-                             ! in units of m or kg m-2.
+  real, dimension(:,:), pointer :: Cg_u => NULL()  !< The external wave speed at u-points, in m s-1.
+  real, dimension(:,:), pointer :: Cg_v => NULL()  !< The external wave speed at u-points, in m s-1.
+  real, dimension(:,:), pointer :: H_u => NULL()   !< The total thickness at the u-points, in m or kg m-2.
+  real, dimension(:,:), pointer :: H_v => NULL()   !< The total thickness at the v-points, in m or kg m-2.
+  real, dimension(:,:), pointer :: uhbt => NULL()  !< The zonal barotropic thickness fluxes specified
+                                     !! for open boundary conditions (if any), in units of m3 s-1.
+  real, dimension(:,:), pointer :: vhbt => NULL()  !< The meridional barotropic thickness fluxes specified
+                                     !! for open boundary conditions (if any), in units of m3 s-1.
+  real, dimension(:,:), pointer :: ubt_outer => NULL() !< The zonal velocities just outside the domain,
+                                     !! as set by the open boundary conditions, in units of m s-1.
+  real, dimension(:,:), pointer :: vbt_outer => NULL() !< The meridional velocities just outside the domain,
+                                     !! as set by the open boundary conditions, in units of m s-1.
+  real, dimension(:,:), pointer :: eta_outer_u => NULL() !< The surface height outside of the domain
+                                     !! at a u-point with an open boundary condition, in units of m or kg m-2.
+  real, dimension(:,:), pointer :: eta_outer_v => NULL() !< The surface height outside of the domain
+                                     !! at a v-point with an open boundary condition, in units of m or kg m-2.
   logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
   logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
+  !>@{ Index ranges for the open boundary conditions
   integer :: is_u_obc, ie_u_obc, js_u_obc, je_u_obc
   integer :: is_v_obc, ie_v_obc, js_v_obc, je_v_obc
+  !!@}
   logical :: is_alloced = .false. !< True if BT_OBC is in use and has been allocated
-  ! for group halo pass
-  type(group_pass_type) :: pass_uv
-  type(group_pass_type) :: pass_uhvh
-  type(group_pass_type) :: pass_h
-  type(group_pass_type) :: pass_cg
-  type(group_pass_type) :: pass_eta_outer
+
+  type(group_pass_type) :: pass_uv   !< Structure for group halo pass
+  type(group_pass_type) :: pass_uhvh !< Structure for group halo pass
+  type(group_pass_type) :: pass_h    !< Structure for group halo pass
+  type(group_pass_type) :: pass_cg   !< Structure for group halo pass
+  type(group_pass_type) :: pass_eta_outer  !< Structure for group halo pass
 end type BT_OBC_type
 
+!> The barotropic stepping control stucture
 type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: frhatu
+          !< The fraction of the total column thickness interpolated to u grid points in each layer, nondim.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: frhatv
-      ! frhatu and frhatv are the fraction of the total column thickness
-      ! interpolated to u or v grid points in each layer, nondimensional.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    IDatu, &        !< Inverse of the basin depth at u grid points, in m-1.
-    lin_drag_u, &   !< A spatially varying linear drag coefficient acting
-                    !! on the zonal barotropic flow, in H s-1.
-    uhbt_IC, &      !< The barotropic solver's estimate of the zonal
-                    !! transport as the initial condition for the next call
-                    !! to btstep, in H m2 s-1.
-    ubt_IC, &       !< The barotropic solver's estimate of the zonal velocity
-                    !! that will be the initial condition for the next call
-                    !! to btstep, in m s-1.
-    ubtav           !< The barotropic zonal velocity averaged over the
-                    !! baroclinic time step, m s-1.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    IDatv, &        !< Inverse of the basin depth at v grid points, in m-1.
-    lin_drag_v, &   !< A spatially varying linear drag coefficient acting
-                    !! on the zonal barotropic flow, in H s-1.
-    vhbt_IC, &      !< The barotropic solver's estimate of the zonal
-                    !! transport as the initla condition for the next call
-                    !! to btstep, in H m2 s-1.
-    vbt_IC, &       !< The barotropic solver's estimate of the zonal velocity
-                    !! that will be the initial condition for the next call
-                    !! to btstep, in m s-1.
-    vbtav           !< The barotropic meridional velocity averaged over the
-                    !! baroclinic time step, m s-1.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    eta_cor, &      !< The difference between the free surface height from
-                    !! the barotropic calculation and the sum of the layer
-                    !! thicknesses. This difference is imposed as a forcing
-                    !! term in the barotropic calculation over a baroclinic
-                    !! timestep, in H (m or kg m-2).
-    eta_cor_bound   !< A limit on the rate at which eta_cor can be applied
-                    !! while avoiding instability, in units of H s-1. This
-                    !! is only used if CS%bound_BT_corr is true.
+          !< The fraction of the total column thickness interpolated to v grid points in each layer, nondim.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: IDatu
+          !< Inverse of the basin depth at u grid points, in m-1.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: lin_drag_u
+          !< A spatially varying linear drag coefficient acting on the zonal barotropic flow, in H s-1.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_IC
+          !< The barotropic solver's estimate of the zonal transport as the initial condition for
+          !! the next call to btstep, in H m2 s-1.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: ubt_IC
+          !< The barotropic solver's estimate of the zonal velocity that will be the initial
+          !! condition for the next call to btstep, in m s-1.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: ubtav
+          !< The barotropic zonal velocity averaged over the baroclinic time step, m s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: IDatv
+          !< Inverse of the basin depth at v grid points, in m-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: lin_drag_v
+          !< A spatially varying linear drag coefficient acting on the zonal barotropic flow, in H s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_IC
+          !< The barotropic solver's estimate of the zonal transport as the initial condition for
+          !! the next call to btstep, in H m2 s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vbt_IC
+          !< The barotropic solver's estimate of the zonal velocity that will be the initial
+          !! condition for the next call to btstep, in m s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vbtav
+          !< The barotropic meridional velocity averaged over the  baroclinic time step, m s-1.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_cor
+          !< The difference between the free surface height from the barotropic calculation and the sum
+          !! of the layer thicknesses. This difference is imposed as a forcing term in the barotropic
+          !! calculation over a baroclinic timestep, in H (m or kg m-2).
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_cor_bound
+          !< A limit on the rate at which eta_cor can be applied while avoiding instability, in units of H s-1.
+          !! This is only used if CS%bound_BT_corr is true.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
     ua_polarity, &  !< Test vector components for checking grid polarity.
     va_polarity, &  !< Test vector components for checking grid polarity.
     bathyT          !<   A copy of bathyT (ocean bottom depth) with wide halos.
-  real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
-    IareaT          !<   This is a copy of G%IareaT with wide halos, but will
+  real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: IareaT
+                    !<   This is a copy of G%IareaT with wide halos, but will
                     !! still utilize the macro IareaT when referenced, m-2.
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMW_) :: &
     D_u_Cor, &      !<   A simply averaged depth at u points, in m.
@@ -212,7 +216,8 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMBW_) :: &
     q_D             !< f / D at PV points, in m-1 s-1.
 
-  real, dimension(:,:,:), pointer :: frhatu1 => NULL(), frhatv1 => NULL() ! Predictor values.
+  real, dimension(:,:,:), pointer :: frhatu1 => NULL() !< Predictor step values of frhatu stored for diagnostics.
+  real, dimension(:,:,:), pointer :: frhatv1 => NULL() !< Predictor step values of frhatv stored for diagnostics.
 
   type(BT_OBC_type) :: BT_OBC !< A structure with all of this module's fields
                               !! for applying open boundary conditions.
@@ -331,15 +336,24 @@ type, public :: barotropic_CS ; private
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
   logical :: module_is_initialized = .false.
 
-  integer :: isdw, iedw, jsdw, jedw ! The memory limits of the wide halo arrays.
+  integer :: isdw !< The lower i-memory limit for the wide halo arrays.
+  integer :: iedw !< The upper i-memory limit for the wide halo arrays.
+  integer :: jsdw !< The lower j-memory limit for the wide halo arrays.
+  integer :: jedw !< The upper j-memory limit for the wide halo arrays.
 
-  !--- for group halo pass
-  type(group_pass_type) :: pass_q_DCor, pass_gtot
-  type(group_pass_type) :: pass_tmp_uv, pass_eta_bt_rem
-  type(group_pass_type) :: pass_force_hbt0_Cor_ref, pass_Dat_uv
-  type(group_pass_type) :: pass_eta_ubt, pass_etaav, pass_ubt_Cor
-  type(group_pass_type) :: pass_ubta_uhbta, pass_e_anom
+  type(group_pass_type) :: pass_q_DCor !< Handle for a group halo pass
+  type(group_pass_type) :: pass_gtot !< Handle for a group halo pass
+  type(group_pass_type) :: pass_tmp_uv !< Handle for a group halo pass
+  type(group_pass_type) :: pass_eta_bt_rem !< Handle for a group halo pass
+  type(group_pass_type) :: pass_force_hbt0_Cor_ref !< Handle for a group halo pass
+  type(group_pass_type) :: pass_Dat_uv !< Handle for a group halo pass
+  type(group_pass_type) :: pass_eta_ubt !< Handle for a group halo pass
+  type(group_pass_type) :: pass_etaav !< Handle for a group halo pass
+  type(group_pass_type) :: pass_ubt_Cor !< Handle for a group halo pass
+  type(group_pass_type) :: pass_ubta_uhbta !< Handle for a group halo pass
+  type(group_pass_type) :: pass_e_anom !< Handle for a group halo pass
 
+  !>@{ Diagnostic IDs
   integer :: id_PFu_bt = -1, id_PFv_bt = -1, id_Coru_bt = -1, id_Corv_bt = -1
   integer :: id_ubtforce = -1, id_vbtforce = -1, id_uaccel = -1, id_vaccel = -1
   integer :: id_visc_rem_u = -1, id_visc_rem_v = -1, id_eta_cor = -1
@@ -356,31 +370,63 @@ type, public :: barotropic_CS ; private
   integer :: id_BTC_FA_v_NN = -1, id_BTC_FA_v_N0 = -1, id_BTC_FA_v_S0 = -1, id_BTC_FA_v_SS = -1
   integer :: id_BTC_vbt_NN = -1, id_BTC_vbt_SS = -1
   integer :: id_uhbt0 = -1, id_vhbt0 = -1
+  !!@}
 
 end type barotropic_CS
 
+!> A desciption of the functional dependence of transport at a u-point
 type, private :: local_BT_cont_u_type
-  real :: FA_u_EE, FA_u_E0, FA_u_W0, FA_u_WW
-  real :: ubt_EE, ubt_WW
-  real :: uh_crvE, uh_crvW
-  real :: uh_EE, uh_WW
+  real :: FA_u_EE !< The effective open face area for zonal barotropic transport
+                  !! drawing from locations far to the east, in H m.
+  real :: FA_u_E0 !< The effective open face area for zonal barotropic transport
+                  !! drawing from nearby to the east, in H m.
+  real :: FA_u_W0 !< The effective open face area for zonal barotropic transport
+                  !! drawing from nearby to the west, in H m.
+  real :: FA_u_WW !< The effective open face area for zonal barotropic transport
+                  !! drawing from locations far to the west, in H m.
+  real :: uBT_WW  !< uBT_WW is the barotropic velocity, in m s-1, beyond which the marginal
+                  !! open face area is FA_u_WW.  uBT_WW must be non-negative.
+  real :: uBT_EE  !< uBT_EE is a barotropic velocity, in m s-1, beyond which the marginal
+                  !! open face area is FA_u_EE. uBT_EE must be non-positive.
+  real :: uh_crvW !< The curvature of face area with velocity for flow from the west, in H s2 m-1.
+  real :: uh_crvE !< The curvature of face area with velocity for flow from the east, in H s2 m-1.
+  real :: uh_WW   !< The zonal transport when ubt=ubt_WW, in H m2 s-1.
+  real :: uh_EE   !< The zonal transport when ubt=ubt_EE, in H m2 s-1.
 end type local_BT_cont_u_type
+!> A desciption of the functional dependence of transport at a v-point
 type, private :: local_BT_cont_v_type
-  real :: FA_v_NN, FA_v_N0, FA_v_S0, FA_v_SS
-  real :: vbt_NN, vbt_SS
-  real :: vh_crvN, vh_crvS
-  real :: vh_NN, vh_SS
+  real :: FA_v_NN !< The effective open face area for meridional barotropic transport
+                  !! drawing from locations far to the north, in H m.
+  real :: FA_v_N0 !< The effective open face area for meridional barotropic transport
+                  !! drawing from nearby to the north, in H m.
+  real :: FA_v_S0 !< The effective open face area for meridional barotropic transport
+                  !! drawing from nearby to the south, in H m.
+  real :: FA_v_SS !< The effective open face area for meridional barotropic transport
+                  !! drawing from locations far to the south, in H m.
+  real :: vBT_SS  !< vBT_SS is the barotropic velocity, in m s-1, beyond which the marginal
+                  !! open face area is FA_v_SS. vBT_SS must be non-negative.
+  real :: vBT_NN  !< vBT_NN is the barotropic velocity, in m s-1, beyond which the marginal
+                  !! open face area is FA_v_NN.  vBT_NN must be non-positive.
+  real :: vh_crvS !< The curvature of face area with velocity for flow from the south, in H s2 m-1.
+  real :: vh_crvn !< The curvature of face area with velocity for flow from the north, in H s2 m-1.
+  real :: vh_SS   !< The meridional transport when vbt=vbt_SS, in H m2 s-1.
+  real :: vh_NN   !< The meridional transport when vbt=vbt_NN, in H m2 s-1.
 end type local_BT_cont_v_type
 
+!> A container for passing around active tracer point memory limits
 type, private :: memory_size_type
+  !>@{ Currently active memory limits
   integer :: isdw, iedw, jsdw, jedw ! The memory limits of the wide halo arrays.
+  !!@}
 end type memory_size_type
 
+!>@{ CPU time clock IDs
 integer :: id_clock_sync=-1, id_clock_calc=-1
 integer :: id_clock_calc_pre=-1, id_clock_calc_post=-1
 integer :: id_clock_pass_step=-1, id_clock_pass_pre=-1, id_clock_pass_post=-1
+!!@}
 
-! Enumeration values for various schemes
+!>@{ Enumeration values for various schemes
 integer, parameter :: HARMONIC        = 1
 integer, parameter :: ARITHMETIC      = 2
 integer, parameter :: HYBRID          = 3
@@ -390,6 +436,7 @@ character*(20), parameter :: HYBRID_STRING = "HYBRID"
 character*(20), parameter :: HARMONIC_STRING = "HARMONIC"
 character*(20), parameter :: ARITHMETIC_STRING = "ARITHMETIC"
 character*(20), parameter :: BT_CONT_STRING = "FROM_BT_CONT"
+!!@}
 
 contains
 
@@ -2284,21 +2331,19 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(ocean_grid_type),        intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),      intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(barotropic_CS),          pointer       :: CS   !< Barotropic control structure.
-  real, dimension(SZI_(G),SZJ_(G)), &
-                      optional, intent(in)    :: eta  !< The barotropic free surface height
-                                                      !! anomaly or column mass anomaly, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                      optional, intent(in)    :: pbce  !< The baroclinic pressure anomaly in each
-                                                       !! layer due to free surface height
-                                                       !! anomalies, in m2 H-1 s-2.
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: eta  !< The barotropic free surface
+                                                      !! height anomaly or column mass anomaly, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: pbce  !< The baroclinic pressure
+                                                      !! anomaly in each layer due to free surface
+                                                      !! height anomalies, in m2 H-1 s-2.
   type(BT_cont_type), optional, pointer       :: BT_cont  !< A structure with elements that describe
-                                                       !! the effective open face areas as a
-                                                       !! function of barotropic flow.
+                                                      !! the effective open face areas as a
+                                                      !! function of barotropic flow.
   real,               optional, intent(in)    :: gtot_est !< An estimate of the total gravitational
-                                                       !! acceleration, in m s-2.
+                                                      !! acceleration, in m s-2.
   real,               optional, intent(in)    :: SSH_add  !< An additional contribution to SSH to
-                                                       !! provide a margin of error when
-                                                       !! calculating the external wave speed, in m.
+                                                      !! provide a margin of error when
+                                                      !! calculating the external wave speed, in m.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -2578,7 +2623,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
   type(BT_OBC_type),                     intent(inout) :: BT_OBC !< A structure with the private barotropic arrays
                                                                  !! related to the open boundary conditions,
                                                                  !! set by set_up_BT_OBC.
-  type(MOM_domain_type),                 intent(inout)    :: BT_Domain !< MOM_domain_type associated with wide arrays
+  type(MOM_domain_type),                 intent(inout) :: BT_Domain !< MOM_domain_type associated with wide arrays
   type(ocean_grid_type),                 intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in)    :: GV     !< The ocean's vertical grid structure.
   integer,                               intent(in)    :: halo   !< The extra halo size to use here.
@@ -2789,11 +2834,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(barotropic_CS),     pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to barotropic_init.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                 optional, intent(in)    :: h_u  !< The specified thicknesses at u-points,
-                                                 !! in m or kg m-2.
+                 optional, intent(in)    :: h_u  !< The specified thicknesses at u-points, in m or kg m-2.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                 optional, intent(in)    :: h_v  !< The specified thicknesses at v-points,
-                                                 !! in m or kg m-2.
+                 optional, intent(in)    :: h_v  !< The specified thicknesses at v-points, in m or kg m-2.
   logical,       optional, intent(in)    :: may_use_default !< An optional logical argument
                                                  !! to indicate that the default velocity point
                                                  !! thickesses may be used for this particular
