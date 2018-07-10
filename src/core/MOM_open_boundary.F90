@@ -283,7 +283,7 @@ subroutine open_boundary_config(G, param_file, OBC)
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
   integer :: l ! For looping over segments
-  logical :: debug_OBC, debug, mask_outside
+  logical :: debug_OBC, debug, mask_outside, reentrant_x, reentrant_y
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=100) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
@@ -378,6 +378,10 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "A silly value of velocities used outside of open boundary \n"//&
                  "conditions for debugging.", units="m/s", default=0.0, &
                  do_not_log=.not.debug_OBC, debuggingParam=.true.)
+    reentrant_x = .false.
+    call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, default=.true.)
+    reentrant_y = .false.
+    call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, default=.false.)
 
     ! Allocate everything
     ! Note the 0-segment is needed when %segnum_u/v(:,:) = 0
@@ -413,9 +417,9 @@ subroutine open_boundary_config(G, param_file, OBC)
            fail_if_missing=.true.)
       segment_str = remove_spaces(segment_str)
       if (segment_str(1:2) == 'I=') then
-        call setup_u_point_obc(OBC, G, segment_str, l, param_file)
+        call setup_u_point_obc(OBC, G, segment_str, l, param_file, reentrant_y)
       elseif (segment_str(1:2) == 'J=') then
-        call setup_v_point_obc(OBC, G, segment_str, l, param_file)
+        call setup_v_point_obc(OBC, G, segment_str, l, param_file, reentrant_x)
       else
         call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config: "//&
              "Unable to interpret "//segment_param_str//" = "//trim(segment_str))
@@ -753,12 +757,13 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
 end subroutine setup_segment_indices
 
 !> Parse an OBC_SEGMENT_%%% string starting with "I=" and configure placement and type of OBC accordingly
-subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
+subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
   type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "I=%,J=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
   type(param_file_type), intent(in)   :: PF  !< Parameter file handle
+  logical, intent(in)                 :: reentrant_y !< is the domain reentrant in y?
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
   integer :: j, a_loop
@@ -766,7 +771,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   character(len=128) :: segment_param_str
   real, allocatable, dimension(:)  :: tnudge
   ! This returns the global indices for the segment
-  call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
+  call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str, reentrant_y)
 
   call setup_segment_indices(G, OBC%segment(l_seg),I_obc,I_obc,Js_obc,Je_obc)
 
@@ -864,12 +869,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
 end subroutine setup_u_point_obc
 
 !> Parse an OBC_SEGMENT_%%% string starting with "J=" and configure placement and type of OBC accordingly
-subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
+subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_x)
   type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "J=%,I=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
   type(param_file_type),   intent(in) :: PF  !< Parameter file handle
+  logical, intent(in)                 :: reentrant_x !< is the domain reentrant in x?
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
   integer :: i, a_loop
@@ -878,7 +884,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
   real, allocatable, dimension(:)  :: tnudge
 
   ! This returns the global indices for the segment
-  call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str )
+  call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str, reentrant_x)
 
   call setup_segment_indices(G, OBC%segment(l_seg),Is_obc,Ie_obc,J_obc,J_obc)
 
@@ -976,7 +982,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
 end subroutine setup_v_point_obc
 
 !> Parse an OBC_SEGMENT_%%% string
-subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_str )
+subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_str, reentrant)
   integer,          intent(in)  :: ni_global !< Number of h-points in zonal direction
   integer,          intent(in)  :: nj_global !< Number of h-points in meridional direction
   character(len=*), intent(in)  :: segment_str !< A string in form of "I=l,J=m:n,string" or "J=l,I=m,n,string"
@@ -984,12 +990,14 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   integer,          intent(out) :: m !< The value of J=m, if segment_str begins with I=, or the value of I=m
   integer,          intent(out) :: n !< The value of J=n, if segment_str begins with I=, or the value of I=n
   character(len=*), intent(out) :: action_str(:) !< The "string" part of segment_str
+  logical,          intent(in)  :: reentrant !< is domain reentrant in relevant direction?
   ! Local variables
   character(len=24) :: word1, word2, m_word, n_word !< Words delineated by commas in a string in form of
                                                     !! "I=%,J=%:%,string"
   integer :: l_max !< Either ni_global or nj_global, depending on whether segment_str begins with "I=" or "J="
   integer :: mn_max !< Either nj_global or ni_global, depending on whether segment_str begins with "I=" or "J="
   integer :: j
+  integer, parameter :: halo = 10
 
   ! Process first word which will started with either 'I=' or 'J='
   word1 = extract_word(segment_str,',',1)
@@ -1019,17 +1027,31 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   ! Read m
   m_word = extract_word(word2(3:24),':',1)
   m = interpret_int_expr( m_word, mn_max )
-  if (m<-1 .or. m>mn_max+1) then
-    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
-                   "Beginning of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+  if (reentrant) then
+    if (m<-halo .or. m>mn_max+halo) then
+      call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                     "Beginning of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+    endif
+  else
+    if (m<-1 .or. m>mn_max+1) then
+      call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                     "Beginning of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+    endif
   endif
 
-  ! Read m
+  ! Read n
   n_word = extract_word(word2(3:24),':',2)
   n = interpret_int_expr( n_word, mn_max )
-  if (n<-1 .or. n>mn_max+1) then
-    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
-                   "End of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+  if (reentrant) then
+    if (n<-halo .or. n>mn_max+halo) then
+      call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                     "End of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+    endif
+  else
+    if (n<-1 .or. n>mn_max+1) then
+      call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                     "End of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+    endif
   endif
 
   if (abs(n-m)==0) then
@@ -1044,7 +1066,7 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
 
   contains
 
-  ! Returns integer value interpreted from string in form of %I, N or N-%I
+  ! Returns integer value interpreted from string in form of %I, N or N+-%I
   integer function interpret_int_expr(string, imax)
     character(len=*), intent(in) :: string !< Integer in form or %I, N or N-%I
     integer,          intent(in) :: imax !< Value to replace 'N' with
@@ -1057,8 +1079,13 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
     if (len_trim(string)==1 .and. string(1:1)=='N') then
       interpret_int_expr = imax
     elseif (string(1:1)=='N') then
-      read(string(2:slen),*,err=911) interpret_int_expr
-      interpret_int_expr = imax - interpret_int_expr
+      if (string(2:2)=='+') then
+        read(string(3:slen),*,err=911) interpret_int_expr
+        interpret_int_expr = imax + interpret_int_expr
+      elseif (string(2:2)=='-') then
+        read(string(3:slen),*,err=911) interpret_int_expr
+        interpret_int_expr = imax - interpret_int_expr
+      endif
     else
       read(string(1:slen),*,err=911) interpret_int_expr
     endif
