@@ -154,7 +154,7 @@ type, public :: bulkmixedlayer_CS ; private
   logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that can
                                         !! be threaded. To run with multiple threads, set to False.
   type(group_pass_type) :: pass_h_sum_hmbl_prev !< For group halo pass
-  
+
   !>@{ Diagnostic IDs
   integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
   integer :: id_TKE_RiBulk = -1, id_TKE_conv = -1, id_TKE_pen_SW = -1
