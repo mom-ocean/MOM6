@@ -70,6 +70,9 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
   if (.not. use_ice_shelf) then
     forces%frac_shelf_u(:,:) = 0.0 ; forces%frac_shelf_v(:,:) = 0.0
   endif
+  if (.not. forces%accumulate_rigidity) then
+    forces%rigidity_ice_u(:,:) = 0.0 ; forces%rigidity_ice_v(:,:) = 0.0
+  endif
 
   call pass_var(forces%area_berg, G%domain, TO_ALL+Omit_corners, halo=1, complete=.false.)
   call pass_var(forces%mass_berg, G%domain, TO_ALL+Omit_corners, halo=1, complete=.true.)

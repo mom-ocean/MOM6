@@ -54,7 +54,7 @@ use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
+use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
@@ -77,7 +77,6 @@ use MOM_generic_tracer, only : MOM_generic_tracer_fluxes_accumulate
 implicit none ; private
 
 public ocean_model_init, ocean_model_end, update_ocean_model
-public get_ocean_grid ! add by Jiande
 public ocean_model_save_restart, Ocean_stock_pe
 public ice_ocean_boundary_type
 public ocean_model_init_sfc, ocean_model_flux_init
@@ -515,18 +514,24 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                              OS%grid, OS%forcing_CSp)
 
   if (OS%fluxes%fluxes_used) then
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
+    if (do_thermo) &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, &
                                OS%restore_salinity, OS%restore_temp)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_thermo) &
+        call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_dyn) &
+        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
-      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
-                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-      call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
+      if (do_dyn) &
+        call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      if (do_thermo) &
+        call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
@@ -542,22 +547,28 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%fluxes%dt_buoy_accum = dt_coupling
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
+    if (do_thermo) &
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_thermo) &
+        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (do_dyn) &
+        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
-      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
-                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-      call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+      if (do_dyn) &
+        call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+      if (do_thermo) &
+        call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
     ! Some of the fields that exist in both the forcing and mech_forcing types
-    ! are time-averages must be copied back to the forces type.
+    ! (e.g., ustar) are time-averages must be copied back to the forces type.
     call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
 
 #ifdef _USE_GENERIC_TRACER
@@ -1093,28 +1104,8 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
      array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('btfHeat')
      array2D(isc:,jsc:) = 0
-  case('tlat')
-     array2D(isc:,jsc:) = OS%grid%geoLatT(g_isc:g_iec,g_jsc:g_jec)
-  case('tlon')
-     array2D(isc:,jsc:) = OS%grid%geoLonT(g_isc:g_iec,g_jsc:g_jec)
-  case('ulat')
-     array2D(isc:,jsc:) = OS%grid%geoLatCu(g_isc:g_iec,g_jsc:g_jec)
-  case('ulon')
-     array2D(isc:,jsc:) = OS%grid%geoLonCu(g_isc:g_iec,g_jsc:g_jec)
-  case('vlat')
-     array2D(isc:,jsc:) = OS%grid%geoLatCv(g_isc:g_iec,g_jsc:g_jec)
-  case('vlon')
-     array2D(isc:,jsc:) = OS%grid%geoLonCv(g_isc:g_iec,g_jsc:g_jec)
-  case('geoLatBu')
-     array2D(isc:,jsc:) = OS%grid%geoLatBu(g_isc:g_iec,g_jsc:g_jec)
-  case('geoLonBu')
-     array2D(isc:,jsc:) = OS%grid%geoLonBu(g_isc:g_iec,g_jsc:g_jec)
-  case('cos_rot')
-     array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
-  case('sin_rot')
-     array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
   case default
-     call MOM_error(FATAL,'ocean_model_data2D_get: unknown argument name='//name)
+     call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
   end select
 
 
@@ -1133,7 +1124,7 @@ subroutine ocean_model_data1D_get(OS,Ocean, name, value)
   case('c_p')
      value = OS%C_p
   case default
-     call MOM_error(FATAL,'ocean_model_data1D_get: unknown argument name='//name)
+     call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
   end select
 
 
@@ -1160,22 +1151,5 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
-
-!#######################################################################
-! <SUBROUTINE NAME="get_ocean_grid">
-!
-! <DESCRIPTION>
-! Obtain the ocean grid.
-! </DESCRIPTION>
-!
-  subroutine get_ocean_grid(OS, Gridp)
-    type(ocean_state_type) :: OS
-    type(ocean_grid_type) , pointer          :: Gridp
-
-    Gridp => OS%grid
-    return
-
-  end subroutine get_ocean_grid
-! </SUBROUTINE> NAME="get_ocean_grid"
 
 end module ocean_model_mod

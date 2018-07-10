@@ -1083,7 +1083,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
   logical                          :: check_exist, is_there_a_checksum
-  integer(kind=8),dimension(1)     :: checksum_file
+  integer(kind=8),dimension(3)     :: checksum_file
   integer(kind=8)                  :: checksum_data
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -1176,7 +1176,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         call get_file_atts(fields(i),name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
           check_exist = mpp_attribute_exist(fields(i),"checksum")
-          checksum_file = -1
+          checksum_file(:) = -1
           checksum_data = -1
           is_there_a_checksum = .false.
           if ( check_exist ) then
