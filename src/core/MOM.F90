@@ -54,6 +54,7 @@ use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
+use MOM_diabatic_driver,       only : legacy_diabatic
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
 use MOM_diagnostics,           only : register_surface_diags, write_static_fields
@@ -197,6 +198,9 @@ type, public :: MOM_control_struct ; private
 
   logical :: adiabatic               !< If true, there are no diapycnal mass fluxes, and no calls
                                      !! to routines to calculate or apply diapycnal fluxes.
+  logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the
+                                       !! diabatic subroutine. This is temporary and is needed
+                                       !! to avoid change in answers.
   logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
                                      !! processes before time stepping the dynamics.
   logical :: use_ALE_algorithm       !< If true, use the ALE algorithm rather than layered
@@ -1151,8 +1155,14 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, &
     endif
 
     call cpu_clock_begin(id_clock_diabatic)
-    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, Time_end_thermo, G, GV, CS%diabatic_CSp, Waves=Waves)
+    if (CS%use_legacy_diabatic_driver) then
+      ! the following subroutine is legacy and will be deleted in the near future.
+      call legacy_diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
+                          dtdia, Time_end_thermo, G, GV, CS%diabatic_CSp, Waves=Waves)
+    else
+      call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
+                    dtdia, Time_end_thermo, G, GV, CS%diabatic_CSp, Waves=Waves)
+    endif
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
@@ -1627,6 +1637,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
                  "there is no buoyancy forcing, but makes the model \n"//&
                  "faster by eliminating subroutine calls.", default=.false.)
+  call get_param(param_file, "MOM", "USE_LEGACY_DIABATIC_DRIVER", CS%use_legacy_diabatic_driver, &
+                 "If true, use the a legacy version of the diabatic subroutine. \n"//&
+                 "This is temporary and is needed avoid change in answers.", &
+                 default=.true.)
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as \n"//&
                  "the gravity wave adjustment to h. This is a fragile feature and \n"//&
@@ -2364,6 +2378,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (associated(CS%visc%Kv_shear)) &
     call pass_var(CS%visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
 
+  if (associated(CS%visc%Kv_slow)) &
+    call pass_var(CS%visc%Kv_slow, G%Domain, To_All+Omit_Corners, halo=1)
+
   call cpu_clock_end(id_clock_pass_init)
 
   call register_obsolete_diagnostics(param_file, CS%diag)
@@ -2977,8 +2994,7 @@ subroutine MOM_end(CS)
   call tracer_registry_end(CS%tracer_Reg)
   call tracer_flow_control_end(CS%tracer_flow_CSp)
 
-  ! GMM, the following is commented because it fails on Travis.
-  !if (associated(CS%diabatic_CSp)) call diabatic_driver_end(CS%diabatic_CSp)
+  call diabatic_driver_end(CS%diabatic_CSp)
 
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 

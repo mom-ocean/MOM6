@@ -8,7 +8,8 @@ use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval
 use ESMF,                only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
 use seq_cdata_mod,       only: seq_cdata, seq_cdata_setptrs
 use seq_flds_mod,        only: seq_flds_x2o_fields, seq_flds_o2x_fields 
-use shr_flds_mod,        only: shr_flds_dom_coord, shr_flds_dom_other
+!use seq_flds_mod,       only: shr_flds_dom_coord=>seq_flds_dom_coord, shr_flds_dom_other=>seq_flds_dom_other
+use seq_flds_mod,       only: shr_flds_dom_coord, shr_flds_dom_other
 use mct_mod,             only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, &
                                mct_gsmap_orderedpoints
 use mct_mod,             only: mct_aVect, mct_aVect_init, mct_aVect_zero, &
@@ -490,7 +491,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
 
   ! Translate import fields to ice_ocean_boundary
   !TODO: make this an input variable
-  glb%sw_decomp = .false.
+  !glb%sw_decomp = .false.
   !END TODO:
   if (glb%sw_decomp) then
      call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, glb%stdout, Eclock, &
@@ -520,7 +521,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
     call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
-                      glb%ocn_state%restart_CSp, .false., filename=restartname,GV=glb%ocn_state%GV)
+                      glb%ocn_state%restart_CSp, .false., filename=restartname, GV=glb%ocn_state%GV)
 
     ! write name of restart file in the rpointer file
     nu = shr_file_getUnit()

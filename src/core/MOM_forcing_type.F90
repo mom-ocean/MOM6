@@ -118,6 +118,10 @@ type, public :: forcing
                                !! in corrections to the sea surface height field
                                !! that is passed back to the calling routines.
                                !! This may point to p_surf or to p_surf_full.
+  logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
+                                 !! and various types of ice needs to be accumulated, and the
+                                 !! surface pressure explicitly reset to zero at the driver level
+                                 !! when appropriate.
 
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
@@ -207,6 +211,13 @@ type, public :: mech_forcing
                                  !< enabled, and is exactly 0 away from shelves or on land.
     rigidity_ice_u => NULL(), &  !< Depth-integrated lateral viscosity of ice
     rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
+  logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
+                                 !! and various types of ice needs to be accumulated, and the
+                                 !! surface pressure explicitly reset to zero at the driver level
+                                 !! when appropriate.
+  logical :: accumulate_rigidity = .false. !< If true, the rigidity due to various types of
+                                 !! ice needs to be accumulated, and the rigidity explicitly
+                                 !! reset to zero at the driver level when appropriate.
 
   logical :: initialized = .false. !< This indicates whether the appropriate
                                  !! arrays have been initialized.
