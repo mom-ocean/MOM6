@@ -40,13 +40,15 @@ type, public :: CVMix_ddiff_cs
   logical :: debug              !< If true, turn on debugging
 
   ! Daignostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< Pointer to diagnostics control structure
+  !>@{ Diagnostics handles
   integer :: id_KT_extra = -1, id_KS_extra = -1, id_R_rho = -1
+  !!@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: KT_extra  !< double diffusion diffusivity for temp (m2/s)
-  real, allocatable, dimension(:,:,:) :: KS_extra  !< double diffusion diffusivity for salt (m2/s)
-  real, allocatable, dimension(:,:,:) :: R_rho     !< double-diffusion density ratio (nondim)
+  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (m2/s)
+  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (m2/s)
+  real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio (nondim)
 
 end type CVMix_ddiff_cs
 
@@ -171,9 +173,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
   type(CVMix_ddiff_cs),                           pointer :: CS   !< The control structure returned
                                                                   !! by a previous call to CVMix_ddiff_init.
   integer,                                   intent(in)   :: j    !< Meridional grid indice.
-!  real, dimension(:,:),                 optional, pointer :: hbl  !< Depth of ocean boundary layer (m)
-
-  ! local variables
+  ! Local variables
   real, dimension(SZK_(G)) :: &
     cellHeight, &  !< Height of cell centers (m)
     dRho_dT,    &  !< partial derivatives of density wrt temp (kg m-3 degC-1)
@@ -298,6 +298,5 @@ subroutine CVMix_ddiff_end(CS)
   deallocate(CS)
 
 end subroutine CVMix_ddiff_end
-
 
 end module MOM_CVMix_ddiff
