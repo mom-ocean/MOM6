@@ -1,31 +1,7 @@
+!> Interface for surface waves
 module MOM_wave_interface
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-!
-!  By Brandon Reichl, 2018.
-!
-!   This module should be moved as wave coupling progresses and
-! likely will should mirror the iceberg or sea-ice model set-up.
-!
-!   This module is meant to contain the routines to read in and
-! interpret surface wave data for MOM6. In its original form, the
-! capabilities include setting the Stokes drift in the model (from a
-! variety of sources including prescribed, empirical, and input
-! files).  In short order, the plan is to also ammend the subroutine
-! to accept Stokes drift information from an external coupler.
-! Eventually, it will be necessary to break this file apart so that
-! general wave information may be stored in the control structure
-! and the Stokes drift effect can be isolated from processes such as
-! sea-state dependent momentum fluxes, gas fluxes, and other wave
-! related air-sea interaction and boundary layer phenomenon.
-!
-! The Stokes drift are stored on the C-grid with the conventional
-! protocol to interpolate to the h-grid to compute Langmuir number,
-! the primary quantity needed for Langmuir turbulence
-! parameterizations in both the ePBL and KPP approach.  This module
-! also computes full 3d Stokes drift profiles, which will be useful
-! if second-order type boundary layer parameterizations are
-! implemented (perhaps via GOTM, work in progress).
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : diag_ctrl
@@ -131,13 +107,14 @@ type, public:: wave_parameters_CS ; private
   type(diag_ctrl), pointer, public :: diag !< A structure that is used to regulate the
                                            !! timing of diagnostic output.
 
-  ! Diagnostic handles
+  !>@{ Diagnostic handles
   integer, public :: id_surfacestokes_x, id_surfacestokes_y
   integer, public :: id_3dstokes_x, id_3dstokes_y
+  !!@}
 
 end type wave_parameters_CS
 
-!Options not needed outside of this module
+! Options not needed outside of this module
 
 integer :: WaveMethod=-99 !< Options for including wave information
                           !! Valid (tested) choices are:
@@ -146,32 +123,44 @@ integer :: WaveMethod=-99 !< Options for including wave information
                           !!   2 - DHH85
                           !!   3 - LF17
                           !! -99 - No waves computed, but empirical Langmuir number used.
+                          !! \todo Module variable! Move into a control structure.
 
 ! Options if WaveMethod is Surface Stokes Drift Bands (1)
 integer, public :: NumBands =0 !< Number of wavenumber/frequency partitions to receive
                                !! This needs to match the number of bands provided
                                !! via either coupling or file.
+                               !! \todo Module variable! Move into a control structure.
 integer, public :: PartitionMode !< Method for partition mode (meant to check input)
                                  !! 0 - wavenumbers
                                  !! 1 - frequencies
+                                 !! \todo Module variable! Move into a control structure.
 integer :: DataSource !< Integer that specifies where the Model Looks for Data
                       !! Valid choices are:
                       !! 1 - FMS DataOverride Routine
                       !! 2 - Reserved For Coupler
                       !! 3 - User input (fixed values, useful for 1d testing)
+                      !! \todo Module variable! Move into a control structure.
+
 ! Options if using FMS DataOverride Routine
 character(len=40)  :: SurfBandFileName !< Filename if using DataOverride
+                                       !! \todo Module variable! Move into a control structure.
 logical :: dataoverrideisinitialized !< Flag for DataOverride Initialization
+                                     !! \todo Module variable! Move into a control structure.
 
 ! Options for computing Langmuir number
 real :: LA_FracHBL         !< Fraction of OSBL for averaging Langmuir number
+                           !! \todo Module variable! Move into a control structure.
 logical :: LA_Misalignment = .false. !< Flag to use misalignment in Langmuir number
+                                     !! \todo Module variable! Move into a control structure.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
 character(len=40)  :: mdl = "MOM_wave_interface" !< This module's name.
 
+!>@{ Undocumented parameters.
+!! \todo These module variables need to be documented as static/private variables or moved
+!! into a control structure.
 ! Switches needed in import_stokes_drift
 integer, parameter :: TESTPROF = 0, SURFBANDS = 1, &
                       DHH85 = 2, LF17 = 3, NULL_WaveMethod=-99, &
@@ -182,8 +171,9 @@ Real    :: TP_STKX0, TP_STKY0, TP_WVL
 logical :: WaveAgePeakFreq ! Flag to use W
 real    :: WaveAge, WaveWind
 real    :: PI
+!!@}
 
-CONTAINS
+contains
 
 !> Initializes parameters related to MOM_wave_interface
 subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
@@ -193,7 +183,6 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   type(param_file_type), intent(in)      :: param_file !< Input parameter structure
   type(wave_parameters_CS), pointer      :: CS         !< Wave parameter control structure
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostic Pointer
-
   ! Local variables
   ! I/O
   character*(13) :: TMPSTRING1,TMPSTRING2
@@ -416,7 +405,7 @@ subroutine Update_Surface_Waves(G,GV,Day,DT,CS)
   type(verticalGrid_type), intent(in)  :: GV  !< Vertical grid structure
   type(time_type), intent(in)          :: Day !< Time (s)
   type(time_type), intent(in)          :: DT  !< Timestep (s)
-
+  ! Local variables
   integer :: ii, jj, kk, b
   type(time_type) :: Day_Center
 
@@ -462,7 +451,6 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
        intent(in)    :: h     !<Thickness (m or kg/m2)
   real, dimension(SZI_(G),SZJ_(G)), &
        intent(in)    :: ustar !< Wind friction velocity (m/s)
-
   ! Local Variables
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
@@ -662,7 +650,7 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
   return
 end subroutine Update_Stokes_Drift
 
-!< A subroutine to fill the Stokes drift from a NetCDF file
+!> A subroutine to fill the Stokes drift from a NetCDF file
 !! using the data_override procedures.
 subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
   use NETCDF
@@ -670,14 +658,13 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
   type(wave_parameters_CS), pointer    :: CS         !< Wave structure
   type(ocean_grid_type), intent(inout) :: G          !< Grid structure
   type(verticalGrid_type),  intent(in) :: GV         !< Vertical grid structure
-  ! local variables
+  ! Local variables
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real    :: temp_y(SZI_(G),SZJ_(G)) ! Stokes drift of band at h-points, in m/s
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
   integer :: b
   integer :: i, j
-
   integer, dimension(4) :: start, counter, dims, dim_id
   character(len=12)  :: dim_name(4)
   character(20) :: varname, varread1, varread2
@@ -831,11 +818,12 @@ return
 end subroutine Surface_Bands_by_data_override
 
 !> Interface to get Langmuir number based on options stored in wave structure
+!!
+!! Note this can be called with an unallocated Waves pointer, which is okay if we
+!!  want the wind-speed only dependent Langmuir number.  Therefore, we need to be
+!!  careful about what we try to access here.
 subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
                                 H, U_H, V_H, Waves )
-! Note this can be called with an unallocated Waves pointer, which is okay if we
-!  want the wind-speed only dependent Langmuir number.  Therefore, we need to be
-!  careful about what we try to access here.
   type(ocean_grid_type), &
        intent(in)     :: G      !< Ocean grid structure
   type(verticalGrid_type), &
@@ -931,27 +919,29 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
 end subroutine get_Langmuir_Number
 
 !> Get SL averaged Stokes drift from Li/FK 17 method
+!!
+!! Original description:
+!! - This function returns the enhancement factor, given the 10-meter
+!!   wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
+!!
+!! Update (Jan/25):
+!! - Converted from function to subroutine, now returns Langmuir number.
+!! - Computs 10m wind internally, so only ustar and hbl need passed to
+!!   subroutine.
+!!
+!! Qing Li, 160606
+!! - BGR port from CVMix to MOM6 Jan/25/2017
+!! - BGR change output to LA from Efactor
+!! - BGR remove u10 input
+!! - BGR note: fixed parameter values should be changed to "get_params"
 subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL, LA)
-! Original description:
-! This function returns the enhancement factor, given the 10-meter
-! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
-! Update (Jan/25):
-! Converted from function to subroutine, now returns Langmuir number.
-! Computs 10m wind internally, so only ustar and hbl need passed to
-! subroutine.
-!
-! Qing Li, 160606
-! BGR port from CVMix to MOM6 Jan/25/2017
-! BGR change output to LA from Efactor
-! BGR remove u10 input
-! BGR note: fixed parameter values should be changed to "get_params"
   real, intent(in)  :: ustar !< water-side surface friction velocity (m/s)
   real, intent(in)  :: hbl   !< boundary layer depth (m)
   type(verticalGrid_type), &
        intent(in)   :: GV    !< Ocean vertical grid structure
   real, intent(out) :: US_SL !< Surface layer averaged Stokes drift (m/s)
   real, intent(out) :: LA    !< Langmuir number
-! Local variables
+  ! Local variables
   ! parameters
   real, parameter :: &
        ! ratio of U19.5 to U10 (Holthuijsen, 2007)
@@ -1034,16 +1024,15 @@ subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
                                 !! (used here for Stokes drift, m/s)
   real, intent(out) :: Average  !< Output quantity averaged over depth AvgDepth
                                 !! (used here for Stokes drift, m/s)
-
   !Local variables
   real :: top, midpoint, bottom
   real :: Sum
   integer :: kk
 
-! Initializing sum
+  ! Initializing sum
   Sum = 0.0
 
-! Integrate
+  ! Integrate
   bottom = 0.0
   do kk = 1, GV%ke
     Top = Bottom
@@ -1073,12 +1062,11 @@ subroutine Get_SL_Average_Band( GV, AvgDepth, NB, WaveNumbers, SurfStokes, Avera
   real, dimension(NB), &
        intent(in)     :: SurfStokes  !< Surface Stokes drift for each band (m/s)
   real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth (m/s)
-
   ! Local variables
   real :: top, midpoint, bottom
   integer :: bb
 
-! Loop over bands
+  ! Loop over bands
   Average = 0.0
   do bb = 1, NB
     ! Factor includes analytical integration of e(2kz)
@@ -1092,11 +1080,12 @@ subroutine Get_SL_Average_Band( GV, AvgDepth, NB, WaveNumbers, SurfStokes, Avera
 end subroutine Get_SL_Average_Band
 
 !> Compute the Stokes drift at a given depth
+!!
+!! Taken from Qing Li (Brown)
+!! use for comparing MOM6 simulation to his LES
+!! computed at z mid point (I think) and not depth averaged.
+!! Should be fine to integrate in frequency from 0.1 to sqrt(-0.2*grav*2pi/dz
 subroutine DHH85_mid(GV, ust, zpt, US)
-! Taken from Qing Li (Brown)
-! use for comparing MOM6 simulation to his LES
-! computed at z mid point (I think) and not depth averaged.
-! Should be fine to integrate in frequency from 0.1 to sqrt(-0.2*grav*2pi/dz
   type(verticalGrid_type), &
        intent(in)   :: GV    !< Ocean vertical grid
   real, intent(in)  :: UST   !< Surface friction velocity (m/s)
@@ -1151,7 +1140,7 @@ end subroutine DHH85_mid
 
 !> Explicit solver for Stokes mixing.
 !! Still in development do not use.
-subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
+subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
@@ -1165,10 +1154,9 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
        intent(inout) :: v     !< Velocity j-component (m/s)
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
-
   ! Local variables
-  REAL :: dTauUp, dTauDn, DVel
-  INTEGER :: i,j,k
+  real :: dTauUp, dTauDn, DVel
+  integer :: i,j,k
 
 ! This is a template to think about down-Stokes mixing.
 ! This is not ready for use...
@@ -1233,8 +1221,9 @@ end subroutine StokesMixing
 !! Still in development and not meant for general use.
 !! Can be activated (with code intervention) for LES comparison
 !! CHECK THAT RIGHT TIMESTEP IS PASSED IF YOU USE THIS**
+!!
+!! Not accessed in the standard code.
 subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
-  ! Not accessed in the standard code.
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
@@ -1248,10 +1237,9 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
        intent(inout) :: v     !< Velocity j-component (m/s)
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
-
   ! Local variables
-  REAL :: DVel
-  INTEGER :: i,j,k
+  real :: DVel
+  integer :: i,j,k
 
   do k = 1, G%ke
     do j = G%jscB, G%jecB !**Are these index bounds right?
@@ -1280,9 +1268,9 @@ end subroutine CoriolisStokes
 !! the neutral wind-speed as written here.
 subroutine ust_2_u10_coare3p5(USTair,U10,GV)
   real, intent(in)                    :: USTair !< Wind friction velocity (m/s)
-  type(verticalGrid_type), intent(in) :: GV     !< vertical grid type
   real, intent(out)                   :: U10    !< 10-m neutral wind speed (m/s)
-  !
+  type(verticalGrid_type), intent(in) :: GV     !< vertical grid type
+  ! Local variables
   real, parameter :: vonkar = 0.4 ! Should access a get_param von karman
   real, parameter :: nu=1e-6 ! Should access a get_param air-viscosity
   real :: z0sm, z0, z0rough, u10a, alpha, CD
@@ -1323,9 +1311,8 @@ end subroutine ust_2_u10_coare3p5
 
 !> Clear pointers, deallocate memory
 subroutine Waves_end(CS)
-!/
   type(wave_parameters_CS), pointer :: CS !< Control structure
-!/
+
   if (allocated(CS%WaveNum_Cen)) then; deallocate( CS%WaveNum_Cen ); endif
   if (allocated(CS%Freq_Cen))    deallocate( CS%Freq_Cen )
   if (allocated(CS%Us_x))        deallocate( CS%Us_x )
@@ -1336,10 +1323,37 @@ subroutine Waves_end(CS)
   if (allocated(CS%KvS))         deallocate( CS%KvS )
   if (allocated(CS%Us0_y))       deallocate( CS%Us0_y )
   if (allocated(CS%Us0_x))       deallocate( CS%Us0_x )
-!/
+
   deallocate( CS )
-!/
+
   return
 end subroutine Waves_end
+
+!> \namespace  mom_wave_interface
+!!
+!! \author Brandon Reichl, 2018.
+!!
+!! This module should be moved as wave coupling progresses and
+!! likely will should mirror the iceberg or sea-ice model set-up.
+!!
+!! This module is meant to contain the routines to read in and
+!! interpret surface wave data for MOM6. In its original form, the
+!! capabilities include setting the Stokes drift in the model (from a
+!! variety of sources including prescribed, empirical, and input
+!! files).  In short order, the plan is to also ammend the subroutine
+!! to accept Stokes drift information from an external coupler.
+!! Eventually, it will be necessary to break this file apart so that
+!! general wave information may be stored in the control structure
+!! and the Stokes drift effect can be isolated from processes such as
+!! sea-state dependent momentum fluxes, gas fluxes, and other wave
+!! related air-sea interaction and boundary layer phenomenon.
+!!
+!! The Stokes drift are stored on the C-grid with the conventional
+!! protocol to interpolate to the h-grid to compute Langmuir number,
+!! the primary quantity needed for Langmuir turbulence
+!! parameterizations in both the ePBL and KPP approach.  This module
+!! also computes full 3d Stokes drift profiles, which will be useful
+!! if second-order type boundary layer parameterizations are
+!! implemented (perhaps via GOTM, work in progress).
 
 end module MOM_wave_interface

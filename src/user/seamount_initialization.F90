@@ -21,18 +21,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mdl = "seamount_initialization" ! This module's name.
+character(len=40) :: mdl = "seamount_initialization" !< This module's name.
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public seamount_initialize_topography
 public seamount_initialize_thickness
 public seamount_initialize_temperature_salinity
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
 !> Initialization of topography.
