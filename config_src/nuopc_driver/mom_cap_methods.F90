@@ -18,8 +18,8 @@ module mom_cap_methods
   private
 
   ! Public member functions
-  public :: ocn_export
-  public :: ocn_import
+  public :: mom_export
+  public :: mom_import
 
   integer :: rc,dbrc
   integer :: import_cnt = 0
@@ -32,9 +32,9 @@ contains
 !-----------------------------------------------------------------------
 
   !> Maps outgoing ocean data to ESMF State
-  !! See \ref section_ocn_export for a summary of the data
+  !! See \ref section_mom_export for a summary of the data
   !! that is transferred from MOM6 to MCT.
-  subroutine ocn_export(ocean_public, grid, exportState, rc)
+  subroutine mom_export(ocean_public, grid, exportState, rc)
     type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
     type(ocean_grid_type)   , intent(in)    :: grid         !< Ocean model grid
     type(ESMF_State)        , intent(inout) :: exportState  !< outgoing data
@@ -144,35 +144,6 @@ contains
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
-    !tcx
-    ! write(tmpstr,'(a,6i8)') subname//'tcx1',lbnd1,ubnd1,lbnd2,ubnd2
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx2',isc,iec,jsc,jec
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx3_1',lbound(ssh,1),ubound(ssh,1)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx3_2',lbound(ssh,2),ubound(ssh,2)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx4_1',lbound(ocean_public%sea_lev,1),ubound(ocean_public%sea_lev,1)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx4_2',lbound(ocean_public%sea_lev,2),ubound(ocean_public%sea_lev,2)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx5_1',lbound(grid%mask2dT,1),ubound(grid%mask2dT,1)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx5_2',lbound(grid%mask2dT,2),ubound(grid%mask2dT,2)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx6',grid%isd,grid%ied,grid%jsd,grid%jed
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx7',grid%isc,grid%iec,grid%jsc,grid%jec
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx8',grid%idg_offset, grid%jdg_offset
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx9_1',lbound(dataPtr_omask,1),ubound(dataPtr_omask,1)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    ! write(tmpstr,'(a,6i8)') subname//'tcx9_2',lbound(dataPtr_omask,2),ubound(dataPtr_omask,2)
-    ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    !tcx 
-    
     !Copy from ocean_public to exportstate. ocean_public uses global indexing with no halos.
     !The mask comes from "grid" that uses the usual MOM domain that has halos
     !and does not use global indexing.
@@ -273,7 +244,7 @@ contains
        end do
     end do
 
-  end subroutine ocn_export
+  end subroutine mom_export
 
 !-----------------------------------------------------------------------
 
@@ -283,13 +254,16 @@ contains
   !! See \ref section_ocn_import for a summary of the surface fluxes that are
   !! passed from MCT to MOM6, including fluxes that need to be included in
   !! the future.
-  subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary, logunit, clock, rc)
+  subroutine mom_import(ocean_public, grid, importState, ice_ocean_boundary, &
+       logunit, runtype, clock, rc)
+
     type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
     type(ocean_grid_type)         , intent(in)    :: grid               !< Ocean model grid
     type(ESMF_State)              , intent(inout) :: importState        !< incoming data
     type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
     type(ESMF_Clock)              , intent(in)    :: clock
     integer                       , intent(in)    :: logunit 
+    character(len=*)              , intent(in)    :: runtype
     integer                       , intent(inout) :: rc 
 
     ! Local Variables
@@ -329,6 +303,7 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_snow(:,:)
     integer                     :: day, secs
     type(ESMF_time)             :: currTime 
+    logical                     :: do_import
     character(len=*), parameter :: F01  = "('(ocn_import) ',a,4(i6,2x),d21.14)"
     character(len=*), parameter :: subname = '(ocn_import)'
     !-----------------------------------------------------------------------
@@ -507,6 +482,14 @@ contains
     !  write(tmpstr,'(a,i8)') subname//' tcx import_cnt ',import_cnt
     !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
+    if ((trim(runtype) == 'initial' .and. import_cnt <= 2)) then
+       ! This will skip the first time import information is given
+       do_import = .false.
+    else
+       do_import = .true.
+    end if
+    write(6,*)'DEBUG: import_cnt, do_import= ',import_cnt, do_import
+
     do j = jsc, jec
        j1 = j + lbnd2 - jsc
        jg = j + grid%jsc - jsc
@@ -535,9 +518,7 @@ contains
           ! ice_ocean_boundary%mass_berg(i,j)       = 0.0 * GRID%mask2dT(ig,jg)
           ! ice_ocean_boundary%mi(i,j)              = 0.0 * GRID%mask2dT(ig,jg)
 
-          ! This will skip the first time import information is given
-          if (import_cnt > 2) then
-
+          if (do_import) then
              ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)      * GRID%mask2dT(ig,jg)  
              ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)   * GRID%mask2dT(ig,jg)
              ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)   * GRID%mask2dT(ig,jg)
@@ -557,6 +538,7 @@ contains
              !ice_ocean_boundary%u_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1))
              !ice_ocean_boundary%v_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1))
           endif
+
        enddo
     enddo
 
@@ -587,15 +569,14 @@ contains
        end do
     end if
 
-  end subroutine ocn_import
+  end subroutine mom_import
 
-  !-----------------------------------------------------------------------------                                                                      
-
+  !-----------------------------------------------------------------------------                                                         
   subroutine State_GetFldPtr(ST, fldname, fldptr, rc)
-    type(ESMF_State), intent(in) :: ST
-    character(len=*), intent(in) :: fldname
-    real(ESMF_KIND_R8), pointer, intent(in) :: fldptr(:,:)
-    integer, intent(out), optional :: rc
+    type(ESMF_State)            , intent(in)  :: ST
+    character(len=*)            , intent(in)  :: fldname
+    real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:)
+    integer, optional           , intent(out) :: rc
 
     ! local variables                                                                                                                                 
     type(ESMF_Field) :: lfield

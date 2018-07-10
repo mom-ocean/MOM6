@@ -91,7 +91,6 @@ interface ocean_model_data_get
   module procedure ocean_model_data2D_get
 end interface
 
-
 !> This type is used for communication with other components via the FMS coupler.
 !! The element names and types can be changed only with great deliberation, hence
 !! the persistnce of things like the cutsy element name "avg_kount".
@@ -231,7 +230,7 @@ contains
 
 !> ocean_model_init initializes the ocean model, including registering fields
 !! for restarts and reading restart files if appropriate.
-subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
+subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, input_restart_file)
   type(ocean_public_type), target, &
                        intent(inout) :: Ocean_sfc !< A structure containing various
                                 !! publicly visible ocean surface properties after initialization,
@@ -247,6 +246,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
+  character(len=*), optional, intent(in) :: input_restart_file !< If present, name of restart file to read
 
 !   This subroutine initializes both the ocean state and the ocean surface type.
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
@@ -277,6 +277,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   OS%Time = Time_in
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
+                      input_restart_file=input_restart_file, &
                       diag_ptr=OS%diag, count_calls=.true.)
   call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, C_p=OS%C_p, &
                               use_temp=use_temperature)
@@ -679,39 +680,65 @@ end subroutine update_ocean_model
 !                                      used for writing restart. timestamp will prepend to
 !                                      the any restart file name as a prefix.
 ! </DESCRIPTION>
-!
-subroutine ocean_model_restart(OS, timestamp)
+subroutine ocean_model_restart(OS, timestamp, restartname)
   type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
                                                !! internal ocean state being saved to a restart file
   character(len=*), optional, intent(in) :: timestamp !< An optional timestamp string that should be
-                                               !! prepended to the file name. (Currently this is unused.)
+                                                      !! prepended to the file name. (Currently this is unused.)
+  character(len=*), optional, intent(in) :: restartname  !< Name of restart file to use 
+                                                         !! This option distinguishes the cesm interface from the
+                                                         !! non-cesm interface
 
   if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
       call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
          "dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
+
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
       "restart files can only be created after the buoyancy forcing is applied.")
 
-  if (BTEST(OS%Restart_control,1)) then
-    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                      OS%restart_CSp, .true., GV=OS%GV)
-    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                              OS%dirs%restart_output_dir, .true.)
-    if (OS%use_ice_shelf) then
-      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
-    endif
-  endif
-  if (BTEST(OS%Restart_control,0)) then
-    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                      OS%restart_CSp, GV=OS%GV)
-    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                              OS%dirs%restart_output_dir)
-    if (OS%use_ice_shelf) then
-      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
-    endif
-  endif
+  if (present(restartname)) then
+
+     write(6,*)'DEBUG: calling save_restart with restartname= ',restartname
+     write(6,*)'DEBUG: restart_outputdir is ',OS%dirs%restart_output_dir
+
+     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                       OS%restart_CSp, GV=OS%GV, filename=restartname)
+
+     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                               OS%dirs%restart_output_dir) ! Is this needed?
+
+     if (OS%use_ice_shelf) then
+        call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+     endif
+     
+  else
+
+     if (BTEST(OS%Restart_control,1)) then
+        call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+             OS%restart_CSp, .true., GV=OS%GV)
+
+        call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+             OS%dirs%restart_output_dir, .true.)
+
+        if (OS%use_ice_shelf) then
+           call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
+        endif
+     endif
+
+     if (BTEST(OS%Restart_control,0)) then
+        call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                          OS%restart_CSp, GV=OS%GV)
+        
+        call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                                  OS%dirs%restart_output_dir)
+        if (OS%use_ice_shelf) then
+           call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+        endif
+     endif
+
+  end if
 
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
@@ -749,6 +776,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 end subroutine ocean_model_end
 ! </SUBROUTINE> NAME="ocean_model_end"
 
+!=======================================================================
 
 !> ocean_model_save_restart causes restart files associated with the ocean to be
 !! written out.
@@ -779,8 +807,11 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
        "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
        "restart files can only be created after the buoyancy forcing is applied.")
 
-  if (present(directory)) then ; restart_dir = directory
-  else ; restart_dir = OS%dirs%restart_output_dir ; endif
+  if (present(directory)) then 
+     restart_dir = directory
+  else 
+     restart_dir = OS%dirs%restart_output_dir 
+  endif
 
   call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV)
 
