@@ -1,3 +1,5 @@
+!> Initialization of the "lock exchange" experiment.
+!! lock_exchange = A 2-d density driven hydraulic exchange flow.
 module lock_exchange_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -90,8 +92,4 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
 end subroutine lock_exchange_initialize_thickness
 ! -----------------------------------------------------------------------------
 
-!> \namespace lock_exchange_initialization
-!!
-!! The module configures the model for the "lock_exchange" experiment.
-!! lock_exchange = A 2-d density driven hydraulic exchange flow.
 end module lock_exchange_initialization

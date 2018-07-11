@@ -1,3 +1,5 @@
+!> Configures the model for the "tidal_bay" experiment.
+!! tidal_bay = Tidally resonant bay from Zygmunt Kowalik's class on tides.
 module tidal_bay_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -115,8 +117,4 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
 
 end subroutine tidal_bay_set_OBC_data
 
-!> \namespace tidal_bay_initialization
-!!
-!! The module configures the model for the "tidal_bay" experiment.
-!! tidal_bay = Tidally resonant bay from Zygmunt Kowalik's class on tides.
 end module tidal_bay_initialization

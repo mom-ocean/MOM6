@@ -1,3 +1,4 @@
+!> Initializes hydrography from z-coordinate climatology files
 module MOM_tracer_initialization_from_Z
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -32,9 +33,7 @@ implicit none ; private
 
 public :: MOM_initialize_tracer_from_Z
 
-character(len=40)  :: mdl = "MOM_tracer_initialization_from_Z" ! This module's name.
-
-real, parameter :: epsln=1.e-10
+character(len=40)  :: mdl = "MOM_tracer_initialization_from_Z" !< This module's name.
 
 contains
 
@@ -204,6 +203,5 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   call cpu_clock_end(id_clock_routine)
 
 end subroutine MOM_initialize_tracer_from_Z
-
 
 end module MOM_tracer_initialization_from_Z
