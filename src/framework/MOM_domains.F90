@@ -1,3 +1,4 @@
+!> Describes the decomposed MOM domain and has routines for communications across PEs
 module MOM_domains
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -30,8 +31,6 @@ use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use fms_io_mod,        only : file_exist, parse_mask_table
 
 implicit none ; private
-
-! #include <MOM_memory.h>
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent
 public :: MOM_define_domain, MOM_define_io_domain, clone_MOM_domain
@@ -128,7 +127,7 @@ type, public :: MOM_domain_type
                                 !! assigned if all logical processors are used.
 end type MOM_domain_type
 
-integer, parameter :: To_All = To_East + To_West + To_North + To_South
+integer, parameter :: To_All = To_East + To_West + To_North + To_South !< A flag for passing in all directions
 
 contains
 

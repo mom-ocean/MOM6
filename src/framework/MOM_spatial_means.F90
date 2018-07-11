@@ -1,3 +1,4 @@
+!> Functions and routines to take area, volume, mass-weighted, layerwise, zonal or meridional means
 module MOM_spatial_means
 
 ! This file is part of MOM6. See LICENSE.md for the license.

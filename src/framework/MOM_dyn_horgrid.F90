@@ -1,3 +1,5 @@
+!> Contains a shareable dynamic type for describing horizontal grids and metric data
+!! and utilty routines that work on this type.
 module MOM_dyn_horgrid
 
 ! This file is part of MOM6. See LICENSE.md for the license.

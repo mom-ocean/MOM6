@@ -1,3 +1,4 @@
+!> Routines to calculate checksums of various array and vector types
 module MOM_checksums
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -76,11 +77,11 @@ interface chksum_general
   module procedure chksum_general_1d, chksum_general_2d, chksum_general_3d
 end interface
 
-integer, parameter :: default_shift=0
-logical :: calculateStatistics=.true. ! If true, report min, max and mean.
-logical :: writeChksums=.true. ! If true, report the bitcount checksum
-logical :: checkForNaNs=.true. ! If true, checks array for NaNs and cause
-                               ! FATAL error is any are found
+integer, parameter :: default_shift=0 !< The default array shift
+logical :: calculateStatistics=.true. !< If true, report min, max and mean.
+logical :: writeChksums=.true. !< If true, report the bitcount checksum
+logical :: checkForNaNs=.true. !< If true, checks array for NaNs and cause
+                               !! FATAL error is any are found
 
 contains
 
