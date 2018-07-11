@@ -127,6 +127,7 @@ type, public :: diag_grid_storage
 end type diag_grid_storage
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
+!!
 !! There can be both 'primary' and 'seconday' diagnostics. The primaries
 !! reside in the diag_cs%diags array. They have an id which is an index
 !! into this array. The secondaries are 'variations' on the primary diagnostic.
