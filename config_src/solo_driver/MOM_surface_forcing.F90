@@ -1711,7 +1711,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "With wind_config const, this is the constant zonal\n"//&
                  "wind-stress", units="Pa", fail_if_missing=.true.)
     call get_param(param_file, mdl, "CONST_WIND_TAUY", CS%tau_y0, &
-                 "With wind_config const, this is the constant zonal\n"//&
+                 "With wind_config const, this is the constant meridional\n"//&
                  "wind-stress", units="Pa", fail_if_missing=.true.)
   elseif (trim(CS%wind_config) == "SCM_CVmix_tests" .or. &
           trim(CS%buoy_config) == "SCM_CVmix_tests") then
