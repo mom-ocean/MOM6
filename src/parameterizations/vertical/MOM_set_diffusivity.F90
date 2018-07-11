@@ -46,6 +46,7 @@ public set_BBL_TKE
 public set_diffusivity_init
 public set_diffusivity_end
 
+!> This control structure contains parameters for MOM_set_diffusivity.
 type, public :: set_diffusivity_CS ; private
   logical :: debug           !< If true, write verbose checksums for debugging.
 
@@ -119,7 +120,7 @@ type, public :: set_diffusivity_CS ; private
                               !! problems (m/s).  If the value is small enough,
                               !! this parameter should not affect the solution.
   real    :: TKE_decay        !< ratio of natural Ekman depth to TKE decay scale (nondim)
-  real    :: mstar            !! ratio of friction velocity cubed to
+  real    :: mstar            !< ratio of friction velocity cubed to
                               !! TKE input to the mixed layer (nondim)
   logical :: ML_use_omega     !< If true, use absolute rotation rate instead
                               !! of the vertical component of rotation when
@@ -142,41 +143,46 @@ type, public :: set_diffusivity_CS ; private
   real    :: Max_salt_diff_salt_fingers !< max salt diffusivity for salt fingers (m2/s)
   real    :: Kv_molecular               !< molecular visc for double diff convect (m2/s)
 
-  character(len=200)                 :: inputdir
-  type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
-  type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
-  type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
-  type(CVMix_shear_cs),      pointer :: CVMix_shear_csp      => NULL()
-  type(CVMix_ddiff_cs),      pointer :: CVMix_ddiff_csp      => NULL()
-  type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp     => NULL()
-  type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
-  type(tidal_mixing_cs),     pointer :: tm_csp               => NULL()
+  character(len=200) :: inputdir !< The directory in which input files are found
+  type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL() !< Control structure for a child module
+  type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL() !< Control structure for a child module
+  type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL() !< Control structure for a child module
+  type(CVMix_shear_cs),      pointer :: CVMix_shear_csp      => NULL() !< Control structure for a child module
+  type(CVMix_ddiff_cs),      pointer :: CVMix_ddiff_csp      => NULL() !< Control structure for a child module
+  type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp     => NULL() !< Control structure for a child module
+  type(int_tide_CS),         pointer :: int_tide_CSp         => NULL() !< Control structure for a child module
+  type(tidal_mixing_cs),     pointer :: tm_csp               => NULL() !< Control structure for a child module
 
+  !>@{ Diagnostic IDs
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
   integer :: id_Kd_layer   = -1, id_Kd_BBL      = -1, id_Kd_BBL_z   = -1
   integer :: id_Kd_user_z  = -1, id_N2          = -1, id_N2_z       = -1
   integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1
   integer :: id_KT_extra_z = -1, id_KS_extra_z  = -1
+  !!@}
 
 end type set_diffusivity_CS
 
+!> This structure has memory for used in calculating diagnostics of diffusivity
 type diffusivity_diags
   real, pointer, dimension(:,:,:) :: &
-    N2_3d          => NULL(),& ! squared buoyancy frequency at interfaces (1/s2)
-    Kd_user        => NULL(),& ! user-added diffusivity at interfaces (m2/s)
-    Kd_BBL         => NULL(),& ! BBL diffusivity at interfaces (m2/s)
-    Kd_work        => NULL(),& ! layer integrated work by diapycnal mixing (W/m2)
-    maxTKE         => NULL(),& ! energy required to entrain to h_max (m3/s3)
-    TKE_to_Kd      => NULL(),& ! conversion rate (~1.0 / (G_Earth + dRho_lay))
-                               ! between TKE dissipated within a layer and Kd
-                               ! in that layer, in m2 s-1 / m3 s-3 = s2 m-1
-    KT_extra       => NULL(),& ! double diffusion diffusivity for temp (m2/s)
-    KS_extra       => NULL()   ! double diffusion diffusivity for saln (m2/s)
+    N2_3d     => NULL(),& !< squared buoyancy frequency at interfaces (1/s2)
+    Kd_user   => NULL(),& !< user-added diffusivity at interfaces (m2/s)
+    Kd_BBL    => NULL(),& !< BBL diffusivity at interfaces (m2/s)
+    Kd_work   => NULL(),& !< layer integrated work by diapycnal mixing (W/m2)
+    maxTKE    => NULL(),& !< energy required to entrain to h_max (m3/s3)
+    KT_extra  => NULL(),& !< double diffusion diffusivity for temp (m2/s)
+    KS_extra  => NULL()   !< double diffusion diffusivity for saln (m2/s)
+  real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
+                          !< conversion rate (~1.0 / (G_Earth + dRho_lay))
+                          !! between TKE dissipated within a layer and Kd
+                          !! in that layer, in m2 s-1 / m3 s-3 = s2 m-1
 
 end type diffusivity_diags
 
-! Clocks
+!>@{ CPU time clocks
 integer :: id_clock_kappaShear, id_clock_CVMix_ddiff
+!!@}
 
 contains
 
