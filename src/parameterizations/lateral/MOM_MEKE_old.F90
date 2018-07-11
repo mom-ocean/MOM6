@@ -1,9 +1,5 @@
 !> Implements the Mesoscale Eddy Kinetic Energy framework
-!>
-!> update from initial MOM_MEKE: included topographic beta effect in computing
-!> Rhines scale
-!>
-module MOM_MEKE
+module MOM_MEKE_old
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -577,17 +573,13 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: drag_rate_visc  !< Mean flow contrib. to drag rate
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: I_mass  !< Inverse of column mass.
   ! Local variables
-  real :: beta, tbf, SN, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady, pi
+  real :: beta, SN, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady
   real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
   real :: EKE, EKEmin, EKEmax, resid, ResMin, ResMax, EKEerr
   integer :: i, j, is, ie, js, je, n1, n2
   real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket in m^2 s^-2.
   logical :: useSecant, debugIteration
-  real, dimension(SZI_(G),SZJ_(G)) :: D, lat, lon    !< ocean depth, lat & lon at h-points
-  real :: FatH    ! Coriolis parameter at h points; to compute topographic beta
 
-  D = G%bathyT; tbf = 1.
-  lat = G%geolatt; lon = G%geolont
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   debugIteration = .false.
@@ -600,25 +592,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
     !SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min( min(SN_u(I,j) , SN_u(I-1,j)) , min(SN_v(i,J), SN_v(i,J-1)) )
-    !beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
-    ! beta needs to be modified to include topographic beta effect
-    
-    FatH = 0.25*( (G%CoriolisBu(i,j)+G%CoriolisBu(i-1,j-1))+ &
-                (G%CoriolisBu(i-1,j)+G%CoriolisBu(i,j-1)))
-    ! Coriolis parameter at h points; interpolated from f at q points
-    !following MOM_KPP.F90
-
-    !beta = D(i,j)*sqrt((G%dF_dx(i,j)/D(i,j)-FatH/D(i,j)**2*(D(i+1,j)-D(i-1,j))/2./G%dxT(i,j)/tbf)**2 &
-    !       +(G%dF_dy(i,j)/D(i,j)-FatH/D(i,j)**2*(D(i,j+1)-D(i,j-1))/2./G%dyT(i,j)/tbf)**2)
-
-    ! revised version of beta*
-    !beta = sqrt((D(i,j)*G%dF_dx(i,j)-FatH*(D(i+1,j)-D(i-1,j))/2./G%dxT(i,j)/tbf)**2. &
-    !      +(D(i,j)*G%dF_dy(i,j)-FatH*(D(i,j+1)-D(i,j-1))/2./G%dyT(i,j)/tbf)**2.)
-    ! new-new beta    
-    beta = sqrt((G%dF_dx(i,j)-FatH/D(i,j)*(D(i+1,j)-D(i-1,j))/2./G%dxT(i,j)/tbf)**2. &
-          +(G%dF_dy(i,j)-FatH/D(i,j)*(D(i,j+1)-D(i,j-1))/2./G%dyT(i,j)/tbf)**2.)
-
-        
+    beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     I_H = GV%Rho0 * I_mass(i,j)
 
     if (KhCoeff*SN*I_H>0.) then
@@ -721,13 +695,11 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: barotrFac2 !< gamma_t^2
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length (m).
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady, D, lat, lon
-  real :: beta, tbf, SN, FatH, re
+  real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
+  real :: beta, SN
   integer :: i, j, is, ie, js, je
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  D = G%bathyT; lat = G%geolatt; lon = G%geolont
-  tbf = 1.
 
 !$OMP do
   do j=js,je ; do i=is,ie
@@ -737,21 +709,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
       else
         SN = 0.
       endif
-      FatH = 0.25*( (G%CoriolisBu(i,j)+G%CoriolisBu(i-1,j-1))+ &
-                (G%CoriolisBu(i-1,j)+G%CoriolisBu(i,j-1)))
-
-      !beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
-      ! beta needs to be modified to include topographic beta effect
-
-      !beta = D(i,j)*sqrt((G%dF_dx(i,j)/D(i,j)-FatH/D(i,j)**2*(D(i+1,j)-D(i-1,j))/2./G%dxT(i,j)/tbf)**2 &
-      !      +(G%dF_dy(i,j)/D(i,j)-FatH/D(i,j)**2*(D(i,j+1)-D(i,j-1))/2./G%dyT(i,j)/tbf)**2)
-    
-      !beta = sqrt((D(i,j)*G%dF_dx(i,j)-FatH*(D(i+1,j)-D(i-1,j))/2./G%dxT(i,j)/tbf)**2. &
-      !      +(D(i,j)*G%dF_dy(i,j)-FatH*(D(i,j+1)-D(i,j-1))/2./G%dyT(i,j)/tbf)**2.)
-
-      beta = sqrt((G%dF_dx(i,j)-FatH/D(i,j)*(D(i+1,j)-D(i-1,j))/2./G%dxT(i,j)/tbf)**2. &
-            +(G%dF_dy(i,j)-FatH/D(i,j)*(D(i,j+1)-D(i,j-1))/2./G%dyT(i,j)/tbf)**2.)
-
+      beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),            &
@@ -1367,5 +1325,5 @@ end subroutine MEKE_end
 !! Marshall, D. P., and A. J. Adcroft, 2010: Parameterization of ocean eddies: Potential vorticity mixing, energetics and Arnold
 !! first stability theorem. Ocean Modelling, 32, 188--204, http://doi.org/10.1016/j.ocemod.2010.02.001 .
 
-end module MOM_MEKE
+end module MOM_MEKE_old
 

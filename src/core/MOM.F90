@@ -237,6 +237,7 @@ type, public :: MOM_control_struct ; private
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
+                                     !< this has been updated to judge the use of new MEKE
   logical :: useWaves                !< If true, update Stokes drift
   real :: dtbt_reset_period          !< The time interval in seconds between dynamic
                                      !! recalculation of the barotropic time step.  If
