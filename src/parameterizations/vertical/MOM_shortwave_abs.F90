@@ -1,3 +1,4 @@
+!> Absorption of downwelling shortwave radiation
 module MOM_shortwave_abs
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -35,8 +36,10 @@ end type optics_type
 contains
 
 !> Apply shortwave heating below the boundary layer (when running with the bulk mixed layer inhereted
-!! from GOLD) or throughout the water column.  In addition, it causes all of the remaining SW radiation
-!! to be absorbed, provided that the total water column thickness is greater than H_limit_fluxes.
+!! from GOLD) or throughout the water column.
+!!
+!! In addition, it causes all of the remaining SW radiation to be absorbed, provided that the total
+!! water column thickness is greater than H_limit_fluxes.
 !! For thinner water columns, the heating is scaled down proportionately, the assumption being that the
 !! remaining heating (which is left in Pen_SW) should go into an (absent for now) ocean bottom sediment layer.
 subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
@@ -90,7 +93,6 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
                                                            !! volume with temperature, in m3 kg-1 K-1.
   real, dimension(SZI_(G),SZK_(G)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
                                                            !! throughout a layer, in J m-2.
-
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
     T_chg_above    ! A temperature change that will be applied to all the thick
@@ -322,22 +324,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
   real, dimension(SZI_(G),SZK_(G)+1), &
                              intent(inout) :: netPen !< Net penetrating shortwave heat flux at each
                                                  !! interface, summed across all bands, in K H.
-
-! Arguments:
-!  (in)      G             = ocean grid structure
-!  (in)      GV            = The ocean's vertical grid structure.
-!  (in)      h             = layer thickness (units of m or kg/m^2)
-!                            units of h are referred to as H below.
-!  (in)      opacity_band  = opacity in each band of penetrating shortwave
-!                            radiation, in m-1. The indicies are band, i, k.
-!  (in)      nsw           = number of bands of penetrating shortwave radiation
-!  (in)      j             = j-index to work on
-!  (in)      dt            = time step (seconds)
-!  (inout)   Pen_SW_bnd    = penetrating shortwave heating in each band that
-!                            hits the bottom and will be redistributed through
-!                            the water column (K H units); size nsw x SZI_(G).
-!  (out)     netPen        = attenuated flux at interfaces, summed over bands (K H units)
-
+  ! Local variables
   real :: h_heat(SZI_(G))     ! thickness of the water column that receives
                               ! remaining shortwave radiation, in H.
   real :: Pen_SW_rem(SZI_(G)) ! sum across all wavelength bands of the

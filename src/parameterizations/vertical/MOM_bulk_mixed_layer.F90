@@ -1,40 +1,7 @@
+!> Build mixed layer parameterization
 module MOM_bulk_mixed_layer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 1997 - 2005.                                   *
-!*                                                                     *
-!*    This file contains the subroutine (bulkmixedlayer) that          *
-!*  implements a Kraus-Turner-like bulk mixed layer, based on the work *
-!*  of various people, as described in the review paper by Niiler and  *
-!*  Kraus (1979), with particular attention to the form proposed by    *
-!*  Oberhuber (JPO, 1993, 808-829), with an extension to a refied bulk *
-!*  mixed layer as described in Hallberg (Aha Huliko'a, 2003).  The    *
-!*  physical processes portrayed in this subroutine include convective *
-!*  adjustment and mixed layer entrainment and detrainment.            *
-!*  Penetrating shortwave radiation and an exponential decay of TKE    *
-!*  fluxes are also supported by this subroutine.  Several constants   *
-!*  can alternately be set to give a traditional Kraus-Turner mixed    *
-!*  layer scheme, although that is not the preferred option.  The      *
-!*  physical processes and arguments are described in detail below.    *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, buoy, T, S, eaml, ebml, etc.          *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
@@ -3983,5 +3950,23 @@ function EF4(H, E, L, dR_de)
   EF4 = R
 
 end function EF4
+
+!> \namespace mom_bulk_mixed_layer
+!!
+!! By Robert Hallberg, 1997 - 2005.
+!!
+!!   This file contains the subroutine (bulkmixedlayer) that
+!! implements a Kraus-Turner-like bulk mixed layer, based on the work
+!! of various people, as described in the review paper by Niiler and
+!! Kraus (1979), with particular attention to the form proposed by
+!! Oberhuber (JPO, 1993, 808-829), with an extension to a refied bulk
+!! mixed layer as described in Hallberg (Aha Huliko'a, 2003).  The
+!! physical processes portrayed in this subroutine include convective
+!! adjustment and mixed layer entrainment and detrainment.
+!! Penetrating shortwave radiation and an exponential decay of TKE
+!! fluxes are also supported by this subroutine.  Several constants
+!! can alternately be set to give a traditional Kraus-Turner mixed
+!! layer scheme, although that is not the preferred option.  The
+!! physical processes and arguments are described in detail below.
 
 end module MOM_bulk_mixed_layer

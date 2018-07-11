@@ -1,28 +1,7 @@
+!> Shear-dependent mixing following Jackson et al. 2008.
 module MOM_kappa_shear
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Laura Jackson and Robert Hallberg, 2006-2008                    *
-!*                                                                     *
-!*    This file contains the subroutines that determine the diapycnal  *
-!*  diffusivity driven by resolved shears, as specified by the         *
-!*  parameterizations described in Jackson and Hallberg (JPO, 2008).   *
-!*                                                                     *
-!*    The technique by which the 6 equations (for kappa, TKE, u, v, T, *
-!*  and S) are solved simultaneously has been dramatically revised     *
-!*  from the previous version. The previous version was not converging *
-!*  in some cases, especially near the surface mixed layer, while the  *
-!*  revised version does.  The revised version solves for kappa and    *
-!*  TKE with shear and stratification fixed, then marches the density  *
-!*  and velocities forward with an adaptive (and aggressive) time step *
-!*  in a predictor-corrector-corrector emulation of a trapezoidal      *
-!*  scheme.  Run-time-settable parameters determine the tolerence to   *
-!*  which the kappa and TKE equations are solved and the minimum time  *
-!*  step that can be taken.                                            *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
@@ -2161,5 +2140,25 @@ logical function kappa_shear_at_vertex(param_file)
                  default=.false., do_not_log=.true.)
 
 end function kappa_shear_at_vertex
+
+!> \namespace mom_kappa_shear
+!!
+!! By Laura Jackson and Robert Hallberg, 2006-2008
+!!
+!!   This file contains the subroutines that determine the diapycnal
+!! diffusivity driven by resolved shears, as specified by the
+!! parameterizations described in Jackson and Hallberg (JPO, 2008).
+!!
+!!   The technique by which the 6 equations (for kappa, TKE, u, v, T,
+!! and S) are solved simultaneously has been dramatically revised
+!! from the previous version. The previous version was not converging
+!! in some cases, especially near the surface mixed layer, while the
+!! revised version does.  The revised version solves for kappa and
+!! TKE with shear and stratification fixed, then marches the density
+!! and velocities forward with an adaptive (and aggressive) time step
+!! in a predictor-corrector-corrector emulation of a trapezoidal
+!! scheme.  Run-time-settable parameters determine the tolerence to
+!! which the kappa and TKE equations are solved and the minimum time
+!! step that can be taken.
 
 end module MOM_kappa_shear
