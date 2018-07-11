@@ -27,8 +27,7 @@ type, public :: p2d
   real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array
 end type p2d
 
-!>   The following structure contains pointers to various fields
-!! which may be used describe the surface state of MOM, and which
+!> Pointers to various fields which may be used describe the surface state of MOM, and which
 !! will be returned to a the calling program
 type, public :: surface
   real, allocatable, dimension(:,:) :: &
@@ -69,9 +68,8 @@ type, public :: surface
                 !! has had its memory allocated.
 end type surface
 
-!>   The thermo_var_ptrs structure contains pointers to an assortment of
-!! thermodynamic fields that may be available, including potential temperature,
-!! salinity, heat capacity, and the equation of state control structure.
+!> Pointers to an assortment of thermodynamic fields that may be available, including
+!! potential temperature, salinity, heat capacity, and the equation of state control structure.
 type, public :: thermo_var_ptrs
 !   If allocated, the following variables have nz layers.
   real, pointer :: T(:,:,:) => NULL() !< Potential temperature in C.
@@ -111,9 +109,9 @@ type, public :: thermo_var_ptrs
                          !! calculate_surface_state, in units of deg C kg m-2.
 end type thermo_var_ptrs
 
-!> The ocean_internal_state structure contains pointers to all of the prognostic
-!! variables allocated in MOM_variables.F90 and MOM.F90.  It is useful for
-!! sending these variables for diagnostics, and in preparation for ensembles
+!> Pointers to all of the prognostic variables allocated in MOM_variables.F90 and MOM.F90.
+!!
+!! It is useful for sending these variables for diagnostics, and in preparation for ensembles
 !! later on.  All variables have the same names as the local (public) variables
 !! they refer to in MOM.F90.
 type, public :: ocean_internal_state
@@ -143,11 +141,10 @@ type, public :: ocean_internal_state
     v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep
 end type ocean_internal_state
 
-!> The accel_diag_ptrs structure contains pointers to arrays with accelerations,
-!! which can later be used for derived diagnostics, like energy balances.
+!> Pointers to arrays with accelerations, which can later be used for derived diagnostics, like energy balances.
 type, public :: accel_diag_ptrs
 
-! Each of the following fields has nz layers.
+  ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
     diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity, in m s-2.
     diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity, in m s-2.
@@ -174,8 +171,7 @@ type, public :: accel_diag_ptrs
 
 end type accel_diag_ptrs
 
-!> The cont_diag_ptrs structure contains pointers to arrays with transports,
-!! which can later be used for derived diagnostics, like energy balances.
+!> Pointers to arrays with transports, which can later be used for derived diagnostics, like energy balances.
 type, public :: cont_diag_ptrs
 
 ! Each of the following fields has nz layers.
@@ -190,8 +186,7 @@ type, public :: cont_diag_ptrs
 
 end type cont_diag_ptrs
 
-!>   The vertvisc_type structure contains vertical viscosities, drag
-!! coefficients, and related fields.
+!> Vertical viscosities, drag coefficients, and related fields.
 type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
                              !! that is captured in Kd_shear.
@@ -256,8 +251,8 @@ type, public :: vertvisc_type
                          !! at the interfaces. This is done in find_coupling_coef.
 end type vertvisc_type
 
-!> The BT_cont_type structure contains information about the summed layer
-!! transports and how they will vary as the barotropic velocity is changed.
+!> Container for information about the summed layer transports
+!! and how they will vary as the barotropic velocity is changed.
 type, public :: BT_cont_type
   real, allocatable :: FA_u_EE(:,:) !< The effective open face area for zonal barotropic transport
                                     !! drawing from locations far to the east, in H m.
@@ -291,8 +286,8 @@ end type BT_cont_type
 
 contains
 
-!> This subroutine allocates the fields for the surface (return) properties of
-!! the ocean model.  Unused fields are unallocated.
+!> Allocates the fields for the surface (return) properties of
+!! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                   gas_fields_ocn)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
@@ -350,7 +345,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 
 end subroutine allocate_surface_state
 
-!> This subroutine deallocates the elements of a surface state type.
+!> Deallocates the elements of a surface state type.
 subroutine deallocate_surface_state(sfc_state)
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be deallocated.
 
@@ -374,8 +369,7 @@ subroutine deallocate_surface_state(sfc_state)
 
 end subroutine deallocate_surface_state
 
-!> alloc_BT_cont_type allocates the arrays contained within a BT_cont_type and
-!! initializes them to 0.
+!> Allocates the arrays contained within a BT_cont_type and initializes them to 0.
 subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
   type(BT_cont_type),    pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
@@ -411,7 +405,7 @@ subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
 
 end subroutine alloc_BT_cont_type
 
-!> dealloc_BT_cont_type deallocates the arrays contained within a BT_cont_type.
+!> Deallocates the arrays contained within a BT_cont_type.
 subroutine dealloc_BT_cont_type(BT_cont)
   type(BT_cont_type), pointer :: BT_cont !< The BT_cont_type whose elements will be deallocated.
 
@@ -432,8 +426,7 @@ subroutine dealloc_BT_cont_type(BT_cont)
 
 end subroutine dealloc_BT_cont_type
 
-!> MOM_thermovar_chksum does diagnostic checksums on various elements of a
-!! thermo_var_ptrs type for debugging.
+!> Diagnostic checksums on various elements of a thermo_var_ptrs type for debugging.
 subroutine MOM_thermovar_chksum(mesg, tv, G)
   character(len=*),      intent(in) :: mesg !< A message that appears in the checksum lines
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure pointing to various thermodynamic variables

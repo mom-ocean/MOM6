@@ -1,8 +1,10 @@
 !> This module contains the main regridding routines.
+!!
 !! Regridding comprises two steps:
-!! (1) Interpolation and creation of a new grid based on target interface
-!!     densities (or any other criterion).
-!! (2) Remapping of quantities between old grid and new grid.
+!! 1. Interpolation and creation of a new grid based on target interface
+!!    densities (or any other criterion).
+!! 2. Remapping of quantities between old grid and new grid.
+!!
 !! Original module written by Laurent White, 2008.06.09
 module MOM_ALE
 
