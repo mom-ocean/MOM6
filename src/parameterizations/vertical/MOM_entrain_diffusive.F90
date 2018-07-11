@@ -1,54 +1,7 @@
+!> Diapycnal mixing and advection in isopycnal mode
 module MOM_entrain_diffusive
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, September 1997 - July 2000                     *
-!*                                                                     *
-!*    This file contains the subroutines that implement diapycnal      *
-!*  mixing and advection in isopycnal layers.  The main subroutine,    *
-!*  calculate_entrainment, returns the entrainment by each layer       *
-!*  across the interfaces above and below it.  These are calculated    *
-!*  subject to the constraints that no layers can be driven to neg-    *
-!*  ative thickness and that the each layer maintains its target       *
-!*  density, using the scheme described in Hallberg (MWR 2000). There  *
-!*  may or may not be a bulk mixed layer above the isopycnal layers.   *
-!*  The solution is iterated until the change in the entrainment       *
-!*  between successive iterations is less than some small tolerance.   *
-!*                                                                     *
-!*    The dual-stream entrainment scheme of MacDougall and Dewar       *
-!*  (JPO 1997) is used for combined diapycnal advection and diffusion, *
-!*  modified as described in Hallberg (MWR 2000) to be solved          *
-!*  implicitly in time.  Any profile of diffusivities may be used.     *
-!*  Diapycnal advection is fundamentally the residual of diapycnal     *
-!*  diffusion, so the fully implicit upwind differencing scheme that   *
-!*  is used is entirely appropriate.  The downward buoyancy flux in    *
-!*  each layer is determined from an implicit calculation based on     *
-!*  the previously calculated flux of the layer above and an estim-    *
-!*  ated flux in the layer below.  This flux is subject to the foll-   *
-!*  owing conditions:  (1) the flux in the top and bottom layers are   *
-!*  set by the boundary conditions, and (2) no layer may be driven     *
-!*  below an Angstrom thickness.  If there is a bulk mixed layer, the  *
-!*  mixed and buffer layers are treated as Eulerian layers, whose      *
-!*  thicknesses only change due to entrainment by the interior layers. *
-!*                                                                     *
-!*    In addition, the model may adjust the fluxes to drive the layer  *
-!*  densities (sigma 2?) back toward their targer values.              *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, buoy, T, S, ea, eb, etc.              *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -2252,5 +2205,36 @@ subroutine entrain_diffusive_end(CS)
   if (associated(CS)) deallocate(CS)
 
 end subroutine entrain_diffusive_end
+
+!> \namespace mom_entrain_diffusive
+!!
+!! By Robert Hallberg, September 1997 - July 2000
+!!
+!!   This file contains the subroutines that implement diapycnal
+!! mixing and advection in isopycnal layers.  The main subroutine,
+!! calculate_entrainment, returns the entrainment by each layer
+!! across the interfaces above and below it.  These are calculated
+!! subject to the constraints that no layers can be driven to neg-
+!! ative thickness and that the each layer maintains its target
+!! density, using the scheme described in Hallberg (MWR 2000). There
+!! may or may not be a bulk mixed layer above the isopycnal layers.
+!! The solution is iterated until the change in the entrainment
+!! between successive iterations is less than some small tolerance.
+!!
+!!   The dual-stream entrainment scheme of MacDougall and Dewar
+!! (JPO 1997) is used for combined diapycnal advection and diffusion,
+!! modified as described in Hallberg (MWR 2000) to be solved
+!! implicitly in time.  Any profile of diffusivities may be used.
+!! Diapycnal advection is fundamentally the residual of diapycnal
+!! diffusion, so the fully implicit upwind differencing scheme that
+!! is used is entirely appropriate.  The downward buoyancy flux in
+!! each layer is determined from an implicit calculation based on
+!! the previously calculated flux of the layer above and an estim-
+!! ated flux in the layer below.  This flux is subject to the foll-
+!! owing conditions:  (1) the flux in the top and bottom layers are
+!! set by the boundary conditions, and (2) no layer may be driven
+!! below an Angstrom thickness.  If there is a bulk mixed layer, the
+!! mixed and buffer layers are treated as Eulerian layers, whose
+!! thicknesses only change due to entrainment by the interior layers.
 
 end module MOM_entrain_diffusive

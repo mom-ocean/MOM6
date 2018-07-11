@@ -1,14 +1,9 @@
+!> Calculates the energy requirements of mixing.
 module MOM_diapyc_energy_req
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!* By Robert Hallberg, May 2015                                        *
-!*                                                                     *
-!*   This module calculates the energy requirements of mixing.         *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+!! \author By Robert Hallberg, May 2015
 
 use MOM_diag_mediator, only : diag_ctrl, Time_type, post_data_1d_k, register_diag_field
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe

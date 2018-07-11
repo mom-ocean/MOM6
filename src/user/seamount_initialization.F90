@@ -1,3 +1,4 @@
+!> Configures the model for the idealized seamount test case.
 module seamount_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -273,8 +274,4 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
 end subroutine seamount_initialize_temperature_salinity
 
-!> \namespace seamount_initialization
-!!
-!! The module configures the model for the idealized seamount
-!! test case.
 end module seamount_initialization

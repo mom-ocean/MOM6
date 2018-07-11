@@ -1,40 +1,8 @@
+!> Routines used to calculate the opacity of the ocean.
 module MOM_opacity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*   This module contains the routines used to calculate the opacity   *
-!* of the ocean.                                                       *
-!*                                                                     *
-!* CHL_from_file:                                                      *
-!*   In this routine, the Morel (modified) and Manizza (modified)      *
-!* schemes use the "blue" band in the paramterizations to determine    *
-!* the e-folding depth of the incoming shortwave attenuation. The red  *
-!* portion is lumped into the net heating at the surface.              *
-!*                                                                     *
-!* Morel, A., 1988: Optical modeling of the upper ocean in relation    *
-!*   to itsbiogenous matter content (case-i waters)., J. Geo. Res.,    *
-!*   93, 10,749-10,768.                                                *
-!*                                                                     *
-!* Manizza, M., C. LeQuere, A. J. Watson, and E. T. Buitenhuis, 2005:  *
-!*  Bio-optical feedbacks amoung phytoplankton, upper ocean physics    *
-!*  and sea-ice in a global model, Geophys. Res. Let., 32, L05603,     *
-!*  doi:10.1029/2004GL020778.                                          *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, buoy, Rml, eaml, ebml, etc.           *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
 use MOM_time_manager, only :  get_time
@@ -692,5 +660,22 @@ subroutine opacity_end(CS, optics)
   endif ; endif
 
 end subroutine opacity_end
+
+!> \namespace mom_opacity
+!!
+!! CHL_from_file:
+!!   In this routine, the Morel (modified) and Manizza (modified)
+!! schemes use the "blue" band in the paramterizations to determine
+!! the e-folding depth of the incoming shortwave attenuation. The red
+!! portion is lumped into the net heating at the surface.
+!!
+!! Morel, A., 1988: Optical modeling of the upper ocean in relation
+!!   to itsbiogenous matter content (case-i waters)., J. Geo. Res.,
+!!   93, 10,749-10,768.
+!!
+!! Manizza, M., C. LeQuere, A. J. Watson, and E. T. Buitenhuis, 2005:
+!!  Bio-optical feedbacks amoung phytoplankton, upper ocean physics
+!!  and sea-ice in a global model, Geophys. Res. Let., 32, L05603,
+!!  doi:10.1029/2004GL020778.
 
 end module MOM_opacity

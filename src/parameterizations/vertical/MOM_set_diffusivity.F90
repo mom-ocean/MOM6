@@ -1,3 +1,4 @@
+!> Calculate vertical diffusivity from all mixing processes
 module MOM_set_diffusivity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -35,7 +36,6 @@ use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
 use user_change_diffusivity, only : user_change_diff, user_change_diff_init
 use user_change_diffusivity, only : user_change_diff_end, user_change_diff_CS
-
 
 implicit none ; private
 
@@ -187,11 +187,11 @@ integer :: id_clock_kappaShear, id_clock_CVMix_ddiff
 contains
 
 !> Sets the interior vertical diffusion of scalars due to the following processes:
-!! 1) Shear-driven mixing: two options, Jackson et at. and KPP interior;
-!! 2) Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
-!! Harrison & Hallberg, JPO 2008;
-!! 3) Double-diffusion, old method and new method via CVMix;
-!! 4) Tidal mixing: many options available, see MOM_tidal_mixing.F90;
+!! 1. Shear-driven mixing: two options, Jackson et at. and KPP interior;
+!! 2. Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
+!!    Harrison & Hallberg, JPO 2008;
+!! 3. Double-diffusion, old method and new method via CVMix;
+!! 4. Tidal mixing: many options available, see MOM_tidal_mixing.F90;
 !! In addition, this subroutine has the option to set the interior vertical
 !! viscosity associated with processes 1,2 and 4 listed above, which is stored in
 !! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
@@ -657,6 +657,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
 end subroutine set_diffusivity
 
+!> Convert turbulent kinetic energy to diffusivity
 subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
                           TKE_to_Kd, maxTKE, kb)
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
@@ -681,7 +682,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
                                                           !! to its maximum realizable thickness, in m3 s-3
   integer, dimension(SZI_(G)),      intent(out)   :: kb   !< Index of lightest layer denser than the buffer
                                                           !! layer, or -1 without a bulk mixed layer.
-
+  ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
     ds_dsp1, &    ! coordinate variable (sigma-2) difference across an
                   ! interface divided by the difference across the interface
@@ -859,6 +860,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
 
 end subroutine find_TKE_to_Kd
 
+!> Calculate Brunt-Vaisala frequency, N^2.
 subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
                    N2_lay, N2_int, N2_bot)
   type(ocean_grid_type),    intent(in)  :: G    !< The ocean's grid structure
@@ -884,7 +886,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
   real, dimension(SZI_(G),SZK_(G)), &
                             intent(out) :: N2_lay !< The squared buoyancy frequency of the layers, in s-2.
   real, dimension(SZI_(G)), intent(out) :: N2_bot !< The near-bottom squared buoyancy frequency, in s-2.
-
+  ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces
     dRho_dT,         & ! partial derivative of density wrt temp (kg m-3 degC-1)
