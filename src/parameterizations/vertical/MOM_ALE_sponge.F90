@@ -1,11 +1,12 @@
 !> This module contains the routines used to apply sponge layers when using
 !! the ALE mode.
+!!
 !! Applying sponges requires the following:
-!! (1) initialize_ALE_sponge
-!! (2) set_up_ALE_sponge_field (tracers) and set_up_ALE_sponge_vel_field (vel)
-!! (3) apply_ALE_sponge
-!! (4) init_ALE_sponge_diags (not being used for now)
-!! (5) ALE_sponge_end (not being used for now)
+!! 1. initialize_ALE_sponge
+!! 2. set_up_ALE_sponge_field (tracers) and set_up_ALE_sponge_vel_field (vel)
+!! 3. apply_ALE_sponge
+!! 4. init_ALE_sponge_diags (not being used for now)
+!! 5. ALE_sponge_end (not being used for now)
 
 module MOM_ALE_sponge
 
@@ -40,6 +41,7 @@ interface set_up_ALE_sponge_vel_field
 end interface
 
 !> Ddetermine the number of points which are within sponges in this computational domain.
+!!
 !! Only points that have positive values of Iresttime and which mask2dT indicates are ocean
 !! points are included in the sponges.  It also stores the target interface heights.
 interface initialize_ALE_sponge

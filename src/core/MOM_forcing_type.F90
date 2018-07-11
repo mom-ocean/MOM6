@@ -33,10 +33,11 @@ public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcin
 public set_derived_forcing_fields, copy_back_forcing_fields, set_net_mass_forcing
 
 !> Structure that contains pointers to the boundary forcing used to drive the
-!! liquid ocean simulated by MOM. Data in this type is allocated in the module
-!! MOM_surface_forcing.F90, of which there are three: solo, coupled, and
-!! ice-shelf. Alternatively, they are allocated in MESO_surface_forcing.F90,
-!! which is a special case of solo_driver/MOM_surface_forcing.F90.
+!! liquid ocean simulated by MOM.
+!!
+!! Data in this type is allocated in the module MOM_surface_forcing.F90, of which there
+!! are three: solo, coupled, and ice-shelf. Alternatively, they are allocated in
+!! MESO_surface_forcing.F90, which is a special case of solo_driver/MOM_surface_forcing.F90.
 type, public :: forcing
 
   ! Pointers in this module should be initialized to NULL.

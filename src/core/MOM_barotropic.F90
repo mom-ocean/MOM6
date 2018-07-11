@@ -1,78 +1,7 @@
+!> Baropotric solver
 module MOM_barotropic
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - January 2007                      *
-!*                                                                     *
-!*    This program contains the subroutines that time steps the        *
-!*  linearized barotropic equations.  btstep is used to actually       *
-!*  time step the barotropic equations, and contains most of the       *
-!*  substance of this module.                                          *
-!*                                                                     *
-!*    btstep uses a forwards-backwards based scheme to time step       *
-!*  the barotropic equations, returning the layers' accelerations due  *
-!*  to the barotropic changes in the ocean state, the final free       *
-!*  surface height (or column mass), and the volume (or mass) fluxes   *
-!*  summed through the layers and averaged over the baroclinic time    *
-!*  step.  As input, btstep takes the initial 3-D velocities, the      *
-!*  inital free surface height, the 3-D accelerations of the layers,   *
-!*  and the external forcing.  Everything in btstep is cast in terms   *
-!*  of anomalies, so if everything is in balance, there is explicitly  *
-!*  no acceleration due to btstep.                                     *
-!*                                                                     *
-!*    The spatial discretization of the continuity equation is second  *
-!*  order accurate.  A flux conservative form is used to guarantee     *
-!*  global conservation of volume.  The spatial discretization of the  *
-!*  momentum equation is second order accurate.  The Coriolis force    *
-!*  is written in a form which does not contribute to the energy       *
-!*  tendency and which conserves linearized potential vorticity, f/D.  *
-!*  These terms are exactly removed from the baroclinic momentum       *
-!*  equations, so the linearization of vorticity advection will not    *
-!*  degrade the overall solution.                                      *
-!*                                                                     *
-!*    btcalc calculates the fractional thickness of each layer at the  *
-!*  velocity points, for later use in calculating the barotropic       *
-!*  velocities and the averaged accelerations.  Harmonic mean          *
-!*  thicknesses (i.e. 2*h_L*h_R/(h_L + h_R)) are used to avoid overly  *
-!*  strong weighting of overly thin layers.  This may later be relaxed *
-!*  to use thicknesses determined from the continuity equations.       *
-!*                                                                     *
-!*    bt_mass_source determines the real mass sources for the          *
-!*  barotropic solver, along with the corrective pseudo-fluxes that    *
-!*  keep the barotropic and baroclinic estimates of the free surface   *
-!*  height close to each other.  Given the layer thicknesses and the   *
-!*  free surface height that correspond to each other, it calculates   *
-!*  a corrective mass source that is added to the barotropic continuity*
-!*  equation, and optionally adjusts a slowly varying correction rate. *
-!*  Newer algorithmic changes have deemphasized the need for this, but *
-!*  it is still here to add net water sources to the barotropic solver.*
-!*                                                                     *
-!*    barotropic_init allocates and initializes any barotropic arrays  *
-!*  that have not been read from a restart file, reads parameters from *
-!*  the inputfile, and sets up diagnostic fields.                      *
-!*                                                                     *
-!*    barotropic_end deallocates anything allocated in barotropic_init *
-!*  or register_barotropic_restarts.                                   *
-!*                                                                     *
-!*    register_barotropic_restarts is used to indicate any fields that *
-!*  are private to the barotropic solver that need to be included in   *
-!*  the restart files, and to ensure that they are read.               *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v_in, vbt, accel_layer_v, vbtav          *
-!*    j    x ^ x ^ x   At >:  u_in, ubt, accel_layer_u, ubtav, amer    *
-!*    j    > o > o >   At o:  eta, h, bathyT, pbce                     *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_debugging, only : hchksum, uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
@@ -172,10 +101,10 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: lin_drag_u
           !< A spatially varying linear drag coefficient acting on the zonal barotropic flow, in H s-1.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_IC
-          !< The barotropic solver's estimate of the zonal transport as the initial condition for
+          !< The barotropic solvers estimate of the zonal transport as the initial condition for
           !! the next call to btstep, in H m2 s-1.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: ubt_IC
-          !< The barotropic solver's estimate of the zonal velocity that will be the initial
+          !< The barotropic solvers estimate of the zonal velocity that will be the initial
           !! condition for the next call to btstep, in m s-1.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: ubtav
           !< The barotropic zonal velocity averaged over the baroclinic time step, m s-1.
@@ -184,10 +113,10 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: lin_drag_v
           !< A spatially varying linear drag coefficient acting on the zonal barotropic flow, in H s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_IC
-          !< The barotropic solver's estimate of the zonal transport as the initial condition for
+          !< The barotropic solvers estimate of the zonal transport as the initial condition for
           !! the next call to btstep, in H m2 s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vbt_IC
-          !< The barotropic solver's estimate of the zonal velocity that will be the initial
+          !< The barotropic solvers estimate of the zonal velocity that will be the initial
           !! condition for the next call to btstep, in m s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vbtav
           !< The barotropic meridional velocity averaged over the  baroclinic time step, m s-1.
@@ -219,7 +148,7 @@ type, public :: barotropic_CS ; private
   real, dimension(:,:,:), pointer :: frhatu1 => NULL() !< Predictor step values of frhatu stored for diagnostics.
   real, dimension(:,:,:), pointer :: frhatv1 => NULL() !< Predictor step values of frhatv stored for diagnostics.
 
-  type(BT_OBC_type) :: BT_OBC !< A structure with all of this module's fields
+  type(BT_OBC_type) :: BT_OBC !< A structure with all of this modules fields
                               !! for applying open boundary conditions.
 
   real    :: Rho0            !<   The density used in the Boussinesq
@@ -328,7 +257,7 @@ type, public :: barotropic_CS ; private
   logical :: use_old_coriolis_bracket_bug !< If True, use an order of operations
                              !! that is not bitwise rotationally symmetric in the
                              !! meridional Coriolis term of the barotropic solver.
-  type(time_type), pointer :: Time  => NULL() !< A pointer to the ocean model's clock.
+  type(time_type), pointer :: Time  => NULL() !< A pointer to the ocean models clock.
   type(diag_ctrl), pointer :: diag => NULL()  !< A structure that is used to regulate
                              !! the timing of diagnostic output.
   type(MOM_domain_type), pointer :: BT_Domain => NULL()
@@ -4505,5 +4434,63 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
                               longname="Barotropic timestep", units="seconds")
 
 end subroutine register_barotropic_restarts
+
+!> \namespace mom_barotropic
+!!
+!!  By Robert Hallberg, April 1994 - January 2007
+!!
+!!    This program contains the subroutines that time steps the
+!!  linearized barotropic equations.  btstep is used to actually
+!!  time step the barotropic equations, and contains most of the
+!!  substance of this module.
+!!
+!!    btstep uses a forwards-backwards based scheme to time step
+!!  the barotropic equations, returning the layers' accelerations due
+!!  to the barotropic changes in the ocean state, the final free
+!!  surface height (or column mass), and the volume (or mass) fluxes
+!!  summed through the layers and averaged over the baroclinic time
+!!  step.  As input, btstep takes the initial 3-D velocities, the
+!!  inital free surface height, the 3-D accelerations of the layers,
+!!  and the external forcing.  Everything in btstep is cast in terms
+!!  of anomalies, so if everything is in balance, there is explicitly
+!!  no acceleration due to btstep.
+!!
+!!    The spatial discretization of the continuity equation is second
+!!  order accurate.  A flux conservative form is used to guarantee
+!!  global conservation of volume.  The spatial discretization of the
+!!  momentum equation is second order accurate.  The Coriolis force
+!!  is written in a form which does not contribute to the energy
+!!  tendency and which conserves linearized potential vorticity, f/D.
+!!  These terms are exactly removed from the baroclinic momentum
+!!  equations, so the linearization of vorticity advection will not
+!!  degrade the overall solution.
+!!
+!!    btcalc calculates the fractional thickness of each layer at the
+!!  velocity points, for later use in calculating the barotropic
+!!  velocities and the averaged accelerations.  Harmonic mean
+!!  thicknesses (i.e. 2*h_L*h_R/(h_L + h_R)) are used to avoid overly
+!!  strong weighting of overly thin layers.  This may later be relaxed
+!!  to use thicknesses determined from the continuity equations.
+!!
+!!    bt_mass_source determines the real mass sources for the
+!!  barotropic solver, along with the corrective pseudo-fluxes that
+!!  keep the barotropic and baroclinic estimates of the free surface
+!!  height close to each other.  Given the layer thicknesses and the
+!!  free surface height that correspond to each other, it calculates
+!!  a corrective mass source that is added to the barotropic continuity*
+!!  equation, and optionally adjusts a slowly varying correction rate.
+!!  Newer algorithmic changes have deemphasized the need for this, but
+!!  it is still here to add net water sources to the barotropic solver.*
+!!
+!!    barotropic_init allocates and initializes any barotropic arrays
+!!  that have not been read from a restart file, reads parameters from
+!!  the inputfile, and sets up diagnostic fields.
+!!
+!!    barotropic_end deallocates anything allocated in barotropic_init
+!!  or register_barotropic_restarts.
+!!
+!!    register_barotropic_restarts is used to indicate any fields that
+!!  are private to the barotropic solver that need to be included in
+!!  the restart files, and to ensure that they are read.
 
 end module MOM_barotropic
