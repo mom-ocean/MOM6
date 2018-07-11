@@ -1,3 +1,4 @@
+!> The "super critical" configuration
 module supercritical_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
