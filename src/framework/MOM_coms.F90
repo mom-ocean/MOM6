@@ -47,9 +47,11 @@ interface reproducing_sum
 end interface reproducing_sum
 
 !> The Extended Fixed Point (EFP) type provides a public interface for doing sums
-!! and taking differences with this type.  The use of this type is documented in
+!! and taking differences with this type.
+!!
+!! The use of this type is documented in
 !!   Hallberg, R. & A. Adcroft, 2014: An Order-invariant Real-to-Integer Conversion Sum.
-!!      Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
+!!   Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
 type, public :: EFP_type ; private
   integer(kind=8), dimension(ni) :: v !< The value in this type
 end type EFP_type
