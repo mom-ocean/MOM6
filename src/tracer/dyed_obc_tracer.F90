@@ -1,3 +1,4 @@
+!> This tracer package dyes flow through open boundaries
 module dyed_obc_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
