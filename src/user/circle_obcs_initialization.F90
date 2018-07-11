@@ -1,4 +1,4 @@
-!> Configures the model for the "circle_obcs" experiment which tests 
+!> Configures the model for the "circle_obcs" experiment which tests
 !! Open Boundary Conditions radiating an SSH anomaly.
 module circle_obcs_initialization
 
