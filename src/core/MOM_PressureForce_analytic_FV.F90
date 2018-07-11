@@ -240,9 +240,9 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
     if ( CS%Recon_Scheme == 1 ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     elseif ( CS%Recon_Scheme == 2) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+      call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     endif
   endif
 
@@ -253,7 +253,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
     if (use_EOS) then
       if ( use_ALE ) then
         if ( CS%Recon_Scheme == 1 ) then
-          call int_spec_vol_dp_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
+          call int_spec_vol_dp_generic_plm( T_t(:,:,k), T_b(:,:,k), &
                     S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
                     alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
                     tv%eqn_of_state, dza(:,:,k), intp_dza(:,:,k), &
@@ -665,14 +665,14 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
       ! where the layers are located.
       if ( use_ALE ) then
         if ( CS%Recon_Scheme == 1 ) then
-          call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
+          call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), &
                     S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                     rho_ref, CS%Rho0, GV%g_Earth,    &
                     dz_neglect, G%bathyT, G%HI, G%HI, &
                     tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp = CS%useMassWghtInterp)
         elseif ( CS%Recon_Scheme == 2 ) then
-          call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
+          call int_density_dz_generic_ppm( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                     tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                     rho_ref, CS%Rho0, GV%g_Earth, &
                     G%HI, G%HI, tv%eqn_of_state, dpa, intz_dpa,    &
@@ -846,7 +846,8 @@ end subroutine PressureForce_AFV_init
 
 !> Deallocates the finite volume pressure gradient control structure
 subroutine PressureForce_AFV_end(CS)
-  type(PressureForce_AFV_CS), pointer :: CS
+  type(PressureForce_AFV_CS), pointer :: CS !< Finite volume pressure control structure that
+                                            !! will be deallocated in this subroutine.
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_AFV_end
 

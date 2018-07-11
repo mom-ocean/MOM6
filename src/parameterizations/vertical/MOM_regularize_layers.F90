@@ -49,34 +49,38 @@ implicit none ; private
 
 public regularize_layers, regularize_layers_init
 
+!> This control structure holds parameters used by the MOM_regularize_layers module
 type, public :: regularize_layers_CS ; private
-  logical :: regularize_surface_layers ! If true, vertically restructure the
-                             ! near-surface layers when they have too much
-                             ! lateral variations to allow for sensible lateral
-                             ! barotropic transports.
-  logical :: reg_sfc_detrain
-  real    :: h_def_tol1      ! The value of the relative thickness deficit at
-                             ! which to start modifying the structure, 0.5 by
-                             ! default (or a thickness ratio of 5.83).
-  real    :: h_def_tol2      ! The value of the relative thickness deficit at
-                             ! which to the structure modification is in full
-                             ! force, now 20% of the way from h_def_tol1 to 1.
-  real    :: h_def_tol3      ! The values of the relative thickness defitic at
-  real    :: h_def_tol4      ! which to start detrainment from the buffer layers
-                             ! to the interior, and at which to do this at full
-                             ! intensity.  Now 30% and 50% of the way from
-                             ! h_def_tol1 to 1.
-  real    :: Hmix_min        ! The minimum mixed layer thickness in m.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  logical :: debug           ! If true, do more thorough checks for debugging purposes.
+  logical :: regularize_surface_layers !< If true, vertically restructure the
+                             !! near-surface layers when they have too much
+                             !! lateral variations to allow for sensible lateral
+                             !! barotropic transports.
+  logical :: reg_sfc_detrain !< If true, allow the buffer layers to detrain into the
+                             !! interior as a part of the restructuring when
+                             !! regularize_surface_layers is true
+  real    :: h_def_tol1      !< The value of the relative thickness deficit at
+                             !! which to start modifying the structure, 0.5 by
+                             !! default (or a thickness ratio of 5.83).
+  real    :: h_def_tol2      !< The value of the relative thickness deficit at
+                             !! which to the structure modification is in full
+                             !! force, now 20% of the way from h_def_tol1 to 1.
+  real    :: h_def_tol3      !< The value of the relative thickness deficit at which to start
+                             !! detrainment from the buffer layers to the interior, now 30% of
+                             !! the way from h_def_tol1 to 1.
+  real    :: h_def_tol4      !< The value of the relative thickness deficit at which to do
+                             !! detrainment from the buffer layers to the interior at full
+                             !! force, now 50% of the way from h_def_tol1 to 1.
+  real    :: Hmix_min        !< The minimum mixed layer thickness in m.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                             !! regulate the timing of diagnostic output.
+  logical :: debug           !< If true, do more thorough checks for debugging purposes.
 
-  integer :: id_def_rat = -1
-  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called
-                                        ! from inside loops that can be threaded.
-                                        ! To run with multiple threads, set to False.
+  integer :: id_def_rat = -1 !< A diagnostic ID
+  logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that
+                             !! can be threaded. To run with multiple threads, set to False.
 #ifdef DEBUG_CODE
+  !>@{ Diagnostic IDs
   integer :: id_def_rat_2 = -1, id_def_rat_3 = -1
   integer :: id_def_rat_u = -1, id_def_rat_v = -1
   integer :: id_e1 = -1, id_e2 = -1, id_e3 = -1
@@ -85,6 +89,7 @@ type, public :: regularize_layers_CS ; private
   integer :: id_def_rat_v_2 = -1, id_def_rat_v_2b = -1
   integer :: id_def_rat_u_3 = -1, id_def_rat_u_3b = -1
   integer :: id_def_rat_v_3 = -1, id_def_rat_v_3b = -1
+  !!@}
 #endif
 end type regularize_layers_CS
 
@@ -109,7 +114,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! layer detrainment, in the same units as
                                                   !! h - usually m or kg m-2 (i.e., H).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment, in the same units as h - usually
                                                   !! m or kg m-2 (i.e., H).
@@ -168,7 +173,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! layer detrainment, in the same units as h -
                                                   !! usually m or kg m-2 (i.e., H).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment, in the same units as h - usually
                                                   !! m or kg m-2 (i.e., H).
@@ -277,7 +282,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
 
   if (GV%nkml<1) return
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
-  if (.not.ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
+  if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, &
     "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
 
@@ -1062,7 +1067,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'nondim')
 #endif
 
-  if(CS%allow_clocks_in_omp_loops) then
+  if (CS%allow_clocks_in_omp_loops) then
     id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
   endif
   id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)

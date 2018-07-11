@@ -32,30 +32,28 @@ public dye_tracer_column_physics, dye_tracer_surface_state
 public dye_stock, regional_dyes_end
 
 
+!> The control structure for the regional dyes tracer package
 type, public :: dye_tracer_CS ; private
-  integer :: ntr    ! The number of tracers that are actually used.
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  real, allocatable, dimension(:) :: dye_source_minlon, & ! Minimum longitude of region dye will be injected.
-                                     dye_source_maxlon, & ! Maximum longitude of region dye will be injected.
-                                     dye_source_minlat, & ! Minimum latitude of region dye will be injected.
-                                     dye_source_maxlat, & ! Maximum latitude of region dye will be injected.
-                                     dye_source_mindepth, & ! Minimum depth of region dye will be injected (m).
-                                     dye_source_maxdepth  ! Maximum depth of region dye will be injected (m).
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
-                                           ! subroutine, in g m-3?
+  integer :: ntr    !< The number of tracers that are actually used.
+  logical :: coupled_tracers = .false.  !< These tracers are not offered to the coupler.
+  real, allocatable, dimension(:) :: dye_source_minlon !< Minimum longitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected (m).
+  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected (m).
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
 
-  integer, allocatable, dimension(:) :: &
-    ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
-               ! surface tracer concentrations are to be provided to the coupler.
+  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+                                               !! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  type(vardesc), allocatable :: tr_desc(:)
-  logical :: tracers_may_reinit = .false. ! hard-coding here (mjh)
+  type(vardesc), allocatable :: tr_desc(:) !< Descriptions and metadata for the tracers
+  logical :: tracers_may_reinit = .false. !< If true the tracers may be initialized if not found in a restart file
 end type dye_tracer_CS
 
 contains
@@ -233,7 +231,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           z_bot = z_bot + h(i,j,k)*GV%H_to_m
         enddo
       endif
-    enddo; enddo
+    enddo ; enddo
   enddo
 
 end subroutine initialize_dye_tracer
@@ -245,25 +243,29 @@ end subroutine initialize_dye_tracer
 !!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old !< Layer thickness before entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_new !< Layer thickness after entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: ea    !< an array to which the amount of
-                                              !! fluid entrained from the layer above during this
-                                              !! call will be added, in m or kg m-2.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: eb    !< an array to which the amount of
-                                              !! fluid entrained from the layer below during this
-                                              !! call will be added, in m or kg m-2.
-  type(forcing),                      intent(in) :: fluxes !< A structure containing pointers to
-                                              !! any possible forcing fields.  Unused fields have NULL ptrs.
-  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  type(dye_tracer_CS),                pointer    :: CS   !< The control structure returned by a previous
-                                                         !! call to register_dye_tracer.
-  real,                     optional,intent(in)  :: evap_CFL_limit
-  real,                     optional,intent(in)  :: minimum_forcing_depth
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: ea   !< an array to which the amount of fluid entrained
+                                              !! from the layer above during this call will be
+                                              !! added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: eb   !< an array to which the amount of fluid entrained
+                                              !! from the layer below during this call will be
+                                              !! added, in m or kg m-2.
+  type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
+                                              !! and tracer forcing fields.  Unused fields have NULL ptrs.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  type(dye_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous
+                                              !! call to register_dye_tracer.
+  real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
+                                              !! be fluxed out of the top layer in a timestep (nondim)
+  real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
+                                              !! fluxes can be applied, in m
 
 ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -283,7 +285,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     do m=1,CS%ntr
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
-      enddo ; enddo ; enddo;
+      enddo ; enddo ; enddo
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
@@ -312,7 +314,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           z_bot = z_bot + h_new(i,j,k)*GV%H_to_m
         enddo
       endif
-    enddo; enddo
+    enddo ; enddo
   enddo
 
 end subroutine dye_tracer_column_physics
@@ -399,7 +401,8 @@ end subroutine dye_tracer_surface_state
 
 !> Clean up any allocated memory after the run.
 subroutine regional_dyes_end(CS)
-  type(dye_tracer_CS), pointer :: CS
+  type(dye_tracer_CS), pointer :: CS !< The control structure returned by a previous
+                                     !! call to register_dye_tracer.
   integer :: m
 
   if (associated(CS)) then

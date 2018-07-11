@@ -28,8 +28,8 @@ contains
 !> Initialise a zlike_CS with pointers to parameters
 subroutine init_coord_zlike(CS, nk, coordinateResolution)
   type(zlike_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
-  integer,            intent(in) :: nk
-  real, dimension(:), intent(in) :: coordinateResolution
+  integer,            intent(in) :: nk !< Number of levels in the grid
+  real, dimension(:), intent(in) :: coordinateResolution !< Target coordinate resolution, in m
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_zlike: CS already associated!")
   allocate(CS)
@@ -52,7 +52,7 @@ end subroutine end_coord_zlike
 !> Set parameters in the zlike structure
 subroutine set_zlike_params(CS, min_thickness)
   type(zlike_CS), pointer    :: CS !< Coordinate control structure
-  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness
+  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness, in m
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_zlike_params: CS not associated")
 
@@ -66,8 +66,10 @@ subroutine build_zstar_column(CS, depth, total_thickness, zInterface, &
   real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in m or H)
   real,                     intent(in)    :: total_thickness !< Column thickness (positive in the same units as depth)
   real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-  real, optional,           intent(in)    :: z_rigid_top !< The height of a rigid top (negative in the same units as depth)
-  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top in the same units as depth
+  real, optional,           intent(in)    :: z_rigid_top !< The height of a rigid top (negative in the
+                                                         !! same units as depth)
+  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top in the
+                                                      !! same units as depth
   real, optional,           intent(in)    :: zScale !< Scaling factor from the target coordinate resolution
                                                     !! in m to desired units for zInterface, perhaps m_to_H
   ! Local variables

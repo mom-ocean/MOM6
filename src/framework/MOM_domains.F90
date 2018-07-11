@@ -45,30 +45,37 @@ public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
 
+!> Do a halo update on an array
 interface pass_var
   module procedure pass_var_3d, pass_var_2d
 end interface pass_var
 
+!> Do a halo update on a pair of arrays representing the two components of a vector
 interface pass_vector
   module procedure pass_vector_3d, pass_vector_2d
 end interface pass_vector
 
+!> Initiate a non-blocking halo update on an array
 interface pass_var_start
   module procedure pass_var_start_3d, pass_var_start_2d
 end interface pass_var_start
 
+!> Complete a non-blocking halo update on an array
 interface pass_var_complete
   module procedure pass_var_complete_3d, pass_var_complete_2d
 end interface pass_var_complete
 
+!> Initiate a halo update on a pair of arrays representing the two components of a vector
 interface pass_vector_start
   module procedure pass_vector_start_3d, pass_vector_start_2d
 end interface pass_vector_start
 
+!> Complete a halo update on a pair of arrays representing the two components of a vector
 interface pass_vector_complete
   module procedure pass_vector_complete_3d, pass_vector_complete_2d
 end interface pass_vector_complete
 
+!> Set up a group of halo updates
 interface create_group_pass
   module procedure create_var_group_pass_2d
   module procedure create_var_group_pass_3d
@@ -76,11 +83,14 @@ interface create_group_pass
   module procedure create_vector_group_pass_3d
 end interface create_group_pass
 
+!> Do a set of halo updates that fill in the values at the duplicated edges
+!! of a staggered symmetric memory domain
 interface fill_symmetric_edges
   module procedure fill_vector_symmetric_edges_2d !, fill_vector_symmetric_edges_3d
 !   module procedure fill_scalar_symmetric_edges_2d, fill_scalar_symmetric_edges_3d
 end interface fill_symmetric_edges
 
+!> Copy one MOM_domain_type into another
 interface clone_MOM_domain
   module procedure clone_MD_to_MD, clone_MD_to_d2D
 end interface clone_MOM_domain
@@ -145,21 +155,7 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo, &
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments: array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in,opt)  complete - An optional argument indicating whether the halo updates
-!                       should be completed before progress resumes.  Omitting
-!                       complete is the same as setting complete to .true.
-!  (in,opt)   position - An optional argument indicating the position.  This is
-!                       usally CORNER, but is CENTER by default.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
+
   integer :: dirflag
   logical :: block_til_complete
 
@@ -205,21 +201,6 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
                                                    !! by default.
   integer,      optional, intent(in)   :: clock    !< The handle for a cpu time clock that should be
                                                    !! started then stopped to time this routine.
-! Arguments: array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in,opt)  complete - An optional argument indicating whether the halo updates
-!                       should be completed before progress resumes.  Omitting
-!                       complete is the same as setting complete to .true.
-!  (in,opt)  position - An optional argument indicating the position.  This is
-!                       usally CORNER, but is CENTER by default.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 
   integer :: dirflag
   logical :: block_til_complete
@@ -268,23 +249,7 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete, halo, &
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
   integer                               :: pass_var_start_2d  !<The integer index for this update.
-! Arguments: array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in)      position - An optional argument indicating the position.  This is
-!                       may be CORNER, but is CENTER by default.
-!  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second
-!                       pass_..._start call.  Omitting complete is the same as
-!                       setting complete to .true.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
-!  (return value) - The integer index for this update.
+
   integer :: dirflag
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
@@ -329,23 +294,7 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete, halo, &
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
   integer                               :: pass_var_start_3d  !< The integer index for this update.
-! Arguments: array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in)      position - An optional argument indicating the position.  This is
-!                       may be CORNER, but is CENTER by default.
-!  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second
-!                       pass_..._start call.  Omitting complete is the same as
-!                       setting complete to .true.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
-!  (return value) - The integer index for this update.
+
   integer :: dirflag
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
@@ -388,20 +337,7 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position, h
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments: id_update - The integer id of this update which has been returned
-!                        from a previous call to pass_var_start.
-!  (inout)   array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in)      position - An optional argument indicating the position.  This is
-!                       may be CORNER, but is CENTER by default.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
+
   integer :: dirflag
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
@@ -444,20 +380,7 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, h
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments: id_update - The integer id of this update which has been returned
-!                        from a previous call to pass_var_start.
-!  (inout)   array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in)      position - An optional argument indicating the position.  This is
-!                       may be CORNER, but is CENTER by default.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
+
   integer :: dirflag
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
@@ -507,29 +430,8 @@ subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete,
                                                     !! halo by default.
   integer,     optional, intent(in)    :: clock     !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be completed before progress resumes.  Omitting
-!                       complete is the same as setting complete to .true.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
   logical :: block_til_complete
@@ -579,18 +481,8 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
   logical,     optional, intent(in)    :: scalar  !< An optional argument indicating whether.
   integer,     optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                    !! started then stopped to time this routine.
-! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in)      scalar -  An optional argument indicating whether
 
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
   integer :: i, j, isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
@@ -684,29 +576,8 @@ subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete,
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be completed before progress resumes.  Omitting
-!                       complete is the same as setting complete to .true.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
   logical :: block_til_complete
@@ -765,30 +636,8 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
                                                     !! started then stopped to time this routine.
   integer                               :: pass_vector_start_2d !< The integer index for this
                                                                 !! update.
-! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second
-!                       pass_..._start call.  Omitting complete is the same as
-!                       setting complete to .true.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
-!  (return value) - The integer index for this update.
+
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
 
@@ -844,30 +693,7 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
                                                     !! started then stopped to time this routine.
   integer                               :: pass_vector_start_3d !< The integer index for this
                                                                 !! update.
-! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in)      complete - An optional argument indicating whether the halo updates
-!                       should be initiated immediately or wait for second
-!                       pass_..._start call.  Omitting complete is the same as
-!                       setting complete to .true.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
-!  (return value) - The integer index for this update.
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
 
@@ -921,28 +747,7 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments: id_update - The integer id of this update which has been returned
-!                        from a previous call to pass_var_start.
-!  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
-!  (return value) - The integer index for this update.
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
 
@@ -996,28 +801,7 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments: id_update - The integer id of this update which has been returned
-!                        from a previous call to pass_var_start.
-!  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
-!  (return value) - The integer index for this update.
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
 
@@ -1064,21 +848,7 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position, &
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments:
-!  (inout)   group - The data type that store information for group update.
-!                    This data will be used in do_group_pass.
-!  (inout)   array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in,opt)  sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in,opt)  position - An optional argument indicating the position.  This is
-!                       may be CORNER, but is CENTER by default.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
+  ! Local variables
   integer :: dirflag
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
@@ -1123,21 +893,7 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, h
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments:
-!  (inout)   group - The data type that store information for group update.
-!                    This data will be used in do_group_pass.
-!  (inout)   array - The array which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in,opt)  sideflag - An optional integer indicating which directions the
-!                       data should be sent.  It is TO_ALL or the sum of any of
-!                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
-!                       TO_EAST sends the data to the processor to the east, so
-!                       the halos on the western side are filled.  TO_ALL is
-!                       the default if sideflag is omitted.
-!  (in,opt)  position - An optional argument indicating the position.  This is
-!                       may be CORNER, but is CENTER by default.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
+  ! Local variables
   integer :: dirflag
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
@@ -1189,28 +945,7 @@ subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction
                                                     !! halo by default.
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
-! Arguments:
-!  (inout)   group - The data type that store information for group update.
-!                    This data will be used in do_group_pass.
-!  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
 
@@ -1267,29 +1002,7 @@ subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction
   integer,      optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
 
-! Arguments:
-!  (inout)   group - The data type that store information for group update.
-!                    This data will be used in do_group_pass.
-!  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
-!                     is having its halos points exchanged.
-!  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
-!                     which is having its halos points exchanged.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-!  (in)      direction - An optional integer indicating which directions the
-!                        data should be sent.  It is TO_ALL or the sum of any of
-!                        TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH, possibly
-!                        plus SCALAR_PAIR if these are paired non-directional
-!                        scalars discretized at the typical vector component
-!                        locations.  For example, TO_EAST sends the data to the
-!                        processor to the east, so the halos on the western
-!                        side are filled.  TO_ALL is the default if omitted.
-!  (in)      stagger - An optional flag, which may be one of A_GRID, BGRID_NE,
-!                      or CGRID_NE, indicating where the two components of the
-!                      vector are discretized.  Omitting stagger is the same as
-!                      setting it to CGRID_NE.
-!  (in,opt)  halo - The size of the halo to update - the full halo by default.
-
+  ! Local variables
   integer :: stagger_local
   integer :: dirflag
 
@@ -1328,11 +1041,6 @@ subroutine do_group_pass(group, MOM_dom, clock)
                                                     !! started then stopped to time this routine.
   real :: d_type
 
-! Arguments:
-!  (inout)   group - The data type that store information for group update.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
 
   call mpp_do_group_update(group, MOM_dom%mpp_domain, d_type)
@@ -1354,11 +1062,6 @@ subroutine start_group_pass(group, MOM_dom, clock)
 
   real                                 :: d_type
 
-! Arguments:
-!  (inout)   group - The data type that store information for group update.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
-
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
 
   call mpp_start_group_update(group, MOM_dom%mpp_domain, d_type)
@@ -1378,11 +1081,6 @@ subroutine complete_group_pass(group, MOM_dom, clock)
   integer,     optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                    !! started then stopped to time this routine.
   real                                 :: d_type
-
-! Arguments:
-!  (inout)   group - The data type that store information for group update.
-!  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
-!                      determine where data should be sent.
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
 
@@ -1421,7 +1119,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, optional,               intent(in)    :: NJPROC       !< Processor counts, required with
                                                                  !! static memory.
   integer, dimension(2), optional, intent(inout) :: min_halo     !< If present, this sets the
-                                        !! minimum halo size for this domain in the x- and y-
+                                        !! minimum halo size for this domain in the i- and j-
                                         !! directions, and returns the actual halo size used.
   character(len=*),      optional, intent(in)    :: domain_name  !< A name for this domain, "MOM"
                                                                  !! if missing.
@@ -1430,26 +1128,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   character(len=*),      optional, intent(in)    :: param_suffix !< A suffix to apply to
                                                                  !! layout-specific parameters.
 
-
-! Arguments: MOM_dom - A pointer to the MOM_domain_type being defined here.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in,opt)  symmetric - If present, this specifies whether this domain
-!                        is symmetric, regardless of whether the macro
-!                        SYMMETRIC_MEMORY_ is defined.
-!  (in,opt)  static_memory - If present and true, this domain type is set up for
-!                            static memory and error checking of various input
-!                            values is performed against those in the input file.
-!  (in,opt)  NIHALO, NJHALO - Default halo sizes, required with static memory.
-!  (in,opt)  NIGLOBAL, NJGLOBAL - Total domain sizes, required with static memory.
-!  (in,opt)  NIPROC, NJPROC - Processor counts, required with static memory.
-!  (in,opt)  min_halo - If present, this sets the minimum halo size for this
-!                       domain in the x- and y- directions, and returns the
-!                       actual halo size used.
-!  (in,opt)  domain_name - A name for this domain, "MOM" if missing.
-!  (in,opt)  include_name - A name for model's include file, "MOM_memory.h" if missing.
-!  (in,opt)  param_suffix - A suffix to apply to layout-specific parameters.
-
+  ! Local variables
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
@@ -1536,34 +1215,40 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
-!$ call get_param(param_file, mdl, "OCEAN_OMP_THREADS", ocean_nthreads, &
-!$            "The number of OpenMP threads that MOM6 will use.", &
-!$            default = 1, layoutParam=.true.)
-!$ call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
-!$            "If True, use hyper-threading.", default = .false., layoutParam=.true.)
-!$ if (ocean_omp_hyper_thread) then
-!$   call get_param(param_file, mdl, "OMP_CORES_PER_NODE", omp_cores_per_node, &
-!$            "Number of cores per node needed for hyper-threading.", &
-!$            fail_if_missing=.true., layoutParam=.true.)
-!$ endif
-!$ call omp_set_num_threads(ocean_nthreads)
-!$OMP PARALLEL private(adder)
-!$ base_cpu = get_cpu_affinity()
-!$ if (ocean_omp_hyper_thread) then
-!$   if (mod(omp_get_thread_num(),2) == 0) then
-!$     adder = omp_get_thread_num()/2
-!$   else
-!$     adder = omp_cores_per_node + omp_get_thread_num()/2
+!$OMP PARALLEL
+!$OMP master
+!$ ocean_nthreads = omp_get_num_threads()
+!$OMP END MASTER
+!$OMP END PARALLEL
+!$ if(ocean_nthreads < 2 ) then
+!$   call get_param(param_file, mdl, "OCEAN_OMP_THREADS", ocean_nthreads, &
+!$              "The number of OpenMP threads that MOM6 will use.", &
+!$              default = 1, layoutParam=.true.)
+!$   call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
+!$              "If True, use hyper-threading.", default = .false., layoutParam=.true.)
+!$   if (ocean_omp_hyper_thread) then
+!$     call get_param(param_file, mdl, "OMP_CORES_PER_NODE", omp_cores_per_node, &
+!$              "Number of cores per node needed for hyper-threading.", &
+!$              fail_if_missing=.true., layoutParam=.true.)
 !$   endif
-!$ else
-!$   adder = omp_get_thread_num()
-!$ endif
-!$ call set_cpu_affinity(base_cpu + adder)
-!!$     write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!$   call omp_set_num_threads(ocean_nthreads)
+!$   base_cpu = get_cpu_affinity()
+!$OMP PARALLEL private(adder)
+!$   if (ocean_omp_hyper_thread) then
+!$     if (mod(omp_get_thread_num(),2) == 0) then
+!$       adder = omp_get_thread_num()/2
+!$     else
+!$       adder = omp_cores_per_node + omp_get_thread_num()/2
+!$     endif
+!$   else
+!$     adder = omp_get_thread_num()
+!$   endif
+!$   call set_cpu_affinity(base_cpu + adder)
+!!$     write(6,*) " ocean  ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !!$     call flush(6)
 !$OMP END PARALLEL
+!$ endif
 #endif
-
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
                  "If defined, the velocity point data domain includes \n"//&
                  "every face of the thickness points. In other words, \n"//&
@@ -1717,7 +1402,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(njproc_nm), layout(2), &
-                 "The number of processors in the x-direction. With \n"//&
+                 "The number of processors in the x-direction. With \n"//& !### FIX THIS COMMENT
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(layout_nm), layout, &
@@ -1738,7 +1423,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call parse_mask_table(mask_table, MOM_dom%maskmap, dom_name)
   endif
 
-  !   Set up the I/O lay-out, and check that it uses an even multiple of the
+  !   Set up the I/O layout, and check that it uses an even multiple of the
   ! number of PEs in each direction.
   io_layout(:) = (/ 1, 1 /)
   call get_param(param_file, mdl, trim(io_layout_nm), io_layout, &
@@ -1751,8 +1436,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
          &"are not allowed in ")') io_layout(1)
     call MOM_error(FATAL, mesg//trim(IO_layout_nm))
   elseif (io_layout(1) > 0) then ; if (modulo(layout(1), io_layout(1)) /= 0) then
-    write(mesg,'("MOM_domains_init: The x-direction I/O-layout, IO_LAYOUT(1)=",i4, &
-         &", does not evenly divide the x-direction layout, NIPROC=,",i4,".")') &
+    write(mesg,'("MOM_domains_init: The i-direction I/O-layout, IO_LAYOUT(1)=",i4, &
+         &", does not evenly divide the i-direction layout, NIPROC=,",i4,".")') &
           io_layout(1),layout(1)
     call MOM_error(FATAL, mesg)
   endif ; endif
@@ -1762,8 +1447,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
          &"are not allowed in ")') io_layout(2)
     call MOM_error(FATAL, mesg//trim(IO_layout_nm))
   elseif (io_layout(2) /= 0) then ; if (modulo(layout(2), io_layout(2)) /= 0) then
-    write(mesg,'("MOM_domains_init: The y-direction I/O-layout, IO_LAYOUT(2)=",i4, &
-         &", does not evenly divide the y-direction layout, NJPROC=,",i4,".")') &
+    write(mesg,'("MOM_domains_init: The j-direction I/O-layout, IO_LAYOUT(2)=",i4, &
+         &", does not evenly divide the j-direction layout, NJPROC=,",i4,".")') &
           io_layout(2),layout(2)
     call MOM_error(FATAL, mesg)
   endif ; endif
@@ -1834,12 +1519,23 @@ end subroutine MOM_domains_init
 !! some properties of the new type to differ from the original one.
 subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
                           domain_name)
-  type(MOM_domain_type),           intent(in)    :: MD_in
-  type(MOM_domain_type),           pointer       :: MOM_dom
-  integer, dimension(2), optional, intent(inout) :: min_halo
-  integer,               optional, intent(in)    :: halo_size
-  logical,               optional, intent(in)    :: symmetric
-  character(len=*),      optional, intent(in)    :: domain_name
+  type(MOM_domain_type), intent(in)    :: MD_in  !< An existing MOM_domain
+  type(MOM_domain_type), pointer       :: MOM_dom !< A pointer to a MOM_domain that will be
+                                  !! allocated if it is unassociated, and will have data
+                                  !! copied from MD_in
+  integer, dimension(2), &
+               optional, intent(inout) :: min_halo !< If present, this sets the
+                                  !! minimum halo size for this domain in the i- and j-
+                                  !! directions, and returns the actual halo size used.
+  integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
+                                  !! size for the domian in the i- and j-directions.
+                                  !! min_halo and halo_size can not both be present.
+  logical,     optional, intent(in)    :: symmetric !< If present, this specifies
+                                  !! whether the new domain is symmetric, regardless of
+                                  !! whether the macro SYMMETRIC_MEMORY_ is defined.
+  character(len=*), &
+               optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
+                                  !! if missing.
 
   integer :: global_indices(4)
   logical :: mask_table_exists
@@ -1915,12 +1611,21 @@ end subroutine clone_MD_to_MD
 !! the original one.
 subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
                            domain_name)
-  type(MOM_domain_type),           intent(in)    :: MD_in
-  type(domain2d),                  intent(inout) :: mpp_domain
-  integer, dimension(2), optional, intent(inout) :: min_halo
-  integer,               optional, intent(in)    :: halo_size
-  logical,               optional, intent(in)    :: symmetric
-  character(len=*),      optional, intent(in)    :: domain_name
+  type(MOM_domain_type), intent(in)    :: MD_in !< An existing MOM_domain to be cloned
+  type(domain2d),        intent(inout) :: mpp_domain !< The new mpp_domain to be set up
+  integer, dimension(2), &
+               optional, intent(inout) :: min_halo !< If present, this sets the
+                                  !! minimum halo size for this domain in the i- and j-
+                                  !! directions, and returns the actual halo size used.
+  integer,     optional, intent(in)    :: halo_size !< If present, this sets the halo
+                                  !! size for the domian in the i- and j-directions.
+                                  !! min_halo and halo_size can not both be present.
+  logical,     optional, intent(in)    :: symmetric !< If present, this specifies
+                                  !! whether the new domain is symmetric, regardless of
+                                  !! whether the macro SYMMETRIC_MEMORY_ is defined.
+  character(len=*), &
+               optional, intent(in)    :: domain_name !< A name for the new domain, "MOM"
+                                  !! if missing.
 
   integer :: global_indices(4), layout(2), io_layout(2)
   integer :: X_FLAGS, Y_FLAGS, niglobal, njglobal, nihalo, njhalo
@@ -1976,43 +1681,40 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
 
 end subroutine clone_MD_to_d2D
 
-!> get_domain_extent returns various data that has been stored in a MOM_domain_type.
+!> Returns various data that has been stored in a MOM_domain_type
 subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
                              symmetric, local_indexing, index_offset)
   type(MOM_domain_type), &
-           intent(in)  :: Domain
-  integer, intent(out) :: isc, iec, jsc, jec     !< The start & end indices of the computational
-                                                 !! domain.
-  integer, intent(out) :: isd, ied, jsd, jed     !< The start & end indices of the data domain.
-  integer, intent(out) :: isg, ieg, jsg, jeg     !< The start & end indices of the global domain.
-  integer, intent(out) :: idg_offset, jdg_offset !< The offset between the corresponding global and
-                                                 !! data index spaces.
-  logical, intent(out) :: symmetric              !< True if symmetric memory is used.
+           intent(in)  :: Domain         !< The MOM domain from which to extract information
+  integer, intent(out) :: isc            !< The start i-index of the computational domain
+  integer, intent(out) :: iec            !< The end i-index of the computational domain
+  integer, intent(out) :: jsc            !< The start j-index of the computational domain
+  integer, intent(out) :: jec            !< The end j-index of the computational domain
+  integer, intent(out) :: isd            !< The start i-index of the data domain
+  integer, intent(out) :: ied            !< The end i-index of the data domain
+  integer, intent(out) :: jsd            !< The start j-index of the data domain
+  integer, intent(out) :: jed            !< The end j-index of the data domain
+  integer, intent(out) :: isg            !< The start i-index of the global domain
+  integer, intent(out) :: ieg            !< The end i-index of the global domain
+  integer, intent(out) :: jsg            !< The start j-index of the global domain
+  integer, intent(out) :: jeg            !< The end j-index of the global domain
+  integer, intent(out) :: idg_offset     !< The offset between the corresponding global and
+                                         !! data i-index spaces.
+  integer, intent(out) :: jdg_offset     !< The offset between the corresponding global and
+                                         !! data j-index spaces.
+  logical, intent(out) :: symmetric      !< True if symmetric memory is used.
   logical, optional, &
-            intent(in) :: local_indexing         !< If true, local tracer array indices start at 1,
-                                                 !! as in most MOM6 or GOLD code.
+           intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
+                                         !! as in most MOM6 code.
   integer, optional, &
-            intent(in) :: index_offset           !< A fixed additional offset to all indices. This
-                                                 !! can be useful for some types of debugging with
-                                                 !! dynamic memory allocation.
-
-! Arguments: Domain - The MOM_domain_type from which the indices are extracted.
-!  (out)     isc, iec, jsc, jec - the start & end indices of the
-!                                 computational domain.
-!  (out)     isd, ied, jsd, jed - the start & end indices of the data domain.
-!  (out)     isg, ieg, jsg, jeg - the start & end indices of the global domain.
-!  (out)     idg_offset, jdg_offset - the offset between the corresponding
-!                                     global and data index spaces.
-!  (out)     symmetric - true if symmetric memory is used.
-!  (in,opt)  local_indexing - if true, local tracer array indices start at 1, as
-!                             in most MOM6 or GOLD code.
-!  (in,opt)  index_offset - A fixed additional offset to all indices.  This can
-!                           be useful for some types of debugging with dynamic
-!                           memory allocation.
-
+           intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
+                                         !! can be useful for some types of debugging with
+                                         !! dynamic memory allocation.
+  ! Local variables
   integer :: ind_off
   logical :: local
+
   local = .true. ; if (present(local_indexing)) local = local_indexing
   ind_off = 0 ; if (present(index_offset)) ind_off = index_offset
 
@@ -2042,7 +1744,7 @@ end subroutine get_domain_extent
 
 !> Returns the global shape of h-point arrays
 subroutine get_global_shape(domain, niglobal, njglobal)
-  type(MOM_domain_type), intent(in)  :: domain !< MOM domain
+  type(MOM_domain_type), intent(in)  :: domain   !< MOM domain
   integer,               intent(out) :: niglobal !< i-index global size of h-point arrays
   integer,               intent(out) :: njglobal !< j-index global size of h-point arrays
 

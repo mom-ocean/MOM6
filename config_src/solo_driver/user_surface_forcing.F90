@@ -44,7 +44,7 @@ module user_surface_forcing
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
-use MOM_diag_mediator, only : register_diag_field, diag_ctrl
+use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type, log_version
@@ -61,37 +61,39 @@ implicit none ; private
 
 public USER_wind_forcing, USER_buoyancy_forcing, USER_surface_forcing_init
 
+!>   This control structure should be used to store any run-time variables
+!! associated with the user-specified forcing.  It can be readily modified
+!! for a specific case, and because it is private there will be no changes
+!! needed in other code (although they will have to be recompiled).
 type, public :: user_surface_forcing_CS ; private
-  !   This control structure should be used to store any run-time variables
-  ! associated with the user-specified forcing.  It can be readily modified
-  ! for a specific case, and because it is private there will be no changes
-  ! needed in other code (although they will have to be recompiled).
   !   The variables in the cannonical example are used for some common
   ! cases, but do not need to be used.
 
-  logical :: use_temperature ! If true, temperature and salinity are used as
-                             ! state variables.
-  logical :: restorebuoy     ! If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !   The density used in the Boussinesq
-                             ! approximation, in kg m-3.
-  real :: G_Earth            !   The gravitational acceleration in m s-2.
-  real :: Flux_const         !   The restoring rate at the surface, in m s-1.
-  real :: gust_const         !   A constant unresolved background gustiness
-                             ! that contributes to ustar, in Pa.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
+  logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
+  real :: Rho0               !< The density used in the Boussinesq approximation, in kg m-3.
+  real :: G_Earth            !< The gravitational acceleration in m s-2.
+  real :: Flux_const         !< The restoring rate at the surface, in m s-1.
+  real :: gust_const         !< A constant unresolved background gustiness
+                             !! that contributes to ustar, in Pa.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                             !! timing of diagnostic output.
 end type user_surface_forcing_CS
 
 contains
 
+!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
+!! These are the stresses in the direction of the model grid (i.e. the same
+!! direction as the u- and v- velocities.)  They are both in Pa.
 subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),               intent(in)    :: day
+  type(time_type),               intent(in)    :: day  !< The time of the fluxes
   type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
-  type(user_surface_forcing_CS), pointer       :: CS
+  type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
+                                                       !! by a previous call to user_surface_forcing_init
 
 !   This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
 ! These are the stresses in the direction of the model grid (i.e. the same
@@ -147,15 +149,19 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
 
 end subroutine USER_wind_forcing
 
+!>    This subroutine specifies the current surface fluxes of buoyancy or
+!!  temperature and fresh water.  It may also be modified to add
+!!  surface fluxes of user provided tracers.
 subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
-                                                    !! describe the surface state of the ocean.
-  type(forcing),                 intent(inout) :: fluxes
-  type(time_type),               intent(in)    :: day
+                                                       !! describe the surface state of the ocean.
+  type(forcing),                 intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
+  type(time_type),               intent(in)    :: day  !< The time of the fluxes
   real,                          intent(in)    :: dt   !< The amount of time over which
                                                        !! the fluxes apply, in s
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(user_surface_forcing_CS), pointer       :: CS
+  type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
+                                                       !! by a previous call to user_surface_forcing_init
 
 !    This subroutine specifies the current surface fluxes of buoyancy or
 !  temperature and fresh water.  It may also be modified to add
@@ -204,19 +210,19 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
   if (CS%use_temperature) then
-    call alloc_if_needed(fluxes%evap, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%fprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lrunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%frunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%vprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%evap, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%fprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lrunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%frunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%vprec, isd, ied, jsd, jed)
 
-    call alloc_if_needed(fluxes%sw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%latent, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%sens, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%latent, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sens, isd, ied, jsd, jed)
   else ! This is the buoyancy only mode.
-    call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%buoy, isd, ied, jsd, jed)
   endif
 
 
@@ -250,7 +256,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
-      call alloc_if_needed(fluxes%heat_added, isd, ied, jsd, jed)
+      call safe_alloc_ptr(fluxes%heat_added, isd, ied, jsd, jed)
       !   When modifying the code, comment out this error message.  It is here
       ! so that the original (unmodified) version is not accidentally used.
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
@@ -290,24 +296,15 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 
 end subroutine USER_buoyancy_forcing
 
-subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
-  ! If ptr is not associated, this routine allocates it with the given size
-  ! and zeros out its contents.  This is equivalent to safe_alloc_ptr in
-  ! MOM_diag_mediator, but is here so as to be completely transparent.
-  real, pointer :: ptr(:,:)
-  integer :: isd, ied, jsd, jed
-  if (.not.ASSOCIATED(ptr)) then
-    allocate(ptr(isd:ied,jsd:jed))
-    ptr(:,:) = 0.0
-  endif
-end subroutine alloc_if_needed
-
+!> This subroutine initializes the USER_surface_forcing module
 subroutine USER_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),               intent(in) :: Time
+  type(time_type),               intent(in) :: Time !< The current model time
   type(ocean_grid_type),         intent(in) :: G    !< The ocean's grid structure
   type(param_file_type),         intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,       intent(in) :: diag
-  type(user_surface_forcing_CS), pointer    :: CS
+  type(diag_ctrl), target,       intent(in) :: diag !< A structure that is used to regulate diagnostic output.
+  type(user_surface_forcing_CS), pointer    :: CS   !< A pointer that is set to point to
+                                                    !! the control structure for this module
+
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for

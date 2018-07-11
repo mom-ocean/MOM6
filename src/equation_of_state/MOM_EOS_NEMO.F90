@@ -9,7 +9,7 @@ module MOM_EOS_NEMO
 !*  Roquet, F., Madec, G., McDougall, T. J., and Barker, P. M., 2015.  *
 !*  Accurate polynomial expressions for the density and specific volume*
 !*  of seawater using the TEOS-10 standard. Ocean Modelling, 90:29-43. *
-!*  These algorithms are NOT from NEMO package!!                       *
+!*  These algorithms are NOT from the standard NEMO package!!          *
 !***********************************************************************
 
 !use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
@@ -21,10 +21,15 @@ public calculate_compress_nemo, calculate_density_nemo
 public calculate_density_derivs_nemo
 public calculate_density_scalar_nemo, calculate_density_array_nemo
 
+!> Compute the in situ density of sea water (units of kg/m^3), or its anomaly with respect to
+!! a reference density, from absolute salinity (g/kg), conservative temperature (in deg C),
+!! and pressure in Pa, using the expressions derived for use with NEMO
 interface calculate_density_nemo
   module procedure calculate_density_scalar_nemo, calculate_density_array_nemo
 end interface calculate_density_nemo
 
+!> For a given thermodynamic state, return the derivatives of density with conservative temperature
+!! and absolute salinity, the expressions derived for use with NEMO
 interface calculate_density_derivs_nemo
   module procedure calculate_density_derivs_scalar_nemo, calculate_density_derivs_array_nemo
 end interface calculate_density_derivs_nemo
@@ -205,6 +210,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
   integer,            intent(in)  :: npts     !< the number of values to calculate.
   real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
+  ! Local variables
   real :: zp, zt, zh, zs, zr0, zn, zn0, zn1, zn2, zn3, zs0
   integer :: j
 
@@ -255,6 +261,8 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
  enddo
 end subroutine calculate_density_array_nemo
 
+!> For a given thermodynamic state, calculate the derivatives of density with conservative
+!! temperature and absolute salinity, using the expressions derived for use with NEMO.
 subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
@@ -265,15 +273,8 @@ subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS,
                                                  !! in kg m-3 psu-1.
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absolute salinity in g/kg.                          *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     drho_dT - the partial derivative of density with        *
-! *                      potential temperature, in kg m-3 K-1.         *
-! *  (out)     drho_dS - the partial derivative of density with        *
-! *                      salinity, in kg m-3 psu-1.                    *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
+
+  ! Local variables
   real :: zp,zt , zh , zs , zr0, zn , zn0, zn1, zn2, zn3
   integer :: j
 
@@ -337,9 +338,13 @@ end subroutine calculate_density_derivs_array_nemo
 
 !> Wrapper to calculate_density_derivs_array for scalar inputs
 subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
-  real,    intent(in)  :: T, S, pressure
-  real,    intent(out) :: drho_dt
-  real,    intent(out) :: drho_ds
+  real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,    intent(in)  :: S        !< Salinity in PSU.
+  real,    intent(in)  :: pressure !< Pressure in Pa.
+  real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                   !! temperature, in kg m-3 K-1.
+  real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                   !! in kg m-3 psu-1.
   ! Local variables
   real :: al0, p0, lambda
   integer :: j
@@ -355,6 +360,10 @@ subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds
   drho_ds = drds0(1)
 end subroutine calculate_density_derivs_scalar_nemo
 
+!> Compute the in situ density of sea water (rho in units of kg/m^3) and the compressibility
+!! (drho/dp = C_sound^-2, stored as drho_dp in units of s2 m-2) from absolute salinity
+!! (sal in g/kg), conservative temperature (T in deg C), and pressure in Pa, using the expressions
+!! derived for use with NEMO.
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
@@ -365,16 +374,8 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
                                                  !! in s2 m-2.
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absolute salinity in g/kg.                          *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (out)     drho_dp - the partial derivative of density with        *
-! *                      pressure (also the inverse of the square of   *
-! *                      sound speed) in s2 m-2.                       *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-! *====================================================================*
+
+  ! Local variables
   real ::  zs,zt,zp
   integer :: j
 

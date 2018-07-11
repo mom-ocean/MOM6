@@ -21,18 +21,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mdl = "seamount_initialization" ! This module's name.
+character(len=40) :: mdl = "seamount_initialization" !< This module's name.
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public seamount_initialize_topography
 public seamount_initialize_thickness
 public seamount_initialize_temperature_salinity
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
 !> Initialization of topography.
@@ -96,7 +91,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
   real    :: delta_h
   real    :: min_thickness, S_surf, S_range, S_ref, S_light, S_dense
   character(len=20) :: verticalCoordinate
-  logical :: just_read    ! If true, just read parameters but set nothing.  character(len=20) :: verticalCoordinate
+  logical :: just_read    ! If true, just read parameters but set nothing.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -139,7 +134,8 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
       ! Equating: S_surf - S_range * z/max_depth = S_light + (K-3/2)/(nz-1) * (S_dense - S_light)
       ! Equating: - S_range * z/max_depth = S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light)
       ! Equating: z/max_depth = - ( S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light) ) / S_range
-      e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * ( (real(K)-1.5) / real(nz-1) ) ) / S_range
+      e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * &
+                              ( (real(K)-1.5) / real(nz-1) ) ) / S_range
       e0(K) = nint(2048.*e0(K))/2048. ! Force round numbers ... the above expression has irrational factors ...
       e0(K) = min(real(1-K)*GV%Angstrom_z, e0(K)) ! Bound by surface
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
@@ -177,7 +173,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
       h(i,j,:) = GV%m_to_H * delta_h
-    end do ; end do
+    enddo ; enddo
 
 end select
 

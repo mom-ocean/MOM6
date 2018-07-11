@@ -25,9 +25,9 @@ type, public :: wave_speed_CS ; private
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
-                                       !! monotonic for the purposes of calculating the equivalent barotropic wave speed.
-                                       !! This parameter controls the default behavior of wave_speed() which
-                                       !! can be overridden by optional arguments.
+                                       !! monotonic for the purposes of calculating the equivalent barotropic
+                                       !! wave speed. This parameter controls the default behavior of
+                                       !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
                                        !! calculating the equivalent barotropic wave speed. (m)
                                        !! This parameter controls the default behavior of wave_speed() which
@@ -42,23 +42,25 @@ contains
 !> Calculates the wave speed of the first baroclinic mode.
 subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
                       mono_N2_column_fraction, mono_N2_depth, modal_structure)
-  type(ocean_grid_type),                    intent(in)  :: G  !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thickness in units of H (m or kg/m2)
-  type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1 !< First mode internal wave speed (m/s)
-  type(wave_speed_CS),                      pointer     :: CS !< Control structure for MOM_wave_speed
-  logical, optional,                        intent(in)  :: full_halos !< If true, do the calculation
-                                                  !! over the entire computational domain.
-  logical, optional,                        intent(in)  :: use_ebt_mode !< If true, use the equivalent
-                                                  !! barotropic mode instead of the first baroclinic mode.
-  real, optional,                           intent(in)  :: mono_N2_column_fraction !< The lower fraction
-                                                  !! of water column over which N2 is limited as monotonic
-                                                  !! for the purposes of calculating vertical modal structure.
-  real, optional,                           intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
-                                                  !! monotonic for the purposes of calculating vertical modal structure.
+  type(ocean_grid_type),            intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-        optional,                           intent(out) :: modal_structure !< Normalized model structure (non-dim)
+                                    intent(in)  :: h  !< Layer thickness in units of H (m or kg/m2)
+  type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed (m/s)
+  type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
+  logical, optional,                intent(in)  :: full_halos !< If true, do the calculation
+                                          !! over the entire computational domain.
+  logical, optional,                intent(in)  :: use_ebt_mode !< If true, use the equivalent
+                                          !! barotropic mode instead of the first baroclinic mode.
+  real, optional,                   intent(in)  :: mono_N2_column_fraction !< The lower fraction
+                                          !! of water column over which N2 is limited as monotonic
+                                          !! for the purposes of calculating vertical modal structure.
+  real, optional,                   intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
+                                          !! monotonic for the purposes of calculating vertical
+                                          !! modal structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+        optional,                   intent(out) :: modal_structure !< Normalized model structure (non-dim)
 
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
@@ -84,7 +86,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T, S
+  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
@@ -118,7 +120,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   if (calc_modal_structure) then
     do k=1,nz; do j=js,je; do i=is,ie
       modal_structure(i,j,k) = 0.0
-    enddo; enddo; enddo
+    enddo ; enddo ; enddo
   endif
 
   S => tv%S ; T => tv%T
@@ -354,7 +356,8 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           do itt=1,max_itt
             lam_it(itt) = lam
             if (l_use_ebt_mode) then
-              ! This initialization of det,ddet imply Neumann boundary conditions so that first 3 rows of the matrix are
+              ! This initialization of det,ddet imply Neumann boundary conditions so that first 3 rows
+              ! of the matrix are
               !    /   b(1)-lam  igl(1)      0        0     0  ...  \
               !    |  igu(2)    b(2)-lam   igl(2)     0     0  ...  |
               !    |    0        igu(3)   b(3)-lam  igl(3)  0  ...  |
@@ -373,7 +376,8 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
               !    |    ...  0  igu(kc-1)  b(kc-1)-lam  igl(kc-1)  |
               !    \    ...  0     0        igu(kc)     b(kc)-lam  /
             else
-              ! This initialization of det,ddet imply Dirichlet boundary conditions so that first 3 rows of the matrix are
+              ! This initialization of det,ddet imply Dirichlet boundary conditions so that first 3 rows
+              ! of the matrix are
               !    /  b(2)-lam  igl(2)      0       0     0  ...  |
               !    |  igu(3)  b(3)-lam   igl(3)     0     0  ...  |
               !    |    0       igu43)  b(4)-lam  igl(4)  0  ...  |
@@ -562,7 +566,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                      ! factor used in setting speed2_min
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T, S
+  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
@@ -845,8 +849,8 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             enddo
 
             ! print resutls (for debugging only)
-            !if(ig .eq. 83 .and. jg .eq. 2) then
-            !  if(nmodes>1)then
+            !if (ig == 83 .and. jg == 2) then
+            !  if (nmodes>1)then
             !    print *,  "Results after finding first mode:"
             !    print *, "first guess at lam_1=", 1./speed2_tot
             !    print *, "final guess at lam_1=", lam_1
@@ -874,7 +878,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
               ! set number of intervals within search range
               numint = nint((lamMax - lamMin)/lamInc)
 
-              !if(ig .eq. 144 .and. jg .eq. 5) then
+              !if (ig == 144 .and. jg == 5) then
               !  print *, 'Looking for other eigenvalues at', ig, jg
               !  print *, 'Wave_speed: lamMin=',         lamMin
               !  print *, 'Wave_speed: cnMax=',          1/sqrt(lamMin)
@@ -895,7 +899,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                 xl = xr - lamInc
                 call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
                                  nrows,xr,det_r,ddet_r)
-                !if(ig .eq. 83 .and. jg .eq. 2) then
+                !if (ig == 83 .and. jg == 2) then
                 !  print *, "Move interval"
                 !  print *, "iint=",iint
                 !  print *, "@ xr=",xr
@@ -907,7 +911,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                     nrootsfound = nrootsfound + 1
                     xbl(nrootsfound) = xl
                     xbr(nrootsfound) = xr
-                    !if(ig .eq. 144 .and. jg .eq. 5) then
+                    !if (ig == 144 .and. jg == 5) then
                     !  print *, "Root located without subdivision!"
                     !  print *, "between xbl=",xl,"and xbr=",xr
                     !endif
@@ -935,7 +939,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                             nrootsfound = nrootsfound + 1
                             xbl(nrootsfound) = xl_sub
                             xbr(nrootsfound) = xr
-                            !if(ig .eq. 144 .and. jg .eq. 5) then
+                            !if (ig == 144 .and. jg == 5) then
                             !  print *, "Root located after subdiving",sub_it," times!"
                             !  print *, "between xbl=",xl_sub,"and xbr=",xr
                             !endif
@@ -950,7 +954,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                         call MOM_error(WARNING, "wave_speed: root not found "// &
                                        " after sub_it_max subdivisions of original"// &
                                        " interval.")
-                        !if(ig .eq. 144 .and. jg .eq. 5) then
+                        !if (ig == 144 .and. jg == 5) then
                           !print *, "xbl=",xbl
                           !print *, "xbr=",xbr
                           !print *, "Wave_speed: kc=",kc
@@ -975,7 +979,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                   ! oops, lamMax not large enough - could add code to increase (BDM)
                   ! set unfound modes to zero for now (BDM)
                   cn(i,j,nrootsfound+2:nmodes) = 0.0
-                  !if(ig .eq. 83 .and. jg .eq. 2) then
+                  !if (ig == 83 .and. jg == 2) then
                   !  call MOM_error(WARNING, "wave_speed: not all modes found "// &
                   !                       " within search range: increase numint.")
                   !  print *, "Increase lamMax at ig=",ig," jg=",jg
@@ -1026,7 +1030,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
       ! ----- Spot check - comment out later (BDM) ----------
       !ig = G%idg_offset + i
       !jg = G%jdg_offset + j
-      !if (ig .eq. 83 .and. jg .eq. 2) then
+      !if (ig == 83 .and. jg == 2) then
       !!  print *, "nmodes=",nmodes
       !  print *, "lam_1=",lam_1
       !  print *, "lamMin=",lamMin
@@ -1061,9 +1065,9 @@ subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
   real :: I_rescale ! inverse of rescale
   integer :: n      ! row (layer interface) index
 
-  if (size(b) .ne. nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
-  if (size(a) .ne. nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
-  if (size(c) .ne. nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
+  if (size(b) /= nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
+  if (size(a) /= nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
+  if (size(c) /= nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
 
   I_rescale = 1.0/rescale
 
@@ -1088,10 +1092,12 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   type(wave_speed_CS), pointer :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
-  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over which N2 is limited
-                                     !! as monotonic for the purposes of calculating vertical modal structure.
+  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
+                                     !! which N2 is limited as monotonic for the purposes of
+                                     !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
-                                      !! as monotonic for the purposes of calculating vertical modal structure.
+                                     !! as monotonic for the purposes of calculating the
+                                     !! vertical modal structure.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
@@ -1116,10 +1122,12 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   type(wave_speed_CS), pointer  :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                       !! barotropic mode instead of the first baroclinic mode.
-  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over which N2 is limited
-                                      !! as monotonic for the purposes of calculating vertical modal structure.
+  real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
+                                      !! which N2 is limited as monotonic for the purposes of
+                                      !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
-                                      !! as monotonic for the purposes of calculating vertical modal structure.
+                                      !! as monotonic for the purposes of calculating the
+                                      !! vertical modal structure.
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")

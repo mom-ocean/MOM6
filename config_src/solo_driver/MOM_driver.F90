@@ -66,7 +66,7 @@ program MOM_main
   use time_interp_external_mod, only : time_interp_external_init
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
+  use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
@@ -104,7 +104,7 @@ program MOM_main
   ! simulation does not exceed its CPU time limit.  nmax is determined by
   ! evaluating the CPU time used between successive calls to write_cputime.
   ! Initially it is set to be very large.
-  integer :: nmax=2000000000;
+  integer :: nmax=2000000000
 
   ! A structure containing several relevant directory paths.
   type(directories) :: dirs
@@ -246,8 +246,8 @@ program MOM_main
   endif
 
 !$  call omp_set_num_threads(ocean_nthreads)
-!$OMP PARALLEL private(adder)
 !$  base_cpu = get_cpu_affinity()
+!$OMP PARALLEL private(adder)
 !$  if (use_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
 !$        adder = omp_get_thread_num()/2
@@ -258,7 +258,7 @@ program MOM_main
 !$     adder = omp_get_thread_num()
 !$  endif
 !$  call set_cpu_affinity (base_cpu + adder)
-!$  write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!$  write(6,*) " ocean ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 
@@ -273,11 +273,11 @@ program MOM_main
   else
     calendar = uppercase(calendar)
     if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
-    else if (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
-    else if (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
-    else if (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
-    else if (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
-    else if (calendar(1:1) /= ' ') then
+    elseif (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
+    elseif (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
+    elseif (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
+    elseif (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
+    elseif (calendar(1:1) /= ' ') then
       call MOM_error(FATAL,'MOM_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
       call MOM_error(FATAL,'MOM_driver: No namelist value for calendar')
@@ -483,10 +483,8 @@ program MOM_main
     endif
 
     if (use_ice_shelf) then
-      call shelf_calc_flux(sfc_state, forces, fluxes, Time, dt_forcing, ice_shelf_CSp)
-!###IS     call add_shelf_flux_forcing(fluxes, ice_shelf_CSp)
-!###IS  ! With a coupled ice/ocean run, use the following call.
-!###IS      call add_shelf_flux_IOB(ice_ocean_bdry_type, ice_shelf_CSp)
+      call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
+      call add_shelf_forces(grid, Ice_shelf_CSp, forces)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = dt_forcing
@@ -496,7 +494,7 @@ program MOM_main
     endif
 
     if (ns==1) then
-      call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes, restart_CSp)
+      call finish_MOM_initialization(Time, dirs, MOM_CSp, restart_CSp)
     endif
 
     ! This call steps the model over a time dt_forcing.
@@ -641,7 +639,7 @@ program MOM_main
         call get_date(Time, yr, mon, day, hr, mins, sec)
         write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
              'Current model time: year, month, day, hour, minute, second'
-    end if
+    endif
     call close_file(unit)
   endif
 

@@ -15,7 +15,7 @@ module MOM_write_cputime
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : sum_across_PEs, pe_here, num_pes
-use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_io, only : open_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_time_manager, only : time_type, get_time, operator(>)
@@ -29,30 +29,31 @@ public write_cputime, MOM_write_cputime_init, write_cputime_start_clock
 integer :: CLOCKS_PER_SEC = 1000
 integer :: MAX_TICKS      = 1000
 
+!> A control structure that regulates the writing of CPU time
 type, public :: write_cputime_CS ; private
-  real :: maxcpu                !   The maximum amount of cpu time per processor
-                                ! for which MOM should run before saving a restart
-                                ! file and quiting with a return value that
-                                ! indicates that further execution is required to
-                                ! complete the simulation, in wall-clock seconds.
-  type(time_type) :: Start_time ! The start time of the simulation.
-                                ! Start_time is set in MOM_initialization.F90
-  real :: startup_cputime       ! The CPU time used in the startup phase of the model.
-  real :: prev_cputime = 0.0    ! The last measured CPU time.
-  real :: dn_dcpu_min = -1.0    ! The minimum derivative of timestep with CPU time.
-  real :: cputime2 = 0.0        ! The accumulated cpu time.
-  integer :: previous_calls = 0 ! The number of times write_CPUtime has been called.
-  integer :: prev_n = 0         ! The value of n from the last call.
-  integer :: fileCPU_ascii      ! The unit number of the CPU time file.
-  character(len=200) :: CPUfile ! The name of the CPU time file.
+  real :: maxcpu                !<   The maximum amount of cpu time per processor
+                                !! for which MOM should run before saving a restart
+                                !! file and quiting with a return value that
+                                !! indicates that further execution is required to
+                                !! complete the simulation, in wall-clock seconds.
+  type(time_type) :: Start_time !< The start time of the simulation.
+                                !! Start_time is set in MOM_initialization.F90
+  real :: startup_cputime       !< The CPU time used in the startup phase of the model.
+  real :: prev_cputime = 0.0    !< The last measured CPU time.
+  real :: dn_dcpu_min = -1.0    !< The minimum derivative of timestep with CPU time.
+  real :: cputime2 = 0.0        !< The accumulated cpu time.
+  integer :: previous_calls = 0 !< The number of times write_CPUtime has been called.
+  integer :: prev_n = 0         !< The value of n from the last call.
+  integer :: fileCPU_ascii      !< The unit number of the CPU time file.
+  character(len=200) :: CPUfile !< The name of the CPU time file.
 end type write_cputime_CS
 
 contains
 
+!> Evaluate the CPU time returned by SYSTEM_CLOCK at the start of a run
 subroutine write_cputime_start_clock(CS)
-  type(write_cputime_CS), pointer :: CS
-! Argument:  CS - A pointer that is set to point to the control structure
-!                 for this module
+  type(write_cputime_CS), pointer :: CS !< The control structure set up by a previous
+                                        !! call to MOM_write_cputime_init.
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
   if (.not.associated(CS)) allocate(CS)
 
@@ -60,17 +61,15 @@ subroutine write_cputime_start_clock(CS)
   CS%prev_cputime = new_cputime
 end subroutine write_cputime_start_clock
 
+!> Initialize the MOM_write_cputime module.
 subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   type(param_file_type),  intent(in) :: param_file !< A structure to parse for run-time parameters
-  character(len=*),       intent(in) :: directory
-  type(time_type),        intent(in) :: Input_start_time
-  type(write_cputime_CS), pointer    :: CS
-! Arguments: param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      directory - The directory where the energy file goes.
-!  (in)      Input_start_time - The start time of the simulation.
-!  (in/out)  CS - A pointer that may be set to point to the control structure
-!                 for this module.
+  character(len=*),       intent(in) :: directory  !< The directory where the CPU time file goes.
+  type(time_type),        intent(in) :: Input_start_time !< The start model time of the simulation.
+  type(write_cputime_CS), pointer    :: CS         !< A pointer that may be set to point to the
+                                                   !! control structure for this module.
+
+  ! Local variables
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -106,26 +105,22 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 
 end subroutine MOM_write_cputime_init
 
+!> This subroutine assesses how much CPU time the model has taken and determines how long the model
+!! should be run before it saves a restart file and stops itself.
 subroutine write_cputime(day, n, nmax, CS)
-  type(time_type),                     intent(inout) :: day
-  integer,                             intent(in)    :: n
-  integer,                             intent(inout) :: nmax
-  type(write_cputime_CS),              pointer       :: CS
-!  This subroutine assesses how much CPU time the model has
-! taken and determines how long the model should be run before it
-! saves a restart file and stops itself.
+  type(time_type),        intent(inout) :: day !< The current model time.
+  integer,                intent(in)    :: n  !< The time step number of the current execution.
+  integer,                intent(inout) :: nmax !< The number of iterations after which to stop so
+                                              !! that the simulation will not run out of CPU time.
+  type(write_cputime_CS), pointer       :: CS !< The control structure set up by a previous
+                                              !! call to MOM_write_cputime_init.
 
-! Arguments: day - The current model time.
-!  (in)      n - The time step number of the current execution.
-!  (out)     nmax - The number of iterations after which to stop so
-!                   that the simulation will not run out of CPU time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 MOM_write_cputime_init.
+  ! Local variables
   real    :: d_cputime     ! The change in CPU time since the last call
                            ! this subroutine.
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
   real    :: reday         ! A real version of day.
+  character(len=256) :: mesg  ! The text of an error message
   integer :: start_of_day, num_days
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -159,9 +154,8 @@ subroutine write_cputime(day, n, nmax, CS)
       nmax = n + INT( CS%dn_dcpu_min * &
           (0.95*CS%maxcpu * REAL(num_pes())*CLOCKS_PER_SEC - &
            (CS%startup_cputime + CS%cputime2)) )
-!     if (is_root_pe() ) then
-!       write(*,*) "Resetting nmax to ",nmax," at day",reday
-!     endif
+!     write(mesg,*) "Resetting nmax to ",nmax," at day",reday
+!     call MOM_mesg(mesg)
     endif
   endif
   CS%prev_cputime = new_cputime ; CS%prev_n = n

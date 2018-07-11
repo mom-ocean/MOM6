@@ -13,53 +13,43 @@ public verticalGridInit, verticalGridEnd
 public setVerticalGridAxes
 public get_flux_units, get_thickness_units, get_tr_flux_units
 
+!> Describes the ocean's vertical grid, including unit conversion factors
 type, public :: verticalGrid_type
 
   ! Commonly used parameters
-  integer :: ke     ! The number of layers/levels in the vertical
-  real :: max_depth ! The maximum depth of the ocean in meters.
-  real :: g_Earth   ! The gravitational acceleration in m s-2.
-  real :: Rho0      !   The density used in the Boussinesq approximation or
-                    ! nominal density used to convert depths into mass
-                    ! units, in kg m-3.
+  integer :: ke     !< The number of layers/levels in the vertical
+  real :: max_depth !< The maximum depth of the ocean in meters.
+  real :: g_Earth   !< The gravitational acceleration in m s-2.
+  real :: Rho0      !< The density used in the Boussinesq approximation or nominal
+                    !! density used to convert depths into mass units, in kg m-3.
 
   ! Vertical coordinate descriptions for diagnostics and I/O
-  character(len=40) :: &
-    zAxisUnits, & ! The units that vertical coordinates are written in
-    zAxisLongName ! Coordinate name to appear in files,
-                  ! e.g. "Target Potential Density" or "Height"
-  real ALLOCABLE_, dimension(NKMEM_) :: sLayer ! Coordinate values of layer centers
-  real ALLOCABLE_, dimension(NK_INTERFACE_) :: sInterface ! Coordinate values on interfaces
-  integer :: direction = 1 ! Direction defaults to 1, positive up.
+  character(len=40) :: zAxisUnits !< The units that vertical coordinates are written in
+  character(len=40) :: zAxisLongName !< Coordinate name to appear in files,
+                                  !! e.g. "Target Potential Density" or "Height"
+  real ALLOCABLE_, dimension(NKMEM_) :: sLayer !< Coordinate values of layer centers
+  real ALLOCABLE_, dimension(NK_INTERFACE_) :: sInterface !< Coordinate values on interfaces
+  integer :: direction = 1 !< Direction defaults to 1, positive up.
 
   ! The following variables give information about the vertical grid.
-  logical :: Boussinesq     ! If true, make the Boussinesq approximation.
-  real :: Angstrom      !   A one-Angstrom thickness in the model's thickness
-                        ! units.  (This replaces the old macro EPSILON.)
-  real :: Angstrom_z    !   A one-Angstrom thickness in m.
-  real :: H_subroundoff !   A thickness that is so small that it can be added to
-                        ! a thickness of Angstrom or larger without changing it
-                        ! at the bit level, in thickness units.  If Angstrom is
-                        ! 0 or exceedingly small, this is negligible compared to
-                        ! a thickness of 1e-17 m.
+  logical :: Boussinesq !< If true, make the Boussinesq approximation.
+  real :: Angstrom      !< A one-Angstrom thickness in the model's thickness units.
+  real :: Angstrom_z    !< A one-Angstrom thickness in m.
+  real :: H_subroundoff !< A thickness that is so small that it can be added to a thickness of
+                        !! Angstrom or larger without changing it at the bit level, in thickness units.
+                        !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   real ALLOCABLE_, dimension(NK_INTERFACE_) :: &
-    g_prime, &          ! The reduced gravity at each interface, in m s-2.
-    Rlay                ! The target coordinate value (potential density) in
-                        ! in each layer in kg m-3.
-  integer :: nkml = 0   ! The number of layers at the top that should be treated
-                        ! as parts of a homogenous region.
-  integer :: nk_rho_varies = 0 ! The number of layers at the top where the
-                        ! density does not track any target density.
-  real :: H_to_kg_m2    ! A constant that translates thicknesses from the units
-                        ! of thickness to kg m-2.
-  real :: kg_m2_to_H    ! A constant that translates thicknesses from kg m-2 to
-                        ! the units of thickness.
-  real :: m_to_H        ! A constant that translates distances in m to the
-                        ! units of thickness.
-  real :: H_to_m        ! A constant that translates distances in the units of
-                        ! thickness to m.
-  real :: H_to_Pa       ! A constant that translates the units of thickness to
-                        ! to pressure in Pa.
+    g_prime, &          !< The reduced gravity at each interface, in m s-2.
+    Rlay                !< The target coordinate value (potential density) in each layer in kg m-3.
+  integer :: nkml = 0   !< The number of layers at the top that should be treated
+                        !! as parts of a homogenous region.
+  integer :: nk_rho_varies = 0 !< The number of layers at the top where the
+                        !! density does not track any target density.
+  real :: H_to_kg_m2    !< A constant that translates thicknesses from the units of thickness to kg m-2.
+  real :: kg_m2_to_H    !< A constant that translates thicknesses from kg m-2 to the units of thickness.
+  real :: m_to_H        !< A constant that translates distances in m to the units of thickness.
+  real :: H_to_m        !< A constant that translates distances in the units of thickness to m.
+  real :: H_to_Pa       !< A constant that translates the units of thickness to pressure in Pa.
 end type verticalGrid_type
 
 contains
@@ -68,8 +58,8 @@ contains
 subroutine verticalGridInit( param_file, GV )
 ! This routine initializes the verticalGrid_type structure (GV).
 ! All memory is allocated but not necessarily set to meaningful values until later.
-  type(param_file_type),   intent(in) :: param_file ! Parameter file handle/type
-  type(verticalGrid_type), pointer    :: GV         ! The container for vertical grid data
+  type(param_file_type),   intent(in) :: param_file !< Parameter file handle/type
+  type(verticalGrid_type), pointer    :: GV         !< The container for vertical grid data
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: nk, H_power
@@ -203,7 +193,7 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
   character(len=*), optional, intent(in) :: tr_units          !< Units for a tracer, for example
                                                               !! Celsius or PSU.
   character(len=*), optional, intent(in) :: tr_vol_conc_units !< The concentration units per unit
-                                                              !! volume, forexample if the units are
+                                                              !! volume, for example if the units are
                                                               !! umol m-3, tr_vol_conc_units would
                                                               !! be umol.
   character(len=*), optional, intent(in) :: tr_mass_conc_units !< The concentration units per unit

@@ -97,62 +97,71 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+!> MOM_dynamics_unsplit_RK2 module control structure
 type, public :: MOM_dyn_unsplit_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
-    PFu, &    ! PFu = -dM/dx, in m s-2.
-    diffu     ! Zonal acceleration due to convergence of the along-isopycnal
-              ! stress tensor, in m s-2.
+    CAu, &    !< CAu = f*v - u.grad(u) in m s-2.
+    PFu, &    !< PFu = -dM/dx, in m s-2.
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    ! CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &    ! PFv = -dM/dy, in m s-2.
-    diffv     ! Meridional acceleration due to convergence of the
-              ! along-isopycnal stress tensor, in m s-2.
+    CAv, &    !< CAv = -f*u - u.grad(v) in m s-2.
+    PFv, &    !< PFv = -dM/dy, in m s-2.
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
 
+  real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean to the seafloor (Pa)
+  real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean to the seafloor (Pa)
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL(), tauy_bot => NULL()
-    ! The frictional bottom stresses from the ocean to the seafloor, in Pa.
+  real    :: be      !< A nondimensional number from 0.5 to 1 that controls
+                     !! the backward weighting of the time stepping scheme.
+  real    :: begw    !< A nondimensional number from 0 to 1 that controls
+                     !! the extent to which the treatment of gravity waves
+                     !! is forward-backward (0) or simulated backward
+                     !! Euler (1).  0 is almost always used.
+  logical :: debug   !< If true, write verbose checksums for debugging purposes.
 
-  real    :: be              ! A nondimensional number from 0.5 to 1 that controls
-                             ! the backward weighting of the time stepping scheme.
-  real    :: begw            ! A nondimensional number from 0 to 1 that controls
-                             ! the extent to which the treatment of gravity waves
-                             ! is forward-backward (0) or simulated backward
-                             ! Euler (1).  0 is almost always used.
-  logical :: debug           ! If true, write verbose checksums for debugging purposes.
+  logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
 
-  logical :: module_is_initialized = .false.
-
+  !>@{ Diagnostic IDs
   integer :: id_uh = -1, id_vh = -1
   integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
+  !!@}
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                                   ! timing of diagnostic output.
-  type(accel_diag_ptrs), pointer :: ADp ! A structure pointing to the various
-                                   ! accelerations in the momentum equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
-  type(cont_diag_ptrs), pointer :: CDp ! A structure with pointers to various
-                                   ! terms in the continuity equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(accel_diag_ptrs), pointer :: ADp => NULL() !< A structure pointing to the
+                                   !! accelerations in the momentum equations,
+                                   !! which can later be used to calculate
+                                   !! derived diagnostics like energy budgets.
+  type(cont_diag_ptrs), pointer :: CDp => NULL() !< A structure with pointers to
+                                   !! various terms in the continuity equations,
+                                   !! which can later be used to calculate
+                                   !! derived diagnostics like energy budgets.
 
-! The remainder of the structure is pointers to child subroutines' control strings.
+  ! The remainder of the structure points to child subroutines' control structures.
+  !> A pointer to the horizontal viscosity control structure
   type(hor_visc_CS), pointer :: hor_visc_CSp => NULL()
+  !> A pointer to the continuity control structure
   type(continuity_CS), pointer :: continuity_CSp => NULL()
+  !> A pointer to the CoriolisAdv control structure
   type(CoriolisAdv_CS), pointer :: CoriolisAdv_CSp => NULL()
+  !> A pointer to the PressureForce control structure
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  !> A pointer to the vertvisc control structure
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
+  !> A pointer to the set_visc control structure
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
-  type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
-     ! condition type that specifies whether, where, and  what open boundary
-     ! conditions are used.  If no open BCs are used, this pointer stays
-     ! nullified.  Flather OBCs use open boundary_CS as well.
+  !> A pointer to the tidal forcing control structure
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
-  type(update_OBC_CS), pointer :: update_OBC_CSp => NULL()
-
-! This is a copy of the pointer in the top-level control structure.
+  !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
+
+  type(ocean_OBC_type), pointer :: OBC => NULL() !< A pointer to an open boundary
+     !! condition type that specifies whether, where, and what open boundary
+     !! conditions are used.  If no open BCs are used, this pointer stays
+     !! nullified.  Flather OBCs use open boundary_CS as well.
+  !> A pointer to the update_OBC control structure
+  type(update_OBC_CS), pointer :: update_OBC_CSp => NULL()
 
 end type MOM_dyn_unsplit_RK2_CS
 
@@ -160,9 +169,11 @@ end type MOM_dyn_unsplit_RK2_CS
 public step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 public initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 
+!>@{ CPU time clock IDs
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
 integer :: id_clock_horvisc, id_clock_continuity, id_clock_mom_update
 integer :: id_clock_pass, id_clock_pass_init
+!!@}
 
 contains
 
@@ -258,7 +269,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp
-  real, dimension(:,:), pointer :: p_surf
+  real, dimension(:,:), pointer :: p_surf => NULL()
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping.
   logical :: dyn_p_surf
@@ -526,6 +537,7 @@ subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
 
 end subroutine register_restarts_dyn_unsplit_RK2
 
+!> Initialize parameters and allocate memory associated with the unsplit RK2 dynamics module.
 subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS, &
                                       restart_CS, Accel_diag, Cont_diag, MIS, &
                                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
@@ -704,9 +716,10 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
 
 end subroutine initialize_dyn_unsplit_RK2
 
+!> Clean up and deallocate memory associated with the dyn_unsplit_RK2 module.
 subroutine end_dyn_unsplit_RK2(CS)
-  type(MOM_dyn_unsplit_RK2_CS), pointer :: CS
-!  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
+  type(MOM_dyn_unsplit_RK2_CS), pointer :: CS !< dyn_unsplit_RK2 control structure that
+                                              !! will be deallocated in this subroutine.
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)

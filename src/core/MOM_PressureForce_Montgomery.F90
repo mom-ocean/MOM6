@@ -31,14 +31,16 @@ type, public :: PressureForce_Mont_CS ; private
   real    :: GFS_scale      !< Ratio between gravity applied to top interface
                             !! and the gravitational acceleration of the planet.
                             !! Usually this ratio is 1.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  real, pointer :: PFu_bc(:,:,:) => NULL()   ! Accelerations due to pressure
-  real, pointer :: PFv_bc(:,:,:) => NULL()   ! gradients deriving from density
-                                             ! gradients within layers, m s-2.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate
+                            !! the timing of diagnostic output.
+  real, pointer :: PFu_bc(:,:,:) => NULL()   !< Accelerations due to pressure
+  real, pointer :: PFv_bc(:,:,:) => NULL()   !< gradients deriving from density
+                                             !! gradients within layers, m s-2.
+  !>@{ Diagnostic IDs
   integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  !!@}
+  type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< The tidal forcing control structure
 end type PressureForce_Mont_CS
 
 contains
@@ -63,12 +65,14 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
                                                                 !! (equal to -dM/dy) in m/s2.
   type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
-  real, dimension(:,:),                     optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+  real, dimension(:,:),            optional, pointer     :: p_atm !< The pressure at the ice-ocean or
                                                                 !! atmosphere-ocean in Pa.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                   optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies,
                                                                 !! in m2 s-2 H-1.
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height, in m.
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: eta !< Free surface height, in m.
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     M, &          ! The Montgomery potential, M = (p/rho + gz) , in m2 s-2.
@@ -328,14 +332,14 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
           ((dp_star(i,j) * dp_star(i+1,j) + (p(i,j,K) * dp_star(i+1,j) + &
            p(i+1,j,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
-        if (ASSOCIATED(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
+        if (associated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = (alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((dp_star(i,j) * dp_star(i,j+1) + (p(i,j,K) * dp_star(i,j+1) + &
           p(i,j+1,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
-        if (ASSOCIATED(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
+        if (associated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
@@ -568,14 +572,14 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
           ((h_star(i,j) * h_star(i+1,j) - (e(i,j,K) * h_star(i+1,j) + &
           e(i+1,j,K) * h_star(i,j))) / (h_star(i,j) + h_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
-        if (ASSOCIATED(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
+        if (associated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((h_star(i,j) * h_star(i,j+1) - (e(i,j,K) * h_star(i,j+1) + &
           e(i,j+1,K) * h_star(i,j))) / (h_star(i,j) + h_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
-        if (ASSOCIATED(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
+        if (associated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
@@ -616,19 +620,21 @@ end subroutine PressureForce_Mont_Bouss
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the free surface height.
 subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star)
-  type(ocean_grid_type),                intent(in)  :: G  !< Ocean grid structure
-  type(verticalGrid_type),              intent(in)  :: GV !< Vertical grid structure
+  type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
+  type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in H.
-  type(thermo_var_ptrs),                intent(in)  :: tv !< Thermodynamic variables
+  type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
   real,                                 intent(in)  :: g_Earth !< The gravitational acceleration, in m s-2.
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density, in kg m-3.
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
-                                                                 !! and the gravitational acceleration of the planet.
-                                                                 !! Usually this ratio is 1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
-                                                                !! to free surface height anomalies, in m2 H-1 s-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: rho_star !< The layer densities (maybe
-                                                                !! compressibility compensated), times g/rho_0, in m s-2.
+                                                            !! and the gravitational acceleration of the planet.
+                                                            !! Usually this ratio is 1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                        intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
+                                                            !! to free surface height anomalies, in m2 H-1 s-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              optional, intent(in) :: rho_star !< The layer densities (maybe compressibility
+                                                            !! compensated), times g/rho_0, in m s-2.
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer
                              ! thicknesses, in m-1.
@@ -902,7 +908,7 @@ end subroutine PressureForce_Mont_init
 
 !> Deallocates the Montgomery-potential form of PGF control structure
 subroutine PressureForce_Mont_end(CS)
-  type(PressureForce_Mont_CS), pointer :: CS
+  type(PressureForce_Mont_CS), pointer :: CS  !< Control structure for Montgomery potential PGF
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_Mont_end
 

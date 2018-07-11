@@ -16,11 +16,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mdl = "shelfwave_initialization" ! This module's name.
+character(len=40) :: mdl = "shelfwave_initialization" !< This module's name.
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public shelfwave_initialize_topography
 public shelfwave_set_OBC_data
 public register_shelfwave_OBC, shelfwave_OBC_end
@@ -139,7 +137,7 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
   character(len=40)  :: mdl = "shelfwave_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, n
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
