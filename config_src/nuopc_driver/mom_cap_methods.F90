@@ -489,22 +489,6 @@ contains
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
-    !tcx
-    !  write(tmpstr,'(a,6i8)') subname//'tcx1',lbnd1,ubnd1,lbnd2,ubnd2
-    !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    !  write(tmpstr,'(a,6i8)') subname//'tcx2',isc,iec,jsc,jec
-    !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    !  write(tmpstr,'(a,6i8)') subname//'tcx3',i,j,i1,j1
-    !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    !  write(tmpstr,'(a,6i8)') subname//'tcx4',lbound(ice_ocean_boundary%p,1),ubound(ice_ocean_boundary%p,1),&
-    !  lbound(ice_ocean_boundary%p,2),ubound(ice_ocean_boundary%p,2)
-    !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    !  write(tmpstr,'(a,6i8)') subname//'tcx5',lbound(grid%mask2dT,1),ubound(grid%mask2dT,1),&
-    !  lbound(grid%mask2dT,2),ubound(grid%mask2dT,2)
-    !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    !  write(tmpstr,'(a,i8)') subname//' tcx import_cnt ',import_cnt
-    !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-
     if ((trim(runtype) == 'initial' .and. import_cnt <= 2)) then
        ! This will skip the first time import information is given
        do_import = .false.
@@ -520,45 +504,24 @@ contains
              i1 = i + lbnd1 - isc
              ig = i + grid%jsc - isc
 
-             ! ice_ocean_boundary%p(i,j)               = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%u_flux(i,j)          = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%v_flux(i,j)          = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%t_flux(i,j)          = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%q_flux(i,j)          = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%lw_flux(i,j)         = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%sw_flux_vis_dir(i,j) = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%sw_flux_vis_dif(i,j) = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%sw_flux_nir_dir(i,j) = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%sw_flux_nir_dif(i,j) = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%lprec(i,j)           = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%fprec(i,j)           = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%runoff(i,j)          = 0.0_ESMF_KIND_R8
-             ! ice_ocean_boundary%runoff_hflx(i,j)     = 0.0 * GRID%mask2dT(ig,jg)
-             ! ice_ocean_boundary%calving(i,j)         = 0.0 * GRID%mask2dT(ig,jg)
-             ! ice_ocean_boundary%calving_hflx(i,j)    = 0.0 * GRID%mask2dT(ig,jg)
-             ! ice_ocean_boundary%ustar_berg(i,j)      = 0.0 * GRID%mask2dT(ig,jg)
-             ! ice_ocean_boundary%area_berg(i,j)       = 0.0 * GRID%mask2dT(ig,jg)
-             ! ice_ocean_boundary%mass_berg(i,j)       = 0.0 * GRID%mask2dT(ig,jg)
-             ! ice_ocean_boundary%mi(i,j)              = 0.0 * GRID%mask2dT(ig,jg)
-
-             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)      * GRID%mask2dT(ig,jg)  
-             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)   * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)   * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)   * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)   * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)    * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)   * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%lw_flux(i,j)         = (dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)) * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)  * GRID%mask2dT(ig,jg) 
-             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)  * GRID%mask2dT(ig,jg) 
-             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)  * GRID%mask2dT(ig,jg) 
-             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)  * GRID%mask2dT(ig,jg) 
-             ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1) * GRID%mask2dT(ig,jg)
-             ice_ocean_boundary%runoff(i,j)          = (dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)) * GRID%mask2dT(ig,jg)
-             !ice_ocean_boundary%salt_flux(i,j)      = (dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)) * GRID%mask2dT(ig,jg)
-             !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)  * GRID%mask2dT(ig,jg)
-             !ice_ocean_boundary%u_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1))
-             !ice_ocean_boundary%v_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1))
+             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)      
+             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)   
+             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)   
+             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)   
+             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)   
+             ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)    
+             ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)   
+             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1) 
+             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)  
+             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)  
+             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)  
+             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)  
+             ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1) 
+             ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1) 
+             !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j) 
+             !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1) 
+             !ice_ocean_boundary%u_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
+             !ice_ocean_boundary%v_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
           enddo
        enddo
     end if
