@@ -254,6 +254,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
@@ -511,13 +512,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                              OS%grid, OS%forcing_CSp)
 
   if (OS%fluxes%fluxes_used) then
+
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, &
                                OS%restore_salinity, OS%restore_temp)
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+        call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
     if (OS%icebergs_alter_ocean)  then
       call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
@@ -536,13 +538,15 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     ! Indicate that there are new unused fluxes.
     OS%fluxes%fluxes_used = .false.
     OS%fluxes%dt_buoy_accum = dt_coupling
+
   else
+
     OS%flux_tmp%C_p = OS%fluxes%C_p
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
     endif
     if (OS%icebergs_alter_ocean)  then
       call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
@@ -559,7 +563,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
+
   endif
+
   call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
@@ -876,6 +882,12 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
 end subroutine initialize_ocean_public_type
 
+!=======================================================================
+! This subroutine translates the coupler's ocean_data_type into MOM's
+! surface state variable.  This may eventually be folded into the MOM
+! code that calculates the surface state in the first place.
+! Note the offset in the arrays because the ocean_data_type has no
+! halo points in its arrays and always uses absolute indicies.
 subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, &
                                        patm, press_to_z)
   type(surface),           intent(inout) :: sfc_state !< A structure containing fields that
@@ -885,11 +897,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, &
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
   real,          optional, intent(in)    :: patm(:,:)
   real,          optional, intent(in)    :: press_to_z
-! This subroutine translates the coupler's ocean_data_type into MOM's
-! surface state variable.  This may eventually be folded into the MOM
-! code that calculates the surface state in the first place.
-! Note the offset in the arrays because the ocean_data_type has no
-! halo points in its arrays and always uses absolute indicies.
+
   real :: IgR0
   character(len=48)  :: val_str
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
@@ -978,7 +986,6 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, &
 
 end subroutine convert_state_to_ocean_type
 
-
 !=======================================================================
 ! <SUBROUTINE NAME="ocean_model_init_sfc">
 !
@@ -1006,6 +1013,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
 end subroutine ocean_model_init_sfc
 ! </SUBROUTINE NAME="ocean_model_init_sfc">
 
+!=======================================================================
 !> ocean_model_flux_init is used to initialize properties of the air-sea fluxes
 !! as determined by various run-time parameters.  It can be called from
 !! non-ocean PEs, or PEs that have not yet been initialzed, and it can safely
@@ -1029,6 +1037,7 @@ subroutine ocean_model_flux_init(OS, verbosity)
 
 end subroutine ocean_model_flux_init
 
+!=======================================================================
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 ! Ocean_stock_pe - returns stocks of heat, water, etc. for conservation checks.!
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
