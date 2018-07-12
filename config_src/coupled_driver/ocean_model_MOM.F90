@@ -1,21 +1,15 @@
+!> Top-level module for the MOM6 ocean model in coupled mode.
 module ocean_model_mod
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!-----------------------------------------------------------------------
-!
 ! This is the top level module for the MOM6 ocean model.  It contains routines
 ! for initialization, termination and update of ocean model state.  This
 ! particular version wraps all of the calls for MOM6 in the calls that had
 ! been used for MOM4.
 !
-! <CONTACT EMAIL="Robert.Hallberg@noaa.gov"> Robert Hallberg
-! </CONTACT>
-!
-!<OVERVIEW>
 ! This code is a stop-gap wrapper of the MOM6 code to enable it to be called
 ! in the same way as MOM4.
-!</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
@@ -221,15 +215,12 @@ end type ocean_state_type
 
 contains
 
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_init">
-!
-! <DESCRIPTION>
-! Initialize the ocean model.
-! </DESCRIPTION>
-
 !> ocean_model_init initializes the ocean model, including registering fields
 !! for restarts and reading restart files if appropriate.
+!!
+!!   This subroutine initializes both the ocean state and the ocean surface type.
+!! Because of the way that indicies and domains are handled, Ocean_sfc must have
+!! been used in a previous call to initialize_ocean_type.
 subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   type(ocean_public_type), target, &
                        intent(inout) :: Ocean_sfc !< A structure containing various publicly
@@ -246,11 +237,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
-
-!   This subroutine initializes both the ocean state and the ocean surface type.
-! Because of the way that indicies and domains are handled, Ocean_sfc must have
-! been used in a previous call to initialize_ocean_type.
-
+  ! Local variables
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
 ! This include declares and sets the variable "version".
@@ -408,17 +395,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
-! </SUBROUTINE> NAME="ocean_model_init"
-
-
-!=======================================================================
-! <SUBROUTINE NAME="update_ocean_model">
-!
-! <DESCRIPTION>
-! Update in time the ocean model fields.  This code wraps the call to step_MOM
-! with MOM4's call.
-! </DESCRIPTION>
-!
 
 !> update_ocean_model uses the forcing in Ice_ocean_boundary to advance the
 !! ocean model's state from the input value of Ocean_state (which must be for
@@ -449,7 +425,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   logical, optional, intent(in)    :: Ocn_fluxes_used !< If present, this indicates whether the
                                               !! cumulative thermodynamic fluxes from the ocean,
                                               !! like frazil, have been used and should be reset.
-
+  ! Local variables
   type(time_type) :: Master_time ! This allows step_MOM to temporarily change
                                  ! the time that is seen by internal modules.
   type(time_type) :: Time1       ! The value of the ocean model's time at the
@@ -676,20 +652,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
-! </SUBROUTINE> NAME="update_ocean_model"
-
-
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_restart">
-!
-! <DESCRIPTION>
-! write out restart file.
-! Arguments:
-!   timestamp (optional, intent in) : A character string that represents the model time,
-!                                      used for writing restart. timestamp will prepend to
-!                                      the any restart file name as a prefix.
-! </DESCRIPTION>
-!
 
 !> This subroutine writes out the ocean model restart file.
 subroutine ocean_model_restart(OS, timestamp)
@@ -728,13 +690,6 @@ subroutine ocean_model_restart(OS, timestamp)
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
 
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_end">
-!
-! <DESCRIPTION>
-! Close down the ocean model
-! </DESCRIPTION>
-
 !> ocean_model_end terminates the model run, saving the ocean state in a restart
 !! and deallocating any data associated with the ocean.
 subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
@@ -745,22 +700,11 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
                                                         !! upon termination.
   type(time_type),         intent(in)    :: Time        !< The model time, used for writing restarts.
 
-!   This subroutine terminates the model run, saving the ocean state in a
-! restart file and deallocating any data associated with the ocean.
-
-! Arguments: Ocean_sfc - An ocean_public_type structure that is to be
-!                        deallocated upon termination.
-!  (inout)   Ocean_state - A pointer to the structure containing the internal
-!                          ocean state to be deallocated upon termination.
-!  (in)      Time - The model time, used for writing restarts.
-
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
-! </SUBROUTINE> NAME="ocean_model_end"
-
 
 !> ocean_model_save_restart causes restart files associated with the ocean to be
 !! written out.
@@ -772,12 +716,6 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
                                                 !! write these restart files.
   character(len=*), optional, intent(in) :: filename_suffix !< An optional suffix (e.g., a time-stamp)
                                                 !! to append to the restart file names.
-! Arguments: Ocean_state - A structure containing the internal ocean state (in).
-!  (in)      Time - The model time at this call.  This is needed for mpp_write calls.
-!  (in, opt) directory - An optional directory into which to write these restart files.
-!  (in, opt) filename_suffix - An optional suffix (e.g., a time-stamp) to append
-!                              to the restart file names.
-
 ! Note: This is a new routine - it will need to exist for the new incremental
 !   checkpointing.  It will also be called by ocean_model_end, giving the same
 !   restart behavior as now in FMS.
@@ -804,8 +742,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 
 end subroutine ocean_model_save_restart
 
-!=======================================================================
-
+!> Initialize the public ocean type
 subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
                                         gas_fields_ocn)
   type(domain2D),          intent(in)    :: input_domain !< The ocean model domain description
@@ -860,6 +797,11 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
 end subroutine initialize_ocean_public_type
 
+!> This subroutine translates the coupler's ocean_data_type into MOM's
+!! surface state variable.  This may eventually be folded into the MOM
+!! code that calculates the surface state in the first place.
+!! Note the offset in the arrays because the ocean_data_type has no
+!! halo points in its arrays and always uses absolute indicies.
 subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                !! describe the surface state of the ocean.
@@ -871,11 +813,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
   real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface, in Pa.
   real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and
                                                !! ocean depth in m, usually 1/(rho_0*g), in m Pa-1.
-! This subroutine translates the coupler's ocean_data_type into MOM's
-! surface state variable.  This may eventually be folded into the MOM
-! code that calculates the surface state in the first place.
-! Note the offset in the arrays because the ocean_data_type has no
-! halo points in its arrays and always uses absolute indicies.
+  ! Local variables
   real :: IgR0
   character(len=48)  :: val_str
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
@@ -968,15 +906,6 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
 
 end subroutine convert_state_to_ocean_type
 
-
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_init_sfc">
-!
-! <DESCRIPTION>
-!   This subroutine extracts the surface properties from the ocean's internal
-! state and stores them in the ocean type returned to the calling ice model.
-! </DESCRIPTION>
-
 !>   This subroutine extracts the surface properties from the ocean's internal
 !! state and stores them in the ocean type returned to the calling ice model.
 !! It has to be separate from the ocean_initialization call because the coupler
@@ -986,7 +915,6 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   type(ocean_public_type), intent(inout) :: Ocean_sfc !< A structure containing various publicly
                                 !! visible ocean surface properties after initialization, whose
                                 !! elements have their data set here.
-
   integer :: is, ie, js, je
 
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
@@ -998,7 +926,6 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
 end subroutine ocean_model_init_sfc
-! </SUBROUTINE NAME="ocean_model_init_sfc">
 
 !> ocean_model_flux_init is used to initialize properties of the air-sea fluxes
 !! as determined by various run-time parameters.  It can be called from
@@ -1023,9 +950,6 @@ subroutine ocean_model_flux_init(OS, verbosity)
 
 end subroutine ocean_model_flux_init
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
-! Ocean_stock_pe - returns stocks of heat, water, etc. for conservation checks.!
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 !> Ocean_stock_pe - returns the integrated stocks of heat, water, etc. for conservation checks.
 !!   Because of the way FMS is coded, only the root PE has the integrated amount,
 !!   while all other PEs get 0.

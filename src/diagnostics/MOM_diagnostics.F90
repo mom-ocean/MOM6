@@ -1,28 +1,9 @@
+!> Calculates any requested diagnostic quantities
+!! that are not calculated in the various subroutines.
+!! Diagnostic quantities are requested by allocating them memory.
 module MOM_diagnostics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, February 2001                                  *
-!*                                                                     *
-!*    This subroutine calculates any requested diagnostic quantities   *
-!*  that are not calculated in the various subroutines.  Diagnostic    *
-!*  quantities are requested by allocating them memory.                *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, bathyT                                *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms,              only : reproducing_sum
 use MOM_diag_mediator,     only : post_data, post_data_1d_k, get_diag_time_end

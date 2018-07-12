@@ -1,37 +1,7 @@
+!> Tidal contributions to geopotential
 module MOM_tidal_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  Code by Robert Hallberg, August 2005, based on C-code by Harper    *
-!*  Simmons, February, 2003, in turn based on code by Brian Arbic.     *
-!*                                                                     *
-!*    The main subroutine in this file calculates the total tidal      *
-!*  contribution to the geopotential, including self-attraction and    *
-!*  loading terms and the astronomical contributions.  All options     *
-!*  are selected with entries in a file that is parsed at run-time.    *
-!*  Overall tides are enabled with a line '#define TIDES' in that file.*
-!*  Tidal constituents must be individually enabled with lines like    *
-!*  '#define TIDE_M2'.  This file has default values of amplitude,     *
-!*  frequency, Love number, and phase at time 0 for the Earth's M2,    *
-!*  S2, N2, K2, K1, O1, P1, Q1,  MF, and MM tidal constituents, but    *
-!*  the frequency, amplitude and phase ant time 0 for each constituent *
-!*  can be changed at run time by setting variables like TIDE_M2_FREQ, *
-!*  TIDE_M2_AMP and TIDE_M2_PHASE_T0 (for M2).                         *
-!*                                                                     *
-!*    In addition, the approach to calculating self-attraction and     *
-!*  loading is set at run time.  The default is to use the scalar      *
-!*  approximation, with a coefficient TIDE_SAL_SCALAR_VALUE that must  *
-!*  be set in the run-time file (for global runs, 0.094 is typical).   *
-!*  Alternately, TIDAL_SAL_FROM_FILE can be set to read the SAL from   *
-!*  a file containing the results of a previous simulation. To iterate *
-!*  the SAL to convergence, USE_PREVIOUS_TIDES may be useful (for      *
-!*  details, see Arbic et al., 2004, DSR II). With TIDAL_SAL_FROM_FILE *
-!*  or USE_PREVIOUS_TIDES,a list of input files must be provided to    *
-!*  describe each constituent's properties from a previous solution.   *
-!*                                                                     *
-!***********************************************************************
 
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, &
                               CLOCK_MODULE
@@ -49,8 +19,8 @@ public tidal_forcing_sensitivity
 
 #include <MOM_memory.h>
 
-integer, parameter :: MAX_CONSTITUENTS = 10 ! The maximum number of tidal
-                                            ! constituents that could be used.
+integer, parameter :: MAX_CONSTITUENTS = 10 !< The maximum number of tidal
+                                            !! constituents that could be used.
 
 !> The control structure for the MOM_tidal_forcing mldule
 type, public :: tidal_forcing_CS ; private
@@ -84,7 +54,7 @@ type, public :: tidal_forcing_CS ; private
     amp_prev => NULL()         !< The amplitude of the previous tidal solution, in m.
 end type tidal_forcing_CS
 
-integer :: id_clock_tides
+integer :: id_clock_tides !< CPU clock for tides
 
 contains
 
@@ -99,7 +69,6 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters.
   type(tidal_forcing_CS), pointer      :: CS   !< A pointer that is set to point to the control
                                                !! structure for this module.
-
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: &
     phase, &          ! The phase of some tidal constituent.
@@ -379,7 +348,7 @@ subroutine find_in_files(filenames, varname, array, G)
   character(len=*),                 intent(in)  :: varname   !< The name of the variable to read
   type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: array     !< The array to fill with the data
-
+  ! Local variables
   integer :: nf
 
   do nf=1,size(filenames)
@@ -411,9 +380,6 @@ subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
   type(tidal_forcing_CS), pointer     :: CS !< The control structure returned by a previous call to tidal_forcing_init.
   real,                   intent(out) :: deta_tidal_deta !< The partial derivative of eta_tidal with
                                             !! the local value of eta, nondim.
-!   This subroutine calculates returns the partial derivative of the local
-! geopotential height with the input sea surface height due to self-attraction
-! and loading.
 
   if (CS%USE_SAL_SCALAR .and. CS%USE_PREV_TIDES) then
     deta_tidal_deta = 2.0*CS%SAL_SCALAR
@@ -442,7 +408,6 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta)
   real, optional,                   intent(out) :: deta_tidal_deta !< The partial derivative of
                                                              !! eta_tidal with the local value of
                                                              !! eta, nondim.
-
   ! Local variables
   real :: eta_astro(SZI_(G),SZJ_(G))
   real :: eta_SAL(SZI_(G),SZJ_(G))
@@ -533,5 +498,34 @@ subroutine tidal_forcing_end(CS)
   if (associated(CS)) deallocate(CS)
 
 end subroutine tidal_forcing_end
+
+!> \namespace tidal_forcing
+!!
+!! Code by Robert Hallberg, August 2005, based on C-code by Harper
+!! Simmons, February, 2003, in turn based on code by Brian Arbic.
+!!
+!!   The main subroutine in this file calculates the total tidal
+!! contribution to the geopotential, including self-attraction and
+!! loading terms and the astronomical contributions.  All options
+!! are selected with entries in a file that is parsed at run-time.
+!! Overall tides are enabled with the run-time parameter 'TIDES=True'.
+!! Tidal constituents must be individually enabled with lines like
+!! 'TIDE_M2=True'.  This file has default values of amplitude,
+!! frequency, Love number, and phase at time 0 for the Earth's M2,
+!! S2, N2, K2, K1, O1, P1, Q1,  MF, and MM tidal constituents, but
+!! the frequency, amplitude and phase ant time 0 for each constituent
+!! can be changed at run time by setting variables like TIDE_M2_FREQ,
+!! TIDE_M2_AMP and TIDE_M2_PHASE_T0 (for M2).
+!!
+!!   In addition, the approach to calculating self-attraction and
+!! loading is set at run time.  The default is to use the scalar
+!! approximation, with a coefficient TIDE_SAL_SCALAR_VALUE that must
+!! be set in the run-time file (for global runs, 0.094 is typical).
+!! Alternately, TIDAL_SAL_FROM_FILE can be set to read the SAL from
+!! a file containing the results of a previous simulation. To iterate
+!! the SAL to convergence, USE_PREVIOUS_TIDES may be useful (for
+!! details, see Arbic et al., 2004, DSR II). With TIDAL_SAL_FROM_FILE
+!! or USE_PREVIOUS_TIDES,a list of input files must be provided to
+!! describe each constituent's properties from a previous solution.
 
 end module MOM_tidal_forcing
