@@ -687,13 +687,13 @@ end subroutine update_ocean_model
 !                                      the any restart file name as a prefix.
 ! </DESCRIPTION>
 subroutine ocean_model_restart(OS, timestamp, restartname)
-  type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
-                                               !! internal ocean state being saved to a restart file
-  character(len=*), optional, intent(in) :: timestamp !< An optional timestamp string that should be
-                                                      !! prepended to the file name. (Currently this is unused.)
-  character(len=*), optional, intent(in) :: restartname  !< Name of restart file to use 
-                                                         !! This option distinguishes the cesm interface from the
-                                                         !! non-cesm interface
+  type(ocean_state_type),     pointer    :: OS          !< A pointer to the structure containing the
+                                                        !! internal ocean state being saved to a restart file
+  character(len=*), optional, intent(in) :: timestamp   !< An optional timestamp string that should be
+                                                        !! prepended to the file name. (Currently this is unused.)
+  character(len=*), optional, intent(in) :: restartname !< Name of restart file to use 
+                                                        !! This option distinguishes the cesm interface from the
+                                                        !! non-cesm interface
 
   if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
       call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
@@ -705,9 +705,6 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
       "restart files can only be created after the buoyancy forcing is applied.")
 
   if (present(restartname)) then
-
-     write(6,*)'DEBUG: calling save_restart with restartname= ',restartname
-     write(6,*)'DEBUG: restart_outputdir is ',OS%dirs%restart_output_dir
 
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
                        OS%restart_CSp, GV=OS%GV, filename=restartname)
@@ -753,47 +750,47 @@ end subroutine ocean_model_restart
 ! <SUBROUTINE NAME="ocean_model_end">
 !
 ! <DESCRIPTION>
-! Close down the ocean model
-! </DESCRIPTION>
-
-!> ocean_model_end terminates the model run, saving the ocean state in a restart
-!! and deallocating any data associated with the ocean.
-subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
-  type(ocean_public_type), intent(inout) :: Ocean_sfc   !< An ocean_public_type structure that is
-                                                        !! to be deallocated upon termination.
-  type(ocean_state_type),  pointer       :: Ocean_state !< A pointer to the structure containing
-                                                        !! the internal ocean state to be deallocated
-                                                        !! upon termination.
-  type(time_type),         intent(in)    :: Time        !< The model time, used for writing restarts.
-
-!   This subroutine terminates the model run, saving the ocean state in a
-! restart file and deallocating any data associated with the ocean.
+! Close down the ocean model. Terminate the model run, optionally
+! saving the ocean state in a restart file and deallocating any data
+! associated with the ocean.
 
 ! Arguments: Ocean_sfc - An ocean_public_type structure that is to be
 !                        deallocated upon termination.
 !  (inout)   Ocean_state - A pointer to the structure containing the internal
 !                          ocean state to be deallocated upon termination.
 !  (in)      Time - The model time, used for writing restarts.
+!  (in)      write_restart  - Write restart file if true
+! </DESCRIPTION>
+subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time, write_restart)
+  type(ocean_public_type), intent(inout) :: Ocean_sfc     !< An ocean_public_type structure that is
+                                                          !! to be deallocated upon termination.
+  type(ocean_state_type),  pointer       :: Ocean_state   !< A pointer to the structure containing
+                                                          !! the internal ocean state to be deallocated
+                                                          !! upon termination.
+  type(time_type),         intent(in)    :: Time          !< The model time, used for writing restarts.
+  logical,                 intent(in)    :: write_restart !< true => write restart file       
 
-  call ocean_model_save_restart(Ocean_state, Time)
+  if (write_restart) then
+     call ocean_model_save_restart(Ocean_state, Time)
+  end if
   call diag_mediator_end(Time, Ocean_state%diag)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
+
 end subroutine ocean_model_end
 ! </SUBROUTINE> NAME="ocean_model_end"
-
 !=======================================================================
 
 !> ocean_model_save_restart causes restart files associated with the ocean to be
 !! written out.
 subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
-  type(ocean_state_type),     pointer    :: OS  !< A pointer to the structure containing the
-                                                !! internal ocean state (in).
-  type(time_type),            intent(in) :: Time !< The model time at this call, needed for mpp_write calls.
-  character(len=*), optional, intent(in) :: directory  !<  An optional directory into which to
-                                                !! write these restart files.
+  type(ocean_state_type),     pointer    :: OS              !< A pointer to the structure containing the
+                                                            !! internal ocean state (in).
+  type(time_type),            intent(in) :: Time            !< The model time at this call, needed for mpp_write calls.
+  character(len=*), optional, intent(in) :: directory       !<  An optional directory into which to
+                                                            !! write these restart files.
   character(len=*), optional, intent(in) :: filename_suffix !< An optional suffix (e.g., a time-stamp)
-                                                !! to append to the restart file names.
+                                                            !! to append to the restart file names.
 ! Arguments: Ocean_state - A structure containing the internal ocean state (in).
 !  (in)      Time - The model time at this call.  This is needed for mpp_write calls.
 !  (in, opt) directory - An optional directory into which to write these restart files.
@@ -809,6 +806,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
     call MOM_error(WARNING, "ocean_model_save_restart called with inconsistent "//&
          "dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
+
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
        "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
        "restart files can only be created after the buoyancy forcing is applied.")

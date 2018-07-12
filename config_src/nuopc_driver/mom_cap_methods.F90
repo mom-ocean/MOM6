@@ -110,11 +110,11 @@ contains
          file=__FILE__)) &
          return  ! bail out
     !TODO: need to add the So_bldepth since this is needed for the wave model
-    ! call State_getFldPtr(exportState,"So_bldepth", dataPtr_bldepth, rc=rc)
-    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !      line=__LINE__, &
-    !      file=__FILE__)) &
-    !      return  ! bail out
+    call State_getFldPtr(exportState,"So_bldepth", dataPtr_bldepth, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
     call State_getFldPtr(exportState,"So_fswpen", dataPtr_fswpen, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -157,16 +157,17 @@ contains
        do i = isc, iec
           i1 = i + lbnd1 - isc
           ig = i + grid%isc - isc
-          dataPtr_omask(i1,j1) = grid%mask2dT(ig,jg)
-          dataPtr_t(i1,j1)     = ocean_public%t_surf(i,j) * grid%mask2dT(ig,jg) ! surface temp is in K
-          dataPtr_s(i1,j1)     = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
-          dataPtr_u(i1,j1)     = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
-          dataPtr_v(i1,j1)     = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
-          dataPtr_q(i1,j1)     = 0. 
-          !dataPtr_u(i1,j1)    = (grid%cos_rot(ig,jg) * ocean_public%u_surf(i,j) &
-          !                     - grid%sin_rot(ig,jg) * ocean_public%v_surf(i,j)) * grid%mask2dT(ig,jg)
-          !dataPtr_v(i1,j1)    = (grid%cos_rot(ig,jg) * ocean_public%v_surf(i,j) &
-          !                     + grid%sin_rot(ig,jg) * ocean_public%u_surf(i,j)) * grid%mask2dT(ig,jg)
+          dataPtr_omask(i1,j1)   = grid%mask2dT(ig,jg)
+          dataPtr_t(i1,j1)       = ocean_public%t_surf(i,j) * grid%mask2dT(ig,jg) ! surface temp is in K
+          dataPtr_s(i1,j1)       = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
+          dataPtr_u(i1,j1)       = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
+          dataPtr_v(i1,j1)       = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
+          dataPtr_q(i1,j1)       = 0. 
+          dataPtr_bldepth(i1,j1) = 0. ! TODO: this needs to be generalized
+         !dataPtr_u(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%u_surf(i,j) &
+         !                        - grid%sin_rot(ig,jg) * ocean_public%v_surf(i,j)) * grid%mask2dT(ig,jg)
+         !dataPtr_v(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%v_surf(i,j) &
+         !                        + grid%sin_rot(ig,jg) * ocean_public%u_surf(i,j)) * grid%mask2dT(ig,jg)
        end do
     end do
 
