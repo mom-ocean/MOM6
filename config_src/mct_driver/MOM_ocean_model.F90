@@ -42,7 +42,7 @@ use MOM_io,                  only : close_file, file_exists, read_data, write_ve
 use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart,             only : MOM_restart_CS, save_restart
 use MOM_string_functions,    only : uppercase
-use MOM_surface_forcing,     only : surface_forcing_init 
+use MOM_surface_forcing,     only : surface_forcing_init
 use MOM_surface_forcing,     only : convert_IOB_to_fluxes
 use MOM_surface_forcing,     only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing,     only : ice_ocean_boundary_type, surface_forcing_CS
@@ -150,7 +150,7 @@ end type ocean_public_type
 !> Contains information about the ocean state, although it is not necessary that
 !! this is implemented with all models. This type is NOT private, and can therefore CANNOT vary
 !! between different ocean models.
-type, public :: ocean_state_type 
+type, public :: ocean_state_type
   logical :: is_ocean_PE = .false. !< True if this is an ocean PE.
   type(time_type) :: Time          !< The ocean model's time and master clock.
   integer :: Restart_control !< An integer that is bit-tested to determine whether
@@ -285,15 +285,15 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  "staggering of the surface velocity field that is \n"//&
                  "returned to the coupler.  Valid values include \n"//&
                  "'A', 'B', or 'C'.", default="C")
-  if (uppercase(stagger(1:1)) == 'A') then 
+  if (uppercase(stagger(1:1)) == 'A') then
      Ocean_sfc%stagger = AGRID
-  elseif (uppercase(stagger(1:1)) == 'B') then 
+  elseif (uppercase(stagger(1:1)) == 'B') then
      Ocean_sfc%stagger = BGRID_NE
-  elseif (uppercase(stagger(1:1)) == 'C') then 
+  elseif (uppercase(stagger(1:1)) == 'C') then
      Ocean_sfc%stagger = CGRID_NE
-  else 
+  else
      call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
-          trim(stagger)//" is invalid.") 
+          trim(stagger)//" is invalid.")
   end if
 
   call get_param(param_file, mdl, "RESTORE_SALINITY",OS%restore_salinity, &
@@ -662,8 +662,8 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 
   if (present(directory)) then
      restart_dir = directory
-  else 
-     restart_dir = OS%dirs%restart_output_dir 
+  else
+     restart_dir = OS%dirs%restart_output_dir
   endif
 
   call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV)

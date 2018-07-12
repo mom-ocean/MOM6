@@ -6,7 +6,7 @@ module time_utils_mod
   use time_manager_mod,         only: GREGORIAN, JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
   use time_manager_mod,         only: fms_get_calendar_type => get_calendar_type
   use ESMF
-  
+
   implicit none
   private
 
@@ -49,7 +49,7 @@ module time_utils_mod
     case default
        call mpp_error(FATAL, &
        'ocean_solo: ocean_solo_nml entry calendar must be one of GREGORIAN|JULIAN|NOLEAP|THIRTY_DAY|NO_CALENDAR.' )
-    end select 
+    end select
   end function fms2esmf_cal_c
 
   function fms2esmf_cal_i(calendar)
@@ -150,7 +150,7 @@ module time_utils_mod
     type(time_type)                         :: string_to_date
 
     integer                                 :: yr,mon,day,hr,min,sec
-    
+
     if(present(rc)) rc = ESMF_SUCCESS
 
     read(string, '(I4.4,I2.2,I2.2,".",I2.2,I2.2,I2.2)') yr, mon, day, hr, min, sec

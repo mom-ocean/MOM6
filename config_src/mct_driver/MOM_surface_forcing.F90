@@ -59,7 +59,7 @@ public apply_flux_adjustments
 
 !> Contains pointers to the forcing fields which may be used to drive MOM.
 !! All fluxes are positive downward.
-type, public :: surface_forcing_CS ; 
+type, public :: surface_forcing_CS ;
   integer :: wind_stagger       !< AGRID, BGRID_NE, or CGRID_NE (integer values
                                 !! from MOM_domains) to indicate the staggering of
                                 !! the winds that are being provided in calls to
@@ -604,7 +604,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
         endif
      end if
   end do; end do
-  
+
   ! GMM, CIME uses AGRID. All the BGRID_NE code can be cleaned later
   wind_stagger = AGRID
 
