@@ -9,7 +9,7 @@
 !!
 !! @section Overview Overview
 !!
-!! **This MOM cap has been tested with MOM5 and MOM6.**
+!! **This MOM cap has been tested with MOM6.**
 !!
 !! This document describes the MOM "cap", which is a small software layer that is 
 !! required when the [MOM ocean model] (http://mom-ocean.org/web) 
@@ -383,12 +383,11 @@ module mom_cap_mod
   use MOM_get_input,            only: Get_MOM_Input, directories
   use MOM_domains,              only: pass_var
   use MOM_error_handler,        only: is_root_pe
-#ifdef MOM6_CAP
   use MOM_ocean_model,          only: ice_ocean_boundary_type
   use MOM_grid,                 only: ocean_grid_type
-#else
-  use ocean_types_mod,          only: ice_ocean_boundary_type, ocean_grid_type
-#endif
+  use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
+  use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
+  use MOM_ocean_model,          only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
 #ifdef CESMCOUPLED
   use mom_cap_methods,          only: mom_import, mom_export 
   use esmFlds,                  only: flds_scalar_name, flds_scalar_num
@@ -405,9 +404,6 @@ module mom_cap_mod
   use shr_file_mod,             only: shr_file_getLogUnit, shr_file_getLogLevel
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
 #endif
-  use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
-  use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
-  use MOM_ocean_model,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
 
   use ESMF
   use NUOPC
@@ -424,6 +420,7 @@ module mom_cap_mod
 
   implicit none
   private
+
   public SetServices
 
   type ocean_internalstate_type
@@ -455,17 +452,17 @@ module mom_cap_mod
   type (fld_list_type) :: fldsFrOcn(fldsMax)
 #endif
 
-  integer   :: debug = 0
-  integer   :: import_slice = 1
-  integer   :: export_slice = 1
+  integer            :: debug = 0
+  integer            :: import_slice = 1
+  integer            :: export_slice = 1
   character(len=256) :: tmpstr
-  integer   :: dbrc
+  integer            :: dbrc
+  type(ESMF_Grid)    :: mom_grid_i
 
-  type(ESMF_Grid)         :: mom_grid_i
 #ifdef CESMCOUPLED
-  integer                 :: logunit  ! logging unit number
   logical                 :: write_diagnostics = .false.
-  character(len=32)       :: runtype              ! Run type
+  integer                 :: logunit  ! stdout logging unit number
+  character(len=32)       :: runtype  ! run type
 #else
   logical                 :: write_diagnostics = .true.
 #endif
@@ -473,7 +470,6 @@ module mom_cap_mod
   logical                 :: grid_attach_area = .false.
   integer(ESMF_KIND_I8)   :: restart_interval
   logical                 :: sw_decomp
-  real(ESMF_KIND_R8)      :: c1, c2, c3, c4
   character(len=*),parameter :: u_file_u = &
        __FILE__
 
@@ -595,6 +591,7 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
     call ESMF_AttributeGet(gcomp, name="DumpFields", value=value, defaultValue="false", &
       convention="NUOPC", purpose="Instance", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -613,6 +610,7 @@ contains
     profile_memory=(trim(value)/="false")
     call ESMF_LogWrite('MOM_CAP:ProfileMemory = '//trim(value), ESMF_LOGMSG_INFO, rc=dbrc)  
 
+#ifndef CESMCOUPLED
     ! Retrieve restart_interval in (seconds)
     ! A restart_interval value of 0 means no restart will be written.
     call ESMF_AttributeGet(gcomp, name="restart_interval", value=value, defaultValue="0", &
@@ -635,6 +633,7 @@ contains
       return
     endif
     call ESMF_LogWrite('MOM_CAP:restart_interval = '//trim(value), ESMF_LOGMSG_INFO, rc=dbrc)  
+#endif
 
     call ESMF_AttributeGet(gcomp, name="GridAttachArea", value=value, defaultValue="false", &
       convention="NUOPC", purpose="Instance", rc=rc)
@@ -688,7 +687,6 @@ contains
     integer                                :: nflds       
     logical                                :: activefld
     character(len=32)                      :: starttype            ! model start type
-    integer                                :: logunit
     character(len=512)                     :: diro
     character(len=512)                     :: logfile
     character(len=64)                      :: cvalue
@@ -756,30 +754,6 @@ contains
     dt_cpld = DT_OCEAN
     DT = set_time (DT_OCEAN, 0)         
     Time = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
-
-    ocean_public%is_ocean_pe = .true.
-    call ocean_model_init(ocean_public, ocean_state, Time, Time)
-
-#ifdef CESMCOUPLED    
-    call ocean_model_init_sfc(ocean_state, ocean_public)
-#endif
-
-    !tcx tcraig This results in errors in CESM with help from Alper
-    ! FATAL error "MPP_OPEN: error in OPEN for data_table"
-    ! The subroutine data_override_init shouldn't be called because ALLOW_FLUX_ADJUSTMENTS is set to FALSE
-    !tcx    call data_override_init(ocean_domain_in = ocean_public%domain)
-
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
-    call IOB_allocate(ice_ocean_boundary, isc, iec, jsc, jec)
-
-    call external_coupler_sbc_init(ocean_public%domain, dt_cpld, Run_len)
-
-    ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
-    call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
 
 #ifdef CESMCOUPLED
 
@@ -859,8 +833,11 @@ contains
     end if
 
     if (runtype == "initial") then 
+
        ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
+       ocean_public%is_ocean_pe = .true.
        call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file = 'n')
+
 
     else  ! hybrid or branch or continuos runs
 
@@ -879,10 +856,41 @@ contains
           write(logunit,*) 'Reading restart file: ',trim(restartfile)
        end if
        call shr_file_freeUnit(nu)
+
+       ocean_public%is_ocean_pe = .true.
+       call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file=trim(restartfile))
+
     end if
+    call ocean_model_init_sfc(ocean_state, ocean_public)
+
+#else
+
+    ocean_public%is_ocean_pe = .true.
+    call ocean_model_init(ocean_public, ocean_state, Time, Time)
+
+#endif
+
+    !tcx tcraig This results in errors in CESM with help from Alper
+    ! FATAL error "MPP_OPEN: error in OPEN for data_table"
+    ! The subroutine data_override_init shouldn't be called because ALLOW_FLUX_ADJUSTMENTS is set to FALSE
+    !tcx    call data_override_init(ocean_domain_in = ocean_public%domain)
+
+    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+    call IOB_allocate(ice_ocean_boundary, isc, iec, jsc, jec)
+
+    call external_coupler_sbc_init(ocean_public%domain, dt_cpld, Run_len)
+
+    ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
+    call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+
+#ifdef CESMCOUPLED
 
     ! create import and export field list needed by data models
-    call shr_nuopc_fldList_Concat(fldListFr(compocn), fldListTo(compocn), flds_o2x, flds_x2o, flds_scalar_name)
+    ! call shr_nuopc_fldList_Concat(fldListFr(compocn), fldListTo(compocn), flds_o2x, flds_x2o, flds_scalar_name)
 
     ! advertise import and export fields
     nflds = shr_nuopc_fldList_Getnumflds(fldListFr(compocn))
@@ -909,31 +917,66 @@ contains
 
 #else
 
-    call MOM_FieldsSetup(ice_ocean_boundary, ocean_public)
+    ! This sets pointers of the fldsToOcn to the iceocean_boundary_type
+    ! Don't point directly into mom data YET (last field is optional in interface)
+    ! instead, create space for the field when it's "realized".
 
-    call MOM_AdvertiseFields(importState, fldsToOcn_num, fldsToOcn, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+    !--------- import fields -------------
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_zonal_moment_flx"      , "will provide", data=Ice_ocean_boundary%u_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_merid_moment_flx"      , "will provide", data=Ice_ocean_boundary%v_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_sensi_heat_flx"        , "will provide", data=Ice_ocean_boundary%t_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_evap_rate"             , "will provide", data=Ice_ocean_boundary%q_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"             , "will provide", data=Ice_ocean_boundary%salt_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide", data=Ice_ocean_boundary%lw_flux  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dir_flx"    , "will provide", data=Ice_ocean_boundary%sw_flux_vis_dir)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dif_flx"    , "will provide", data=Ice_ocean_boundary%sw_flux_vis_dif)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dir_flx"     , "will provide", data=Ice_ocean_boundary%sw_flux_nir_dir)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dif_flx"     , "will provide", data=Ice_ocean_boundary%sw_flux_nir_dif)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_prec_rate"             , "will provide", data=Ice_ocean_boundary%lprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fprec_rate"            , "will provide", data=Ice_ocean_boundary%fprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide", data=Ice_ocean_boundary%runoff )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide", data=Ice_ocean_boundary%calving)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide", data=Ice_ocean_boundary%runoff_hflx )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide", data=Ice_ocean_boundary%calving_hflx)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide", data=Ice_ocean_boundary%p )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide", data=Ice_ocean_boundary%mi)
 
-    call MOM_AdvertiseFields(exportState, fldsFrOcn_num, fldsFrOcn, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+    !--------- export fields -------------
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature"    , "will provide", data=ocean_public%t_surf)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"                     , "will provide", data=ocean_public%s_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal"          , "will provide", data=ocean_public%u_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid"          , "will provide", data=ocean_public%v_surf )
+   !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_idir"           , "will provide")
+   !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir"           , "will provide")
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide", data=ocean_public%sea_lev)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide", data=ocean_public%frazil)
+
+    do n = 1,fldsToOcn_num
+       call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)(i)%shortname, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+    enddo
+
+    do n = 1,fldsFrOcn_num
+       call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)(i)%shortname, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+    enddo
+
 #endif
 
-!#ifdef MOM6_CAP
-    ! When running mom6 solo, the rotation angles are not computed internally
-    ! in MOM6. We need to 
-    ! calculate cos and sin of rotational angle for MOM6; the values
-    ! are stored in ocean_internalstate%ptr%ocean_grid_ptr%cos_rot and sin_rot
-    ! The rotation angles are retrieved during run time to rotate incoming
-    ! and outgoing vectors
-    !
-!    call calculate_rot_angle(ocean_state, ocean_public)
-!#endif
+! When running mom6 solo, the rotation angles are not computed internally
+! in MOM6. We need to calculate cos and sin of rotational angle for MOM6;
+! the values are stored in ocean_internalstate%ptr%ocean_grid_ptr%cos_rot and sin_rot
+! The rotation angles are retrieved during run time to rotate incoming
+! and outgoing vectors
+!
+! call calculate_rot_angle(ocean_state, ocean_public)
 ! tcraig, this is handled fine internally and if not, then later call this
 !    call initialize_grid_rotation_angle(ocean_grid, PF)
 
@@ -1351,13 +1394,7 @@ contains
     enddo
     enddo
 
-#ifdef MOM5_CAP
-    call ocean_model_data_get(ocean_state, ocean_public, 'ulon', ofld, isc, jsc)
-#endif
-
-#ifdef MOM6_CAP
     call ocean_model_data_get(ocean_state, ocean_public, 'geoLonBu', ofld, isc, jsc)
-#endif
     write(tmpstr,*) subname//' ofld xu = ',minval(ofld),maxval(ofld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     call mpp_global_field(ocean_public%domain, ofld, gfld)
@@ -1386,16 +1423,8 @@ contains
     enddo
     enddo
 
-! The corner latitude values are treated differently because MOM5 runs on B-Grid while
-! MOM6 runs on C-Grid.
-#ifdef MOM5_CAP
-    call ocean_model_data_get(ocean_state, ocean_public, 'ulat', ofld, isc, jsc)
-#endif
-
-#ifdef MOM6_CAP
+    ! MOM6 runs on C-Grid.
     call ocean_model_data_get(ocean_state, ocean_public, 'geoLatBu', ofld, isc, jsc)
-#endif
-
     write(tmpstr,*) subname//' ofld yu = ',minval(ofld),maxval(ofld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     call mpp_global_field(ocean_public%domain, ofld, gfld)
@@ -1577,7 +1606,7 @@ contains
     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
     call get_ocean_grid(ocean_state, ocean_grid)
 
-    call mom_export(ocean_public, ocean_grid, exportState, rc=rc)
+    call mom_export(ocean_public, ocean_grid, exportState, logunit, clock, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -1782,12 +1811,7 @@ contains
       file=__FILE__)) &
       return  ! bail out
 
-!#ifdef MOM5_CAP
     call get_ocean_grid(ocean_state, ocean_grid)
-!#endif
-!#ifdef MOM6_CAP
-!    ocean_grid => ocean_internalstate%ptr%ocean_grid_ptr
-!#endif
 
 #ifdef CESMCOUPLED
     ! Reset shr logging to my log file
@@ -1852,10 +1876,9 @@ contains
     dataPtr_mzmf = mzmf
     dataPtr_mmmf = mmmf
     deallocate(mzmf, mmmf)
-#endif
 
     !Optionally write restart files when currTime-startTime is integer multiples of restart_interval
-    if(restart_interval > 0 ) then
+    if (restart_interval > 0 ) then
       time_elapsed = currTime - startTime
       call ESMF_TimeIntervalGet(time_elapsed, s_i8=time_elapsed_sec, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1863,7 +1886,7 @@ contains
         file=__FILE__)) &
         return  ! bail out
       n_interval = time_elapsed_sec / restart_interval
-      if((n_interval .gt. 0) .and. (n_interval*restart_interval == time_elapsed_sec)) then
+      if ((n_interval .gt. 0) .and. (n_interval*restart_interval == time_elapsed_sec)) then
           time_restart_current = esmf2fms_time(currTime)
           timestamp = date_to_string(time_restart_current)
           call ESMF_LogWrite("MOM: Writing restart at "//trim(timestamp), ESMF_LOGMSG_INFO, rc=dbrc)
@@ -1871,37 +1894,19 @@ contains
           call ocean_model_restart(ocean_state, timestamp)
       endif
     endif
-
+#endif
+    
     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
     call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
 
-!#ifdef MOM5_CAP
-    call get_ocean_grid(ocean_state, ocean_grid)
-!#endif
-!#ifdef MOM6_CAP
-!    ocean_grid => ocean_internalstate%ptr%ocean_grid_ptr
-!#endif
-
 #ifdef CESMCOUPLED
-    call mom_export(ocean_public, ocean_grid, exportState, rc=rc)
+
+    call mom_export(ocean_public, ocean_grid, exportState, logunit, clock, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-
-    !DEBUG
-    call ESMF_ClockGet(clock, currTIME=MyTime, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
-    call ESMF_TimeGet (MyTime, yy=year, mm=month, dd=day, s=seconds, rc=rc )
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
-    !DEBUG
 
     ! Determine if need to write restart
     call ESMF_ClockGetAlarm(clock, alarmname='seq_timemgr_alarm_restart', alarm=alarm, rc=rc)
@@ -1911,12 +1916,10 @@ contains
          return  ! bail out
 
     if (ESMF_AlarmIsRinging(alarm, rc=rc)) then
-       write(6,*)'DEBUG: alarm is ringing'
-
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
        force_restart_now = .true.
        call ESMF_AlarmRingerOff( alarm, rc=rc )
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1930,8 +1933,6 @@ contains
     if (debug > 0 .and. is_root_pe()) then
        write(logunit) subname//' force_restart_now=', force_restart_now
     end if
-
-    write(6,*)'DEBUG: day,seconds,restart= ',day,seconds,force_restart_now 
 
     if (force_restart_now) then
 
@@ -1954,6 +1955,7 @@ contains
             return  ! bail out
        seconds = seconds + hour*3600 + minute*60
        write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
+
        write(6,*)'DEBUG: runid= ',runid
        write(6,*)'DEBUG: year,month,day,seconds= ',year,month,day,seconds
        write(6,*)'DEBUG: restartname= ',trim(restartname)
@@ -1979,6 +1981,7 @@ contains
     call shr_file_setLogLevel(shrloglev)
 
 #else
+
     allocate(ofld(isc:iec,jsc:jec))
 
     call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
@@ -2087,9 +2090,11 @@ contains
 
     !call ESMF_LogWrite("Before calling sbc forcing", ESMF_LOGMSG_INFO, rc=rc)
     call external_coupler_sbc_after(Ice_ocean_boundary, ocean_public, nc, dt_cpld )
-
     !call ESMF_LogWrite("Before dumpMomInternal", ESMF_LOGMSG_INFO, rc=rc)
     !write(*,*) 'MOM: --- run phase called ---'
+
+    !--------- import fields -------------
+
     call dumpMomInternal(mom_grid_i, import_slice, "mean_zonal_moment_flx"     , "will provide", Ice_ocean_boundary%u_flux)
     call dumpMomInternal(mom_grid_i, import_slice, "mean_merid_moment_flx"     , "will provide", Ice_ocean_boundary%v_flux)
     call dumpMomInternal(mom_grid_i, import_slice, "mean_sensi_heat_flx"       , "will provide", Ice_ocean_boundary%t_flux)
@@ -2109,9 +2114,9 @@ contains
     call dumpMomInternal(mom_grid_i, import_slice, "inst_pres_height_surface"  , "will provide", Ice_ocean_boundary%p )
     call dumpMomInternal(mom_grid_i, import_slice, "mass_of_overlying_sea_ice" , "will provide", Ice_ocean_boundary%mi)
 
-!--------- export fields -------------
+    !--------- export fields -------------
 
-!    call dumpMomInternal(mom_grid_i, export_slice, "ocean_mask"               , "will provide", dataPtr_mask)
+   !call dumpMomInternal(mom_grid_i, export_slice, "ocean_mask"               , "will provide", dataPtr_mask)
     call dumpMomInternal(mom_grid_i, export_slice, "sea_surface_temperature"   , "will provide", ocean_public%t_surf)
     call dumpMomInternal(mom_grid_i, export_slice, "s_surf"                    , "will provide", ocean_public%s_surf )
     call dumpMomInternal(mom_grid_i, export_slice, "ocn_current_zonal"         , "will provide", ocean_public%u_surf )
@@ -2505,33 +2510,6 @@ contains
   end subroutine State_GetFldPtr
 
 #ifndef CESMCOUPLED
-  !-----------------------------------------------------------------------------
-  subroutine MOM_AdvertiseFields(state, nfields, field_defs, rc)
-
-    type(ESMF_State), intent(inout)             :: state
-    integer,intent(in)                          :: nfields
-    type(fld_list_type), intent(inout)          :: field_defs(:)
-    integer, intent(inout)                      :: rc
-
-    integer                                     :: i
-    character(len=*),parameter  :: subname='(mom_cap:MOM_AdvertiseFields)'
-
-    rc = ESMF_SUCCESS
-
-    do i = 1, nfields
-
-      call NUOPC_Advertise(state, &
-        standardName=field_defs(i)%stdname, &
-        name=field_defs(i)%shortname, &
-        rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
-    enddo
-
-  end subroutine MOM_AdvertiseFields
 
   !-----------------------------------------------------------------------------
 
@@ -2579,7 +2557,7 @@ contains
           call ESMF_LogWrite(tmpstr, ESMF_LOGMSG_INFO, rc=dbrc)
           field = ESMF_FieldCreate(grid=grid, &
             farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_DELOCAL, &
-!            farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_GLOBAL, &
+           !farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_GLOBAL, &
             name=field_defs(i)%shortname, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -2604,11 +2582,11 @@ contains
           line=__LINE__, &
           file=__FILE__)) &
           return  ! bail out
-!        call ESMF_FieldPrint(field=field, rc=rc)
-!        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!          line=__LINE__, &
-!          file=__FILE__)) &
-!          return  ! bail out
+        !        call ESMF_FieldPrint(field=field, rc=rc)
+        !        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        !          line=__LINE__, &
+        !          file=__FILE__)) &
+        !          return  ! bail out
       else
         call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is not connected.", &
           ESMF_LOGMSG_INFO, &
@@ -2616,7 +2594,7 @@ contains
           file=__FILE__, &
           rc=dbrc)
         ! TODO: Initialize the value in the pointer to 0 after proper restart is setup
-        !if(associated(field_defs(i)%farrayPtr) ) field_defs(i)%farrayPtr = 0.0
+        ! if(associated(field_defs(i)%farrayPtr) ) field_defs(i)%farrayPtr = 0.0
         ! remove a not connected Field from State
         call ESMF_StateRemove(state, (/field_defs(i)%shortname/), rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -2628,53 +2606,6 @@ contains
     enddo
 
   end subroutine MOM_RealizeFields
-
-  !-----------------------------------------------------------------------------
-
-  subroutine MOM_FieldsSetup(ice_ocean_boundary,ocean_public)
-    type(ice_ocean_boundary_type), intent(in)   :: Ice_ocean_boundary
-    type(ocean_public_type), intent(in)         :: ocean_public
-
-    integer :: rc
-    character(len=*),parameter  :: subname='(mom_cap:MOM_FieldsSetup)'
-
-    ! fld_list_add(num, fldlist, stdname, transferOffer, data(optional), shortname(optional))
-
-    !--------- import fields -------------
-    ! tcraig, don't point directly into mom data YET (last field is optional in interface)
-    ! instead, create space for the field when it's "realized".
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_zonal_moment_flx", "will provide", data=Ice_ocean_boundary%u_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_merid_moment_flx", "will provide", data=Ice_ocean_boundary%v_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_sensi_heat_flx"  , "will provide", data=Ice_ocean_boundary%t_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_evap_rate"       , "will provide", data=Ice_ocean_boundary%q_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"       , "will provide", data=Ice_ocean_boundary%salt_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"      , "will provide", data=Ice_ocean_boundary%lw_flux  )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dir_flx", "will provide", data=Ice_ocean_boundary%sw_flux_vis_dir)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dif_flx", "will provide", data=Ice_ocean_boundary%sw_flux_vis_dif)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dir_flx" , "will provide", data=Ice_ocean_boundary%sw_flux_nir_dir)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dif_flx" , "will provide", data=Ice_ocean_boundary%sw_flux_nir_dif)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_prec_rate"       , "will provide", data=Ice_ocean_boundary%lprec  )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fprec_rate"      , "will provide", data=Ice_ocean_boundary%fprec  )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"     , "will provide", data=Ice_ocean_boundary%runoff )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"    , "will provide", data=Ice_ocean_boundary%calving)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx" , "will provide", data=Ice_ocean_boundary%runoff_hflx )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx", "will provide", data=Ice_ocean_boundary%calving_hflx)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface" , "will provide", data=Ice_ocean_boundary%p )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice", "will provide", data=Ice_ocean_boundary%mi)
-
-    !--------- export fields -------------
-
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask", "will provide")
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature", "will provide", data=ocean_public%t_surf)
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"    , "will provide", data=ocean_public%s_surf )
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal", "will provide", data=ocean_public%u_surf )
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid", "will provide", data=ocean_public%v_surf )
-!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_idir", "will provide")
-!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir", "will provide")
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"   , "will provide", data=ocean_public%sea_lev)
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential"   , "will provide", data=ocean_public%frazil)
-
-  end subroutine MOM_FieldsSetup
 
   !-----------------------------------------------------------------------------
 
@@ -2717,7 +2648,10 @@ contains
     endif
 
   end subroutine fld_list_add
+
 #endif
+
+  !-----------------------------------------------------------------------------
 
   subroutine dumpMomInternal(grid, slice, stdname, nop, farray)
 

@@ -34,18 +34,21 @@ contains
   !> Maps outgoing ocean data to ESMF State
   !! See \ref section_mom_export for a summary of the data
   !! that is transferred from MOM6 to MCT.
-  subroutine mom_export(ocean_public, grid, exportState, rc)
+  subroutine mom_export(ocean_public, grid, exportState, logunit, clock, rc)
     type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
     type(ocean_grid_type)   , intent(in)    :: grid         !< Ocean model grid
     type(ESMF_State)        , intent(inout) :: exportState  !< outgoing data
+    integer                 , intent(in)    :: logunit 
+    type(ESMF_Clock)        , intent(in)    :: clock
     integer                 , intent(inout) :: rc 
 
     ! Local variables
     real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
-    integer :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec         !< Grid indices
-    integer :: lbnd1, lbnd2, ubnd1, ubnd2
-    real :: slp_L, slp_R, slp_C, slope, u_min, u_max
-
+    integer         :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec !< Grid indices
+    integer         :: lbnd1, lbnd2, ubnd1, ubnd2
+    real            :: slp_L, slp_R, slp_C, slope, u_min, u_max
+    integer         :: day, secs
+    type(ESMF_time) :: currTime 
     real(ESMF_KIND_R8), pointer :: dataPtr_omask(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_t(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_s(:,:)
@@ -60,8 +63,8 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_roce_HDO(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_fco2_ocn(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_fdms_ocn(:,:)
-    character(len=*), parameter :: subname = '(ocn_export)'
-    logical :: first_time = .true.
+    character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
+    character(len=*), parameter :: subname = '(mom_export)'
     !-----------------------------------------------------------------------
 
     rc = ESMF_SUCCESS
@@ -106,11 +109,12 @@ contains
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
-    call State_getFldPtr(exportState,"So_bldepth", dataPtr_bldepth, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+    !TODO: need to add the So_bldepth since this is needed for the wave model
+    ! call State_getFldPtr(exportState,"So_bldepth", dataPtr_bldepth, rc=rc)
+    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    !      line=__LINE__, &
+    !      file=__FILE__)) &
+    !      return  ! bail out
     call State_getFldPtr(exportState,"So_fswpen", dataPtr_fswpen, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -244,6 +248,24 @@ contains
        end do
     end do
 
+    if (debug .and. is_root_pe()) then
+       call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
+       call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
+
+       do j = jsc, jec
+          j1 = j + lbnd2 - jsc
+          do i = isc, iec
+             i1 = i + lbnd1 - isc
+             write(logunit,F01)'export: day, secs, j, i, t_surf = ',day,secs,j,i,dataPtr_t(i1,j1)
+             write(logunit,F01)'export: day, secs, j, i, s_surf = ',day,secs,j,i,dataPtr_s(i1,j1)
+             write(logunit,F01)'export: day, secs, j, i, u_surf = ',day,secs,j,i,dataPtr_u(i1,j1)
+             write(logunit,F01)'export: day, secs, j, i, v_surf = ',day,secs,j,i,dataPtr_v(i1,j1)
+             write(logunit,F01)'export: day, secs, j, i, dhdx   = ',day,secs,j,i,dataPtr_dhdx(i1,j1)
+             write(logunit,F01)'export: day, secs, j, i, dhdy   = ',day,secs,j,i,dataPtr_dhdy(i1,j1)
+          end do
+       end do
+    end if
+
   end subroutine mom_export
 
 !-----------------------------------------------------------------------
@@ -304,8 +326,8 @@ contains
     integer                     :: day, secs
     type(ESMF_time)             :: currTime 
     logical                     :: do_import
-    character(len=*), parameter :: F01  = "('(ocn_import) ',a,4(i6,2x),d21.14)"
-    character(len=*), parameter :: subname = '(ocn_import)'
+    character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
+    character(len=*), parameter :: subname = '(mom_import)'
     !-----------------------------------------------------------------------
 
     rc = ESMF_SUCCESS
@@ -488,37 +510,36 @@ contains
     else
        do_import = .true.
     end if
-    write(6,*)'DEBUG: import_cnt, do_import= ',import_cnt, do_import
 
-    do j = jsc, jec
-       j1 = j + lbnd2 - jsc
-       jg = j + grid%jsc - jsc
-       do i = isc, iec
-          i1 = i + lbnd1 - isc
-          ig = i + grid%jsc - isc
+    if (do_import) then
+       do j = jsc, jec
+          j1 = j + lbnd2 - jsc
+          jg = j + grid%jsc - jsc
+          do i = isc, iec
+             i1 = i + lbnd1 - isc
+             ig = i + grid%jsc - isc
 
-          ! ice_ocean_boundary%p(i,j)               = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%u_flux(i,j)          = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%v_flux(i,j)          = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%t_flux(i,j)          = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%q_flux(i,j)          = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%lw_flux(i,j)         = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%sw_flux_vis_dir(i,j) = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%sw_flux_vis_dif(i,j) = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%sw_flux_nir_dir(i,j) = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%sw_flux_nir_dif(i,j) = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%lprec(i,j)           = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%fprec(i,j)           = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%runoff(i,j)          = 0.0_ESMF_KIND_R8
-          ! ice_ocean_boundary%runoff_hflx(i,j)     = 0.0 * GRID%mask2dT(ig,jg)
-          ! ice_ocean_boundary%calving(i,j)         = 0.0 * GRID%mask2dT(ig,jg)
-          ! ice_ocean_boundary%calving_hflx(i,j)    = 0.0 * GRID%mask2dT(ig,jg)
-          ! ice_ocean_boundary%ustar_berg(i,j)      = 0.0 * GRID%mask2dT(ig,jg)
-          ! ice_ocean_boundary%area_berg(i,j)       = 0.0 * GRID%mask2dT(ig,jg)
-          ! ice_ocean_boundary%mass_berg(i,j)       = 0.0 * GRID%mask2dT(ig,jg)
-          ! ice_ocean_boundary%mi(i,j)              = 0.0 * GRID%mask2dT(ig,jg)
+             ! ice_ocean_boundary%p(i,j)               = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%u_flux(i,j)          = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%v_flux(i,j)          = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%t_flux(i,j)          = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%q_flux(i,j)          = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%lw_flux(i,j)         = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%sw_flux_vis_dir(i,j) = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%sw_flux_vis_dif(i,j) = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%sw_flux_nir_dir(i,j) = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%sw_flux_nir_dif(i,j) = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%lprec(i,j)           = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%fprec(i,j)           = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%runoff(i,j)          = 0.0_ESMF_KIND_R8
+             ! ice_ocean_boundary%runoff_hflx(i,j)     = 0.0 * GRID%mask2dT(ig,jg)
+             ! ice_ocean_boundary%calving(i,j)         = 0.0 * GRID%mask2dT(ig,jg)
+             ! ice_ocean_boundary%calving_hflx(i,j)    = 0.0 * GRID%mask2dT(ig,jg)
+             ! ice_ocean_boundary%ustar_berg(i,j)      = 0.0 * GRID%mask2dT(ig,jg)
+             ! ice_ocean_boundary%area_berg(i,j)       = 0.0 * GRID%mask2dT(ig,jg)
+             ! ice_ocean_boundary%mass_berg(i,j)       = 0.0 * GRID%mask2dT(ig,jg)
+             ! ice_ocean_boundary%mi(i,j)              = 0.0 * GRID%mask2dT(ig,jg)
 
-          if (do_import) then
              ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)      * GRID%mask2dT(ig,jg)  
              ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)   * GRID%mask2dT(ig,jg)
              ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)   * GRID%mask2dT(ig,jg)
@@ -537,13 +558,12 @@ contains
              !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)  * GRID%mask2dT(ig,jg)
              !ice_ocean_boundary%u_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1))
              !ice_ocean_boundary%v_flux(i,j)         = (GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1))
-          endif
-
+          enddo
        enddo
-    enddo
+    end if
 
     ! debug output
-    if (import_cnt > 2 .and. debug .and. is_root_pe()) then
+    if (do_import .and. debug .and. is_root_pe()) then
        call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
        call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
 
@@ -572,6 +592,7 @@ contains
   end subroutine mom_import
 
   !-----------------------------------------------------------------------------                                                         
+
   subroutine State_GetFldPtr(ST, fldname, fldptr, rc)
     type(ESMF_State)            , intent(in)  :: ST
     character(len=*)            , intent(in)  :: fldname
