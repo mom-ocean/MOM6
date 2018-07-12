@@ -793,8 +793,7 @@ WARN_LOGFILE           = doxygen.log
 INPUT                  = ../src \
                          front_page.md \
                          ../config_src/solo_driver \
-                         ../config_src/dynamic_symmetric \
-                         ../config_src/coupled_driver/coupler_util.F90 \
+                         ../config_src/dynamic_symmetric
                          ../config_src/coupled_driver/ocean_model_MOM.F90
 
 # This tag can be used to specify the character encoding of the source files
