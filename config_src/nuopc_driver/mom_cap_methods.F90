@@ -38,9 +38,9 @@ contains
     type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
     type(ocean_grid_type)   , intent(in)    :: grid         !< Ocean model grid
     type(ESMF_State)        , intent(inout) :: exportState  !< outgoing data
-    integer                 , intent(in)    :: logunit 
+    integer                 , intent(in)    :: logunit
     type(ESMF_Clock)        , intent(in)    :: clock
-    integer                 , intent(inout) :: rc 
+    integer                 , intent(inout) :: rc
 
     ! Local variables
     real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
@@ -48,7 +48,7 @@ contains
     integer         :: lbnd1, lbnd2, ubnd1, ubnd2
     real            :: slp_L, slp_R, slp_C, slope, u_min, u_max
     integer         :: day, secs
-    type(ESMF_time) :: currTime 
+    type(ESMF_time) :: currTime
     real(ESMF_KIND_R8), pointer :: dataPtr_omask(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_t(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_s(:,:)
@@ -162,7 +162,7 @@ contains
           dataPtr_s(i1,j1)       = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
           dataPtr_u(i1,j1)       = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
           dataPtr_v(i1,j1)       = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
-          dataPtr_q(i1,j1)       = 0. 
+          dataPtr_q(i1,j1)       = 0.
           dataPtr_bldepth(i1,j1) = 0. ! TODO: this needs to be generalized
          !dataPtr_u(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%u_surf(i,j) &
          !                        - grid%sin_rot(ig,jg) * ocean_public%v_surf(i,j)) * grid%mask2dT(ig,jg)
@@ -285,17 +285,17 @@ contains
     type(ESMF_State)              , intent(inout) :: importState        !< incoming data
     type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
     type(ESMF_Clock)              , intent(in)    :: clock
-    integer                       , intent(in)    :: logunit 
+    integer                       , intent(in)    :: logunit
     character(len=*)              , intent(in)    :: runtype
-    integer                       , intent(inout) :: rc 
+    integer                       , intent(inout) :: rc
 
     ! Local Variables
     integer                     :: i, j, i1, j1, ig, jg  ! Grid indices
     integer                     :: isc, iec, jsc, jec    ! Grid indices
-    integer                     :: isc_bnd, jsc_bnd, ise_bnd, jse_bnd 
+    integer                     :: isc_bnd, jsc_bnd, ise_bnd, jse_bnd
     integer                     :: lbnd1, lbnd2, ubnd1, ubnd2
     integer                     :: i0, j0, is, js, ie, je
-    real(ESMF_KIND_R8), pointer :: dataPtr_p(:,:) 
+    real(ESMF_KIND_R8), pointer :: dataPtr_p(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_ifrac(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_duu10n(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_co2prog(:,:)
@@ -325,7 +325,7 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_rain(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_snow(:,:)
     integer                     :: day, secs
-    type(ESMF_time)             :: currTime 
+    type(ESMF_time)             :: currTime
     logical                     :: do_import
     character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
     character(len=*), parameter :: subname = '(mom_import)'
@@ -504,22 +504,22 @@ contains
              i1 = i + lbnd1 - isc
              ig = i + grid%jsc - isc
 
-             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)      
-             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)   
-             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)   
-             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)   
-             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)   
-             ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)    
-             ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)   
-             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1) 
-             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)  
-             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)  
-             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)  
-             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)  
-             ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1) 
-             ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1) 
-             !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j) 
-             !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1) 
+             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)
+             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)
+             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)
+             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)
+             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)
+             ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)
+             ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)
+             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)
+             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)
+             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)
+             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)
+             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)
+             ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1)
+             ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
+             !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
+             !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
              !ice_ocean_boundary%u_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
              !ice_ocean_boundary%v_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
           enddo
@@ -531,7 +531,7 @@ contains
        call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
        call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
 
-       i0 = GRID%isc - isc 
+       i0 = GRID%isc - isc
        j0 = GRID%jsc - jsc
        do j = GRID%jsc, GRID%jec
           do i = GRID%isc, GRID%iec
@@ -555,7 +555,7 @@ contains
 
   end subroutine mom_import
 
-  !-----------------------------------------------------------------------------                                                         
+  !-----------------------------------------------------------------------------
 
   subroutine State_GetFldPtr(ST, fldname, fldptr, rc)
     type(ESMF_State)            , intent(in)  :: ST
@@ -563,7 +563,7 @@ contains
     real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:)
     integer, optional           , intent(out) :: rc
 
-    ! local variables                                                                                                                                 
+    ! local variables
     type(ESMF_Field) :: lfield
     integer :: lrc
     character(len=*),parameter :: subname='(mom_cap:State_GetFldPtr)'
@@ -572,12 +572,12 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  ! bail out                                                                                                                              
+         return  ! bail out
     call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  ! bail out                                                                                                                              
+         return  ! bail out
 
     if (present(rc)) rc = lrc
 

@@ -590,7 +590,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     rigidity_at_h, & ! Ice rigidity at tracer points (m3 s-1)
     taux_at_h, & ! Zonal wind stresses at h points (Pa)
     tauy_at_h    ! Meridional wind stresses at h points (Pa)
- 
+
   real :: gustiness     ! unresolved gustiness that contributes to ustar (Pa)
   real :: Irho0         ! inverse of the mean density in (m^3/kg)
   real :: taux2, tauy2  ! squared wind stresses (Pa^2)

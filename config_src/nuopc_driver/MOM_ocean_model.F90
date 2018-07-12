@@ -691,7 +691,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
                                                         !! internal ocean state being saved to a restart file
   character(len=*), optional, intent(in) :: timestamp   !< An optional timestamp string that should be
                                                         !! prepended to the file name. (Currently this is unused.)
-  character(len=*), optional, intent(in) :: restartname !< Name of restart file to use 
+  character(len=*), optional, intent(in) :: restartname !< Name of restart file to use
                                                         !! This option distinguishes the cesm interface from the
                                                         !! non-cesm interface
 
@@ -715,7 +715,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
      if (OS%use_ice_shelf) then
         call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
      endif
-     
+
   else
 
      if (BTEST(OS%Restart_control,1)) then
@@ -733,7 +733,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
      if (BTEST(OS%Restart_control,0)) then
         call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
                           OS%restart_CSp, GV=OS%GV)
-        
+
         call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                   OS%dirs%restart_output_dir)
         if (OS%use_ice_shelf) then
@@ -768,7 +768,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time, write_restart)
                                                           !! the internal ocean state to be deallocated
                                                           !! upon termination.
   type(time_type),         intent(in)    :: Time          !< The model time, used for writing restarts.
-  logical,                 intent(in)    :: write_restart !< true => write restart file       
+  logical,                 intent(in)    :: write_restart !< true => write restart file
 
   if (write_restart) then
      call ocean_model_save_restart(Ocean_state, Time)
@@ -811,10 +811,10 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
        "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
        "restart files can only be created after the buoyancy forcing is applied.")
 
-  if (present(directory)) then 
+  if (present(directory)) then
      restart_dir = directory
-  else 
-     restart_dir = OS%dirs%restart_output_dir 
+  else
+     restart_dir = OS%dirs%restart_output_dir
   endif
 
   call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV)
