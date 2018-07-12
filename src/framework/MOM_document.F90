@@ -1,13 +1,8 @@
+!> The subroutines here provide hooks for document generation functions at
+!! various levels of granularity.
 module MOM_document
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    The subroutines here provide hooks for document generation       *
-!*  functions at various levels of granularity.                        *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_time_manager, only : time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
@@ -27,7 +22,7 @@ interface doc_param
                    doc_param_time
 end interface
 
-integer, parameter :: mLen = 1240 ! Length of interface/message strings
+integer, parameter :: mLen = 1240 !< Length of interface/message strings
 
 !> A structure that controls where the documentation occurs, its veborsity and formatting.
 type, public :: doc_type ; private
@@ -56,8 +51,8 @@ type :: link_msg ; private
   character(len=620) :: msg                  !< Parameter value and default
 end type link_msg
 
-character(len=4), parameter :: STRING_TRUE = 'True'
-character(len=5), parameter :: STRING_FALSE = 'False'
+character(len=4), parameter :: STRING_TRUE  = 'True'  !< A string for true logicals
+character(len=5), parameter :: STRING_FALSE = 'False' !< A string for false logicals
 
 contains
 

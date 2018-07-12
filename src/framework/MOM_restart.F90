@@ -1,47 +1,7 @@
+!> The MOM6 facility for reading and writing restart files, and querying what has been read.
 module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This file contains four subroutines associated with saving       *
-!*  restart files or restoring the model state from files.             *
-!*                                                                     *
-!*    register_restart_field is used to specify the fields that will   *
-!*  be written to restart files.                                       *
-!*                                                                     *
-!*    Save_restart saves a restart file from which a simulation can    *
-!*  be restarted with results that are identical to those which would  *
-!*  have been attained if there had been no interruption.  If this     *
-!*  file would be larger than 2 Gbytes, it is broken up into a number  *
-!*  of smaller files.                                                  *
-!*                                                                     *
-!*    The subroutine restore_state initializes the fields for the      *
-!*  simulations from a number of restart files or other NetCDF files.  *
-!*  Each restart field is initialized from the first file in the       *
-!*  list in which it is found.  The files are separated by spaces,     *
-!*  and all must be in the specified directory.  If 'r' is included    *
-!*  in the list, it is expanded to include all of the restart files    *
-!*  that are found in the directory.                                   *
-!*                                                                     *
-!*    query_initialized returns true if a field (or the entire restart *
-!*  file) has been initialized from a restart file and false otherwise.*
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, bathyT, tr                            *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_domains, only : pe_here, num_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
