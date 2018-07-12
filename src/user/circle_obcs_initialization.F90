@@ -1,3 +1,5 @@
+!> Configures the model for the "circle_obcs" experiment which tests
+!! Open Boundary Conditions radiating an SSH anomaly.
 module circle_obcs_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -103,8 +105,4 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
 
 end subroutine circle_obcs_initialize_thickness
 
-!> \namespace circle_obcs_initialization
-!!
-!! The module configures the model for the "circle_obcs" experiment.
-!! circle_obcs = Test of Open Boundary Conditions for an SSH anomaly.
 end module circle_obcs_initialization

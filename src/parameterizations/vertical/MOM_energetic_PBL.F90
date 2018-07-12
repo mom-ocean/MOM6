@@ -1,51 +1,7 @@
+!> Energetically consistent planetary boundary layer parameterization
 module MOM_energetic_PBL
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2015.                                          *
-!*                                                                     *
-!*    This file contains the subroutine (energetic_PBL) that uses an   *
-!*  integrated boundary layer energy budget (like a bulk- or refined-  *
-!*  bulk mixed layer scheme), but instead of homogenizing this model   *
-!*  calculates a finite diffusivity and viscosity, which in this       *
-!*  regard is conceptually similar to what is done with KPP or various *
-!*  two-equation closures.  However, the scheme that is implemented    *
-!*  here has the big advantage that is entirely implicit, but is       *
-!*  simple enough that it requires only a single vertical pass to      *
-!*  determine the diffusivity. The development of bulk mixed layer     *
-!*  models stems from the work of various people, as described in the  *
-!*  review paper by Niiler and Kraus (1979). The work here draws in    *
-!*  with particular on the form for TKE decay proposed by Oberhuber    *
-!*  (JPO, 1993, 808-829), with an extension to a refined bulk mixed    *
-!*  layer as described in Hallberg (Aha Huliko'a, 2003).  The physical *
-!*  processes portrayed in this subroutine include convectively driven *
-!*  mixing and mechanically driven mixing.  Unlike boundary-layer      *
-!*  mixing, stratified shear mixing is not a one-directional turbulent *
-!*  process, and it is dealt with elsewhere in the MOM6 code within    *
-!*  the module MOM_kappa_shear.F90.  It is assumed that the heat,      *
-!*  mass, and salt fluxes have been applied elsewhere, but that their  *
-!*  implications for the integrated TKE budget have been captured in   *
-!*  an array that is provided as an argument to this subroutine.  This *
-!*  is a full 3-d array due to the effects of penetrating shortwave    *
-!*  radiation.                                                         *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, T, S, Kd, etc.                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
@@ -2402,5 +2358,34 @@ subroutine energetic_PBL_end(CS)
   deallocate(CS)
 
 end subroutine energetic_PBL_end
+
+!> \namespace MOM_energetic_PBL
+!!
+!! By Robert Hallberg, 2015.
+!!
+!!   This file contains the subroutine (energetic_PBL) that uses an
+!! integrated boundary layer energy budget (like a bulk- or refined-
+!! bulk mixed layer scheme), but instead of homogenizing this model
+!! calculates a finite diffusivity and viscosity, which in this
+!! regard is conceptually similar to what is done with KPP or various
+!! two-equation closures.  However, the scheme that is implemented
+!! here has the big advantage that is entirely implicit, but is
+!! simple enough that it requires only a single vertical pass to
+!! determine the diffusivity. The development of bulk mixed layer
+!! models stems from the work of various people, as described in the
+!! review paper by Niiler and Kraus (1979). The work here draws in
+!! with particular on the form for TKE decay proposed by Oberhuber
+!! (JPO, 1993, 808-829), with an extension to a refined bulk mixed
+!! layer as described in Hallberg (Aha Huliko'a, 2003).  The physical
+!! processes portrayed in this subroutine include convectively driven
+!! mixing and mechanically driven mixing.  Unlike boundary-layer
+!! mixing, stratified shear mixing is not a one-directional turbulent
+!! process, and it is dealt with elsewhere in the MOM6 code within
+!! the module MOM_kappa_shear.F90.  It is assumed that the heat,
+!! mass, and salt fluxes have been applied elsewhere, but that their
+!! implications for the integrated TKE budget have been captured in
+!! an array that is provided as an argument to this subroutine.  This
+!! is a full 3-d array due to the effects of penetrating shortwave
+!! radiation.
 
 end module MOM_energetic_PBL

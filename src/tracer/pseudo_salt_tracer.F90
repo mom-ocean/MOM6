@@ -1,39 +1,7 @@
+!> A tracer package that mimics salinity
 module pseudo_salt_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Andrew Shao, 2016                                               *
-!*                                                                     *
-!*    This file contains the routines necessary to model a passive     *
-!*  tracer that uses the same boundary fluxes as salinity. At the      *
-!*  beginning of the run, salt is set to the same as tv%S. Any         *
-!*  deviations between this salt-like tracer and tv%S signifies a      *
-!*  difference between how active and passive tracers are treated.     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -366,5 +334,15 @@ subroutine pseudo_salt_tracer_end(CS)
     deallocate(CS)
   endif
 end subroutine pseudo_salt_tracer_end
+
+!> \namespace pseudo_salt_tracer
+!!
+!!  By Andrew Shao, 2016
+!!
+!!    This file contains the routines necessary to model a passive
+!!  tracer that uses the same boundary fluxes as salinity. At the
+!!  beginning of the run, salt is set to the same as tv%S. Any
+!!  deviations between this salt-like tracer and tv%S signifies a
+!!  difference between how active and passive tracers are treated.
 
 end module pseudo_salt_tracer

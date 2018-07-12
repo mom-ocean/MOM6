@@ -1,13 +1,9 @@
+!> The subroutines here provide convenient wrappers to the fms diag_manager
+!! interfaces with additional diagnostic capabilies.
 module MOM_diag_mediator
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    The subroutines here provide convenient wrappers to the fms      *
-!*  diag_manager interfaces with additional diagnostic capabilies.     *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_checksums,        only : chksum_general
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -127,6 +123,7 @@ type, public :: diag_grid_storage
 end type diag_grid_storage
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
+!!
 !! There can be both 'primary' and 'seconday' diagnostics. The primaries
 !! reside in the diag_cs%diags array. They have an id which is an index
 !! into this array. The secondaries are 'variations' on the primary diagnostic.

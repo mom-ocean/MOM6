@@ -1,3 +1,4 @@
+!> The equation of state using the TEOS10 expressions
 module MOM_EOS_TEOS10
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -47,7 +48,7 @@ interface calculate_density_second_derivs_teos10
   module procedure calculate_density_second_derivs_scalar_teos10, calculate_density_second_derivs_array_teos10
 end interface calculate_density_second_derivs_teos10
 
-real, parameter :: Pa2db  = 1.e-4  ! The conversion factor from Pa to dbar.
+real, parameter :: Pa2db  = 1.e-4  !< The conversion factor from Pa to dbar.
 
 contains
 

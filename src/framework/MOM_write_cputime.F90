@@ -1,18 +1,7 @@
+!> A module to monitor the overall CPU time used by MOM6 and project when to stop the model
 module MOM_write_cputime
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, May 2006.                                      *
-!*                                                                     *
-!*    This file contains the subroutine (write_cputime) that writes    *
-!*  the summed CPU time across all processors to an output file. In    *
-!*  addition, write_cputime estimates how many more time steps can be  *
-!*  taken before 95% of the available CPU time is used, so that the    *
-!*  model can be checkpointed at that time.                            *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : sum_across_PEs, pe_here, num_pes
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
@@ -26,8 +15,8 @@ public write_cputime, MOM_write_cputime_init, write_cputime_start_clock
 
 !-----------------------------------------------------------------------
 
-integer :: CLOCKS_PER_SEC = 1000
-integer :: MAX_TICKS      = 1000
+integer :: CLOCKS_PER_SEC = 1000 !< The number of clock cycles per second, used by the system clock
+integer :: MAX_TICKS      = 1000 !< The number of ticks per second, used by the system clock
 
 !> A control structure that regulates the writing of CPU time
 type, public :: write_cputime_CS ; private
@@ -188,5 +177,15 @@ subroutine write_cputime(day, n, nmax, CS)
   CS%previous_calls = CS%previous_calls + 1
 
 end subroutine write_cputime
+
+!> \namespace mom_write_cputime
+!!
+!!  By Robert Hallberg, May 2006.
+!!
+!!    This file contains the subroutine (write_cputime) that writes
+!!  the summed CPU time across all processors to an output file. In
+!!  addition, write_cputime estimates how many more time steps can be
+!!  taken before 95% of the available CPU time is used, so that the
+!!  model can be checkpointed at that time.
 
 end module MOM_write_cputime

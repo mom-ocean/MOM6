@@ -1,41 +1,7 @@
+!> Reports integrated quantities for monitoring the model state
 module MOM_sum_output
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This file contains the subroutine (write_energy) that writes     *
-!*  horizontally integrated quantities, such as energies and layer     *
-!*  volumes, and other summary information to an output file.  Some    *
-!*  of these quantities (APE or resting interface height) are defined  *
-!*  relative to the global histogram of topography.  The subroutine    *
-!*  that compiles that histogram (depth_list_setup) is also included   *
-!*  in this file.                                                      *
-!*                                                                     *
-!*    In addition, if the number of velocity truncations since the     *
-!*  previous call to write_energy exceeds maxtrunc or the total energy *
-!*  exceeds a very large threshold, a fatal termination is triggered.  *
-!*                                                                     *
-!*    This file also contains a few miscelaneous initialization        *
-!*  calls to FMS-related modules.                                      *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, bathyT                                *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
 use MOM_coms, only : reproducing_sum, EFP_to_real, real_to_EFP
@@ -66,9 +32,7 @@ implicit none ; private
 
 public write_energy, accumulate_net_input, MOM_sum_output_init
 
-!-----------------------------------------------------------------------
-
-integer, parameter :: NUM_FIELDS = 17
+integer, parameter :: NUM_FIELDS = 17 !< Number of diagnostic fields
 
 !> A list of depths and corresponding globally integrated ocean area at each
 !! depth and the ocean volume below each depth.
@@ -83,7 +47,7 @@ type, public :: sum_output_CS ; private
   type(Depth_List), pointer, dimension(:) :: DL => NULL() !< The sorted depth list.
   integer :: list_size          !< length of sorting vector <= niglobal*njglobal
 
-  integer ALLOCABLE_, dimension(NKMEM_) :: lH
+  integer, allocatable, dimension(:) :: lH
                                 !< This saves the entry in DL with a volume just
                                 !! less than the volume of fluid below the interface.
   logical :: do_APE_calc        !<   If true, calculate the available potential energy of the
@@ -256,7 +220,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
     endif
 
-    ALLOC_(CS%lH(G%ke))
+    allocate(CS%lH(G%ke))
     call depth_list_setup(G, CS)
   else
     CS%list_size = 0
@@ -293,8 +257,7 @@ subroutine MOM_sum_output_end(CS)
                                       !! previous call to MOM_sum_output_init.
   if (associated(CS)) then
     if (CS%do_APE_calc) then
-      DEALLOC_(CS%lH)
-      deallocate(CS%DL)
+      deallocate(CS%lH, CS%DL)
     endif
 
     deallocate(CS)
@@ -324,7 +287,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
   type(ocean_OBC_type),         &
                     optional, pointer    :: OBC !< Open boundaries control structure.
   type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
-
   ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces, in m.
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT, in m2.
@@ -950,7 +912,6 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
                                               !! to MOM_sum_output_init.
-
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     FW_in, &   ! The net fresh water input, integrated over a timestep in kg.
@@ -1069,11 +1030,7 @@ subroutine depth_list_setup(G, CS)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
-!  This subroutine sets up an ordered list of depths, along with the
-! cross sectional areas at each depth and the volume of fluid deeper
-! than each depth.  This might be read from a previously created file
-! or it might be created anew.  (For now only new creation occurs.
-
+  ! Local variables
   integer :: k
 
   if (CS%read_depth_list) then
@@ -1102,7 +1059,6 @@ subroutine create_depth_list(G, CS)
   type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS !< The control structure set up in MOM_sum_output_init,
                                           !! in which the ordered depth list is stored.
-
   ! Local variables
   real, dimension(G%Domain%niglobal*G%Domain%njglobal + 1) :: &
     Dlist, &  !< The global list of bottom depths, in m.
@@ -1230,7 +1186,6 @@ subroutine write_depth_list(G, CS, filename, list_size)
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
   integer,               intent(in) :: list_size !< The size of the depth list.
-
   ! Local variables
   real, allocatable :: tmp(:)
   integer :: ncid, dimid(1), Did, Aid, Vid, status, k
@@ -1311,7 +1266,6 @@ subroutine read_depth_list(G, CS, filename)
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
-
   ! Local variables
   character(len=32) :: mdl
   character(len=240) :: var_name, var_msg
@@ -1393,5 +1347,21 @@ subroutine read_depth_list(G, CS, filename)
   deallocate(tmp)
 
 end subroutine read_depth_list
+
+!> \namespace mom_sum_output
+!!
+!! By Robert Hallberg, April 1994 - June 2002
+!!
+!!   This file contains the subroutine (write_energy) that writes
+!! horizontally integrated quantities, such as energies and layer
+!! volumes, and other summary information to an output file.  Some
+!! of these quantities (APE or resting interface height) are defined
+!! relative to the global histogram of topography.  The subroutine
+!! that compiles that histogram (depth_list_setup) is also included
+!! in this file.
+!!
+!!   In addition, if the number of velocity truncations since the
+!! previous call to write_energy exceeds maxtrunc or the total energy
+!! exceeds a very large threshold, a fatal termination is triggered.
 
 end module MOM_sum_output

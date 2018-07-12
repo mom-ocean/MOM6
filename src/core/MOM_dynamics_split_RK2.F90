@@ -75,26 +75,26 @@ type, public :: MOM_dyn_split_RK2_CS ; private
     PFv, &    !< PFv = -dM/dy, in m s-2.
     diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
 
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    visc_rem_u !< Both the fraction of the zonal momentum originally in a
-               !! layer that remains after a time-step of viscosity, and the
-               !! fraction of a time-step's worth of a barotropic acceleration
-               !! that a layer experiences after viscosity is applied.
-               !! Nondimensional between 0 (at the bottom) and 1 (far above).
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    u_accel_bt !< The layers' zonal accelerations due to the difference between
-               !! the barotropic accelerations and the baroclinic accelerations
-               !! that were fed into the barotopic calculation, in m s-2.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    visc_rem_v !< Both the fraction of the meridional momentum originally in
-               !! a layer that remains after a time-step of viscosity, and the
-               !! fraction of a time-step's worth of a barotropic acceleration
-               !! that a layer experiences after viscosity is applied.
-               !! Nondimensional between 0 (at the bottom) and 1 (far above).
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    v_accel_bt !< The layers' meridional accelerations due to the difference between
-               !! the barotropic accelerations and the baroclinic accelerations
-               !! that were fed into the barotopic calculation, in m s-2.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: visc_rem_u
+              !< Both the fraction of the zonal momentum originally in a
+              !! layer that remains after a time-step of viscosity, and the
+              !! fraction of a time-step worth of a barotropic acceleration
+              !! that a layer experiences after viscosity is applied.
+              !! Nondimensional between 0 (at the bottom) and 1 (far above).
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_accel_bt
+              !< The zonal layer accelerations due to the difference between
+              !! the barotropic accelerations and the baroclinic accelerations
+              !! that were fed into the barotopic calculation, in m s-2.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: visc_rem_v
+              !< Both the fraction of the meridional momentum originally in
+              !! a layer that remains after a time-step of viscosity, and the
+              !! fraction of a time-step worth of a barotropic acceleration
+              !! that a layer experiences after viscosity is applied.
+              !! Nondimensional between 0 (at the bottom) and 1 (far above).
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_accel_bt
+              !< The meridional layer accelerations due to the difference between
+              !! the barotropic accelerations and the baroclinic accelerations
+              !! that were fed into the barotopic calculation, in m s-2.
 
   ! The following variables are only used with the split time stepping scheme.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta    !< Instantaneous free surface height (in Boussinesq

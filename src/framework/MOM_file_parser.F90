@@ -1,32 +1,7 @@
+!> The MOM6 facility to parse input files for runtime parameters
 module MOM_file_parser
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, updated 9/2013.           *
-!*                                                                     *
-!*    The subroutines here parse a set of input files for the value    *
-!*  a named parameter and sets that parameter at run time.  Currently  *
-!*  these files use use one of several formats:                        *
-!*    #define VAR       ! To set the logical VAR to true.              *
-!*    VAR = True        ! To set the logical VAR to true.              *
-!*    #undef VAR        ! To set the logical VAR to false.             *
-!*    VAR = False       ! To set the logical VAR to false.             *
-!*    #define VAR 999   ! To set the real or integer VAR to 999.       *
-!*    VAR = 999         ! To set the real or integer VAR to 999.       *
-!*    #override VAR = 888 ! To override a previously set value.        *
-!*    VAR = 1.1, 2.2, 3.3 ! To set an array of real values.            *
-!*                                                                     *
-!*  In addition, when set by the get_param interface, the values of    *
-!*  parameters are automatically logged, along with defaults, units,   *
-!*  and a description.  It is an error for a variable to be overridden *
-!*  more than once, and MOM6 has a facility to check for unused lines  *
-!*  to set variables, which may indicate miss-spelled or archaic       *
-!*  parameters.  Parameter names are case-specific, and lines may use  *
-!*  a F90 or C++ style comment, starting with ! or //.                 *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : root_PE, broadcast
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
@@ -40,20 +15,21 @@ use MOM_string_functions, only : left_real, left_reals
 
 implicit none ; private
 
-integer, parameter, public :: MAX_PARAM_FILES = 5 ! Maximum number of parameter files.
-integer, parameter :: INPUT_STR_LENGTH = 320 ! Maximum linelength in parameter file.
-integer, parameter :: FILENAME_LENGTH = 200  ! Maximum number of characters in
-                                             ! file names.
+integer, parameter, public :: MAX_PARAM_FILES = 5 !< Maximum number of parameter files.
+integer, parameter :: INPUT_STR_LENGTH = 320 !< Maximum line length in parameter file.
+integer, parameter :: FILENAME_LENGTH = 200  !< Maximum number of characters in file names.
 
 ! The all_PEs_read option should be eliminated with post-riga shared code.
-logical :: all_PEs_read = .false.
+logical :: all_PEs_read = .false. !< If true, all PEs read the input files
+                                  !! TODO: Eliminate this parameter
 
-! Defaults
+!>@{ Default values for parameters
 logical, parameter :: report_unused_default = .false.
 logical, parameter :: unused_params_fatal_default = .false.
 logical, parameter :: log_to_stdout_default = .false.
 logical, parameter :: complete_doc_default = .true.
 logical, parameter :: minimal_doc_default = .true.
+!!@}
 
 !> The valid lines extracted from an input parameter file without comments
 type, private :: file_data_type ; private
@@ -2103,5 +2079,30 @@ function popBlockLevel(oldblockName)
       'popBlockLevel: A pop was attempted leaving an empty block name.')
   endif
 end function popBlockLevel
+
+!> \namespace mom_file_parser
+!!
+!!  By Robert Hallberg and Alistair Adcroft, updated 9/2013.
+!!
+!!    The subroutines here parse a set of input files for the value
+!!  a named parameter and sets that parameter at run time.  Currently
+!!  these files use use one of several formats:
+!!    \#define VAR      ! To set the logical VAR to true.
+!!    VAR = True        ! To set the logical VAR to true.
+!!    \#undef VAR       ! To set the logical VAR to false.
+!!    VAR = False       ! To set the logical VAR to false.
+!!    \#define VAR 999  ! To set the real or integer VAR to 999.
+!!    VAR = 999         ! To set the real or integer VAR to 999.
+!!    \#override VAR = 888 ! To override a previously set value.
+!!    VAR = 1.1, 2.2, 3.3  ! To set an array of real values.
+  ! Note that in the comments above, dOxygen translates \# to # .
+!!
+!!  In addition, when set by the get_param interface, the values of
+!!  parameters are automatically logged, along with defaults, units,
+!!  and a description.  It is an error for a variable to be overridden
+!!  more than once, and MOM6 has a facility to check for unused lines
+!!  to set variables, which may indicate miss-spelled or archaic
+!!  parameters.  Parameter names are case-specific, and lines may use
+!!  a F90 or C++ style comment, starting with ! or //.
 
 end module MOM_file_parser

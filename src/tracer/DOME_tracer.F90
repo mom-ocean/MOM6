@@ -1,3 +1,4 @@
+!> A tracer package that is used as a diagnostic in the DOME experiments
 module DOME_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -30,8 +31,7 @@ implicit none ; private
 public register_DOME_tracer, initialize_DOME_tracer
 public DOME_tracer_column_physics, DOME_tracer_surface_state, DOME_tracer_end
 
-!> ntr is the number of tracers in this module.
-integer, parameter :: ntr = 11
+integer, parameter :: ntr = 11 !< The number of tracers in this module.
 
 !> The DOME_tracer control structure
 type, public :: DOME_tracer_CS ; private
@@ -375,38 +375,21 @@ subroutine DOME_tracer_end(CS)
   endif
 end subroutine DOME_tracer_end
 
-!> \namespace DOME_tracer
-!!                                                                     *
-!!  By Robert Hallberg, 2002                                           *
-!!                                                                     *
-!!    This file contains an example of the code that is needed to set  *
-!!  up and use a set (in this case eleven) of dynamically passive      *
-!!  tracers.  These tracers dye the inflowing water or water initially *
-!!  within a range of latitudes or water initially in a range of       *
-!!  depths.                                                            *
-!!                                                                     *
-!!    A single subroutine is called from within each file to register  *
-!!  each of the tracers for reinitialization and advection and to      *
-!!  register the subroutine that initializes the tracers and set up    *
-!!  their output and the subroutine that does any tracer physics or    *
-!!  chemistry along with diapycnal mixing (included here because some  *
-!!  tracers may float or swim vertically or dye diapycnal processes).  *
-!!                                                                     *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q                                        *
-!!    j+1  > o > o >   At ^:  v                                        *
-!!    j    x ^ x ^ x   At >:  u                                        *
-!!    j    > o > o >   At o:  h, tr                                    *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
-!!                                                                     *
-!!*******+*********+*********+*********+*********+*********+*********+**
+!> \namespace dome_tracer
+!!
+!!  By Robert Hallberg, 2002
+!!
+!!    This file contains an example of the code that is needed to set
+!!  up and use a set (in this case eleven) of dynamically passive
+!!  tracers.  These tracers dye the inflowing water or water initially
+!!  within a range of latitudes or water initially in a range of
+!!  depths.
+!!
+!!    A single subroutine is called from within each file to register
+!!  each of the tracers for reinitialization and advection and to
+!!  register the subroutine that initializes the tracers and set up
+!!  their output and the subroutine that does any tracer physics or
+!!  chemistry along with diapycnal mixing (included here because some
+!!  tracers may float or swim vertically or dye diapycnal processes).
 
 end module DOME_tracer
