@@ -1,51 +1,7 @@
+!> Simulates CFCs using the OCMIP2 protocols
 module MOM_OCMIP2_CFC
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2007                                           *
-!*                                                                     *
-!*    This file contains an example of the code that is needed to set  *
-!*  up and use CFC-11 and CFC-12 in a fully coupled or ice-ocean model *
-!*  context. There are 5 subroutines in this file.                     *
-!*                                                                     *
-!*    register_OCMIP2_CFC determines if the module is going to work,   *
-!*  then makes several calls registering tracers to be advected and    *
-!*  read from a restart file. it also sets various run-time parameters *
-!*  for this module and sets up a "control structure" (CS) to store    *
-!*  all information for this module.                                   *
-!*                                                                     *
-!*    initialize_OCMIP2_CFC initializes this modules arrays if they    *
-!*  have not been found in a restart file.  It also determines which   *
-!*  diagnostics will need to be calculated.                            *
-!*                                                                     *
-!*    OCMIP2_CFC_column_physics updates the CFC concentrations,        *
-!*  applying everthing but horizontal advection and diffusion.         *
-!*  Surface fluxes are applied inside an implicit vertical advection   *
-!*  and diffusion tridiagonal solver, and any interior sources and     *
-!*  sinks (not applicable for CFCs) would also be applied here.  This  *
-!*  subroutine also sends out any requested interior diagnostics.      *
-!*                                                                     *
-!*    OCMIP2_CFC_surface_state calculates the information required     *
-!*  from the ocean for the FMS coupler to calculate CFC fluxes.        *
-!*                                                                     *
-!*    OCMIP2_CFC_end deallocates the persistent run-time memory used   *
-!*  by this module.                                                    *
-!*                                                                     *
-!*     A small fragment of the horizontal grid is shown below:         *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v,                                       *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, CFC11, CFC12                          *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
@@ -78,8 +34,7 @@ public OCMIP2_CFC_column_physics, OCMIP2_CFC_surface_state
 public OCMIP2_CFC_stock, OCMIP2_CFC_end
 
 
-! NTR is the number of tracers in this module.
-integer, parameter :: NTR = 2
+integer, parameter :: NTR = 2 !< the number of tracers in this module.
 
 !> The control structure for the  OCMPI2_CFC tracer package
 type, public :: OCMIP2_CFC_CS ; private
@@ -672,5 +627,14 @@ subroutine OCMIP2_CFC_end(CS)
     deallocate(CS)
   endif
 end subroutine OCMIP2_CFC_end
+
+
+!> \namespace mom_ocmip2_cfc
+!!
+!!   By Robert Hallberg, 2007
+!!
+!!     This module contains the code that is needed to set
+!!   up and use CFC-11 and CFC-12 in a fully coupled or ice-ocean model
+!!   context using the OCMIP2 protocols
 
 end module MOM_OCMIP2_CFC

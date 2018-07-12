@@ -1,41 +1,7 @@
+!> A tracer package to mimic dissolved oil.
 module oil_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2002                                           *
-!*                                                                     *
-!*    This file contains an example of the code that is needed to set  *
-!*  up and use a set (in this case two) of dynamically passive tracers *
-!*  for diagnostic purposes.  The tracers here are an ideal age tracer *
-!*  that ages at a rate of 1/year once it is isolated from the surface,*
-!*  and a vintage tracer, whose surface concentration grows exponen-   *
-!*  with time with a 30-year timescale (similar to CFCs).              *
-!*                                                                     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
@@ -67,8 +33,7 @@ public register_oil_tracer, initialize_oil_tracer
 public oil_tracer_column_physics, oil_tracer_surface_state
 public oil_stock, oil_tracer_end
 
-! NTR_MAX is the maximum number of tracers in this module.
-integer, parameter :: NTR_MAX = 20
+integer, parameter :: NTR_MAX = 20 !< the maximum number of tracers in this module.
 
 !> The control structure for the oil tracer package
 type, public :: oil_tracer_CS ; private
@@ -534,5 +499,19 @@ subroutine oil_tracer_end(CS)
     deallocate(CS)
   endif
 end subroutine oil_tracer_end
+
+!> \namespace oil_tracer
+!!
+!!  By Alistair Adcroft and Robert Hallberg, 2010                                           *
+!!
+!!    In the midst of the Deepwater Horizon oil spill, it became evident that
+!!  models were needed to predict the long-term fate of dissolved oil in the
+!!  open ocean.  This tracer packages mimics the transport, dilution and decay
+!!  of dissolved oil plumes in the ocean.
+!!
+!!    This tracer package was central to the simulations used by Adcroft et al.,
+!!  GRL 2010, to prove that the Deepwater Horizon spill was an important regional
+!!  event, with implications for dissolved oxygen levels in the Gulf of Mexico,
+!!  but not one that would directly impact the East Coast of the U.S.
 
 end module oil_tracer

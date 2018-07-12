@@ -1,27 +1,7 @@
+!> Used to initialize tracers from a depth- (or z*-) space file.
 module MOM_tracer_Z_init
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, September 2009                                 *
-!*                                                                     *
-!*    This file contains a subroutine to initialize tracers into the   *
-!*  MOM vertical grid from a depth- (or z*-) space file.               *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:                                           *
-!*    j+1  > o > o >   At ^:                                           *
-!*    j    x ^ x ^ x   At >:                                           *
-!*    j    > o > o >   At o:  tr                                       *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_to_Z, only : find_overlap, find_limited_slope
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe

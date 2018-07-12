@@ -1,3 +1,4 @@
+!> A tracer package for using dyes to diagnose regional flows.
 module regional_dyes
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -411,39 +412,13 @@ subroutine regional_dyes_end(CS)
   endif
 end subroutine regional_dyes_end
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2002                                           *
-!*                                                                     *
-!*    This file contains an example of the code that is needed to set  *
-!*  up and use a set (in this case two) of dynamically passive tracers *
-!*  for diagnostic purposes.  The tracers here are dye tracers which   *
-!*  are set to 1 within the geographical region specified. The depth   *
-!*  which a tracer is set is determined by calculating the depth from  *
-!*  the seafloor upwards through the column.                           *
-!*                                                                     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+!> \namespace regional_dyes
+!!
+!!    This file contains an example of the code that is needed to set
+!!  up and use a set (in this case two) of dynamically passive tracers
+!!  for diagnostic purposes.  The tracers here are dye tracers which
+!!  are set to 1 within the geographical region specified. The depth
+!!  which a tracer is set is determined by calculating the depth from
+!!  the seafloor upwards through the column.
 
 end module regional_dyes
