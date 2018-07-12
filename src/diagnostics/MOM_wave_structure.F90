@@ -1,31 +1,14 @@
+!> Vertical structure functions for first baroclinic mode wave speed
 module MOM_wave_structure
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Benjamin Mater & Robert Hallberg, 2015                          *
-!*                                                                     *
-!*    The subroutine in this module calculates the vertical structure  *
-!*    functions of the first baroclinic mode internal wave speed.      *
-!*    Calculation of interface values is the same as done in           *
-!*    MOM_wave_speed by Hallberg, 2008.                                *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh, vav                               *
-!*    j    x ^ x ^ x   At >:  u, uh, uav                               *
-!*    j    > o > o >   At o:  h                                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+!  By Benjamin Mater & Robert Hallberg, 2015
+
+! The subroutine in this module calculates the vertical structure
+! functions of the first baroclinic mode internal wave speed.
+! Calculation of interface values is the same as done in
+! MOM_wave_speed by Hallberg, 2008.
 
 use MOM_debugging,     only : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
@@ -74,6 +57,31 @@ end type wave_structure_CS
 contains
 
 !>  This subroutine determines the internal wave velocity structure for any mode.
+!!
+!! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with
+!! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the
+!! system d2e/dz2 = -(N2/cn2)e, or (A-lam*I)e = 0, where A = -(1/N2)(d2/dz2), lam = 1/c^2,
+!! and I is the identity matrix. 2nd order discretization in the vertical lets this system
+!! be represented as
+!!
+!!   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
+!!
+!! with rigid lid boundary conditions e(1) = e(nz+1) = 0.0 giving
+!!
+!!   (Igu(2)+Igl(2)-lam)*e(2) - Igl(2)*e(3) = 0.0
+!!   -Igu(nz)*e(nz-1) + (Igu(nz)+Igl(nz)-lam)*e(nz) = 0.0
+!!
+!! where, upon noting N2 = reduced gravity/layer thickness, we get
+!!    Igl(k) = 1.0/(gprime(k)*H(k)) ; Igu(k) = 1.0/(gprime(k)*H(k-1))
+!!
+!! The eigen value for this system is approximated using "wave_speed." This subroutine uses
+!! these eigen values (mode speeds) to estimate the corresponding eigen vectors (velocity
+!! structure) using the "inverse iteration with shift" method. The algorithm is
+!!
+!!   Pick a starting vector reasonably close to mode structure and with unit magnitude, b_guess
+!!   For n=1,2,3,...
+!!     Solve (A-lam*I)e = e_guess for e
+!!     Set e_guess=e/|e| and repeat, with each iteration refining the estimate of e
 subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid
@@ -96,34 +104,6 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   logical,optional,                         intent(in)  :: full_halos !< If true, do the calculation
                                                                 !! over the entire computational
                                                                 !! domain.
-
-!    This subroutine determines the internal wave velocity structure for any mode.
-!
-! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with
-! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the
-! system d2e/dz2 = -(N2/cn2)e, or (A-lam*I)e = 0, where A = -(1/N2)(d2/dz2), lam = 1/c^2,
-! and I is the identity matrix. 2nd order discretization in the vertical lets this system
-! be represented as
-!
-!   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
-!
-! with rigid lid boundary conditions e(1) = e(nz+1) = 0.0 giving
-!
-!   (Igu(2)+Igl(2)-lam)*e(2) - Igl(2)*e(3) = 0.0
-!   -Igu(nz)*e(nz-1) + (Igu(nz)+Igl(nz)-lam)*e(nz) = 0.0
-!
-! where, upon noting N2 = reduced gravity/layer thickness, we get
-!    Igl(k) = 1.0/(gprime(k)*H(k)) ; Igu(k) = 1.0/(gprime(k)*H(k-1))
-!
-! The eigen value for this system is approximated using "wave_speed." This subroutine uses
-! these eigen values (mode speeds) to estimate the corresponding eigen vectors (velocity
-! structure) using the "inverse iteration with shift" method. The algorithm is
-!
-!   Pick a starting vector reasonably close to mode structure and with unit magnitude, b_guess
-!   For n=1,2,3,...
-!     Solve (A-lam*I)e = e_guess for e
-!     Set e_guess=e/|e| and repeat, with each iteration refining the estimate of e
-
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
@@ -585,7 +565,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
 end subroutine wave_structure
 
-!>    This subroutine solves a tri-diagonal system Ax=y using either the standard
+!> Solves a tri-diagonal system Ax=y using either the standard
 !! Thomas algorithm (TDMA_T) or its more stable variant that invokes the
 !! "Hallberg substitution" (TDMA_H).
 subroutine tridiag_solver(a, b, c, h, y, method, x)
@@ -602,7 +582,6 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
   real, dimension(:), intent(in)  :: y !< vector of known values on right hand side.
   character(len=*),   intent(in)  :: method !< A string describing the algorithm to use
   real, dimension(:), intent(out) :: x !< vector of unknown values to solve for.
-
   ! Local variables
   integer :: nrow                         ! number of rows in A matrix
   real, allocatable, dimension(:,:) :: A_check ! for solution checking
@@ -721,7 +700,6 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
                                               !! diagnostic output.
   type(wave_structure_CS), pointer    :: CS   !< A pointer that is set to point to the
                                               !! control structure for this module.
-
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
@@ -756,6 +734,5 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
 
 end subroutine wave_structure_init
-
 
 end module MOM_wave_structure

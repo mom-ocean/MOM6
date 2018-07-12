@@ -1,11 +1,12 @@
+!> This module contains the coupler-type declarations and methods for use in
+!! ocean-only configurations of MOM6.
+!!
+!! It is intended that the version of coupler_types_mod that is avialable from
+!! FMS will conform to this version with the FMS city release after warsaw.
+
 module coupler_types_mod
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!   This module contains the coupler-type declarations and methods for use in
-! ocean-only configurations of MOM6.  It is intended that the version of
-! coupler_types_mod that is avialable from FMS will conform to this version with
-! the FMS city release after warsaw.
 
 use fms_io_mod,        only: restart_file_type, register_restart_field
 use fms_io_mod,        only: query_initialized, restore_state

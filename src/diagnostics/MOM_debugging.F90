@@ -1,13 +1,12 @@
+!> Provides checksumming functions for debugging
+!!
+!! This module contains subroutines that perform various error checking and
+!! debugging functions for MOM6.  This routine is similar to it counterpart in
+!! the SIS2 code, except for the use of the ocean_grid_type and by keeping them
+!! separate we retain the ability to set up MOM6 and SIS2 debugging separately.
 module MOM_debugging
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
-!   This module contains subroutines that perform various error checking and   !
-! debugging functions for MOM6.  This routine is similar to it counterpart in  !
-! the SIS2 code, except for the use of the ocean_grid_type and by keeping them !
-! separate we retain the ability to set up MOM6 and SIS2 debugging separately. !
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 
 use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum
 use MOM_checksums, only : is_NaN, chksum, MOM_checksums_init
@@ -66,15 +65,15 @@ interface vec_chksum_A
   module procedure chksum_vec_A3d, chksum_vec_A2d
 end interface vec_chksum_A
 
-integer :: max_redundant_prints = 100
-integer :: redundant_prints(3) = 0
-logical :: debug = .false.
-logical :: debug_chksums = .true.
-logical :: debug_redundant = .true.
+! Note: these parameters are module data but ONLY used when debugging and
+!       so can violate the thread-safe requirement of no module/global data.
+integer :: max_redundant_prints = 100 !< Maximum number of times to write redundant messages
+integer :: redundant_prints(3) = 0 !< Counters for controlling redundant printing
+logical :: debug = .false. !< Write out verbose debugging data
+logical :: debug_chksums = .true. !< Perform checksums on arrays
+logical :: debug_redundant = .true. !< Check redundant 
 
 contains
-
-! =====================================================================
 
 !> MOM_debugging_init initializes the MOM_debugging module, and sets
 !! the parameterts that control which checks are active for MOM6.
@@ -116,7 +115,7 @@ subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   integer,                   optional, intent(in)    :: je     !< The ending j-index to check
   integer,                   optional, intent(in)    :: direction !< the direction flag to be
                                                                !! passed to pass_vector
-
+  ! Local variables
   character(len=24) :: mesg_k
   integer :: k
 
@@ -152,9 +151,9 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   real :: u_resym(G%IsdB:G%IedB,G%jsd:G%jed)
   real :: v_resym(G%isd:G%ied,G%JsdB:G%JedB)
   character(len=128) :: mesg2
-
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -241,14 +240,13 @@ subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je)
   integer,                optional, intent(in)    :: ie    !< The ending i-index to check
   integer,                optional, intent(in)    :: js    !< The starting j-index to check
   integer,                optional, intent(in)    :: je    !< The ending j-index to check
-
   ! Local variables
   real :: a_nonsym(G%isd:G%ied,G%jsd:G%jed)
   real :: a_resym(G%IsdB:G%IedB,G%JsdB:G%JedB)
   character(len=128) :: mesg2
-
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -306,7 +304,6 @@ subroutine check_redundant_vB3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   integer,                   optional, intent(in)    :: je     !< The ending j-index to check
   integer,                   optional, intent(in)    :: direction !< the direction flag to be
                                                                !! passed to pass_vector
-
   ! Local variables
   character(len=24) :: mesg_k
   integer :: k
@@ -337,16 +334,15 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   integer,                optional, intent(in)    :: je     !< The ending j-index to check
   integer,                optional, intent(in)    :: direction !< the direction flag to be
                                                             !! passed to pass_vector
-
   ! Local variables
   real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed)
   real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed)
   real :: u_resym(G%IsdB:G%IedB,G%JsdB:G%JedB)
   real :: v_resym(G%IsdB:G%IedB,G%JsdB:G%JedB)
   character(len=128) :: mesg2
-
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -409,7 +405,6 @@ subroutine check_redundant_sT3d(mesg, array, G, is, ie, js, je)
   integer,                    optional, intent(in)    :: ie    !< The ending i-index to check
   integer,                    optional, intent(in)    :: js    !< The starting j-index to check
   integer,                    optional, intent(in)    :: je    !< The ending j-index to check
-
   ! Local variables
   character(len=24) :: mesg_k
   integer :: k
@@ -435,7 +430,6 @@ subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
   integer,                optional, intent(in)    :: ie    !< The ending i-index to check
   integer,                optional, intent(in)    :: js    !< The starting j-index to check
   integer,                optional, intent(in)    :: je    !< The ending j-index to check
-
   ! Local variables
   real :: a_nonsym(G%isd:G%ied,G%jsd:G%jed)
   character(len=128) :: mesg2
@@ -516,13 +510,7 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   integer,               optional, intent(in)    :: je     !< The ending j-index to check
   integer,               optional, intent(in)    :: direction !< the direction flag to be
                                                            !! passed to pass_vector
-! Arguments: u_comp - The u-component of the vector being checked.
-!  (in)      v_comp - The v-component of the vector being checked.
-!  (in)      mesg - A message indicating what is being checked.
-!  (in)      G - The ocean's grid structure.
-!  (in/opt)  is, ie, js, je - the i- and j- range of indices to check.
-!  (in/opt)  direction - the direction flag to be passed to pass_vector.
-
+  ! Local variables
   real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed)
   real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed)
   character(len=128) :: mesg2
@@ -571,8 +559,6 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 
 end subroutine  check_redundant_vT2d
 
-! =====================================================================
-
 !> Do a checksum and redundant point check on a 3d C-grid vector.
 subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars)
   character(len=*),                  intent(in)    :: mesg   !< An identifying message
@@ -582,7 +568,7 @@ subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars)
   integer,                 optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,                 optional, intent(in)    :: scalars !< If true this is a pair of
                                                              !! scalars that are being checked.
-
+  ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
@@ -608,7 +594,7 @@ subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, halos, scalars)
   integer,               optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,               optional, intent(in)    :: scalars !< If true this is a pair of
                                                            !! scalars that are being checked.
-
+  ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
@@ -634,7 +620,7 @@ subroutine chksum_vec_B3d(mesg, u_comp, v_comp, G, halos, scalars)
   integer,                  optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,                  optional, intent(in)    :: scalars !< If true this is a pair of
                                                               !! scalars that are being checked.
-
+  ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
@@ -663,7 +649,7 @@ subroutine chksum_vec_B2d(mesg, u_comp, v_comp, G, halos, scalars, symmetric)
                                                             !! scalars that are being checked.
   logical,                optional, intent(in)    :: symmetric !< If true, do the checksums on the
                                                             !! full symmetric computational domain.
-
+  ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
@@ -690,7 +676,7 @@ subroutine chksum_vec_A3d(mesg, u_comp, v_comp, G, halos, scalars)
   integer,                optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,                optional, intent(in)    :: scalars !< If true this is a pair of
                                                             !! scalars that are being checked.
-
+  ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
@@ -708,7 +694,6 @@ subroutine chksum_vec_A3d(mesg, u_comp, v_comp, G, halos, scalars)
 
 end subroutine chksum_vec_A3d
 
-
 !> Do a checksum and redundant point check on a 2d C-grid vector.
 subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, halos, scalars)
   character(len=*),               intent(in)    :: mesg   !< An identifying message
@@ -718,7 +703,7 @@ subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, halos, scalars)
   integer,              optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,              optional, intent(in)    :: scalars !< If true this is a pair of
                                                           !! scalars that are being checked.
-
+  ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
@@ -736,9 +721,6 @@ subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, halos, scalars)
 
 end subroutine chksum_vec_A2d
 
-
-! =====================================================================
-
 !> This function returns the sum over computational domain of all
 !! processors of hThick*stuff, where stuff is a 3-d array at tracer points.
 function totalStuff(HI, hThick, areaT, stuff)
@@ -747,7 +729,6 @@ function totalStuff(HI, hThick, areaT, stuff)
   real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed
   real                                         :: totalStuff !< the globally integrated amoutn of stuff
-
   ! Local variables
   integer :: i, j, k, nz
 
@@ -760,12 +741,8 @@ function totalStuff(HI, hThick, areaT, stuff)
 
 end function totalStuff
 
-! =====================================================================
-
 !> This subroutine display the total thickness, temperature and salinity
 !! as well as the change since the last call.
-!! NOTE: This subroutine uses "save" data which is not thread safe and is purely
-!! for extreme debugging without a proper debugger.
 subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
@@ -773,11 +750,10 @@ subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: temperature !< The temperature field to sum
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
   character(len=*),                   intent(in) :: mesg        !< An identifying message
-
   ! NOTE: This subroutine uses "save" data which is not thread safe and is purely for
   ! extreme debugging without a proper debugger.
   real, save :: totalH = 0., totalT = 0., totalS = 0.
-
+  ! Local variables
   logical, save :: firstCall = .true.
   real :: thisH, thisT, thisS, delH, delT, delS
   integer :: i, j, k, nz
@@ -850,8 +826,6 @@ logical function check_column_integrals(nk_1, field_1, nk_2, field_2, missing_va
   real, dimension(nk_2), intent(in) :: field_2        !< Second field to be summed
   real, optional,        intent(in) :: missing_value  !< If column contains missing values,
                                                       !! mask them from the sum
-
-
   ! Local variables
   real    :: u1_sum, error1, u2_sum, error2, misval
   integer :: k
