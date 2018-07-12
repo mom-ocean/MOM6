@@ -1,3 +1,4 @@
+!> Provides transparent structures with groups of MOM6 variables and supporting routines
 module MOM_variables
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -116,29 +117,29 @@ end type thermo_var_ptrs
 !! they refer to in MOM.F90.
 type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
-    T => NULL(), & !< Pointer to the temperature state variable
-    S => NULL(), & !< Pointer to the salinity state variable
-    u => NULL(), & !< Pointer to the zonal velocity
-    v => NULL(), & !< Pointer to the meridional velocity
-    h => NULL()    !< Pointer to the layer thicknesses
+    T => NULL(), & !< Pointer to the temperature state variable, in deg C
+    S => NULL(), & !< Pointer to the salinity state variable, in PSU or g/kg
+    u => NULL(), & !< Pointer to the zonal velocity, in m s-1
+    v => NULL(), & !< Pointer to the meridional velocity, in m s-1
+    h => NULL()    !< Pointer to the layer thicknesses, in H (often m or kg m-2)
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), & !<  Pointer to zonal transports
-    vh => NULL()    !<  Pointer to meridional transports
+    uh => NULL(), & !<  Pointer to zonal transports, in H m2 s-1
+    vh => NULL()    !<  Pointer to meridional transports, in H m2 s-1
   real, pointer, dimension(:,:,:) :: &
-    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration
-    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration
-    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration
-    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration
-    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity
-    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity
-    pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
-    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration
-    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration
+    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration, in m s-2
+    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration, in m s-2
+    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration, in m s-2
+    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration, in m s-2
+    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity, in m s-2
+    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity, in m s-2
+    pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement, in s-2
+    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration, in m s-2
+    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration, in m s-2
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep
-    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep
-    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep
-    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep
+    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep, in m s-1
+    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep, in m s-1
+    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep, in m s-1
+    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep, in m s-1
 end type ocean_internal_state
 
 !> Pointers to arrays with accelerations, which can later be used for derived diagnostics, like energy balances.
@@ -234,8 +235,7 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
                 !! in tracer columns, in m2 s-1.
-  real, pointer, dimension(:,:,:) :: &
-    Kv_shear => NULL()
+  real, pointer, dimension(:,:,:) :: Kv_shear => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers
                 !! in tracer columns, in m2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_shear_Bu => NULL()
@@ -290,13 +290,13 @@ contains
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                   gas_fields_ocn)
-  type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
-  type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
-  logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
-  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically
-                                                           !! integrated fields.
+  type(ocean_grid_type), intent(in)    :: G               !< ocean grid structure
+  type(surface),         intent(inout) :: sfc_state       !< ocean surface state type to be allocated.
+  logical,     optional, intent(in)    :: use_temperature !< If true, allocate the space for thermodynamic variables.
+  logical,     optional, intent(in)    :: do_integrals    !< If true, allocate the space for vertically
+                                                          !! integrated fields.
   type(coupler_1d_bc_type), &
-               optional, intent(in)    :: gas_fields_ocn   !< If present, this type describes the ocean
+               optional, intent(in)    :: gas_fields_ocn  !< If present, this type describes the ocean
                                               !! ocean and surface-ice fields that will participate
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
@@ -327,8 +327,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   allocate(sfc_state%v(isd:ied,JsdB:JedB)) ; sfc_state%v(:,:) = 0.0
 
   if (alloc_integ) then
-    ! Allocate structures for the vertically integrated ocean_mass, ocean_heat,
-    ! and ocean_salt.
+    ! Allocate structures for the vertically integrated ocean_mass, ocean_heat, and ocean_salt.
     allocate(sfc_state%ocean_mass(isd:ied,jsd:jed)) ; sfc_state%ocean_mass(:,:) = 0.0
     if (use_temp) then
       allocate(sfc_state%ocean_heat(isd:ied,jsd:jed)) ; sfc_state%ocean_heat(:,:) = 0.0
@@ -347,7 +346,7 @@ end subroutine allocate_surface_state
 
 !> Deallocates the elements of a surface state type.
 subroutine deallocate_surface_state(sfc_state)
-  type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be deallocated.
+  type(surface), intent(inout) :: sfc_state !< ocean surface state type to be deallocated here.
 
   if (.not.sfc_state%arrays_allocated) return
 
