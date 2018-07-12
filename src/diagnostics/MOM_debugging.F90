@@ -71,7 +71,7 @@ integer :: max_redundant_prints = 100 !< Maximum number of times to write redund
 integer :: redundant_prints(3) = 0 !< Counters for controlling redundant printing
 logical :: debug = .false. !< Write out verbose debugging data
 logical :: debug_chksums = .true. !< Perform checksums on arrays
-logical :: debug_redundant = .true. !< Check redundant 
+logical :: debug_redundant = .true. !< Check redundant values on PE boundaries
 
 contains
 
