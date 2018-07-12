@@ -1,3 +1,4 @@
+!> Initialization for the "sloshing" internal waves configuration.
 module sloshing_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.

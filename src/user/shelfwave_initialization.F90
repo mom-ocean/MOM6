@@ -1,3 +1,4 @@
+!> Configures the model for the idealized shelfwave test case.
 module shelfwave_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -176,8 +177,4 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
 
 end subroutine shelfwave_set_OBC_data
 
-!> \namespace shelfwave_initialization
-!!
-!! The module configures the model for the idealized shelfwave
-!! test case.
 end module shelfwave_initialization

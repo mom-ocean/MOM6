@@ -1,20 +1,14 @@
-!> This module contains the routines used to set up and use a set of (one for now)
-!! dynamically passive tracers. For now, just one passive tracer is injected in
+!> Routines used to set up and use a set of (one for now)
+!! dynamically passive tracers in the ISOMIP configuration.
+!!
+!! For now, just one passive tracer is injected in
 !! the sponge layer.
-!! Set up and use passive tracers requires the following:
-!! (1) register_ISOMIP_tracer
-!! (2)
 module ISOMIP_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  Original sample tracer package by Robert Hallberg, 2002            *
-!*  Adapted to the ISOMIP test case by Gustavo Marques, May 2016       *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
+! Original sample tracer package by Robert Hallberg, 2002
+! Adapted to the ISOMIP test case by Gustavo Marques, May 2016
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS

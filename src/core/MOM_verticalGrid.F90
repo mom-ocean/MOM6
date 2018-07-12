@@ -1,3 +1,4 @@
+!> Provides a transparent vertical ocean grid type and supporting routines
 module MOM_verticalGrid
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -13,7 +14,7 @@ public verticalGridInit, verticalGridEnd
 public setVerticalGridAxes
 public get_flux_units, get_thickness_units, get_tr_flux_units
 
-!> Describes the ocean's vertical grid, including unit conversion factors
+!> Describes the vertical ocean grid, including unit conversion factors
 type, public :: verticalGrid_type
 
   ! Commonly used parameters
@@ -27,18 +28,18 @@ type, public :: verticalGrid_type
   character(len=40) :: zAxisUnits !< The units that vertical coordinates are written in
   character(len=40) :: zAxisLongName !< Coordinate name to appear in files,
                                   !! e.g. "Target Potential Density" or "Height"
-  real ALLOCABLE_, dimension(NKMEM_) :: sLayer !< Coordinate values of layer centers
-  real ALLOCABLE_, dimension(NK_INTERFACE_) :: sInterface !< Coordinate values on interfaces
+  real, allocatable, dimension(:) :: sLayer !< Coordinate values of layer centers
+  real, allocatable, dimension(:) :: sInterface !< Coordinate values on interfaces
   integer :: direction = 1 !< Direction defaults to 1, positive up.
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq !< If true, make the Boussinesq approximation.
-  real :: Angstrom      !< A one-Angstrom thickness in the model's thickness units.
+  real :: Angstrom      !< A one-Angstrom thickness in the model thickness units.
   real :: Angstrom_z    !< A one-Angstrom thickness in m.
   real :: H_subroundoff !< A thickness that is so small that it can be added to a thickness of
                         !! Angstrom or larger without changing it at the bit level, in thickness units.
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
-  real ALLOCABLE_, dimension(NK_INTERFACE_) :: &
+  real, allocatable, dimension(:) :: &
     g_prime, &          !< The reduced gravity at each interface, in m s-2.
     Rlay                !< The target coordinate value (potential density) in each layer in kg m-3.
   integer :: nkml = 0   !< The number of layers at the top that should be treated
@@ -54,16 +55,18 @@ end type verticalGrid_type
 
 contains
 
-!> Allocates and initializes the model's vertical grid structure.
+!> Allocates and initializes the ocean model vertical grid structure.
 subroutine verticalGridInit( param_file, GV )
-! This routine initializes the verticalGrid_type structure (GV).
-! All memory is allocated but not necessarily set to meaningful values until later.
   type(param_file_type),   intent(in) :: param_file !< Parameter file handle/type
   type(verticalGrid_type), pointer    :: GV         !< The container for vertical grid data
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This routine initializes the verticalGrid_type structure (GV).
+  ! All memory is allocated but not necessarily set to meaningful values until later.
+
+  ! Local variables
   integer :: nk, H_power
   real    :: rescale_factor
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=16) :: mdl = 'MOM_verticalGrid'
 
   if (associated(GV)) call MOM_error(FATAL, &
@@ -140,24 +143,21 @@ subroutine verticalGridInit( param_file, GV )
   call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H)
   call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m)
 
-  ALLOC_( GV%sInterface(nk+1) )
-  ALLOC_( GV%sLayer(nk) )
-  ALLOC_( GV%g_prime(nk+1) ) ; GV%g_prime(:) = 0.0
+  allocate( GV%sInterface(nk+1) )
+  allocate( GV%sLayer(nk) )
+  allocate( GV%g_prime(nk+1) ) ; GV%g_prime(:) = 0.0
   ! The extent of Rlay should be changed to nk?
-  ALLOC_( GV%Rlay(nk+1) )    ; GV%Rlay(:) = 0.0
+  allocate( GV%Rlay(nk+1) )    ; GV%Rlay(:) = 0.0
 
 end subroutine verticalGridInit
 
 !> Returns the model's thickness units, usually m or kg/m^2.
 function get_thickness_units(GV)
-  character(len=48)                 :: get_thickness_units
+  character(len=48)                   :: get_thickness_units !< The vertical thickness units
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-!   This subroutine returns the appropriate units for thicknesses,
-! depending on whether the model is Boussinesq or not and the scaling for
-! the vertical thickness.
-
-! Arguments: G - The ocean's grid structure.
-!  (ret)     get_thickness_units - The model's vertical thickness units.
+  !   This subroutine returns the appropriate units for thicknesses,
+  ! depending on whether the model is Boussinesq or not and the scaling for
+  ! the vertical thickness.
 
   if (GV%Boussinesq) then
     get_thickness_units = "m"
@@ -168,14 +168,11 @@ end function get_thickness_units
 
 !> Returns the model's thickness flux units, usually m^3/s or kg/s.
 function get_flux_units(GV)
-  character(len=48)                 :: get_flux_units
+  character(len=48)                   :: get_flux_units !< The thickness flux units
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-!   This subroutine returns the appropriate units for thickness fluxes,
-! depending on whether the model is Boussinesq or not and the scaling for
-! the vertical thickness.
-
-! Arguments: G - The ocean's grid structure.
-!  (ret)     get_flux_units - The model's thickness flux units.
+  !   This subroutine returns the appropriate units for thickness fluxes,
+  ! depending on whether the model is Boussinesq or not and the scaling for
+  ! the vertical thickness.
 
   if (GV%Boussinesq) then
     get_flux_units = "m3 s-1"
@@ -201,20 +198,9 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
                                                               !! the units are mol kg-1,
                                                               !! tr_vol_conc_units would be mol.
 
-!   This subroutine returns the appropriate units for thicknesses and fluxes,
-! depending on whether the model is Boussinesq or not and the scaling for
-! the vertical thickness.
-
-! Arguments: G - The ocean's grid structure.
-!      One of the following three arguments must be present.
-!  (in,opt)  tr_units - Units for a tracer, for example Celsius or PSU.
-!  (in,opt)  tr_vol_conc_units - The concentration units per unit volume, for
-!                                example if the units are umol m-3,
-!                                tr_vol_conc_units would be umol.
-!  (in,opt)  tr_mass_conc_units - The concentration units per unit mass of sea
-!                                water, for example if the units are mol kg-1,
-!                                tr_vol_conc_units would be mol.
-!  (ret)     get_tr_flux_units - The model's flux units for a tracer.
+  !   This subroutine returns the appropriate units for thicknesses and fluxes,
+  ! depending on whether the model is Boussinesq or not and the scaling for
+  ! the vertical thickness.
   integer :: cnt
 
   cnt = 0
@@ -253,7 +239,6 @@ end function get_tr_flux_units
 
 !> This sets the coordinate data for the "layer mode" of the isopycnal model.
 subroutine setVerticalGridAxes( Rlay, GV )
-  ! Arguments
   type(verticalGrid_type), intent(inout) :: GV   !< The container for vertical grid data
   real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density
   ! Local variables
@@ -276,12 +261,10 @@ end subroutine setVerticalGridAxes
 
 !> Deallocates the model's vertical grid structure.
 subroutine verticalGridEnd( GV )
-! Arguments: G - The ocean's grid structure.
-  type(verticalGrid_type), pointer :: GV   !< The ocean's vertical grid structure
+  type(verticalGrid_type), pointer :: GV !< The ocean's vertical grid structure
 
-  DEALLOC_(GV%g_prime) ; DEALLOC_(GV%Rlay)
-  DEALLOC_( GV%sInterface )
-  DEALLOC_( GV%sLayer )
+  deallocate( GV%g_prime, GV%Rlay )
+  deallocate( GV%sInterface , GV%sLayer )
   deallocate( GV )
 
 end subroutine verticalGridEnd

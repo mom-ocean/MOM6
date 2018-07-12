@@ -22,9 +22,10 @@ public Neverland_buoyancy_forcing
 public Neverland_surface_forcing_init
 
 !> This control structure should be used to store any run-time variables
-!! associated with the Neverland forcing.  It can be readily modified
-!! for a specific case, and because it is private there will be no changes
-!! needed in other code (although they will have to be recompiled).
+!! associated with the Neverland forcing.
+!!
+!! It can be readily modified for a specific case, and because it is private there
+!! will be no changes needed in other code (although they will have to be recompiled).
 type, public :: Neverland_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, use temperature and salinity.

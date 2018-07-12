@@ -1,3 +1,5 @@
+!> Interfaces to non-domain-oriented communication subroutines, including the
+!! MOM6 reproducing sums facility
 module MOM_coms
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -23,23 +25,26 @@ public :: Set_PElist, Get_PElist
 !   This module provides interfaces to the non-domain-oriented communication
 ! subroutines.
 
-integer(kind=8), parameter :: prec=2_8**46 ! The precision of each integer.
-real, parameter :: r_prec=2.0**46  ! A real version of prec.
-real, parameter :: I_prec=1.0/(2.0**46) ! The inverse of prec.
+integer(kind=8), parameter :: prec=2_8**46 !< The precision of each integer.
+real, parameter :: r_prec=2.0**46  !< A real version of prec.
+real, parameter :: I_prec=1.0/(2.0**46) !< The inverse of prec.
 integer, parameter :: max_count_prec=2**(63-46)-1
-                              ! The number of values that can be added together
-                              ! with the current value of prec before there will
-                              ! be roundoff problems.
+                              !< The number of values that can be added together
+                              !! with the current value of prec before there will
+                              !! be roundoff problems.
 
-integer, parameter :: ni=6    ! The number of long integers to use to represent
-                              ! a real number.
+integer, parameter :: ni=6    !< The number of long integers to use to represent
+                              !< a real number.
 real, parameter, dimension(ni) :: &
   pr = (/ r_prec**2, r_prec, 1.0, 1.0/r_prec, 1.0/r_prec**2, 1.0/r_prec**3 /)
+    !< An array of the real precision of each of the integers
 real, parameter, dimension(ni) :: &
   I_pr = (/ 1.0/r_prec**2, 1.0/r_prec, 1.0, r_prec, r_prec**2, r_prec**3 /)
+    !< An array of the inverse of thereal precision of each of the integers
 
-logical :: overflow_error = .false., NaN_error = .false.
-logical :: debug = .false.    ! Making this true enables debugging output.
+logical :: overflow_error = .false. !< This becomes true if an overflow is encountered.
+logical :: NaN_error = .false.      !< This becomes true if a NaN is encountered.
+logical :: debug = .false.          !< Making this true enables debugging output.
 
 !> Find an accurate and order-invariant sum of distributed 2d or 3d fields
 interface reproducing_sum
@@ -47,9 +52,11 @@ interface reproducing_sum
 end interface reproducing_sum
 
 !> The Extended Fixed Point (EFP) type provides a public interface for doing sums
-!! and taking differences with this type.  The use of this type is documented in
+!! and taking differences with this type.
+!!
+!! The use of this type is documented in
 !!   Hallberg, R. & A. Adcroft, 2014: An Order-invariant Real-to-Integer Conversion Sum.
-!!      Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
+!!   Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
 type, public :: EFP_type ; private
   integer(kind=8), dimension(ni) :: v !< The value in this type
 end type EFP_type
@@ -675,7 +682,7 @@ function real_to_EFP(val, overflow)
 
 end function real_to_EFP
 
-!<   This subroutine does a sum across PEs of a list of EFP variables,
+!>   This subroutine does a sum across PEs of a list of EFP variables,
 !! returning the sums in place, with all overflows carried.
 subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   type(EFP_type), dimension(:), &
@@ -725,12 +732,9 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
 
 end subroutine EFP_list_sum_across_PEs
 
-!< This subroutine carries out all of the calls required to close out the infrastructure cleanly.
+!> This subroutine carries out all of the calls required to close out the infrastructure cleanly.
 !! This should only be called in ocean-only runs, as the coupler takes care of this in coupled runs.
 subroutine MOM_infra_end
-  ! This subroutine should contain all of the calls that are required
-  ! to close out the infrastructure cleanly.  This should only be called
-  ! in ocean-only runs, as the coupler takes care of this in coupled runs.
   call print_memuse_stats( 'Memory HiWaterMark', always=.TRUE. )
   call fms_end
 end subroutine MOM_infra_end

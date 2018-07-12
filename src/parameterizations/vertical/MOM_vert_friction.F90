@@ -29,6 +29,7 @@ public vertvisc, vertvisc_remnant, vertvisc_coef
 public vertvisc_limit_vel, vertvisc_init, vertvisc_end
 public updateCFLtruncationValue
 
+!> The control structure with parameters and memory for the MOM_vert_friction module
 type, public :: vertvisc_CS ; private
   real    :: Hmix            !< The mixed layer thickness in m.
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
@@ -66,13 +67,10 @@ type, public :: vertvisc_CS ; private
     a_v                !< The v-drag coefficient across an interface, in m s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     h_v                !< The effective layer thickness at v-points, m or kg m-2.
-  !>@{
-  !! The surface coupling coefficient under ice shelves
-  !! in m s-1. Retained to determine stress under shelves.
-  real, pointer, dimension(:,:) :: &
-    a1_shelf_u => NULL(), &
-    a1_shelf_v => NULL()
-  !>@}
+  real, pointer, dimension(:,:) :: a1_shelf_u => NULL() !< The u-momentum coupling coefficient under
+                           !! ice shelves in m s-1. Retained to determine stress under shelves.
+  real, pointer, dimension(:,:) :: a1_shelf_v => NULL() !< The v-momentum coupling coefficient under
+                           !! ice shelves in m s-1. Retained to determine stress under shelves.
 
   logical :: split          !< If true, use the split time stepping scheme.
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
@@ -99,28 +97,28 @@ type, public :: vertvisc_CS ; private
                             !! thickness for viscosity.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   integer :: nkml           !< The number of layers in the mixed layer.
-  integer, pointer :: ntrunc  !< The number of times the velocity has been
-                              !! truncated since the last call to write_energy.
-  !>@{
-  !! The complete path to files in which a column's worth of
-  !! accelerations are written when velocity truncations occur.
-  character(len=200) :: u_trunc_file
-  character(len=200) :: v_trunc_file
-  !>@}
+  integer, pointer :: ntrunc !< The number of times the velocity has been
+                            !! truncated since the last call to write_energy.
+  character(len=200) :: u_trunc_file  !< The complete path to a file in which a column of
+                            !! u-accelerations are written if velocity truncations occur.
+  character(len=200) :: v_trunc_file !< The complete path to a file in which a column of
+                            !! v-accelerations are written if velocity truncations occur.
+  logical :: StokesMixing   !< If true, do Stokes drift mixing via the Lagrangian current
+                            !! (Eulerian plus Stokes drift).  False by default and set
+                            !! via STOKES_MIXING_COMBINED.
 
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
 
-  !>@{
-  !! Diagnostic identifiers
+  !>@{ Diagnostic identifiers
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   !>@}
 
-  type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
-  logical :: StokesMixing
+  type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
+                              !! for recording accelerations leading to velocity truncations
 end type vertvisc_CS
 
 contains

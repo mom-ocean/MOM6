@@ -1,3 +1,4 @@
+!> This tracer package dyes flow through open boundaries
 module dyed_obc_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -268,35 +269,19 @@ subroutine dyed_obc_tracer_end(CS)
 end subroutine dyed_obc_tracer_end
 
 !> \namespace dyed_obc_tracer
-!!                                                                     *
-!!  By Kate Hedstrom, 2017, copied from DOME tracers and also          *
-!!    dye_example.                                                     *
-!!                                                                     *
-!!    This file contains an example of the code that is needed to set  *
-!!  up and use a set of dynamically passive tracers. These tracers     *
-!!  dye the inflowing water, one per open boundary segment.            *
-!!                                                                     *
-!!    A single subroutine is called from within each file to register  *
-!!  each of the tracers for reinitialization and advection and to      *
-!!  register the subroutine that initializes the tracers and set up    *
-!!  their output and the subroutine that does any tracer physics or    *
-!!  chemistry along with diapycnal mixing (included here because some  *
-!!  tracers may float or swim vertically or dye diapycnal processes).  *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q                                        *
-!!    j+1  > o > o >   At ^:  v                                        *
-!!    j    x ^ x ^ x   At >:  u                                        *
-!!    j    > o > o >   At o:  h, tr                                    *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
-!!                                                                     *
-!!*******+*********+*********+*********+*********+*********+*********+**
+!!
+!! By Kate Hedstrom, 2017, copied from DOME tracers and also
+!! dye_example.
+!!
+!! This file contains an example of the code that is needed to set
+!! up and use a set of dynamically passive tracers. These tracers
+!! dye the inflowing water, one per open boundary segment.
+!!
+!! A single subroutine is called from within each file to register
+!! each of the tracers for reinitialization and advection and to
+!! register the subroutine that initializes the tracers and set up
+!! their output and the subroutine that does any tracer physics or
+!! chemistry along with diapycnal mixing (included here because some
+!! tracers may float or swim vertically or dye diapycnal processes).
 
 end module dyed_obc_tracer

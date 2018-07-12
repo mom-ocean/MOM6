@@ -1,3 +1,4 @@
+!> The equation of state using the Jackett and McDougall fits to the UNESCO EOS
 module MOM_EOS_UNESCO
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -29,7 +30,7 @@ interface calculate_spec_vol_UNESCO
   module procedure calculate_spec_vol_scalar_UNESCO, calculate_spec_vol_array_UNESCO
 end interface calculate_spec_vol_UNESCO
 
-
+!>@{ Parameters in the UNESCO equation of state
 ! The following constants are used to calculate rho0.  The notation
 ! is Rab for the contribution to rho0 from T^aS^b.
 real, parameter ::  R00 = 999.842594, R10 = 6.793952e-2, R20 = -9.095290e-3, &
@@ -48,7 +49,7 @@ real, parameter ::  S00 = 1.965933e4, S10 = 1.444304e2, S20 = -1.706103, &
   Sp30 = 1.956415e-6, Sp01 = 6.704388e-3, Sp11 = -1.847318e-4, Sp21 = 2.059331e-7, &
   Sp032 = 1.480266e-4, SP000 = 2.102898e-4, SP010 = -1.202016e-5, SP020 = 1.394680e-7, &
   SP001 = -2.040237e-6, SP011 = 6.128773e-8, SP021 = 6.207323e-10
-
+!!@}
 
 contains
 

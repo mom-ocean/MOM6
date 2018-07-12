@@ -1,30 +1,13 @@
+!> Debug accelerations at a given point
+!!
+!!    The two subroutines in this file write out all of the terms
+!! in the u- or v-momentum balance at a given point.  Usually
+!! these subroutines are called after the velocities exceed some
+!! threshold, in order to determine which term is culpable.
+!! often this is done for debugging purposes.
 module MOM_PointAccel
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!***********************************************************************
-!*                                                                     *
-!*     The two subroutines in this file write out all of the terms     *
-!*  in the u- or v-momentum balance at a given point.  Usually         *
-!*  these subroutines are called after the velocities exceed some      *
-!*  threshold, in order to determine which term is culpable.           *
-!*  often this is done for debugging purposes.                         *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h  *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, vbt, vhtr        *
-!*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, ubt, uhtr        *
-!*    j    > o > o >   At o:  h, bathyT, tr, T, S                      *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_domains, only : pe_here
@@ -106,11 +89,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
-
-! This subroutine writes to an output file all of the accelerations
-! that have been applied to a column of zonal velocities over the
-! previous timestep.  This subroutine is called from vertvisc.
-
+  ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, du
@@ -438,11 +417,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
-
-! This subroutine writes to an output file all of the accelerations
-! that have been applied to a column of meridional velocities over
-! the previous timestep.  This subroutine is called from vertvisc.
-
+  ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, dv
@@ -758,7 +733,6 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
                                                       !! directory paths.
   type(PointAccel_CS),          pointer       :: CS   !< A pointer that is set to point to the
                                                       !! control structure for this module.
-
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PointAccel" ! This module's name.
@@ -801,4 +775,5 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   CS%u_file = -1 ; CS%v_file = -1 ; CS%cols_written = 0
 
 end subroutine PointAccel_init
+
 end module MOM_PointAccel

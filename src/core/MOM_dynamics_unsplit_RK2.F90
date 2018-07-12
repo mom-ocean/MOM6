@@ -1,3 +1,4 @@
+!> Time steps the ocean dynamics with an unsplit quasi 2nd order Runge-Kutta scheme
 module MOM_dynamics_unsplit_RK2
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -179,22 +180,20 @@ contains
 
 ! =============================================================================
 
+!> Step the MOM6 dynamics using an unsplit quasi-2nd order Runge-Kutta scheme
 subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE)
   type(ocean_grid_type),             intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid
                                                               !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                     intent(inout) :: u_in    !< The input and output zonal
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_in !< The input and output zonal
                                                               !! velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                     intent(inout) :: v_in    !< The input and output meridional
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_in !< The input and output meridional
                                                               !! velocity, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                     intent(inout) :: h_in    !< The input and output layer
-                                              !! thicknesses, in m or kg m-2, depending on
-                                              !! whether the Boussinesq approximation is made.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_in !< The input and output layer thicknesses,
+                                                              !! in m or kg m-2, depending on whether
+                                                              !! the Boussinesq approximation is made.
   type(thermo_var_ptrs),             intent(in)    :: tv      !< A structure pointing to various
                                                               !! thermodynamic variables.
   type(vertvisc_type),               intent(inout) :: visc    !< A structure containing vertical
@@ -206,23 +205,19 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! in s.
   type(mech_forcing),                intent(in)    :: forces  !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< A pointer (perhaps NULL) to
-                                                            !! the surface pressure at the beginning
-                                                            !! of this dynamic step, in Pa.
+                                                              !! the surface pressure at the beginning
+                                                              !! of this dynamic step, in Pa.
   real, dimension(:,:),              pointer       :: p_surf_end   !< A pointer (perhaps NULL) to
                                                               !! the surface pressure at the end of
                                                               !! this dynamic step, in Pa.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                     intent(inout) :: uh      !< The zonal volume or mass transport,
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport,
                                                               !! in m3 s-1 or kg s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                     intent(inout) :: vh      !< The meridional volume or mass
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh  !< The meridional volume or mass
                                                               !! transport, in m3 s-1 or kg s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                     intent(inout) :: uhtr    !< The accumulated zonal volume or
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or
                                                               !! mass transport since the last
                                                               !! tracer advection, in m3 or kg.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                     intent(inout) :: vhtr    !< The accumulated meridional volume
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume
                                                               !! or mass transport since the last
                                                               !! tracer advection, in m3 or kg.
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av  !< The time-mean free surface height
@@ -235,37 +230,8 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   type(MEKE_type),                   pointer       :: MEKE    !< A pointer to a structure containing
                                                               !! fields related to the Mesoscale
                                                               !! Eddy Kinetic Energy.
-! Arguments: u_in - The input and output zonal velocity, in m s-1.
-!  (inout)   v_in - The input and output meridional velocity, in m s-1.
-!  (inout)   h_in - The input and output layer thicknesses, in m or kg m-2,
-!                depending on whether the Boussinesq approximation is made.
-!  (in)      tv - a structure pointing to various thermodynamic variables.
-!  (inout)   visc - A structure containing vertical viscosities, bottom drag
-!                   viscosities, and related fields.
-!  (in)      Time_local - The model time at the end of the time step.
-!  (in)      dt - The time step in s.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      p_surf_begin - A pointer (perhaps NULL) to the surface pressure
-!                     at the beginning of this dynamic step, in Pa.
-!  (in)      p_surf_end - A pointer (perhaps NULL) to the surface pressure
-!                     at the end of this dynamic step, in Pa.
-!  (inout)   uh - The zonal volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   uhtr - The accumulated zonal volume or mass transport since the last
-!                   tracer advection, in m3 or kg.
-!  (inout)   vhtr - The accumulated meridional volume or mass transport since the last
-!                   tracer advection, in m3 or kg.
-!  (out)     eta_av - The time-mean free surface height or column mass, in m or
-!                     kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure set up by initialize_dyn_unsplit_RK2.
-!  (in)      VarMix - A pointer to a structure with fields that specify the
-!                     spatially variable viscosities.
-!  (inout)   MEKE - A pointer to a structure containing fields related to
-!                   the Mesoscale Eddy Kinetic Energy.
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp
@@ -490,6 +456,11 @@ end subroutine step_MOM_dyn_unsplit_RK2
 
 ! =============================================================================
 
+!> Allocate the control structure for this module, allocates memory in it, and registers
+!! any auxiliary restart variables that are specific to the unsplit RK2 time stepping scheme.
+!!
+!! All variables registered here should have the ability to be recreated if they are not present
+!! in a restart file.
 subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),         intent(in)    :: HI         !< A horizontal index type structure.
   type(verticalGrid_type),      intent(in)    :: GV         !< The ocean's vertical grid structure.
@@ -503,13 +474,7 @@ subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
 ! to the unsplit time stepping scheme.  All variables registered here should
 ! have the ability to be recreated if they are not present in a restart file.
 
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
-!  (inout)   restart_CS - A pointer to the restart control structure.
-
+  ! Local variables
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -587,39 +552,11 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   integer, target,                           intent(inout) :: ntrunc !< A target for the variable
                                                        !! that records the number of times the
                                                        !! velocity is truncated (this should be 0).
-! Arguments: u - The zonal velocity, in m s-1.
-!  (inout)   v - The meridional velocity, in m s-1.
-!  (inout)   h - The layer thicknesses, in m or kg m-2, depending on whether
-!                the Boussinesq approximation is made.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
-!  (in)      restart_CS - A pointer to the restart control structure.
-!  (inout)   Accel_diag - A set of pointers to the various accelerations in
-!                  the momentum equations, which can be used for later derived
-!                  diagnostics, like energy budgets.
-!  (inout)   Cont_diag - A structure with pointers to various terms in the
-!                   continuity equations.
-!  (inout)   MIS - The "MOM6 Internal State" structure, used to pass around
-!                  pointers to various arrays for diagnostic purposes.
-!  (in)      OBC - If open boundary conditions are used, this points to the
-!                  ocean_OBC_type that was set up in MOM_initialization.
-!  (in)      update_OBC_CSp - If open boundary condition updates are used,
-!                  this points to the appropriate control structure.
-!  (in)      ALE_CS - This points to the ALE control structure.
-!  (in)      setVisc_CSp - This points to the set_visc control structure.
-!  (inout)   visc - A structure containing vertical viscosities, bottom drag
-!                   viscosities, and related fields.
-!  (in)      dirs - A structure containing several relevant directory paths.
-!  (in)      ntrunc - A target for the variable that records the number of times
-!                     the velocity is truncated (this should be 0).
 
   !   This subroutine initializes all of the variables that are used by this
   ! dynamic core, including diagnostics and the cpu clocks.
+
+  ! Local varaibles
   character(len=40) :: mdl = "MOM_dynamics_unsplit_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   real :: H_convert

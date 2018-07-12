@@ -1,3 +1,4 @@
+!> Freezing point expressions
 module MOM_TFreeze
 
 ! This file is part of MOM6. See LICENSE.md for the license.

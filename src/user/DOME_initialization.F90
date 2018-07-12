@@ -1,3 +1,5 @@
+!> Configures the model for the "DOME" experiment.
+!! DOME = Dynamics of Overflows and Mixing Experiment
 module DOME_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -375,8 +377,4 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
 
 end subroutine DOME_set_OBC_data
 
-!> \namespace dome_initialization
-!!
-!! The module configures the model for the "DOME" experiment.
-!! DOME = Dynamics of Overflows and Mixing Experiment
 end module DOME_initialization

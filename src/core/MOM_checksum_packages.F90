@@ -1,8 +1,9 @@
+!> Provides routines that do checksums of groups of MOM variables
 module MOM_checksum_packages
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!   This module provdes a several routines that do check-sums of groups
+!   This module provides several routines that do check-sums of groups
 ! of variables in the various dynamic solver routines.
 
 use MOM_debugging, only : hchksum, uvchksum
@@ -110,10 +111,7 @@ subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
                                                !! thermodynamic variables.
   type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure.
   integer,        optional, intent(in) :: haloshift !< The width of halos to check (default 0).
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      tv - A structure containing pointers to any thermodynamic
-!                 fields that are in use.
-!  (in)      G - The ocean's grid structure.
+
   integer :: is, ie, js, je, nz, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   hs=1; if (present(haloshift)) hs=haloshift
