@@ -316,17 +316,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
   use_MEKE_Ku = associated(MEKE%Ku)
 
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
-!$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
-!$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
-!$OMP                                  mod_Leith, legacy_bound)                       &
-!$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
-!$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
-!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
-!$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
-!$OMP                                  div_xx, div_xx_dx, div_xx_dy,                  &
-!$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
+  !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
+  !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
+  !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
+  !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
+  !$OMP                                  mod_Leith, legacy_bound)                       &
+  !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
+  !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
+  !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
+  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
+  !$OMP                                  div_xx, div_xx_dx, div_xx_dy, local_strain,    &
+  !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
     ! The following are the forms of the horizontal tension and horizontal

@@ -610,10 +610,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
     call KPP_calculate(CS%KPP_CSp, G, GV, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
       Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
-!$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,G,Kd_heat,Hml)
 
     if (associated(Hml)) then
+      !$OMP parallel default(shared)
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
+      !$OMP end parallel
       call pass_var(Hml, G%domain, halo=1)
     endif
 
