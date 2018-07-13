@@ -56,7 +56,7 @@ use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables,           only : surface
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_ice_shelf,           only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf,           only : ice_shelf_end, ice_shelf_save_restart
+use MOM_ice_shelf,           only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use coupler_types_mod,       only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod,       only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod,       only : coupler_type_initialized, coupler_type_copy_data
@@ -472,7 +472,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
@@ -495,7 +496,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                OS%sfc_state, OS%restore_salinity, OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
