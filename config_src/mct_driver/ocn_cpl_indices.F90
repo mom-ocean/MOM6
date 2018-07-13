@@ -2,8 +2,8 @@ module ocn_cpl_indices
 
   use mct_mod,              only: mct_avect_init, mct_avect_indexra, mct_aVect_clean, mct_aVect
   use seq_flds_mod,         only: ice_ncat, seq_flds_i2o_per_cat
-  use seq_flds_mod,         only: seq_flds_x2o_fields, seq_flds_o2x_fields 
-  
+  use seq_flds_mod,         only: seq_flds_x2o_fields, seq_flds_o2x_fields
+
   implicit none ; public
 
   !> Structure with indices needed for MCT attribute vectors

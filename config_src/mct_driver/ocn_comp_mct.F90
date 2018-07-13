@@ -7,7 +7,7 @@ module ocn_comp_mct
 use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval
 use ESMF,                only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
 use seq_cdata_mod,       only: seq_cdata, seq_cdata_setptrs
-use seq_flds_mod,        only: seq_flds_x2o_fields, seq_flds_o2x_fields 
+use seq_flds_mod,        only: seq_flds_x2o_fields, seq_flds_o2x_fields
 use mct_mod,             only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, &
                                mct_gsmap_orderedpoints
 use mct_mod,             only: mct_aVect, mct_aVect_init, mct_aVect_zero, &
@@ -38,11 +38,11 @@ use MOM_error_handler,    only: MOM_error, FATAL, is_root_pe, WARNING
 use MOM_time_manager,     only: time_type, set_date, set_time, set_calendar_type, NOLEAP
 use MOM_time_manager,     only: operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,     only: operator(==), operator(/=), operator(>), get_time
-use MOM_file_parser,      only: get_param, log_version, param_file_type 
+use MOM_file_parser,      only: get_param, log_version, param_file_type
 use MOM_get_input,        only: Get_MOM_Input, directories
 use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_constants,        only: CELSIUS_KELVIN_OFFSET
-use MOM_domains,          only: AGRID, BGRID_NE, CGRID_NE, pass_vector 
+use MOM_domains,          only: AGRID, BGRID_NE, CGRID_NE, pass_vector
 use mpp_domains_mod,      only: mpp_get_compute_domain
 
 ! Previously inlined - now in separate modules
@@ -279,7 +279,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   ! Initialize the MOM6 model
   runtype = get_runtype()
-  if (runtype == "initial") then 
+  if (runtype == "initial") then
      ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
      call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
   else  ! hybrid or branch or continuos runs
