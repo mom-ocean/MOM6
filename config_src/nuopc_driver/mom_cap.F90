@@ -414,9 +414,9 @@ module mom_cap_mod
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
 #endif
 
-  use ESMF
-  use NUOPC
-  use NUOPC_Model, &
+  use ESMF                      ! TODO: only: ...
+  use NUOPC                     ! TODO: only: ...
+  use NUOPC_Model, &            ! TODO: only: ...
     model_routine_SS           => SetServices, &
     model_label_DataInitialize => label_DataInitialize, &
     model_label_Advance        => label_Advance, &
@@ -425,7 +425,7 @@ module mom_cap_mod
 #endif
     model_label_Finalize       => label_Finalize
 
-  use time_utils_mod
+  use time_utils_mod,           only: esmf2fms_time
 
   implicit none
   private
