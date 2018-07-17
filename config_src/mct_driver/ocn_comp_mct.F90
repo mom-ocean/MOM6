@@ -723,7 +723,7 @@ end function
 
 !=======================================================================
 
-!! It has to be separate from the ocean_initialization call because the coupler
+!> It has to be separate from the ocean_initialization call because the coupler
 !! module allocates the space for some of these variables.
 subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   type(ocean_state_type),  pointer       :: OS

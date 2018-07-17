@@ -105,8 +105,8 @@ interface ocean_model_data_get
 end interface
 
 !> This type is used for communication with other components via the FMS coupler.
-! The element names and types can be changed only with great deliberation, hence
-! the persistnce of things like the cutsy element name "avg_kount".
+!! The element names and types can be changed only with great deliberation, hence
+!! the persistnce of things like the cutsy element name "avg_kount".
 type, public ::  ocean_public_type
   type(domain2d) :: Domain    !< The domain for the surface fields.
   logical :: is_ocean_pe      !! .true. on processors that run the ocean model.
@@ -821,19 +821,14 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
 
 end subroutine convert_state_to_ocean_type
 
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_init_sfc">
-!
-! <DESCRIPTION>
-!   This subroutine extracts the surface properties from the ocean's internal
-! state and stores them in the ocean type returned to the calling ice model.
-! It has to be separate from the ocean_initialization call because the coupler
-! module allocates the space for some of these variables.
-! </DESCRIPTION>
-
+!> This subroutine extracts the surface properties from the ocean's internal
+!! state and stores them in the ocean type returned to the calling ice model.
+!! It has to be separate from the ocean_initialization call because the coupler
+!! module allocates the space for some of these variables.
 subroutine ocean_model_init_sfc(OS, Ocean_sfc)
-  type(ocean_state_type),  pointer       :: OS
-  type(ocean_public_type), intent(inout) :: Ocean_sfc
+  type(ocean_state_type),  pointer       :: OS        !< A pointer to the structure containing the
+                                                      !! internal ocean state (in).
+  type(ocean_public_type), intent(inout) :: Ocean_sfc !< Ocean surface state
 
   integer :: is, ie, js, je
 
