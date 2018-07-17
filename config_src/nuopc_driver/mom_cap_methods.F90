@@ -520,8 +520,10 @@ contains
           ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
           !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
           !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
-          !ice_ocean_boundary%u_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
-          !ice_ocean_boundary%v_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
+          !ice_ocean_boundary%u_flux(i,j)         =&
+          !         GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
+          !ice_ocean_boundary%v_flux(i,j)         =&
+          !         GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
         enddo
       enddo
     end if
@@ -535,20 +537,34 @@ contains
       j0 = GRID%jsc - jsc
       do j = GRID%jsc, GRID%jec
         do i = GRID%isc, GRID%iec
-          write(logunit,F01)'import: day, secs, j, i, u_flux          = ',day,secs,j,i,ice_ocean_boundary%u_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, v_flux          = ',day,secs,j,i,ice_ocean_boundary%v_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, lprec           = ',day,secs,j,i,ice_ocean_boundary%lprec(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i-i0,j-j0)
-          !write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, runoff          = ',day,secs,j,i,ice_ocean_boundary%runoff(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, psurf           = ',day,secs,j,i,ice_ocean_boundary%p(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, salt_flux       = ',day,secs,j,i,ice_ocean_boundary%salt_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dir(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dif(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, u_flux          = '&
+                            ,day,secs,j,i,ice_ocean_boundary%u_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, v_flux          = '&
+                            ,day,secs,j,i,ice_ocean_boundary%v_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, lprec           = '&
+                            ,day,secs,j,i,ice_ocean_boundary%lprec(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, lwrad           = '&
+                            ,day,secs,j,i,ice_ocean_boundary%lw_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, q_flux          = '&
+                            ,day,secs,j,i,ice_ocean_boundary%q_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, t_flux          = '&
+                            ,day,secs,j,i,ice_ocean_boundary%t_flux(i-i0,j-j0)
+          !write(logunit,F01)'import: day, secs, j, i, latent_flux     = '&
+                            ,day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, runoff          = '&
+                            ,day,secs,j,i,ice_ocean_boundary%runoff(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, psurf           = '&
+                            ,day,secs,j,i,ice_ocean_boundary%p(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, salt_flux       = '&
+                            ,day,secs,j,i,ice_ocean_boundary%salt_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dir = '&
+                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dir(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dif = '&
+                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dif(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dir = '&
+                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = '&
+                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
         end do
       end do
     end if

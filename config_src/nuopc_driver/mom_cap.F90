@@ -49,7 +49,8 @@
 !! system, and some during finalization of the coupled system.  The initialization
 !! sequence is the most complex and is governed by the NUOPC technical rules.
 !! Details about the initialization sequence can be found in the [NUOPC Reference Manual]
-!! (http://www.earthsystemmodeling.org/esmf_releases/non_public/ESMF_7_0_0/NUOPC_refdoc/node3.html#SECTION00034000000000000000).
+!! (http://www.earthsystemmodeling.org/esmf_releases/non_public/ESMF_7_0_0/NUOPC_refdoc/node3.html
+!!  #SECTION00034000000000000000).
 !!
 !! A particularly important part of the NUOPC intialization sequence is to establish
 !! field connections between models.  Simply put, a field connection is established
@@ -61,7 +62,8 @@
 !! quantities, NUOPC relies on a set of standard names and a built-in, extensible
 !! standard name dictionary to match fields between models.  More information about
 !! the use of standard names can be found in the [NUOPC Reference Manual]
-!! (http://www.earthsystemmodeling.org/esmf_releases/non_public/ESMF_7_0_0/NUOPC_refdoc/node3.html#SECTION00032000000000000000).
+!! (http://www.earthsystemmodeling.org/esmf_releases/non_public/ESMF_7_0_0/NUOPC_refdoc/node3.html
+!!  #SECTION00032000000000000000).
 !!
 !! Two key initialization phases that appear in every NUOPC cap, including this MOM
 !! cap are the field "advertise" and field "realize" phases.  *Advertise* is a special
@@ -88,10 +90,14 @@
 !! initialization, run, or finalize part of the coupled system run.
 !!
 !! Phase    | MOM Cap Subroutine                                                 |  Description
-!! ---------|--------------------------------------------------------------------|-------------------------------------------------------------
-!! Init     | [InitializeP0] (@ref mom_cap_mod::initializep0)                    | Sets the Initialize Phase Definition (IPD) version to use
-!! Init     | [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise)      | Advertises standard names of import and export fields
-!! Init     | [InitializeRealize] (@ref mom_cap_mod::initializerealize)          | Creates an ESMF_Grid for the MOM grid as well as ESMF_Fields for import and export fields
+!! ---------|--------------------------------------------------------------------|--------------------------------------
+!! Init     | [InitializeP0] (@ref mom_cap_mod::initializep0)                    | Sets the Initialize Phase Definition
+!!                                                                               |  (IPD) version to use
+!! Init     | [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise)      | Advertises standard names of import 
+!!                                                                               |  and export fields
+!! Init     | [InitializeRealize] (@ref mom_cap_mod::initializerealize)          | Creates an ESMF_Grid for the MOM grid
+!!                                                                               |  as well as ESMF_Fields for import 
+!!                                                                               |  and export fields
 !! Run      | [ModelAdvance] (@ref mom_cap_mod::modeladvance)                    | Advances the model by a timestep
 !! Final    | [Finalize] (@ref mom_cap_mod::ocean_model_finalize)                | Cleans up
 !!
@@ -142,7 +148,7 @@
 !!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_public, Time, Time_step_coupled)
 !!
 !! Prior to this call, the cap performs a few steps:
-!! - the `Time` and `Time_step_coupled` parameters, which are based on FMS types, are derived from the incoming ESMF clock
+!! - the `Time` and `Time_step_coupled` parameters, based on FMS types, are derived from the incoming ESMF clock
 !! - there are calls to two stubs: `ice_ocn_bnd_from_data()` and `external_coupler_sbc_before()` - these are currently
 !!   inactive, but may be modified to read in import data from file or from an external coupler
 !! - diagnostics are optionally written to files `field_ocn_import_*`, one for each import field
@@ -156,7 +162,8 @@
 !! - the `freezing_melting_potential` export is converted from J m-2 to W m-2 by dividing by the coupling interval
 !! - vector rotations are applied to the `ocean_current_zonal` and `ocean_current_merid` exports, back to lat-lon grid
 !! - diagnostics are optionally written to files `field_ocn_export_*`, one for each export field
-!! - a call is made to `external_coupler_sbc_after()` to update exports from an external coupler (currently an inactive stub)
+!! - a call is made to `external_coupler_sbc_after()` to update exports from an external coupler (currently an inactive
+!!    stub)
 !!
 !! @subsubsection VectorRotations Vector Rotations
 !!
@@ -217,26 +224,28 @@
 !!
 !! @subsection ImportFields Import Fields
 !!
-!! Standard Name                     | Units      | Model Variable  | Description                                   | Notes
-!! ----------------------------------|------------|-----------------|-----------------------------------------------|--------------------------------------
-!! inst_pres_height_surface          | Pa         | p               | pressure of overlying sea ice and atmosphere  | |
-!! mass_of_overlying_sea_ice         | kg         | mi              | mass of overlying sea ice                     | |
-!! mean_calving_heat_flx             | W m-2      | calving_hflx    | heat flux, relative to 0C, of frozen land water into ocean | |
-!! mean_calving_rate                 | kg m-2 s-1 | calving         | mass flux of frozen runoff                    | |
-!! mean_evap_rate                    | kg m-2 s-1 | q_flux          | specific humidity flux                        | sign reversed (- evap)
-!! mean_fprec_rate                   | kg m-2 s-1 | fprec           | mass flux of frozen precip                    | |
-!! mean_merid_moment_flx             | Pa         | v_flux          | j-directed wind stress into ocean             | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
-!! mean_net_lw_flx                   | W m-2      | lw_flux         | long wave radiation                           | |
-!! mean_net_sw_ir_dif_flx            | W m-2      | sw_flux_nir_dif | diffuse near IR shortwave radiation           | |
-!! mean_net_sw_ir_dir_flx            | W m-2      | sw_flux_nir_dir | direct near IR shortwave radiation            | |
-!! mean_net_sw_vis_dif_flx           | W m-2      | sw_flux_vis_dif | diffuse visible shortware radiation           | |
-!! mean_net_sw_vis_dir_flx           | W m-2      | sw_flux_vis_dir | direct visible shortware radiation            | |
-!! mean_prec_rate                    | kg m-2 s-1 | lprec           | mass flux of liquid precip                    | |
-!! mean_runoff_heat_flx              | W m-2      | runoff_hflx     | heat flux, relative to 0C, of liquid land water into ocean | |
-!! mean_runoff_rate                  | kg m-2 s-1 | runoff          | mass flux of liquid runoff                    | |
-!! mean_salt_rate                    | kg m-2 s-1 | salt_flux       | salt flux                                     | |
-!! mean_sensi_heat_flx               | W m-2      | t_flux          | sensible heat flux into ocean                 | sign reversed (- sensi)
-!! mean_zonal_moment_flx             | Pa         | u_flux          | j-directed wind stress into ocean             | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
+!! Standard Name             | Units      | Model Variable  | Description                      | Notes
+!! --------------------------|------------|-----------------|---------------------------------------|-------------------
+!! inst_pres_height_surface  | Pa         | p               | pressure of overlying sea ice and atmosphere
+!! mass_of_overlying_sea_ice | kg         | mi              | mass of overlying sea ice        | |
+!! mean_calving_heat_flx     | W m-2      | calving_hflx    | heat flux, relative to 0C, of frozen land water into ocean
+!! mean_calving_rate         | kg m-2 s-1 | calving         | mass flux of frozen runoff       | |
+!! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux           | sign reversed (- evap)
+!! mean_fprec_rate           | kg m-2 s-1 | fprec           | mass flux of frozen precip       | |
+!! mean_merid_moment_flx     | Pa         | v_flux          | j-directed wind stress into ocean 
+!!                                              | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
+!! mean_net_lw_flx           | W m-2      | lw_flux         | long wave radiation              | |
+!! mean_net_sw_ir_dif_flx    | W m-2      | sw_flux_nir_dif | diffuse near IR shortwave radiation| |
+!! mean_net_sw_ir_dir_flx    | W m-2      | sw_flux_nir_dir | direct near IR shortwave radiation| |
+!! mean_net_sw_vis_dif_flx   | W m-2      | sw_flux_vis_dif | diffuse visible shortware radiation| |
+!! mean_net_sw_vis_dir_flx   | W m-2      | sw_flux_vis_dir | direct visible shortware radiation| |
+!! mean_prec_rate            | kg m-2 s-1 | lprec           | mass flux of liquid precip       | |
+!! mean_runoff_heat_flx      | W m-2      | runoff_hflx     | heat flux, relative to 0C, of liquid land water into ocean
+!! mean_runoff_rate          | kg m-2 s-1 | runoff          | mass flux of liquid runoff       | |
+!! mean_salt_rate            | kg m-2 s-1 | salt_flux       | salt flux                        | |
+!! mean_sensi_heat_flx       | W m-2      | t_flux          | sensible heat flux into ocean    | sign reversed (- sensi)
+!! mean_zonal_moment_flx     | Pa         | u_flux          | j-directed wind stress into ocean
+!!                                              | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
 !!
 !!
 !! @subsection ExportField Export Fields
@@ -244,15 +253,19 @@
 !! Export fields are populated from the `ocean_public` parameter (type `ocean_public_type`)
 !! after the call to `update_ocean_model()`.
 !!
-!! Standard Name                     | Units      | Model Variable  | Description                               | Notes
-!! ----------------------------------|------------|-----------------|-------------------------------------------|---------------------------------------------------------------------
-!! freezing_melting_potential        | W m-2      | frazil          | accumulated heating from frazil formation | cap converts model units (J m-2) to (W m-2) for export
-!! ocean_mask                        |            |                 | ocean mask                                | |
-!! ocn_current_merid                 | m s-1      | v_surf          | j-directed surface velocity on u-cell     | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
-!! ocn_current_zonal                 | m s-1      | u_surf          | i-directed surface velocity on u-cell     | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
-!! s_surf                            | psu        | s_surf          | sea surface salinity on t-cell            | |
-!! sea_lev                           | m          | sea_lev         | sea level                                 | model computation is eta_t + patm/(rho0*grav) - eta_geoid - eta_tide
-!! sea_surface_temperature           | K          | t_surf          | sea surface temperature on t-cell         | |
+!! Standard Name              | Units | Model Variable | Description                               | Notes
+!! ---------------------------|-------|----------------|-------------------------------------------|--------------------
+!! freezing_melting_potential | W m-2 | frazil         | accumulated heating from frazil formation 
+!!                                              | cap converts model units (J m-2) to (W m-2) for export
+!! ocean_mask                 |       |                | ocean mask                                | |
+!! ocn_current_merid          | m s-1 | v_surf         | j-directed surface velocity on u-cell     
+!!                                              | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
+!! ocn_current_zonal          | m s-1 | u_surf         | i-directed surface velocity on u-cell     
+!!                                              | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
+!! s_surf                     | psu   | s_surf         | sea surface salinity on t-cell            | |
+!! sea_lev                    | m     | sea_lev        | sea level                                 
+!!                                              | model computation is eta_t + patm/(rho0*grav) - eta_geoid - eta_tide
+!! sea_surface_temperature    | K     | t_surf         | sea surface temperature on t-cell         | |
 !!
 !! @subsection MemoryManagement Memory Management
 !!
@@ -685,7 +698,8 @@ contains
     integer                                :: shrloglev            ! original log level
     integer                                :: inst_index           ! number of current instance (ie. 1)
     character(len=16)                      :: inst_name            ! fullname of current instance (ie. "lnd_0001")
-    character(len=16)                      :: inst_suffix = ""     ! char string associated with instance (ie. "_0001" or "")
+    character(len=16)                      :: inst_suffix = ""     ! char string associated with instance
+                                                                   ! (ie. "_0001" or "")
     logical                                :: isPresent
     character(len=384)                     :: restart_pointer_file ! File name for restart pointer file
     character(len=384)                     :: restartfile          ! Path/Name of restart file
@@ -913,35 +927,59 @@ contains
     ! instead, create space for the field when it's "realized".
 
     !--------- import fields -------------
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_zonal_moment_flx"      , "will provide", data=Ice_ocean_boundary%u_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_merid_moment_flx"      , "will provide", data=Ice_ocean_boundary%v_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_sensi_heat_flx"        , "will provide", data=Ice_ocean_boundary%t_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_evap_rate"             , "will provide", data=Ice_ocean_boundary%q_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"             , "will provide", data=Ice_ocean_boundary%salt_flux)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide", data=Ice_ocean_boundary%lw_flux  )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dir_flx"    , "will provide", data=Ice_ocean_boundary%sw_flux_vis_dir)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dif_flx"    , "will provide", data=Ice_ocean_boundary%sw_flux_vis_dif)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dir_flx"     , "will provide", data=Ice_ocean_boundary%sw_flux_nir_dir)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dif_flx"     , "will provide", data=Ice_ocean_boundary%sw_flux_nir_dif)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_prec_rate"             , "will provide", data=Ice_ocean_boundary%lprec  )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fprec_rate"            , "will provide", data=Ice_ocean_boundary%fprec  )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide", data=Ice_ocean_boundary%runoff )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide", data=Ice_ocean_boundary%calving)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide", data=Ice_ocean_boundary%runoff_hflx )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide", data=Ice_ocean_boundary%calving_hflx)
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide", data=Ice_ocean_boundary%p )
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide", data=Ice_ocean_boundary%mi)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_zonal_moment_flx"      , "will provide",&
+                      data=Ice_ocean_boundary%u_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_merid_moment_flx"      , "will provide",&
+                      data=Ice_ocean_boundary%v_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_sensi_heat_flx"        , "will provide",&
+                      data=Ice_ocean_boundary%t_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_evap_rate"             , "will provide",&
+                      data=Ice_ocean_boundary%q_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"             , "will provide",&
+                      data=Ice_ocean_boundary%salt_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide",&
+                      data=Ice_ocean_boundary%lw_flux  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dir_flx"    , "will provide",&
+                      data=Ice_ocean_boundary%sw_flux_vis_dir)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dif_flx"    , "will provide",&
+                      data=Ice_ocean_boundary%sw_flux_vis_dif)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dir_flx"     , "will provide",&
+                      data=Ice_ocean_boundary%sw_flux_nir_dir)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dif_flx"     , "will provide",&
+                      data=Ice_ocean_boundary%sw_flux_nir_dif)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_prec_rate"             , "will provide",&
+                      data=Ice_ocean_boundary%lprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fprec_rate"            , "will provide",&
+                      data=Ice_ocean_boundary%fprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide",&
+                      data=Ice_ocean_boundary%runoff )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide",&
+                      data=Ice_ocean_boundary%calving)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide",&
+                      data=Ice_ocean_boundary%runoff_hflx )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide",&
+                      data=Ice_ocean_boundary%calving_hflx)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide",&
+                      data=Ice_ocean_boundary%p )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide",&
+                      data=Ice_ocean_boundary%mi)
 
     !--------- export fields -------------
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature"    , "will provide", data=ocean_public%t_surf)
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"                     , "will provide", data=ocean_public%s_surf )
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal"          , "will provide", data=ocean_public%u_surf )
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid"          , "will provide", data=ocean_public%v_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature"    , "will provide",&
+                      data=ocean_public%t_surf)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"                     , "will provide",&
+                      data=ocean_public%s_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal"          , "will provide",&
+                      data=ocean_public%u_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid"          , "will provide",&
+                      data=ocean_public%v_surf )
    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_idir"           , "will provide")
    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir"           , "will provide")
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide", data=ocean_public%sea_lev)
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide", data=ocean_public%frazil)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide",&
+                      data=ocean_public%sea_lev)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide",&
+                      data=ocean_public%frazil)
 
     do n = 1,fldsToOcn_num
       call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)(i)%shortname, rc=rc)
@@ -1033,7 +1071,8 @@ contains
     integer                                    :: shrloglev        ! original log level
     integer                                    :: inst_index       ! number of current instance (ie. 1)
     character(len=16)                          :: inst_name        ! fullname of current instance (ie. "lnd_0001")
-    character(len=16)                          :: inst_suffix = "" ! char string associated with instance (ie. "_0001" or "")
+    character(len=16)                          :: inst_suffix = "" ! char string associated with instance
+                                                                   ! (ie. "_0001" or "")
     character(len=64)                          :: cvalue
     character(len=512)                         :: diro
     character(len=512)                         :: logfile
@@ -2008,7 +2047,7 @@ contains
     enddo
     deallocate(ocz, ocm)
 
-    !call ESMF_LogWrite("Before writing diagnostics", dataPtr_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc))
+    !call ESMF_LogWrite("B4 writing diags", dataPtr_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc))
     do j = lbnd2, ubnd2
     do i = lbnd1, ubnd1
       j1 = j - lbnd2 + jsc
@@ -2073,24 +2112,42 @@ contains
 
     !--------- import fields -------------
 
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_zonal_moment_flx"     , "will provide", Ice_ocean_boundary%u_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_merid_moment_flx"     , "will provide", Ice_ocean_boundary%v_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_sensi_heat_flx"       , "will provide", Ice_ocean_boundary%t_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_evap_rate"            , "will provide", Ice_ocean_boundary%q_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_salt_rate"            , "will provide", Ice_ocean_boundary%salt_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_lw_flx"           , "will provide", Ice_ocean_boundary%lw_flux  )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_vis_dir_flx"   , "will provide", Ice_ocean_boundary%sw_flux_vis_dir)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_vis_dif_flx"   , "will provide", Ice_ocean_boundary%sw_flux_vis_dif)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_ir_dir_flx"    , "will provide", Ice_ocean_boundary%sw_flux_nir_dir)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_ir_dif_flx"    , "will provide", Ice_ocean_boundary%sw_flux_nir_dif)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_prec_rate"            , "will provide", Ice_ocean_boundary%lprec  )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_fprec_rate"           , "will provide", Ice_ocean_boundary%fprec  )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_runoff_rate"          , "will provide", Ice_ocean_boundary%runoff )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_calving_rate"         , "will provide", Ice_ocean_boundary%calving)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_runoff_heat_flx"      , "will provide", Ice_ocean_boundary%runoff_hflx )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_calving_heat_flx"     , "will provide", Ice_ocean_boundary%calving_hflx)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "inst_pres_height_surface"  , "will provide", Ice_ocean_boundary%p )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mass_of_overlying_sea_ice" , "will provide", Ice_ocean_boundary%mi)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_zonal_moment_flx"     , "will provide",&
+    !                      Ice_ocean_boundary%u_flux)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_merid_moment_flx"     , "will provide",&
+    !                      Ice_ocean_boundary%v_flux)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_sensi_heat_flx"       , "will provide",&
+    !                      Ice_ocean_boundary%t_flux)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_evap_rate"            , "will provide",&
+    !                      Ice_ocean_boundary%q_flux)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_salt_rate"            , "will provide",&
+    !                      Ice_ocean_boundary%salt_flux)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_lw_flx"           , "will provide",&
+    !                      Ice_ocean_boundary%lw_flux  )
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_vis_dir_flx"   , "will provide",&
+    !                      Ice_ocean_boundary%sw_flux_vis_dir)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_vis_dif_flx"   , "will provide",&
+    !                      Ice_ocean_boundary%sw_flux_vis_dif)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_ir_dir_flx"    , "will provide",&
+    !                      Ice_ocean_boundary%sw_flux_nir_dir)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_ir_dif_flx"    , "will provide",&
+    !                      Ice_ocean_boundary%sw_flux_nir_dif)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_prec_rate"            , "will provide",&
+    !                      Ice_ocean_boundary%lprec  )
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_fprec_rate"           , "will provide",&
+    !                      Ice_ocean_boundary%fprec  )
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_runoff_rate"          , "will provide",&
+    !                      Ice_ocean_boundary%runoff )
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_calving_rate"         , "will provide",&
+    !                      Ice_ocean_boundary%calving)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_runoff_heat_flx"      , "will provide",&
+    !                      Ice_ocean_boundary%runoff_hflx )
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_calving_heat_flx"     , "will provide",&
+    !                      Ice_ocean_boundary%calving_hflx)
+    ! call dumpMomInternal(mom_grid_i, import_slice, "inst_pres_height_surface"  , "will provide",&
+    !                      Ice_ocean_boundary%p )
+    ! call dumpMomInternal(mom_grid_i, import_slice, "mass_of_overlying_sea_ice" , "will provide",&
+    !                      Ice_ocean_boundary%mi)
 
     !--------- export fields -------------
 
@@ -2527,7 +2584,8 @@ contains
             file=__FILE__)) &
             return  ! bail out
         elseif (field_defs(i)%assoc) then
-          call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected and associated.", &
+          call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname)&
+            // " is connected and associated.", &
             ESMF_LOGMSG_INFO, &
             line=__LINE__, &
             file=__FILE__, &

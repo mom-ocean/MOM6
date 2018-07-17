@@ -69,7 +69,8 @@ module ocn_cpl_indices
 
     ! optional per thickness category fields
     integer, dimension(:), allocatable :: x2o_frac_col      !< Fraction of ocean cell, per column
-    integer, dimension(:), allocatable :: x2o_fracr_col     !< Fraction of ocean cell used  in radiation computations, per column
+    integer, dimension(:), allocatable :: x2o_fracr_col     !< Fraction of ocean cell used  in radiation computations,
+                                                            !! per column
     integer, dimension(:), allocatable :: x2o_qsw_fracr_col !< qsw * fracr, per column
   end type cpl_indices_type
 
