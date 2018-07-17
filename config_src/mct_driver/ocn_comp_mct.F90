@@ -88,9 +88,9 @@ type MCT_MOM_Data
   type(ocean_grid_type),   pointer :: grid => NULL()       !< The grid structure
   type(seq_infodata_type), pointer :: infodata             !< The input info type
   type(cpl_indices_type)           :: ind                  !< Variable IDs
-  logical                          :: sw_decomp            !< Controls whether shortwave is decomposed into four components
+  logical                          :: sw_decomp            !< Controls whether shortwave is decomposed into 4 components
   real                             :: c1, c2, c3, c4       !< Coeffs. used in the shortwave decomposition  i/o
-  integer                          :: stdout               !< standard output unit. (by default, it should point to ocn.log.* file)
+  integer                          :: stdout               !< standard output unit. (by default, points to ocn.log.* )
   character(len=384)               :: pointer_filename     !< Name of the ascii file that contains the path
                                                            !! and filename of the latest restart file.
 end type MCT_MOM_Data
