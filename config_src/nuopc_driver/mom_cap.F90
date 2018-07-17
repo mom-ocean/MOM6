@@ -768,32 +768,32 @@ contains
       file=__FILE__)) &
       return  ! bail out
     if (isPresent) then
-       call NUOPC_CompAttributeGet(gcomp, name="inst_suffix", value=inst_suffix, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+      call NUOPC_CompAttributeGet(gcomp, name="inst_suffix", value=inst_suffix, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
     else
        inst_suffix = ''
     end if
 
     ! reset shr logging to my log file
     if (is_root_pe()) then
-       call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+      call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
-       call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-       logunit = shr_file_getUnit()
-       open(logunit,file=trim(diro)//"/"//trim(logfile))
+      call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+      logunit = shr_file_getUnit()
+      open(logunit,file=trim(diro)//"/"//trim(logfile))
     else
-       logunit = 6
+      logunit = 6
     endif
 
     call shr_file_getLogUnit (shrlogunit)
@@ -803,17 +803,17 @@ contains
 
     call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     read(cvalue,*) starttype
 
     if (trim(starttype) == trim('startup')) then
-       runtype = "initial"
+      runtype = "initial"
     else if (trim(starttype) == trim('continue') ) then
-       runtype = "continue"
+      runtype = "continue"
     else if (trim(starttype) == trim('branch')) then
-       runtype = "continue"
+      runtype = "continue"
     else
       call ESMF_LogWrite(subname//' ERROR: unknown starttype '//trim(starttype), ESMF_LOGMSG_ERROR, rc=dbrc)
       rc = ESMF_FAILURE
@@ -825,31 +825,31 @@ contains
 
     if (runtype == "initial") then
 
-       ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
-       ocean_public%is_ocean_pe = .true.
-       call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file = 'n')
+      ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
+      ocean_public%is_ocean_pe = .true.
+      call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file = 'n')
 
 
     else  ! hybrid or branch or continuos runs
 
-       ! read name of restart file in the pointer file
-       nu = shr_file_getUnit()
-       restart_pointer_file = 'rpointer.ocn'
-       if (is_root_pe()) then
-          write(logunit,*) 'Reading ocn pointer file: ',restart_pointer_file
-       end if
-       open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-       read(nu,'(a)') restartfile
-       close(nu)
+      ! read name of restart file in the pointer file
+      nu = shr_file_getUnit()
+      restart_pointer_file = 'rpointer.ocn'
+      if (is_root_pe()) then
+        write(logunit,*) 'Reading ocn pointer file: ',restart_pointer_file
+      end if
+      open(nu, file=restart_pointer_file, form='formatted', status='unknown')
+      read(nu,'(a)') restartfile
+      close(nu)
 
-       ! initialize from restart file
-       if (is_root_pe()) then
-          write(logunit,*) 'Reading restart file: ',trim(restartfile)
-       end if
-       call shr_file_freeUnit(nu)
+      ! initialize from restart file
+      if (is_root_pe()) then
+        write(logunit,*) 'Reading restart file: ',trim(restartfile)
+      end if
+      call shr_file_freeUnit(nu)
 
-       ocean_public%is_ocean_pe = .true.
-       call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file=trim(restartfile))
+      ocean_public%is_ocean_pe = .true.
+      call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file=trim(restartfile))
 
     end if
     call ocean_model_init_sfc(ocean_state, ocean_public)
@@ -886,24 +886,24 @@ contains
     ! advertise import and export fields
     nflds = shr_nuopc_fldList_Getnumflds(fldListFr(compocn))
     do n = 1,nflds
-       call shr_nuopc_fldList_Getfldinfo(fldListFr(compocn), n, activefld, stdname, shortname)
-       if (activefld) then
-          call NUOPC_Advertise(exportState, standardName=stdname, shortname=shortname, name=shortname, &
-               TransferOfferGeomObject='will provide', rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-       end if
-       call ESMF_LogWrite(subname//':Fr_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
+      call shr_nuopc_fldList_Getfldinfo(fldListFr(compocn), n, activefld, stdname, shortname)
+      if (activefld) then
+        call NUOPC_Advertise(exportState, standardName=stdname, shortname=shortname, name=shortname, &
+             TransferOfferGeomObject='will provide', rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+      end if
+      call ESMF_LogWrite(subname//':Fr_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
     end do
 
     nflds = shr_nuopc_fldList_Getnumflds(fldListTo(compocn))
     do n = 1,nflds
-       call shr_nuopc_fldList_Getfldinfo(fldListTo(compocn), n, activefld, stdname, shortname)
-       if (activefld) then
-          call NUOPC_Advertise(importState, standardName=stdname, shortname=shortname, name=shortname, &
-               TransferOfferGeomObject='will provide', rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_file_u)) return
-       end if
-       call ESMF_LogWrite(subname//':To_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
+      call shr_nuopc_fldList_Getfldinfo(fldListTo(compocn), n, activefld, stdname, shortname)
+      if (activefld) then
+        call NUOPC_Advertise(importState, standardName=stdname, shortname=shortname, name=shortname, &
+             TransferOfferGeomObject='will provide', rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_file_u)) return
+      end if
+      call ESMF_LogWrite(subname//':To_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
     end do
 
 #else
@@ -944,19 +944,19 @@ contains
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide", data=ocean_public%frazil)
 
     do n = 1,fldsToOcn_num
-       call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)(i)%shortname, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+      call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)(i)%shortname, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
     enddo
 
     do n = 1,fldsFrOcn_num
-       call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)(i)%shortname, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+      call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)(i)%shortname, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
     enddo
 
 #endif
@@ -1107,10 +1107,10 @@ contains
     call mpp_get_compute_domains(ocean_public%domain, xbegin=xb, xend=xe, ybegin=yb, yend=ye)
     call mpp_get_pelist(ocean_public%domain, pe)
     if (debug > 0) then
-       do n = 1,ntiles
-          write(tmpstr,'(a,6i6)') subname//' tiles ',n,pe(n),xb(n),xe(n),yb(n),ye(n)
-          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-       enddo
+      do n = 1,ntiles
+        write(tmpstr,'(a,6i6)') subname//' tiles ',n,pe(n),xb(n),xe(n),yb(n),ye(n)
+        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+      enddo
     end if
 
     !---------------------------------
@@ -1122,19 +1122,19 @@ contains
     allocate(deLabelList(ntiles))
 
     do n = 1, ntiles
-       deLabelList(n) = n
-       deBlockList(1,1,n) = xb(n)
-       deBlockList(1,2,n) = xe(n)
-       deBlockList(2,1,n) = yb(n)
-       deBlockList(2,2,n) = ye(n)
-       petMap(n) = pe(n)
-       ! write(tmpstr,'(a,3i8)') subname//' iglo = ',n,deBlockList(1,1,n),deBlockList(1,2,n)
-       ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-       ! write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
-       ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-       ! write(tmpstr,'(a,2i8)') subname//' pe  = ',n,petMap(n)
-       ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-       !--- assume a tile with starting index of 1 has an equivalent wraparound tile on the other side
+      deLabelList(n) = n
+      deBlockList(1,1,n) = xb(n)
+      deBlockList(1,2,n) = xe(n)
+      deBlockList(2,1,n) = yb(n)
+      deBlockList(2,2,n) = ye(n)
+      petMap(n) = pe(n)
+      ! write(tmpstr,'(a,3i8)') subname//' iglo = ',n,deBlockList(1,1,n),deBlockList(1,2,n)
+      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+      ! write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
+      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+      ! write(tmpstr,'(a,2i8)') subname//' pe  = ',n,petMap(n)
+      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+      !--- assume a tile with starting index of 1 has an equivalent wraparound tile on the other side
     enddo
 
     delayout = ESMF_DELayoutCreate(petMap, rc=rc)
@@ -1203,9 +1203,9 @@ contains
     !---------------------------------
 
     gridIn = ESMF_GridCreate(distgrid=distgrid, &
-       gridEdgeLWidth=(/0,0/), gridEdgeUWidth=(/0,1/), &
-       coordSys = ESMF_COORDSYS_SPH_DEG, &
-       rc = rc)
+      gridEdgeLWidth=(/0,0/), gridEdgeUWidth=(/0,1/), &
+      coordSys = ESMF_COORDSYS_SPH_DEG, &
+      rc = rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -1233,7 +1233,7 @@ contains
     ! Attach area to the Grid optionally. By default the cell areas are computed.
     if(grid_attach_area) then
       call ESMF_GridAddItem(gridIn, itemFlag=ESMF_GRIDITEM_AREA, itemTypeKind=ESMF_TYPEKIND_R8, &
-         staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
+        staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
         file=__FILE__)) &
@@ -1316,11 +1316,11 @@ contains
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
     if (iec-isc /= ubnd1-lbnd1 .or. jec-jsc /= ubnd2-lbnd2) then
-       rc=ESMF_FAILURE
-       call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-         msg=SUBNAME//": fld and grid do not have the same size.", &
-         line=__LINE__, file=__FILE__, rcToReturn=rc)
-       return  ! bail out
+      rc=ESMF_FAILURE
+      call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+        msg=SUBNAME//": fld and grid do not have the same size.", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return  ! bail out
     endif
 
     allocate(ofld(isc:iec,jsc:jec))
@@ -1334,9 +1334,9 @@ contains
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd2, ubnd2
     do i = lbnd1, ubnd1
-       j1 = j - lbnd2 + jsc
-       i1 = i - lbnd1 + isc
-       dataPtr_mask(i,j) = nint(ofld(i1,j1))
+      j1 = j - lbnd2 + jsc
+      i1 = i - lbnd1 + isc
+      dataPtr_mask(i,j) = nint(ofld(i1,j1))
     enddo
     enddo
 
@@ -1349,9 +1349,9 @@ contains
       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
       do j = lbnd2, ubnd2
       do i = lbnd1, ubnd1
-         j1 = j - lbnd2 + jsc
-         i1 = i - lbnd1 + isc
-         dataPtr_area(i,j) = ofld(i1,j1)
+        j1 = j - lbnd2 + jsc
+        i1 = i - lbnd1 + isc
+        dataPtr_area(i,j) = ofld(i1,j1)
       enddo
       enddo
     endif
@@ -1364,10 +1364,10 @@ contains
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd2, ubnd2
     do i = lbnd1, ubnd1
-       j1 = j - lbnd2 + jsc
-       i1 = i - lbnd1 + isc
-       dataPtr_xcen(i,j) = ofld(i1,j1)
-       dataPtr_xcen(i,j) = mod(dataPtr_xcen(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
+      j1 = j - lbnd2 + jsc
+      i1 = i - lbnd1 + isc
+      dataPtr_xcen(i,j) = ofld(i1,j1)
+      dataPtr_xcen(i,j) = mod(dataPtr_xcen(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
     enddo
     enddo
 
@@ -1379,9 +1379,9 @@ contains
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd2, ubnd2
     do i = lbnd1, ubnd1
-       j1 = j - lbnd2 + jsc
-       i1 = i - lbnd1 + isc
-       dataPtr_ycen(i,j) = ofld(i1,j1)
+      j1 = j - lbnd2 + jsc
+      i1 = i - lbnd1 + isc
+      dataPtr_ycen(i,j) = ofld(i1,j1)
     enddo
     enddo
 
@@ -1393,24 +1393,24 @@ contains
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd4, ubnd4
     do i = lbnd3, ubnd3
-       j1 = j - lbnd4 + jsc - 1
-       i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
-       if (j1 == 0) then
-          dataPtr_xcor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
-!          if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) > 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) - 360.
-!          if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) < 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) + 360.
-       elseif (j1 >= 1 .and. j1 <= nyg) then
-          dataPtr_xcor(i,j) = gfld(i1,j1)
-       else
-          rc=ESMF_FAILURE
-          call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-            msg=SUBNAME//": error in xu j1.", &
-            line=__LINE__, file=__FILE__, rcToReturn=rc)
-          return  ! bail out
-       endif
-       dataPtr_xcor(i,j) = mod(dataPtr_xcor(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
-       ! write(tmpstr,*) subname//' ijfld xu = ',i,i1,j,j1,dataPtr_xcor(i,j)
-       ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+      j1 = j - lbnd4 + jsc - 1
+      i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
+      if (j1 == 0) then
+        dataPtr_xcor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
+!        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) > 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) - 360.
+!        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) < 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) + 360.
+      elseif (j1 >= 1 .and. j1 <= nyg) then
+        dataPtr_xcor(i,j) = gfld(i1,j1)
+      else
+        rc=ESMF_FAILURE
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+          msg=SUBNAME//": error in xu j1.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return  ! bail out
+      endif
+      dataPtr_xcor(i,j) = mod(dataPtr_xcor(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
+      ! write(tmpstr,*) subname//' ijfld xu = ',i,i1,j,j1,dataPtr_xcor(i,j)
+      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     enddo
     enddo
 
@@ -1423,21 +1423,21 @@ contains
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd4, ubnd4
     do i = lbnd3, ubnd3
-       j1 = j - lbnd4 + jsc - 1
-       i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
-       if (j1 == 0) then
-          dataPtr_ycor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
-       elseif (j1 >= 1 .and. j1 <= nyg) then
-          dataPtr_ycor(i,j) = gfld(i1,j1)
-       else
-          rc=ESMF_FAILURE
-          call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-            msg=SUBNAME//": error in yu j1.", &
-            line=__LINE__, file=__FILE__, rcToReturn=rc)
-          return  ! bail out
-       endif
-       ! write(tmpstr,*) subname//' ijfld yu = ',i,i1,j,j1,dataPtr_ycor(i,j)
-       ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+      j1 = j - lbnd4 + jsc - 1
+      i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
+      if (j1 == 0) then
+        dataPtr_ycor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
+      elseif (j1 >= 1 .and. j1 <= nyg) then
+        dataPtr_ycor(i,j) = gfld(i1,j1)
+      else
+        rc=ESMF_FAILURE
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+          msg=SUBNAME//": error in yu j1.", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return  ! bail out
+      endif
+      ! write(tmpstr,*) subname//' ijfld yu = ',i,i1,j,j1,dataPtr_ycor(i,j)
+      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     enddo
     enddo
 
@@ -1473,30 +1473,30 @@ contains
     call shr_nuopc_fldList_Realize(importState, fldListTo(compocn), flds_scalar_name, flds_scalar_num, &
          grid=gridIn, tag=subname//':MOM6Import', rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
     call shr_nuopc_fldList_Realize(exportState, fldListFr(compocn), flds_scalar_name, flds_scalar_num, &
-         grid=gridOut, tag=subname//':MOM6Export', rc=rc)
+        grid=gridOut, tag=subname//':MOM6Export', rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
     call shr_nuopc_methods_State_SetScalar(dble(nxg),flds_scalar_index_nx, exportState, mpicom, &
-         flds_scalar_name, flds_scalar_num, rc)
+        flds_scalar_name, flds_scalar_num, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
     call shr_nuopc_methods_State_SetScalar(dble(nyg),flds_scalar_index_ny, exportState, mpicom, &
-         flds_scalar_name, flds_scalar_num, rc)
+        flds_scalar_name, flds_scalar_num, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 #else
     call MOM_RealizeFields(importState, gridIn , fldsToOcn_num, fldsToOcn, "Ocn import", rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1538,9 +1538,9 @@ contains
 
       do j = lbnd2, ubnd2
       do i = lbnd1, ubnd1
-         j1 = j - lbnd2 + jsc
-         i1 = i - lbnd1 + isc
-         if (ofld(i1,j1) == 0.) t_surf(i,j) = 0.0
+        j1 = j - lbnd2 + jsc
+        i1 = i - lbnd1 + isc
+        if (ofld(i1,j1) == 0.) t_surf(i,j) = 0.0
       enddo
       enddo
 
@@ -1617,29 +1617,29 @@ contains
       return  ! bail out
 
     do n=1, fieldCount
-       call ESMF_StateGet(exportState, itemName=fieldNameList(n), field=field, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      call ESMF_StateGet(exportState, itemName=fieldNameList(n), field=field, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
-       call NUOPC_SetAttribute(field, name="Updated", value="true", rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      call NUOPC_SetAttribute(field, name="Updated", value="true", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
     end do
     deallocate(fieldNameList)
 
     ! check whether all Fields in the exportState are "Updated"
     if (NUOPC_IsUpdated(exportState)) then
-       call NUOPC_CompAttributeSet(gcomp, name="InitializeDataComplete", value="true", rc=rc)
+      call NUOPC_CompAttributeSet(gcomp, name="InitializeDataComplete", value="true", rc=rc)
 
-       call ESMF_LogWrite("MOM6 - Initialize-Data-Dependency SATISFIED!!!", ESMF_LOGMSG_INFO, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      call ESMF_LogWrite("MOM6 - Initialize-Data-Dependency SATISFIED!!!", ESMF_LOGMSG_INFO, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
     end if
 
     if(write_diagnostics) then
@@ -1897,61 +1897,61 @@ contains
     ! If restart alarm is ringing - write restart file
     call ESMF_ClockGetAlarm(clock, alarmname='seq_timemgr_alarm_restart', alarm=alarm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     if (ESMF_AlarmIsRinging(alarm, rc=rc)) then
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
-       call ESMF_AlarmRingerOff( alarm, rc=rc )
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+      call ESMF_AlarmRingerOff( alarm, rc=rc )
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
-       ! determine restart filename
-       ! Need to use next time step since clock is not advanced until the end of the time interval
-       call NUOPC_CompAttributeGet(gcomp, name='case_name', value=cvalue, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-       read(cvalue,*) runid
+      ! determine restart filename
+      ! Need to use next time step since clock is not advanced until the end of the time interval
+      call NUOPC_CompAttributeGet(gcomp, name='case_name', value=cvalue, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+      read(cvalue,*) runid
 
-       call ESMF_ClockGetNextTime(clock, MyTime, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+      call ESMF_ClockGetNextTime(clock, MyTime, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
-       call ESMF_TimeGet (MyTime, yy=year, mm=month, dd=day, s=seconds, rc=rc )
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-       write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
+      call ESMF_TimeGet (MyTime, yy=year, mm=month, dd=day, s=seconds, rc=rc )
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+      write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
-       ! write name of restart file in the rpointer file
-       nu = shr_file_getUnit()
-       if (is_root_pe()) then
-          restart_pointer_file = 'rpointer.ocn'
-          open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-          write(nu,'(a)') trim(restartname) //'.nc'
-          close(nu)
-          write(logunit,*) 'ocn restart pointer file written: ',trim(restartname)
-       endif
-       call shr_file_freeUnit(nu)
+      ! write name of restart file in the rpointer file
+      nu = shr_file_getUnit()
+      if (is_root_pe()) then
+        restart_pointer_file = 'rpointer.ocn'
+        open(nu, file=restart_pointer_file, form='formatted', status='unknown')
+        write(nu,'(a)') trim(restartname) //'.nc'
+        close(nu)
+        write(logunit,*) 'ocn restart pointer file written: ',trim(restartname)
+      endif
+      call shr_file_freeUnit(nu)
 
-       ! write restart file(s)
-       call ocean_model_restart(ocean_state, restartname=restartname)
+      ! write restart file(s)
+      call ocean_model_restart(ocean_state, restartname=restartname)
 
-       if (is_root_pe()) then
-          write(logunit,*) subname//' writing restart file ',trim(restartname)
-       end if
+      if (is_root_pe()) then
+        write(logunit,*) subname//' writing restart file ',trim(restartname)
+      end if
     endif
 
     ! reset shr logging to my original values
@@ -1965,9 +1965,9 @@ contains
     call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
     do j = lbnd2, ubnd2
     do i = lbnd1, ubnd1
-       j1 = j - lbnd2 + jsc
-       i1 = i - lbnd1 + isc
-       dataPtr_mask(i,j) = nint(ofld(i1,j1))
+      j1 = j - lbnd2 + jsc
+      i1 = i - lbnd1 + isc
+      dataPtr_mask(i,j) = nint(ofld(i1,j1))
     enddo
     enddo
     deallocate(ofld)
@@ -2011,9 +2011,9 @@ contains
     !call ESMF_LogWrite("Before writing diagnostics", dataPtr_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc))
     do j = lbnd2, ubnd2
     do i = lbnd1, ubnd1
-       j1 = j - lbnd2 + jsc
-       i1 = i - lbnd1 + isc
-       dataPtr_mask(i,j) = nint(ofld(i1,j1))
+      j1 = j - lbnd2 + jsc
+      i1 = i - lbnd1 + isc
+      dataPtr_mask(i,j) = nint(ofld(i1,j1))
     enddo
     enddo
     deallocate(ofld)
@@ -2151,22 +2151,22 @@ contains
     if (mcurrtime /= dcurrtime) then
       call ESMF_TimeGet(dcurrtime, timeString=dtimestring, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-           line=__LINE__, &
-           file=__FILE__)) &
-           return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
       call ESMF_TimeGet(mcurrtime, timeString=mtimestring, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-           line=__LINE__, &
-           file=__FILE__)) &
-           return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
       call ESMF_LogWrite(subname//" ERROR in time consistency; "//trim(dtimestring)//" ne "//trim(mtimestring),  &
-           ESMF_LOGMSG_ERROR, rc=dbrc)
+          ESMF_LOGMSG_ERROR, rc=dbrc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-           line=__LINE__, &
-           file=__FILE__)) &
-           return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
       rc=ESMF_Failure
     endif
 
@@ -2195,30 +2195,30 @@ contains
     if (alarmCount == 0) then
       call ESMF_ClockGetAlarmList(dclock, alarmlistflag=ESMF_ALARMLIST_ALL, alarmCount=alarmCount, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-           line=__LINE__, &
-           file=__FILE__)) &
-           return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
       allocate(alarmList(alarmCount))
       call ESMF_ClockGetAlarmList(dclock, alarmlistflag=ESMF_ALARMLIST_ALL, alarmList=alarmList, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-           line=__LINE__, &
-           file=__FILE__)) &
-           return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
       do n = 1, alarmCount
-         ! call ESMF_AlarmPrint(alarmList(n), rc=rc)
-         ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-         dalarm = ESMF_AlarmCreate(alarmList(n), rc=rc)
-         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, &
-              file=__FILE__)) &
-              return  ! bail out
-         call ESMF_AlarmSet(dalarm, clock=mclock, rc=rc)
-         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, &
-              file=__FILE__)) &
-              return  ! bail out
+        ! call ESMF_AlarmPrint(alarmList(n), rc=rc)
+        ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+        dalarm = ESMF_AlarmCreate(alarmList(n), rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+        call ESMF_AlarmSet(dalarm, clock=mclock, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
       enddo
 
       deallocate(alarmList)
@@ -2230,15 +2230,15 @@ contains
 
     call ESMF_ClockAdvance(mclock,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     call ESMF_ClockSet(mclock, currTime=dcurrtime, timeStep=dtimestep, stopTime=mstoptime, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
   end subroutine ModelSetRunClock
 
@@ -2308,29 +2308,29 @@ contains
   ! get forcing data from data_overide
   subroutine ice_ocn_bnd_from_data(x, Time, Time_step_coupled)
 
-      type (ice_ocean_boundary_type) :: x
-      type(Time_type), intent(in)    :: Time, Time_step_coupled
+    type (ice_ocean_boundary_type) :: x
+    type(Time_type), intent(in)    :: Time, Time_step_coupled
 
-      type(Time_type)                :: Time_next
-      character(len=*),parameter  :: subname='(mom_cap:ice_ocn_bnd_from_data)'
+    type(Time_type)                :: Time_next
+    character(len=*),parameter  :: subname='(mom_cap:ice_ocn_bnd_from_data)'
 
-      Time_next = Time + Time_step_coupled
+    Time_next = Time + Time_step_coupled
 
-      !call data_override('OCN', 't_flux',          x%t_flux         , Time_next)
-      !call data_override('OCN', 'u_flux',          x%u_flux         , Time_next)
-      !call data_override('OCN', 'v_flux',          x%v_flux         , Time_next)
-      !call data_override('OCN', 'q_flux',          x%q_flux         , Time_next)
-      !call data_override('OCN', 'salt_flux',       x%salt_flux      , Time_next)
-      !call data_override('OCN', 'lw_flux',         x%lw_flux        , Time_next)
-      !call data_override('OCN', 'sw_flux_vis_dir', x%sw_flux_vis_dir, Time_next)
-      !call data_override('OCN', 'sw_flux_vis_dif', x%sw_flux_vis_dif, Time_next)
-      !call data_override('OCN', 'sw_flux_nir_dir', x%sw_flux_nir_dir, Time_next)
-      !call data_override('OCN', 'sw_flux_nir_dif', x%sw_flux_nir_dif, Time_next)
-      !call data_override('OCN', 'lprec',           x%lprec          , Time_next)
-      !call data_override('OCN', 'fprec',           x%fprec          , Time_next)
-      !call data_override('OCN', 'runoff',          x%runoff         , Time_next)
-      !call data_override('OCN', 'calving',         x%calving        , Time_next)
-      !call data_override('OCN', 'p',               x%p              , Time_next)
+    !call data_override('OCN', 't_flux',          x%t_flux         , Time_next)
+    !call data_override('OCN', 'u_flux',          x%u_flux         , Time_next)
+    !call data_override('OCN', 'v_flux',          x%v_flux         , Time_next)
+    !call data_override('OCN', 'q_flux',          x%q_flux         , Time_next)
+    !call data_override('OCN', 'salt_flux',       x%salt_flux      , Time_next)
+    !call data_override('OCN', 'lw_flux',         x%lw_flux        , Time_next)
+    !call data_override('OCN', 'sw_flux_vis_dir', x%sw_flux_vis_dir, Time_next)
+    !call data_override('OCN', 'sw_flux_vis_dif', x%sw_flux_vis_dif, Time_next)
+    !call data_override('OCN', 'sw_flux_nir_dir', x%sw_flux_nir_dir, Time_next)
+    !call data_override('OCN', 'sw_flux_nir_dif', x%sw_flux_nir_dif, Time_next)
+    !call data_override('OCN', 'lprec',           x%lprec          , Time_next)
+    !call data_override('OCN', 'fprec',           x%fprec          , Time_next)
+    !call data_override('OCN', 'runoff',          x%runoff         , Time_next)
+    !call data_override('OCN', 'calving',         x%calving        , Time_next)
+    !call data_override('OCN', 'p',               x%p              , Time_next)
 
   end subroutine ice_ocn_bnd_from_data
 
