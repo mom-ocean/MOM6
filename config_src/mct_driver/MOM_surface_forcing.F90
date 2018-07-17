@@ -760,6 +760,7 @@ end subroutine convert_IOB_to_forces
 
 !=======================================================================
 
+!> Allocates ice-ocean boundary type containers and sets to 0.
 subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
   type(ice_ocean_boundary_type), intent(inout)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
   integer, intent(in) :: isc, iec, jsc, jec                 !< The ocean's local grid size
@@ -1277,6 +1278,7 @@ end subroutine surface_forcing_init
 
 !=======================================================================
 
+!> Finalizes surface forcing: deallocate surface forcing control structure
 subroutine surface_forcing_end(CS, fluxes)
   type(surface_forcing_CS), pointer       :: CS
   type(forcing), optional,  intent(inout) :: fluxes

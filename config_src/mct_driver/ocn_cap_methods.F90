@@ -21,15 +21,16 @@ module ocn_cap_methods
 contains
 !=======================================================================
 
+  !> Maps incomping ocean data to MOM6 data structures
   subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit, Eclock, c1, c2, c3, c4)
-    real(kind=8)                  , intent(in)    :: x2o(:,:)           ! incoming data
-    type(cpl_indices_type)        , intent(in)    :: ind                ! Structure with MCT attribute vects and indices
-    type(ocean_grid_type)         , intent(in)    :: grid               ! Ocean model grid
-    type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary ! Ocean boundary forcing
-    type(ocean_public_type)       , intent(in)    :: ocean_public       ! Ocean surface state
-    integer                       , intent(in)    :: logunit            ! Unit for stdout output
-    type(ESMF_Clock)              , intent(in)    :: EClock             ! Time and time step ? \todo Why must this
-    real(kind=8), optional        , intent(in)    :: c1, c2, c3, c4     ! Coeffs. used in the shortwave decomposition
+    real(kind=8)                  , intent(in)    :: x2o(:,:)           !< incoming data
+    type(cpl_indices_type)        , intent(in)    :: ind                !< Structure with MCT attribute vects and indices
+    type(ocean_grid_type)         , intent(in)    :: grid               !< Ocean model grid
+    type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
+    type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
+    integer                       , intent(in)    :: logunit            !< Unit for stdout output
+    type(ESMF_Clock)              , intent(in)    :: EClock             !< Time and time step ? \todo Why must this
+    real(kind=8), optional        , intent(in)    :: c1, c2, c3, c4     !< Coeffs. used in the shortwave decomposition
 
     ! Local variables
     integer         :: i, j, ig, jg, isc, iec, jsc, jec  ! Grid indices
