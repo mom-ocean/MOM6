@@ -93,10 +93,10 @@
 !! ---------|--------------------------------------------------------------------|--------------------------------------
 !! Init     | [InitializeP0] (@ref mom_cap_mod::initializep0)                    | Sets the Initialize Phase Definition
 !!                                                                               |  (IPD) version to use
-!! Init     | [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise)      | Advertises standard names of import 
+!! Init     | [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise)      | Advertises standard names of import
 !!                                                                               |  and export fields
 !! Init     | [InitializeRealize] (@ref mom_cap_mod::initializerealize)          | Creates an ESMF_Grid for the MOM grid
-!!                                                                               |  as well as ESMF_Fields for import 
+!!                                                                               |  as well as ESMF_Fields for import
 !!                                                                               |  and export fields
 !! Run      | [ModelAdvance] (@ref mom_cap_mod::modeladvance)                    | Advances the model by a timestep
 !! Final    | [Finalize] (@ref mom_cap_mod::ocean_model_finalize)                | Cleans up
@@ -232,7 +232,7 @@
 !! mean_calving_rate         | kg m-2 s-1 | calving         | mass flux of frozen runoff       | |
 !! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux           | sign reversed (- evap)
 !! mean_fprec_rate           | kg m-2 s-1 | fprec           | mass flux of frozen precip       | |
-!! mean_merid_moment_flx     | Pa         | v_flux          | j-directed wind stress into ocean 
+!! mean_merid_moment_flx     | Pa         | v_flux          | j-directed wind stress into ocean
 !!                                              | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
 !! mean_net_lw_flx           | W m-2      | lw_flux         | long wave radiation              | |
 !! mean_net_sw_ir_dif_flx    | W m-2      | sw_flux_nir_dif | diffuse near IR shortwave radiation| |
@@ -255,15 +255,15 @@
 !!
 !! Standard Name              | Units | Model Variable | Description                               | Notes
 !! ---------------------------|-------|----------------|-------------------------------------------|--------------------
-!! freezing_melting_potential | W m-2 | frazil         | accumulated heating from frazil formation 
+!! freezing_melting_potential | W m-2 | frazil         | accumulated heating from frazil formation
 !!                                              | cap converts model units (J m-2) to (W m-2) for export
 !! ocean_mask                 |       |                | ocean mask                                | |
-!! ocn_current_merid          | m s-1 | v_surf         | j-directed surface velocity on u-cell     
+!! ocn_current_merid          | m s-1 | v_surf         | j-directed surface velocity on u-cell
 !!                                              | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
-!! ocn_current_zonal          | m s-1 | u_surf         | i-directed surface velocity on u-cell     
+!! ocn_current_zonal          | m s-1 | u_surf         | i-directed surface velocity on u-cell
 !!                                              | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
 !! s_surf                     | psu   | s_surf         | sea surface salinity on t-cell            | |
-!! sea_lev                    | m     | sea_lev        | sea level                                 
+!! sea_lev                    | m     | sea_lev        | sea level
 !!                                              | model computation is eta_t + patm/(rho0*grav) - eta_geoid - eta_tide
 !! sea_surface_temperature    | K     | t_surf         | sea surface temperature on t-cell         | |
 !!
