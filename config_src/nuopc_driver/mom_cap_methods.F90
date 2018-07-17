@@ -4,7 +4,9 @@ module mom_cap_methods
   ! This file is part of MOM6. See LICENSE.md for the license.
 
   ! mct modules
-  use ESMF
+  use ESMF,                only: ESMF_time, ESMF_ClockGet, ESMF_TimeGet, ESMF_State, ESMF_Clock
+  use ESMF,                only: ESMF_KIND_R8, ESMF_Field, ESMF_SUCCESS, ESMF_LogFoundError
+  use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_StateGet, ESMF_FieldGet
   use perf_mod,            only: t_startf, t_stopf
   use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
@@ -550,7 +552,7 @@ contains
           write(logunit,F01)'import: day, secs, j, i, t_flux          = '&
                             ,day,secs,j,i,ice_ocean_boundary%t_flux(i-i0,j-j0)
           !write(logunit,F01)'import: day, secs, j, i, latent_flux     = '&
-                            ,day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
+          !                  ,day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
           write(logunit,F01)'import: day, secs, j, i, runoff          = '&
                             ,day,secs,j,i,ice_ocean_boundary%runoff(i-i0,j-j0)
           write(logunit,F01)'import: day, secs, j, i, psurf           = '&

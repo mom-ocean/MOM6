@@ -1,6 +1,6 @@
 module ocn_cap_methods
 
-  use ESMF
+  use ESMF,                only: ESMF_clock, ESMF_time, ESMF_ClockGet, ESMF_TimeGet
   use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
