@@ -280,27 +280,27 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! Initialize the MOM6 model
   runtype = get_runtype()
   if (runtype == "initial") then
-     ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
-     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
+    ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
   else  ! hybrid or branch or continuos runs
-     ! get output path root
-     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
-     ! read name of restart file in the pointer file
-     nu = shr_file_getUnit()
-     restart_pointer_file = trim(glb%pointer_filename)
-     if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
-     open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-     read(nu,'(a)') restartfile
-     close(nu)
-     !restartfile = trim(restartpath) // trim(restartfile)
-     if (is_root_pe()) then
-        write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
-     end if
-     call shr_file_freeUnit(nu)
-     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
+    ! get output path root
+    call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
+    ! read name of restart file in the pointer file
+    nu = shr_file_getUnit()
+    restart_pointer_file = trim(glb%pointer_filename)
+    if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
+    open(nu, file=restart_pointer_file, form='formatted', status='unknown')
+    read(nu,'(a)') restartfile
+    close(nu)
+    !restartfile = trim(restartpath) // trim(restartfile)
+    if (is_root_pe()) then
+      write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
+    end if
+    call shr_file_freeUnit(nu)
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
   endif
   if (is_root_pe()) then
-     write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
+    write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
   end if
 
   ! Initialize ocn_state%sfc_state out of sight
@@ -361,8 +361,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ncouple_per_day = seconds_in_day / ocn_cpl_dt
   mom_cpl_dt = seconds_in_day / ncouple_per_day
   if (mom_cpl_dt /= ocn_cpl_dt) then
-     write(glb%stdout,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
-     call exit(0)
+    write(glb%stdout,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
+    call exit(0)
   end if
 
   ! send initial state to driver
@@ -382,10 +382,10 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
-   call seq_infodata_PutData( glb%infodata, &
-        ocn_nx = ni , ocn_ny = nj)
-   call seq_infodata_PutData( glb%infodata, &
-        ocn_prognostic=.true., ocnrof_prognostic=.true.)
+  call seq_infodata_PutData( glb%infodata, &
+       ocn_nx = ni , ocn_ny = nj)
+  call seq_infodata_PutData( glb%infodata, &
+       ocn_prognostic=.true., ocnrof_prognostic=.true.)
 
   if (debug .and. root_pe().eq.pe_here()) print *, "leaving ocean_init_mct"
 
@@ -492,10 +492,10 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   !glb%sw_decomp = .false.
   !END TODO:
   if (glb%sw_decomp) then
-     call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, glb%stdout, Eclock, &
+    call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, glb%stdout, Eclock, &
           c1=glb%c1, c2=glb%c2, c3=glb%c3, c4=glb%c4)
   else
-     call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, glb%stdout, Eclock )
+    call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, glb%stdout, Eclock )
   end if
 
   ! Update internal ocean

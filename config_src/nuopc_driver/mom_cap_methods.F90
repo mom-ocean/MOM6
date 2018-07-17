@@ -71,55 +71,55 @@ contains
 
     call State_getFldPtr(exportState,"So_omask", dataPtr_omask, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"So_t", dataPtr_t, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"So_s", dataPtr_s, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"So_u", dataPtr_u, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"So_v", dataPtr_v, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"Fioo_q", dataPtr_q, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"So_dhdx", dataPtr_dhdx, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"So_dhdy", dataPtr_dhdy, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     !TODO: need to add the So_bldepth since this is needed for the wave model
     call State_getFldPtr(exportState,"So_bldepth", dataPtr_bldepth, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(exportState,"So_fswpen", dataPtr_fswpen, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     !  call State_getFldPtr(exportState,"So_roce_16O", dataPtr_roce_16O, rc=rc)
     !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     !    line=__LINE__, &
@@ -152,33 +152,33 @@ contains
     !The mask comes from "grid" that uses the usual MOM domain that has halos
     !and does not use global indexing.
     do j = jsc, jec
-       j1 = j + lbnd2 - jsc
-       jg = j + grid%jsc - jsc
-       do i = isc, iec
-          i1 = i + lbnd1 - isc
-          ig = i + grid%isc - isc
-          dataPtr_omask(i1,j1)   = grid%mask2dT(ig,jg)
-          dataPtr_t(i1,j1)       = ocean_public%t_surf(i,j) * grid%mask2dT(ig,jg) ! surface temp is in K
-          dataPtr_s(i1,j1)       = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
-          dataPtr_u(i1,j1)       = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
-          dataPtr_v(i1,j1)       = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
-          dataPtr_q(i1,j1)       = 0.
-          dataPtr_bldepth(i1,j1) = 0. ! TODO: this needs to be generalized
-         !dataPtr_u(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%u_surf(i,j) &
-         !                        - grid%sin_rot(ig,jg) * ocean_public%v_surf(i,j)) * grid%mask2dT(ig,jg)
-         !dataPtr_v(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%v_surf(i,j) &
-         !                        + grid%sin_rot(ig,jg) * ocean_public%u_surf(i,j)) * grid%mask2dT(ig,jg)
-       end do
+      j1 = j + lbnd2 - jsc
+      jg = j + grid%jsc - jsc
+      do i = isc, iec
+        i1 = i + lbnd1 - isc
+        ig = i + grid%isc - isc
+        dataPtr_omask(i1,j1)   = grid%mask2dT(ig,jg)
+        dataPtr_t(i1,j1)       = ocean_public%t_surf(i,j) * grid%mask2dT(ig,jg) ! surface temp is in K
+        dataPtr_s(i1,j1)       = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
+        dataPtr_u(i1,j1)       = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
+        dataPtr_v(i1,j1)       = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
+        dataPtr_q(i1,j1)       = 0.
+        dataPtr_bldepth(i1,j1) = 0. ! TODO: this needs to be generalized
+        !dataPtr_u(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%u_surf(i,j) &
+        !                        - grid%sin_rot(ig,jg) * ocean_public%v_surf(i,j)) * grid%mask2dT(ig,jg)
+        !dataPtr_v(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%v_surf(i,j) &
+        !                        + grid%sin_rot(ig,jg) * ocean_public%u_surf(i,j)) * grid%mask2dT(ig,jg)
+      end do
     end do
 
     ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
     ! in order to update halos. i.e. does not use global indexing.
     do j=grid%jsc, grid%jec
-       jg = j + grid%jdg_offset
-       do i=grid%isc,grid%iec
-          ig = i + grid%idg_offset
-          ssh(i,j) = ocean_public%sea_lev(ig,jg)
-       end do
+      jg = j + grid%jdg_offset
+      do i=grid%isc,grid%iec
+        ig = i + grid%idg_offset
+        ssh(i,j) = ocean_public%sea_lev(ig,jg)
+      end do
     end do
 
     ! Update halo of ssh so we can calculate gradients
@@ -186,85 +186,85 @@ contains
 
     ! d/dx ssh
     do jg = jsc, jec
-       j  = jg + grid%jsc - jsc
-       j1 = jg + lbnd2 - jsc
-       do ig = isc,iec
-          i  = ig + grid%isc - isc
-          i1 = ig + lbnd1 - isc
+      j  = jg + grid%jsc - jsc
+      j1 = jg + lbnd2 - jsc
+      do ig = isc,iec
+        i  = ig + grid%isc - isc
+        i1 = ig + lbnd1 - isc
 
-          ! This is a simple second-order difference
-          !dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(ig,jg)
-          ! This is a PLM slope which might be less prone to the A-grid null mode
-          slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(i-1,j)
-          if (grid%mask2dCu(i-1,j)==0.) slp_L = 0.
-          slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(i,j)
-          if (grid%mask2dCu(i+1,j)==0.) slp_R = 0.
-          slp_C = 0.5 * (slp_L + slp_R)
-          if ( (slp_L * slp_R) > 0.0 ) then
-             ! This limits the slope so that the edge values are bounded by the
-             ! two cell averages spanning the edge.
-             u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-             u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-             slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-          else
-             ! Extrema in the mean values require a PCM reconstruction avoid generating
-             ! larger extreme values.
-             slope = 0.0
-          end if
-          dataPtr_dhdx(i1,j1) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
-          if (grid%mask2dT(i,j)==0.) dataPtr_dhdx(i1,j1) = 0.0
-       end do
+        ! This is a simple second-order difference
+        !dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(ig,jg)
+        ! This is a PLM slope which might be less prone to the A-grid null mode
+        slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(i-1,j)
+        if (grid%mask2dCu(i-1,j)==0.) slp_L = 0.
+        slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(i,j)
+        if (grid%mask2dCu(i+1,j)==0.) slp_R = 0.
+        slp_C = 0.5 * (slp_L + slp_R)
+        if ( (slp_L * slp_R) > 0.0 ) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+        end if
+        dataPtr_dhdx(i1,j1) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+        if (grid%mask2dT(i,j)==0.) dataPtr_dhdx(i1,j1) = 0.0
+      end do
     end do
 
     ! d/dy ssh
     do jg = jsc, jec
-       j  = jg + grid%jsc - jsc
-       j1 = jg + lbnd2 - jsc
-       do ig = isc,iec
-          i  = ig + grid%isc - isc
-          i1 = ig + lbnd1 - isc
+      j  = jg + grid%jsc - jsc
+      j1 = jg + lbnd2 - jsc
+      do ig = isc,iec
+        i  = ig + grid%isc - isc
+        i1 = ig + lbnd1 - isc
 
-          ! This is a simple second-order difference
-          !dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(ig,jg)
-          ! This is a PLM slope which might be less prone to the A-grid null mode
-          slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,j-1)
-          if (grid%mask2dCv(i,j-1)==0.) slp_L = 0.
-          slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,j)
-          if (grid%mask2dCv(i,j+1)==0.) slp_R = 0.
-          slp_C = 0.5 * (slp_L + slp_R)
-          !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
-          if ((slp_L * slp_R) > 0.0) then
-             ! This limits the slope so that the edge values are bounded by the
-             ! two cell averages spanning the edge.
-             u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-             u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-             slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-          else
-             ! Extrema in the mean values require a PCM reconstruction avoid generating
-             ! larger extreme values.
-             slope = 0.0
-          end if
-          dataPtr_dhdy(i1,j1) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
-          if (grid%mask2dT(i,j)==0.) dataPtr_dhdy(i1,j1) = 0.0
-       end do
+        ! This is a simple second-order difference
+        !dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(ig,jg)
+        ! This is a PLM slope which might be less prone to the A-grid null mode
+        slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,j-1)
+        if (grid%mask2dCv(i,j-1)==0.) slp_L = 0.
+        slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,j)
+        if (grid%mask2dCv(i,j+1)==0.) slp_R = 0.
+        slp_C = 0.5 * (slp_L + slp_R)
+        !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
+        if ((slp_L * slp_R) > 0.0) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+        end if
+        dataPtr_dhdy(i1,j1) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+        if (grid%mask2dT(i,j)==0.) dataPtr_dhdy(i1,j1) = 0.0
+      end do
     end do
 
     if (debug .and. is_root_pe()) then
-       call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
-       call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
+      call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
+      call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
 
-       do j = jsc, jec
-          j1 = j + lbnd2 - jsc
-          do i = isc, iec
-             i1 = i + lbnd1 - isc
-             write(logunit,F01)'export: day, secs, j, i, t_surf = ',day,secs,j,i,dataPtr_t(i1,j1)
-             write(logunit,F01)'export: day, secs, j, i, s_surf = ',day,secs,j,i,dataPtr_s(i1,j1)
-             write(logunit,F01)'export: day, secs, j, i, u_surf = ',day,secs,j,i,dataPtr_u(i1,j1)
-             write(logunit,F01)'export: day, secs, j, i, v_surf = ',day,secs,j,i,dataPtr_v(i1,j1)
-             write(logunit,F01)'export: day, secs, j, i, dhdx   = ',day,secs,j,i,dataPtr_dhdx(i1,j1)
-             write(logunit,F01)'export: day, secs, j, i, dhdy   = ',day,secs,j,i,dataPtr_dhdy(i1,j1)
-          end do
-       end do
+      do j = jsc, jec
+        j1 = j + lbnd2 - jsc
+        do i = isc, iec
+          i1 = i + lbnd1 - isc
+          write(logunit,F01)'export: day, secs, j, i, t_surf = ',day,secs,j,i,dataPtr_t(i1,j1)
+          write(logunit,F01)'export: day, secs, j, i, s_surf = ',day,secs,j,i,dataPtr_s(i1,j1)
+          write(logunit,F01)'export: day, secs, j, i, u_surf = ',day,secs,j,i,dataPtr_u(i1,j1)
+          write(logunit,F01)'export: day, secs, j, i, v_surf = ',day,secs,j,i,dataPtr_v(i1,j1)
+          write(logunit,F01)'export: day, secs, j, i, dhdx   = ',day,secs,j,i,dataPtr_dhdx(i1,j1)
+          write(logunit,F01)'export: day, secs, j, i, dhdy   = ',day,secs,j,i,dataPtr_dhdy(i1,j1)
+        end do
+      end do
     end if
 
   end subroutine mom_export
@@ -338,19 +338,19 @@ contains
 
     call State_getFldPtr(importState,'Sa_pslv', dataPtr_p,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,'Si_ifrac', dataPtr_ifrac,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"So_duu10n", dataPtr_duu10n, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     !  call State_getFldPtr(importState,"Sa_co2prog", dataPtr_co2prog, rc=rc)
     !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     !    line=__LINE__, &
@@ -363,124 +363,124 @@ contains
     !    return  ! bail out
     call State_getFldPtr(importState,"Sw_lamult", dataPtr_lamult, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Sw_ustokes", dataPtr_ustokes, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Sw_vstokes", dataPtr_vstokes, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_swndr" , dataPtr_swndr, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_swndf" , dataPtr_swndf, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_swvdr" , dataPtr_swvdr, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_swvdf" , dataPtr_swvdf, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_taux" , dataPtr_taux, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_tauy" , dataPtr_tauy, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_sen"  , dataPtr_sen, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_lat"  , dataPtr_lat, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_evap" , dataPtr_evap, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Fioi_salt" , dataPtr_osalt, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_lwdn" , dataPtr_lwdn, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_lwup" , dataPtr_lwup, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_swnet", dataPtr_swnet, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_rofl" , dataPtr_rofl, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Foxx_rofi" , dataPtr_rofi, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Fioi_meltw", dataPtr_meltw, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Fioi_melth", dataPtr_melth, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Fioi_salt" , dataPtr_iosalt, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_prec" , dataPtr_prec, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_rain" , dataPtr_rain, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call State_getFldPtr(importState,"Faxa_snow" , dataPtr_snow, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     lbnd1 = lbound(dataPtr_p,1)
     ubnd1 = ubound(dataPtr_p,1)
@@ -490,67 +490,67 @@ contains
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
     if ((trim(runtype) == 'initial' .and. import_cnt <= 2)) then
-       ! This will skip the first time import information is given
-       do_import = .false.
+      ! This will skip the first time import information is given
+      do_import = .false.
     else
-       do_import = .true.
+      do_import = .true.
     end if
 
     if (do_import) then
-       do j = jsc, jec
-          j1 = j + lbnd2 - jsc
-          jg = j + grid%jsc - jsc
-          do i = isc, iec
-             i1 = i + lbnd1 - isc
-             ig = i + grid%jsc - isc
+      do j = jsc, jec
+        j1 = j + lbnd2 - jsc
+        jg = j + grid%jsc - jsc
+        do i = isc, iec
+          i1 = i + lbnd1 - isc
+          ig = i + grid%jsc - isc
 
-             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)
-             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)
-             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)
-             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)
-             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)
-             ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)
-             ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)
-             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)
-             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)
-             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)
-             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)
-             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)
-             ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1)
-             ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
-             !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
-             !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
-             !ice_ocean_boundary%u_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
-             !ice_ocean_boundary%v_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
-          enddo
-       enddo
+          ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)
+          ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)
+          ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)
+          ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)
+          ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)
+          ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)
+          ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)
+          ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)
+          ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)
+          ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)
+          ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)
+          ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)
+          ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1)
+          ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
+          !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
+          !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
+          !ice_ocean_boundary%u_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
+          !ice_ocean_boundary%v_flux(i,j)         =  GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
+        enddo
+      enddo
     end if
 
     ! debug output
     if (do_import .and. debug .and. is_root_pe()) then
-       call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
-       call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
+      call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
+      call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
 
-       i0 = GRID%isc - isc
-       j0 = GRID%jsc - jsc
-       do j = GRID%jsc, GRID%jec
-          do i = GRID%isc, GRID%iec
-             write(logunit,F01)'import: day, secs, j, i, u_flux          = ',day,secs,j,i,ice_ocean_boundary%u_flux(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, v_flux          = ',day,secs,j,i,ice_ocean_boundary%v_flux(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, lprec           = ',day,secs,j,i,ice_ocean_boundary%lprec(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i-i0,j-j0)
-            !write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, runoff          = ',day,secs,j,i,ice_ocean_boundary%runoff(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, psurf           = ',day,secs,j,i,ice_ocean_boundary%p(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, salt_flux       = ',day,secs,j,i,ice_ocean_boundary%salt_flux(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dir(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dif(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
-             write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
-          end do
-       end do
+      i0 = GRID%isc - isc
+      j0 = GRID%jsc - jsc
+      do j = GRID%jsc, GRID%jec
+        do i = GRID%isc, GRID%iec
+          write(logunit,F01)'import: day, secs, j, i, u_flux          = ',day,secs,j,i,ice_ocean_boundary%u_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, v_flux          = ',day,secs,j,i,ice_ocean_boundary%v_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, lprec           = ',day,secs,j,i,ice_ocean_boundary%lprec(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i-i0,j-j0)
+          !write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, runoff          = ',day,secs,j,i,ice_ocean_boundary%runoff(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, psurf           = ',day,secs,j,i,ice_ocean_boundary%p(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, salt_flux       = ',day,secs,j,i,ice_ocean_boundary%salt_flux(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dir(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dif(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dir = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
+          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = ',day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
+        end do
+      end do
     end if
 
   end subroutine mom_import
@@ -570,14 +570,14 @@ contains
 
     call ESMF_StateGet(ST, itemName=trim(fldname), field=lfield, rc=lrc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
     call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     if (present(rc)) rc = lrc
 

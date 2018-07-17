@@ -706,40 +706,40 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
 
   if (present(restartname)) then
 
-     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%restart_CSp, GV=OS%GV, filename=restartname)
+    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                      OS%restart_CSp, GV=OS%GV, filename=restartname)
 
-     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                               OS%dirs%restart_output_dir) ! Is this needed?
+    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                              OS%dirs%restart_output_dir) ! Is this needed?
 
-     if (OS%use_ice_shelf) then
-        call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
-     endif
+    if (OS%use_ice_shelf) then
+      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+    endif
 
   else
 
-     if (BTEST(OS%Restart_control,1)) then
-        call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-             OS%restart_CSp, .true., GV=OS%GV)
+    if (BTEST(OS%Restart_control,1)) then
+      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+        OS%restart_CSp, .true., GV=OS%GV)
 
-        call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-             OS%dirs%restart_output_dir, .true.)
+      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+        OS%dirs%restart_output_dir, .true.)
 
-        if (OS%use_ice_shelf) then
-           call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
-        endif
-     endif
+      if (OS%use_ice_shelf) then
+        call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
+      endif
+    endif
 
-     if (BTEST(OS%Restart_control,0)) then
-        call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                          OS%restart_CSp, GV=OS%GV)
+    if (BTEST(OS%Restart_control,0)) then
+      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                        OS%restart_CSp, GV=OS%GV)
 
-        call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                                  OS%dirs%restart_output_dir)
-        if (OS%use_ice_shelf) then
-           call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
-        endif
-     endif
+      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                                OS%dirs%restart_output_dir)
+      if (OS%use_ice_shelf) then
+        call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+      endif
+    endif
 
   end if
 
@@ -812,9 +812,9 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
        "restart files can only be created after the buoyancy forcing is applied.")
 
   if (present(directory)) then
-     restart_dir = directory
+    restart_dir = directory
   else
-     restart_dir = OS%dirs%restart_output_dir
+    restart_dir = OS%dirs%restart_output_dir
   endif
 
   call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV)
@@ -850,9 +850,9 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
   if (PRESENT(maskmap)) then
-     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
+    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
   else
-     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
+    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
   endif
   call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
@@ -1105,45 +1105,45 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
 
   select case(name)
   case('area')
-     array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
   case('mask')
-     array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
 !     do j=g_jsc,g_jec ; do i=g_isc,g_iec
 !        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
 !     enddo ; enddo
   case('t_surf')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_pme')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_runoff')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_calving')
-     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('btfHeat')
-     array2D(isc:,jsc:) = 0
+    array2D(isc:,jsc:) = 0
   case('tlat')
-     array2D(isc:,jsc:) = OS%grid%geoLatT(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLatT(g_isc:g_iec,g_jsc:g_jec)
   case('tlon')
-     array2D(isc:,jsc:) = OS%grid%geoLonT(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLonT(g_isc:g_iec,g_jsc:g_jec)
   case('ulat')
-     array2D(isc:,jsc:) = OS%grid%geoLatCu(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLatCu(g_isc:g_iec,g_jsc:g_jec)
   case('ulon')
-     array2D(isc:,jsc:) = OS%grid%geoLonCu(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLonCu(g_isc:g_iec,g_jsc:g_jec)
   case('vlat')
-     array2D(isc:,jsc:) = OS%grid%geoLatCv(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLatCv(g_isc:g_iec,g_jsc:g_jec)
   case('vlon')
-     array2D(isc:,jsc:) = OS%grid%geoLonCv(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLonCv(g_isc:g_iec,g_jsc:g_jec)
   case('geoLatBu')
-     array2D(isc:,jsc:) = OS%grid%geoLatBu(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLatBu(g_isc:g_iec,g_jsc:g_jec)
   case('geoLonBu')
-     array2D(isc:,jsc:) = OS%grid%geoLonBu(g_isc:g_iec,g_jsc:g_jec)
+    array2D(isc:,jsc:) = OS%grid%geoLonBu(g_isc:g_iec,g_jsc:g_jec)
   case('cos_rot')
-     array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
+    array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
   case('sin_rot')
-     array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
+    array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
   case default
-     call MOM_error(FATAL,'ocean_model_data2D_get: unknown argument name='//name)
+    call MOM_error(FATAL,'ocean_model_data2D_get: unknown argument name='//name)
   end select
 
 
@@ -1160,9 +1160,9 @@ subroutine ocean_model_data1D_get(OS,Ocean, name, value)
 
   select case(name)
   case('c_p')
-     value = OS%C_p
+    value = OS%C_p
   case default
-     call MOM_error(FATAL,'ocean_model_data1D_get: unknown argument name='//name)
+    call MOM_error(FATAL,'ocean_model_data1D_get: unknown argument name='//name)
   end select
 
 
@@ -1170,22 +1170,22 @@ end subroutine ocean_model_data1D_get
 
 subroutine ocean_public_type_chksum(id, timestep, ocn)
 
-    character(len=*), intent(in) :: id
-    integer         , intent(in) :: timestep
-    type(ocean_public_type), intent(in) :: ocn
-    integer ::   n,m, outunit
+  character(len=*), intent(in) :: id
+  integer         , intent(in) :: timestep
+  type(ocean_public_type), intent(in) :: ocn
+  integer ::   n,m, outunit
 
-    outunit = stdout()
+  outunit = stdout()
 
-    write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
-    write(outunit,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
-    write(outunit,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
-    write(outunit,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
-    write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
-    write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
-    write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
+  write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
+  write(outunit,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
+  write(outunit,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
+  write(outunit,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
+  write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
+  write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
+  write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
 
-    call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
+  call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
@@ -1197,14 +1197,14 @@ end subroutine ocean_public_type_chksum
 ! Obtain the ocean grid.
 ! </DESCRIPTION>
 !
-  subroutine get_ocean_grid(OS, Gridp)
-    type(ocean_state_type) :: OS
-    type(ocean_grid_type) , pointer          :: Gridp
+subroutine get_ocean_grid(OS, Gridp)
+  type(ocean_state_type) :: OS
+  type(ocean_grid_type) , pointer          :: Gridp
 
-    Gridp => OS%grid
-    return
+  Gridp => OS%grid
+  return
 
-  end subroutine get_ocean_grid
+end subroutine get_ocean_grid
 ! </SUBROUTINE> NAME="get_ocean_grid"
 
 end module MOM_ocean_model
