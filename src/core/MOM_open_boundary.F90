@@ -1613,7 +1613,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(I,j,k) = u_new(I-1,j,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
-           if (dhdt*dhdx < 0.0) then
+           ! dhdt gets set to 0 on inflow in oblique case
+           if (dhdt*dhdx <= 0.0) then
              tau = segment%Velocity_nudging_timescale_in
            else
              tau = segment%Velocity_nudging_timescale_out
@@ -1733,7 +1734,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(I,j,k) = u_new(I+1,j,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
-           if (dhdt*dhdx < 0.0) then
+           ! dhdt gets set to 0. on inflow in oblique case
+           if (dhdt*dhdx <= 0.0) then
              tau = segment%Velocity_nudging_timescale_in
            else
              tau = segment%Velocity_nudging_timescale_out
@@ -1854,7 +1856,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = v_new(i,J-1,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
-           if (dhdt*dhdy < 0.0) then
+           ! dhdt gets set to 0 on inflow in oblique case
+           if (dhdt*dhdx <= 0.0) then
              tau = segment%Velocity_nudging_timescale_in
            else
              tau = segment%Velocity_nudging_timescale_out
@@ -1975,7 +1978,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = v_new(i,J+1,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
-           if (dhdt*dhdy < 0.0) then
+           ! dhdt gets set to 0 on inflow in oblique case
+           if (dhdt*dhdx <= 0.0) then
              tau = segment%Velocity_nudging_timescale_in
            else
              tau = segment%Velocity_nudging_timescale_out
