@@ -166,6 +166,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: fprec           =>NULL() !< mass flux of frozen precip (kg/m2/s)
   real, pointer, dimension(:,:) :: runoff          =>NULL() !< mass flux of liquid runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: calving         =>NULL() !< mass flux of frozen runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: stress_mag      =>NULL() !< The time-mean magnitude of the stress on the ocean (Pa)
   real, pointer, dimension(:,:) :: ustar_berg      =>NULL() !< frictional velocity beneath icebergs (m/s)
   real, pointer, dimension(:,:) :: area_berg       =>NULL() !< area covered by icebergs(m2/m2)
   real, pointer, dimension(:,:) :: mass_berg       =>NULL() !< mass of icebergs(kg/m2)
