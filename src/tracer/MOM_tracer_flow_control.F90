@@ -1,3 +1,4 @@
+!> Orchestrates the registration and calling of tracer packages
 module MOM_tracer_flow_control
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -67,19 +68,21 @@ public call_tracer_register, tracer_flow_control_init, call_tracer_set_forcing
 public call_tracer_column_fns, call_tracer_surface_state, call_tracer_stocks
 public call_tracer_flux_init, get_chl_from_model, tracer_flow_control_end
 
+!> The control structure for orchestrating the calling of tracer packages
 type, public :: tracer_flow_control_CS ; private
-  logical :: use_USER_tracer_example = .false.
-  logical :: use_DOME_tracer = .false.
-  logical :: use_ISOMIP_tracer = .false.
-  logical :: use_ideal_age = .false.
-  logical :: use_regional_dyes = .false.
-  logical :: use_oil = .false.
-  logical :: use_advection_test_tracer = .false.
-  logical :: use_OCMIP2_CFC = .false.
-  logical :: use_MOM_generic_tracer = .false.
-  logical :: use_pseudo_salt_tracer = .false.
-  logical :: use_boundary_impulse_tracer = .false.
-  logical :: use_dyed_obc_tracer = .false.
+  logical :: use_USER_tracer_example = .false.     !< If true, use the USER_tracer_example package
+  logical :: use_DOME_tracer = .false.             !< If true, use the DOME_tracer package
+  logical :: use_ISOMIP_tracer = .false.           !< If true, use the ISOMPE_tracer package
+  logical :: use_ideal_age = .false.               !< If true, use the ideal age tracer package
+  logical :: use_regional_dyes = .false.           !< If true, use the regional dyes tracer package
+  logical :: use_oil = .false.                     !< If true, use the oil tracer package
+  logical :: use_advection_test_tracer = .false.   !< If true, use the advection_test_tracer package
+  logical :: use_OCMIP2_CFC = .false.              !< If true, use the OCMIP2_CFC tracer package
+  logical :: use_MOM_generic_tracer = .false.      !< If true, use the MOM_generic_tracer packages
+  logical :: use_pseudo_salt_tracer = .false.      !< If true, use the psuedo_salt tracer  package
+  logical :: use_boundary_impulse_tracer = .false. !< If true, use the boundary impulse tracer package
+  logical :: use_dyed_obc_tracer = .false.         !< If true, use the dyed OBC tracer package
+  !>@{ Pointers to the control strucures for the tracer packages
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ISOMIP_tracer_CS), pointer :: ISOMIP_tracer_CSp => NULL()
@@ -94,6 +97,7 @@ type, public :: tracer_flow_control_CS ; private
   type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
   type(boundary_impulse_tracer_CS), pointer :: boundary_impulse_tracer_CSp => NULL()
   type(dyed_obc_tracer_CS), pointer :: dyed_obc_tracer_CSp => NULL()
+  !!@}
 end type tracer_flow_control_CS
 
 contains
@@ -341,21 +345,14 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
 
 end subroutine tracer_flow_control_init
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine extracts the chlorophyll concentrations from the model state, if possible
 subroutine get_chl_from_model(Chl_array, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: Chl_array !< The array into which the
-                                                                  !! model's Chlorophyll-A
-                                                                  !! concentrations in mg m-3 are
-                                                                  !! to be read.
-  type(ocean_grid_type),                 intent(in)  :: G         !< The ocean's grid structure.
-  type(tracer_flow_control_CS),          pointer     :: CS        !< The control structure returned
-                                                                  !! by a previous call to
-                                                                  !! call_tracer_register.
-! Arguments: Chl_array - The array into which the model's Chlorophyll-A
-!                        concentrations in mg m-3 are to be read.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), &
+                                intent(out) :: Chl_array !< The array in which to store the model's
+                                                         !! Chlorophyll-A concentrations in mg m-3.
+  type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
+  type(tracer_flow_control_CS), pointer     :: CS        !< The control structure returned by a
+                                                         !! previous call to call_tracer_register.
 
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) then
