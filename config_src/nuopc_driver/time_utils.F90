@@ -37,18 +37,18 @@ module time_utils_mod
 
     select case( uppercase(trim(calendar)) )
     case( 'GREGORIAN' )
-       fms2esmf_cal_c = ESMF_CALKIND_GREGORIAN
+      fms2esmf_cal_c = ESMF_CALKIND_GREGORIAN
     case( 'JULIAN' )
-       fms2esmf_cal_c = ESMF_CALKIND_JULIAN
+      fms2esmf_cal_c = ESMF_CALKIND_JULIAN
     case( 'NOLEAP' )
-       fms2esmf_cal_c = ESMF_CALKIND_NOLEAP
+      fms2esmf_cal_c = ESMF_CALKIND_NOLEAP
     case( 'THIRTY_DAY' )
-       fms2esmf_cal_c = ESMF_CALKIND_360DAY
+      fms2esmf_cal_c = ESMF_CALKIND_360DAY
     case( 'NO_CALENDAR' )
-       fms2esmf_cal_c = ESMF_CALKIND_NOCALENDAR
+      fms2esmf_cal_c = ESMF_CALKIND_NOCALENDAR
     case default
-       call mpp_error(FATAL, &
-       'ocean_solo: ocean_solo_nml entry calendar must be one of GREGORIAN|JULIAN|NOLEAP|THIRTY_DAY|NO_CALENDAR.' )
+      call mpp_error(FATAL, &
+      'ocean_solo: ocean_solo_nml entry calendar must be one of GREGORIAN|JULIAN|NOLEAP|THIRTY_DAY|NO_CALENDAR.' )
     end select
   end function fms2esmf_cal_c
 
