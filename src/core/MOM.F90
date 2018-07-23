@@ -1,3 +1,4 @@
+!> The central module of the MOM6 ocean model
 module MOM
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -9,7 +10,6 @@ use MOM_checksum_packages,    only : MOM_accel_chksum, MOM_surface_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
@@ -26,11 +26,10 @@ use MOM_domains,              only : To_North, To_East, To_South, To_West
 use MOM_domains,              only : To_All, Omit_corners, CGRID_NE, SCALAR_PAIR
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,              only : start_group_pass, complete_group_pass, Omit_Corners
-use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
-use MOM_fixed_initialization, only : MOM_initialize_fixed
 use MOM_forcing_type,         only : forcing, mech_forcing
 use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
@@ -40,7 +39,6 @@ use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
-use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : operator(>=), increment_date
@@ -52,6 +50,7 @@ use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjus
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
+use MOM_coord_initialization,  only : MOM_initialize_coord
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_diabatic_driver,       only : legacy_diabatic
@@ -72,8 +71,9 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_EOS,                   only : EOS_init, calculate_density
 use MOM_debugging,             only : check_redundant
+use MOM_EOS,                   only : EOS_init, calculate_density
+use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
 use MOM_hor_index,             only : hor_index_type, hor_index_init
@@ -91,6 +91,7 @@ use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
+use MOM_state_initialization,  only : MOM_initialize_state
 use MOM_sum_output,            only : write_energy, accumulate_net_input
 use MOM_sum_output,            only : MOM_sum_output_init, sum_output_CS
 use MOM_ALE_sponge,            only : init_ALE_sponge_diags, ALE_sponge_CS
@@ -134,9 +135,9 @@ implicit none ; private
 
 !> A structure with diagnostic IDs of the state variables
 type MOM_diag_IDs
-  ! 3-d state fields
-  integer :: id_u  = -1, id_v  = -1, id_h  = -1
-  ! 2-d state field
+  !>@{ 3-d state field diagnostic IDs
+  integer :: id_u  = -1, id_v  = -1, id_h  = -1  !!@}
+  !> 2-d state field diagnotic ID
   integer :: id_ssh_inst = -1
 end type MOM_diag_IDs
 
@@ -155,11 +156,13 @@ type, public :: MOM_control_struct ; private
     v,  &           !< meridional velocity (m/s)
     vh, &           !< vh = v * h * dx at v grid points (m3/s or kg/s)
     vhtr            !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    ssh_rint, &     !< A running time integral of the sea surface height, in s m.
-    ave_ssh_ibc, &  !< time-averaged (over a forcing time step) sea surface height
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ssh_rint
+                    !< A running time integral of the sea surface height, in s m.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ave_ssh_ibc
+                    !< time-averaged (over a forcing time step) sea surface height
                     !! with a correction for the inverse barometer (meter)
-    eta_av_bc       !< free surface height or column mass time averaged over the last
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_av_bc
+                    !< free surface height or column mass time averaged over the last
                     !! baroclinic dynamics time step (m or kg/m2)
   real, dimension(:,:), pointer :: &
     Hml => NULL()   !< active mixed layer depth, in m
@@ -171,47 +174,40 @@ type, public :: MOM_control_struct ; private
 
   type(ocean_grid_type) :: G  !< structure containing metrics and grid info
   type(verticalGrid_type), pointer :: &
-    GV => NULL()              !< structure containing vertical grid info
-  type(thermo_var_ptrs) :: tv !< structure containing pointers to available
-                              !! thermodynamic fields
-  real :: t_dyn_rel_adv       !< The time of the dynamics relative to tracer
-                              !! advection and lateral mixing (in seconds), or
-                              !! equivalently the elapsed time since advectively
-                              !! updating the tracers.  t_dyn_rel_adv is invariably
-                              !! positive and may span multiple coupling timesteps.
-  real :: t_dyn_rel_thermo    !< The time of the dynamics relative to diabatic
-                              !! processes and remapping (in seconds).  t_dyn_rel_thermo
-                              !! can be negative or positive depending on whether
-                              !! the diabatic processes are applied before or after
-                              !! the dynamics and may span multiple coupling timesteps.
-  real :: t_dyn_rel_diag      !< The time of the diagnostics relative to diabatic
-                              !! processes and remapping (in seconds).  t_dyn_rel_diag
-                              !! is always positive, since the diagnostics must lag.
-  integer :: ndyn_per_adv = 0 !< Number of calls to dynamics since the last call to advection
-                              !! Must be saved if thermo spans coupling?
+    GV => NULL()    !< structure containing vertical grid info
+  type(thermo_var_ptrs) :: tv !< structure containing pointers to available thermodynamic fields
+  real :: t_dyn_rel_adv !< The time of the dynamics relative to tracer advection and lateral mixing
+                    !! (in seconds), or equivalently the elapsed time since advectively updating the
+                    !! tracers.  t_dyn_rel_adv is invariably positive and may span multiple coupling timesteps.
+  real :: t_dyn_rel_thermo  !< The time of the dynamics relative to diabatic  processes and remapping
+                    !! (in seconds).  t_dyn_rel_thermo can be negative or positive depending on whether
+                    !! the diabatic processes are applied before or after the dynamics and may span
+                    !! multiple coupling timesteps.
+  real :: t_dyn_rel_diag !< The time of the diagnostics relative to diabatic processes and remapping
+                    !! (in seconds).  t_dyn_rel_diag is always positive, since the diagnostics must lag.
+  integer :: ndyn_per_adv = 0 !< Number of calls to dynamics since the last call to advection.
+                    !### Must be saved if thermo spans coupling?
 
   type(diag_ctrl)     :: diag !< structure to regulate diagnostic output timing
   type(vertvisc_type) :: visc !< structure containing vertical viscosities,
-                              !! bottom drag viscosities, and related fields
+                    !! bottom drag viscosities, and related fields
   type(MEKE_type), pointer :: MEKE => NULL() !<  structure containing fields
-                              !! related to the Mesoscale Eddy Kinetic Energy
+                    !! related to the Mesoscale Eddy Kinetic Energy
 
-  logical :: adiabatic               !< If true, there are no diapycnal mass fluxes, and no calls
-                                     !! to routines to calculate or apply diapycnal fluxes.
-  logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the
-                                       !! diabatic subroutine. This is temporary and is needed
-                                       !! to avoid change in answers.
-  logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
-                                     !! processes before time stepping the dynamics.
-  logical :: use_ALE_algorithm       !< If true, use the ALE algorithm rather than layered
-                                     !! isopycnal/stacked shallow water mode. This logical is
-                                     !! set by calling the function useRegridding() from the
-                                     !! MOM_regridding module.
+  logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
+                    !! to routines to calculate or apply diapycnal fluxes.
+  logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the diabatic
+                    !! subroutine. This is temporary and is needed to avoid change in answers.
+  logical :: diabatic_first !< If true, apply diabatic and thermodynamic processes before time
+                    !! stepping the dynamics.
+  logical :: use_ALE_algorithm  !< If true, use the ALE algorithm rather than layered
+                    !! isopycnal/stacked shallow water mode. This logical is set by calling the
+                    !! function useRegridding() from the MOM_regridding module.
   logical :: offline_tracer_mode = .false.
-                                     !< If true, step_offline() is called instead of step_MOM().
-                                     !! This is intended for running MOM6 in offline tracer mode
+                    !< If true, step_offline() is called instead of step_MOM().
+                    !! This is intended for running MOM6 in offline tracer mode
 
-  type(time_type), pointer :: Time   !< pointer to ocean clock
+  type(time_type), pointer :: Time   !< pointer to the ocean clock
   real    :: dt                      !< (baroclinic) dynamics time step (seconds)
   real    :: dt_therm                !< thermodynamics time step (seconds)
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
@@ -291,49 +287,70 @@ type, public :: MOM_control_struct ; private
   real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message
   real    :: bad_vol_col_thick  !< Minimum column thickness before triggering bad value message
 
-  ! Structures and handles used for diagnostics.
-  type(MOM_diag_IDs) :: IDs
-  type(transport_diag_IDs) :: transport_IDs
-  type(surface_diag_IDs) :: sfc_IDs
-  type(diag_grid_storage) :: diag_pre_sync, diag_pre_dyn
+  type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
+  type(transport_diag_IDs) :: transport_IDs  !< Handles used for transport diagnostics.
+  type(surface_diag_IDs)   :: sfc_IDs  !< Handles used for surface diagnostics.
+  type(diag_grid_storage)  :: diag_pre_sync !< The grid (thicknesses) before remapping
+  type(diag_grid_storage)  :: diag_pre_dyn  !< The grid (thicknesses) before dynamics
 
   ! The remainder of this type provides pointers to child module control structures.
 
-  ! These are used for the dynamics updates
-  type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
-  type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
-  type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
-  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp  => NULL()
+  type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp => NULL()
+    !< Pointer to the control structure used for the unsplit dynamics
+  type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp => NULL()
+    !< Pointer to the control structure used for the unsplit RK2 dynamics
+  type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp => NULL()
+    !< Pointer to the control structure used for the mode-split RK2 dynamics
+  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp => NULL()
+    !< Pointer to the control structure used for the isopycnal height diffusive transport.
+    !! This is also common referred to as Gent-McWilliams diffusion
   type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
+    !< Pointer to the control structure used for the mixed layer restratification
+  type(set_visc_CS),             pointer :: set_visc_CSp => NULL()
+    !< Pointer to the control structure used to set viscosities
+  type(diabatic_CS),             pointer :: diabatic_CSp => NULL()
+    !< Pointer to the control structure for the diabatic driver
+  type(MEKE_CS),                 pointer :: MEKE_CSp => NULL()
+    !< Pointer to the control structure for the MEKE updates
+  type(VarMix_CS),               pointer :: VarMix => NULL()
+    !< Pointer to the control structure for the variable mixing module
 
-  type(set_visc_CS),             pointer :: set_visc_CSp           => NULL()
-  type(diabatic_CS),             pointer :: diabatic_CSp           => NULL()
-  type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
-  type(VarMix_CS),               pointer :: VarMix                 => NULL()
+  type(tracer_registry_type),    pointer :: tracer_Reg => NULL()
+    !< Pointer to the MOM tracer registry
+  type(tracer_advect_CS),        pointer :: tracer_adv_CSp => NULL()
+    !< Pointer to the MOM tracer advection control structure
+  type(tracer_hor_diff_CS),      pointer :: tracer_diff_CSp => NULL()
+    !< Pointer to the MOM along-isopycnal tracer diffusion control structure
+  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp => NULL()
+    !< Pointer to the control structure that orchestrates the calling of tracer packages
+  !### update_OBC_CS might not be needed outside of initialization?
+  type(update_OBC_CS),           pointer :: update_OBC_CSp => NULL()
+    !< Pointer to the control structure for updating open boundary condition properties
+  type(ocean_OBC_type),          pointer :: OBC => NULL()
+    !< Pointer to the MOM open boundary condition type
+  type(sponge_CS),               pointer :: sponge_CSp => NULL()
+    !< Pointer to the layered-mode sponge control structure
+  type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp => NULL()
+    !< Pointer to the ALE-mode sponge control structure
+  type(ALE_CS),                  pointer :: ALE_CSp => NULL()
+    !< Pointer to the Arbitrary Lagrangian Eulerian (ALE) vertical coordinate control structure
 
-  ! These are used for tracer advection, diffusion, and remapping
-  type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
-  type(tracer_advect_CS),        pointer :: tracer_adv_CSp         => NULL()
-  type(tracer_hor_diff_CS),      pointer :: tracer_diff_CSp        => NULL()
-  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
-  ! This might not be needed outside of initialization?
-  type(update_OBC_CS),           pointer :: update_OBC_CSp         => NULL()
-  type(ocean_OBC_type),          pointer :: OBC                    => NULL()
-  type(sponge_CS),               pointer :: sponge_CSp             => NULL()
-  type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
-  type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
+  ! Pointers to control structures used for diagnostics
+  type(sum_output_CS),           pointer :: sum_output_CSp => NULL()
+    !< Pointer to the globally summed output control structure
+  type(diagnostics_CS),          pointer :: diagnostics_CSp => NULL()
+    !< Pointer to the MOM diagnostics control structure
+  type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp => NULL()
+    !< Pointer to the MOM Z-space diagnostics control structure
+  type(offline_transport_CS),    pointer :: offline_CSp => NULL()
+    !< Pointer to the offline tracer transport control structure
 
-  type(sum_output_CS),           pointer :: sum_output_CSp         => NULL()
-  type(diagnostics_CS),          pointer :: diagnostics_CSp        => NULL()
-  type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
-  type(offline_transport_CS),    pointer :: offline_CSp            => NULL()
-
-  logical                                :: ensemble_ocean !< if true, this run is part of a
-                                               !! larger ensemble for the purpose of data assimilation
-                                               !! or statistical analysis.
-  type(ODA_CS), pointer                  :: odaCS => NULL() !< a pointer to the control structure for handling
-                                                 !! ensemble model state vectors and data assimilation
-                                                 !! increments and priors
+  logical               :: ensemble_ocean !< if true, this run is part of a
+                                !! larger ensemble for the purpose of data assimilation
+                                !! or statistical analysis.
+  type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
+                                !! ensemble model state vectors and data assimilation
+                                !! increments and priors
 end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
@@ -342,6 +359,7 @@ public extract_surface_state, get_ocean_stocks
 public get_MOM_state_elements, MOM_state_is_synchronized
 public allocate_surface_state, deallocate_surface_state
 
+!>@{ CPU time clock IDs
 integer :: id_clock_ocean
 integer :: id_clock_dynamics
 integer :: id_clock_thermo
@@ -360,6 +378,7 @@ integer :: id_clock_pass_init  ! also in dynamics d/r
 integer :: id_clock_ALE
 integer :: id_clock_other
 integer :: id_clock_offline_tracer
+!!@}
 
 contains
 
@@ -379,7 +398,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   real,               intent(in)    :: time_interval !< time interval covered by this run segment, in s.
   type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
   type(Wave_parameters_CS), &
-            optional, pointer       :: Waves         !< An optional pointer to a wave proptery CS
+            optional, pointer       :: Waves         !< An optional pointer to a wave property CS
   logical,  optional, intent(in)    :: do_dynamics   !< Present and false, do not do updates due
                                                      !! to the dynamics.
   logical,  optional, intent(in)    :: do_thermodynamics  !< Present and false, do not do updates due
@@ -842,6 +861,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
 end subroutine step_MOM
 
+!> Time step the ocean dynamics, including the momentum and continuity equations
 subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                              bbl_time_int, CS, Time_local, Waves)
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
@@ -1349,7 +1369,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
     ! If this is the first iteration in the offline timestep, then we need to read in fields and
     ! perform the main advection.
     if (first_iter) then
-      if (is_root_pe()) print *, "Reading in new offline fields"
+      call MOM_mesg("Reading in new offline fields")
       ! Read in new transport and other fields
       ! call update_transport_from_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
       !     CS%tv%T, CS%tv%S, fluxes, CS%use_ALE_algorithm)
@@ -1403,7 +1423,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         endif
       endif
 
-      if (is_root_pe()) print *, "Last iteration of offline interval"
+      call MOM_mesg("Last iteration of offline interval")
 
       ! Apply freshwater fluxes out of the ocean
       call offline_fw_fluxes_out_ocean(G, GV, CS%offline_CSp, fluxes, CS%h)
@@ -1460,7 +1480,8 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
 end subroutine step_offline
 
-!> This subroutine initializes MOM.
+!> Initialize MOM, including memory allocation, setting up parameters and diagnostics,
+!! initializing the ocean state variables, and initializing subsidiary modules
 subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                           Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
                           count_calls, tracer_flow_CSp)
@@ -2426,7 +2447,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
 end subroutine initialize_MOM
 
-!> This subroutine finishes initializing MOM and writes out the initial conditions.
+!> Finishe initializing MOM and writes out the initial conditions.
 subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
@@ -2500,7 +2521,7 @@ subroutine register_diags(Time, G, GV, IDs, diag)
       Time, 'Instantaneous Sea Surface Height', 'm')
 end subroutine register_diags
 
-!> This subroutine sets up clock IDs for timing various subroutines.
+!> Set up CPU clock IDs for timing various subroutines.
 subroutine MOM_timing_init(CS)
   type(MOM_control_struct), intent(in) :: CS  !< control structure set up by initialize_MOM.
 
@@ -2591,7 +2612,7 @@ subroutine set_restart_fields(GV, param_file, CS, restart_CSp)
 
 end subroutine set_restart_fields
 
-!> This subroutine applies a correction to the sea surface height to compensate
+!> Apply a correction to the sea surface height to compensate
 !! for the atmospheric pressure (the inverse barometer).
 subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
   type(thermo_var_ptrs),             intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
@@ -2628,8 +2649,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
 
 end subroutine adjust_ssh_for_p_atm
 
-!> This subroutine sets the surface (return) properties of the ocean
-!! model by setting the appropriate fields in sfc_state.  Unused fields
+!> Set the surface (return) properties of the ocean model by
+!! setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
 subroutine extract_surface_state(CS, sfc_state)
   type(MOM_control_struct), pointer       :: CS !< Master MOM control structure
@@ -2973,7 +2994,7 @@ subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
 
 end subroutine get_ocean_stocks
 
-!> End of model
+!> End of ocean model, including memory deallocation
 subroutine MOM_end(CS)
   type(MOM_control_struct), pointer :: CS   !< MOM control structure
 

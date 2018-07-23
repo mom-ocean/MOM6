@@ -1,3 +1,4 @@
+!> Initialization for the "sloshing" internal waves configuration.
 module sloshing_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -18,18 +19,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public sloshing_initialize_topography
 public sloshing_initialize_thickness
 public sloshing_initialize_temperature_salinity
 
-character(len=40)  :: mdl = "sloshing_initialization" ! This module's name.
+character(len=40)  :: mdl = "sloshing_initialization" !< This module's name.
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
 !> Initialization of topography.
@@ -176,7 +172,6 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
 end subroutine sloshing_initialize_thickness
 
 
-!------------------------------------------------------------------------------
 !> Initialization of temperature and salinity
 !!
 !! This subroutine initializes linear profiles for T and S according to
