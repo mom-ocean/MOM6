@@ -91,15 +91,15 @@
 !!
 !! Phase    | MOM Cap Subroutine                                                 |  Description
 !! ---------|--------------------------------------------------------------------|--------------------------------------
-!! Init     | [InitializeP0] (@ref mom_cap_mod::initializep0)                    | Sets the Initialize Phase Definition
+!! Init     | [InitializeP0] (@ref ocn_comp_nuopc::initializep0)                    | Sets the Initialize Phase Definition
 !!                                                                               |  (IPD) version to use
-!! Init     | [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise)      | Advertises standard names of import
+!! Init     | [InitializeAdvertise] (@ref ocn_comp_nuopc::initializeadvertise)      | Advertises standard names of import
 !!                                                                               |  and export fields
-!! Init     | [InitializeRealize] (@ref mom_cap_mod::initializerealize)          | Creates an ESMF_Grid for the MOM grid
+!! Init     | [InitializeRealize] (@ref ocn_comp_nuopc::initializerealize)          | Creates an ESMF_Grid for the MOM grid
 !!                                                                               |  as well as ESMF_Fields for import
 !!                                                                               |  and export fields
-!! Run      | [ModelAdvance] (@ref mom_cap_mod::modeladvance)                    | Advances the model by a timestep
-!! Final    | [Finalize] (@ref mom_cap_mod::ocean_model_finalize)                | Cleans up
+!! Run      | [ModelAdvance] (@ref ocn_comp_nuopc::modeladvance)                    | Advances the model by a timestep
+!! Final    | [Finalize] (@ref ocn_comp_nuopc::ocean_model_finalize)                | Cleans up
 !!
 !! @section UnderlyingModelInterfaces Underlying Model Interfaces
 !!
@@ -108,7 +108,7 @@
 !!
 !! The MOM tripolar grid is represented as a 2D `ESMF_Grid` and coupling fields are placed
 !! on this grid. Calls related to creating the grid are located in the [InitializeRealize]
-!! (@ref mom_cap_mod::initializerealize) subroutine, which is called by the NUOPC infrastructure
+!! (@ref ocn_comp_nuopc::initializerealize) subroutine, which is called by the NUOPC infrastructure
 !! during the intialization sequence.
 !!
 !! The cap determines parameters for setting up the grid by calling subroutines in the
@@ -132,7 +132,7 @@
 !!
 !! @subsection Initialization Initialization
 !!
-!! During the [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise) phase, calls are
+!! During the [InitializeAdvertise] (@ref ocn_comp_nuopc::initializeadvertise) phase, calls are
 !! made to MOM's native initialization subroutines, including `fms_init()`, `constants_init()`,
 !! `field_manager_init()`, `diag_manager_init()`, and `set_calendar_type()`.  The MPI communicator
 !! is pulled in through the ESMF VM object for the MOM component. The dt and start time are set
@@ -141,7 +141,7 @@
 !!
 !! @subsection Run Run
 !!
-!! The [ModelAdvance] (@ref mom_cap_mod::modeladvance) subroutine is called by the NUOPC
+!! The [ModelAdvance] (@ref ocn_comp_nuopc::modeladvance) subroutine is called by the NUOPC
 !! infrastructure when it's time for MOM to advance in time. During this subroutine, there is a
 !! call into the MOM update routine:
 !!
@@ -208,7 +208,7 @@
 !! \f]
 !! @subsection Finalization Finalization
 !!
-!! NUOPC infrastructure calls [ocean_model_finalize] (@ref mom_cap_mod::ocean_model_finalize)
+!! NUOPC infrastructure calls [ocean_model_finalize] (@ref ocn_comp_nuopc::ocean_model_finalize)
 !! at the end of the run. This subroutine is a hook to call into MOM's native shutdown
 !! procedures:
 !!
@@ -291,11 +291,11 @@
 !! so that it can maintain state there if desired.
 !! The member of type `ice_ocean_boundary_type` is populated by this cap
 !! with incoming coupling fields from other components. These three derived types are allocated during the
-!! [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise) phase.  Also during that
+!! [InitializeAdvertise] (@ref ocn_comp_nuopc::initializeadvertise) phase.  Also during that
 !! phase, the `ice_ocean_boundary` type members are all allocated using bounds retrieved
 !! from `mpp_get_compute_domain()`.
 !!
-!! During the [InitializeRealize] (@ref mom_cap_mod::initializerealize) phase,
+!! During the [InitializeRealize] (@ref ocn_comp_nuopc::initializerealize) phase,
 !! `ESMF_Field`s are created for each of the coupling fields in the `ice_ocean_boundary`
 !! and `ocean_public_type` members of the internal state. These fields directly reference into the members of
 !! the `ice_ocean_boundary` and `ocean_public_type` so that memory-to-memory copies are not required to move
@@ -308,7 +308,7 @@
 !! "DumpFields" has been set to "true". In this case the cap will write out NetCDF files
 !! with names "field_ocn_import_<fieldname>.nc" and "field_ocn_export_<fieldname>.nc".
 !! Additionally, calls will be made to the cap subroutine [dumpMomInternal]
-!! (@ref mom_cap_mod::dumpmominternal) to write out model internal fields to files
+!! (@ref ocn_comp_nuopc::dumpmominternal) to write out model internal fields to files
 !! named "field_ocn_internal_<fieldname>.nc".  In all cases these NetCDF files will
 !! contain a time series of field data.
 !!
@@ -343,7 +343,7 @@
 !! * `DumpFields` - when set to "true", write out diagnostic NetCDF files for import/export/internal fields
 !! * `ProfileMemory` - when set to "true", write out memory usage information to the ESMF log files; this
 !!   information is written when entering and leaving the [ModelAdvance]
-!!   (@ref mom_cap_mod::modeladvance) subroutine and before and after the call to
+!!   (@ref ocn_comp_nuopc::modeladvance) subroutine and before and after the call to
 !!   `update_ocean_model()`.
 !! * `restart_interval` - integer number of seconds indicating the interval at
 !!   which to call `ocean_model_restart()`; no restarts written if set to 0
@@ -361,7 +361,7 @@
 !! - [MOM Home Page] (http://mom-ocean.org/web)
 !!
 !!
-module mom_cap_mod
+module ocn_comp_nuopc
   use constants_mod,            only: constants_init
   use data_override_mod,        only: data_override_init, data_override
   use diag_manager_mod,         only: diag_manager_init, diag_manager_end
@@ -2739,4 +2739,4 @@ contains
   end subroutine
 #endif
 
-end module mom_cap_mod
+end module ocn_comp_nuopc
