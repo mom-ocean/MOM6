@@ -850,8 +850,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
-  character(len=200) :: restartpath     ! The restart file path (dir/file).
-  character(len=80)  :: restartname     ! The restart file name (no dir).
+  character(len=512) :: restartpath     ! The restart file path (dir/file).
+  character(len=256) :: restartname     ! The restart file name (no dir).
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
                                         ! to the name of files after the first.
   integer(kind=8) :: var_sz, size_in_file ! The size in bytes of each variable
@@ -1439,9 +1439,9 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 !  (in/out)  CS - The control structure returned by a previous call to
 !                 restart_init.
 
-  character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
-  character(len=80) :: fname      ! The name of the current file.
-  character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
+  character(len=256) :: filepath  ! The path (dir/file) to the file being opened.
+  character(len=256) :: fname     ! The name of the current file.
+  character(len=8)   :: suffix    ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
 ! character(len=256) :: mesg      ! A message for warnings.
   integer :: num_restart     ! The number of restart files that have already
