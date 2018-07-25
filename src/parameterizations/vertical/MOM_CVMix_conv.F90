@@ -172,7 +172,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
 
   if (.not. associated(hbl)) then
-    allocate(hbl(SZI_(G), SZJ_(G)));
+    allocate(hbl(SZI_(G), SZJ_(G)))
     hbl(:,:) = 0.0
   endif
 
@@ -212,6 +212,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
+      ! gets index of the level and interface above hbl
       kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
       call CVMix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
@@ -258,6 +259,8 @@ end function CVMix_conv_is_used
 !> Clear pointers and dealocate memory
 subroutine CVMix_conv_end(CS)
   type(CVMix_conv_cs), pointer :: CS ! Control structure
+
+  if (.not. associated(CS)) return
 
   deallocate(CS%N2)
   deallocate(CS%kd_conv)

@@ -301,7 +301,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       end select
     endif
 
-  else if (CS%use_CVMix_tidal) then
+  elseif (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Cannot set INT_TIDE_DISSIPATION to False "// &
             "when USE_CVMix_TIDAL is set to True.")
   endif
@@ -315,7 +315,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Lee wave driven dissipation scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
-    end if
+    endif
     call get_param(param_file, mdl, "LEE_WAVE_PROFILE", tmpstr, &
                  "LEE_WAVE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with LEE_WAVE_DISSIPATION. Valid values are:\n"//&
@@ -346,7 +346,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Polzin scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
-    end if
+    endif
     call get_param(param_file, mdl, "NU_POLZIN", CS%Nu_Polzin, &
                  "When the Polzin decay profile is used, this is a \n"//&
                  "non-dimensional constant in the expression for the \n"//&
@@ -428,7 +428,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       if (CS%use_CVMix_tidal) then
           call MOM_error(FATAL, "tidal_mixing_init: Tidal amplitude files are "// &
               "not compatible with CVMix tidal mixing. ")
-      end if
+      endif
       call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
                  "The path to the file containing the spatially varying \n"//&
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
@@ -459,7 +459,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
       CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*GV%Rho0*&
            CS%kappa_itides*CS%h2(i,j)*utide*utide
-    enddo; enddo
+    enddo ; enddo
 
   endif
 
@@ -588,8 +588,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
            'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'm')
 
-      CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
-           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'm')
+      CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model', &
+           'Polzin_decay_scale_scaled',diag%axesT1,Time, &
+           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, '// &
+           'scaled by N2_bot/N2_meanz', 'm')
 
       CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
            'Bottom Buoyancy frequency squared', 's-2')
@@ -640,7 +642,7 @@ end function tidal_mixing_init
 !! tidal dissipation and to add the effect of internal-tide-driven mixing to the layer or interface
 !! diffusivities.
 subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
-                                    N2_lay, N2_int, Kd, Kd_int, Kd_max)
+                                    N2_lay, N2_int, Kd, Kd_int, Kd_max, Kv)
   type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
@@ -653,10 +655,12 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
   real,                                     intent(inout) :: Kd_max
+  real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
+                                                                 !! (not layer!) in m2 s-1.
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
-      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
+      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
     else
       call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     N2_lay, Kd, Kd_int, Kd_max)
@@ -667,7 +671,7 @@ end subroutine
 
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
 !! mixing to the interface diffusivities.
-subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
+subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
   integer,                                  intent(in)    :: j
   type(ocean_grid_type),                    intent(in)    :: G     !< Grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV    !< ocean vertical grid structure
@@ -675,6 +679,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZI_(G),SZK_(G)+1),       intent(in)    :: N2_int
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
+  real, dimension(:,:,:),                   pointer       :: Kv    !< The "slow" vertical viscosity at each interface
+                                                                   !! (not layer!) in m2 s-1.
 
   ! local
   real, dimension(SZK_(G)+1) :: Kd_tidal    !< tidal diffusivity [m2/s]
@@ -690,7 +696,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
   integer :: i, k, is, ie
   real :: dh, hcorr, Simmons_coeff
-  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3] ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
+  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3]
+                                     ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
   real :: h_neglect, h_neglect_edge
   type(tidal_mixing_diags), pointer :: dd
 
@@ -741,10 +748,17 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
                                CVMix_params            = CS%CVMix_glb_params, &
                                CVMix_tidal_params_user = CS%CVMix_tidal_params)
 
+      ! Update diffusivity
       do k=1,G%ke
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
-        !TODO: Kv(i,j,k) = ????????????
       enddo
+
+      ! Update viscosity
+      if (associated(Kv)) then
+        do k=1,G%ke+1
+          Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
+        enddo
+      endif
 
       ! diagnostics
       if (associated(dd%Kd_itidal)) then
@@ -833,10 +847,17 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
                                           CVmix_params            = CS%CVMix_glb_params,  &
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
 
+      ! Update diffusivity
       do k=1,G%ke
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
-        !TODO: Kv(i,j,k) = ????????????
       enddo
+
+      ! Update viscosity
+      if (associated(Kv)) then
+        do k=1,G%ke+1
+          Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
+        enddo
+      endif
 
       ! diagnostics
       if (associated(dd%Kd_itidal)) then
@@ -886,12 +907,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
   real,                                       intent(inout) :: Kd_max
 
-  ! This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
-  ! The mechanisms considered are (1) local dissipation of internal waves generated by the
-  ! barotropic flow ("itidal"), (2) local dissipation of internal waves generated by the propagating
-  ! low modes (rays) of the internal tide ("lowmode"), and (3) local dissipation of internal lee waves.
-  ! Will eventually need to add diffusivity due to other wave-breaking processes (e.g. Bottom friction,
-  ! Froude-number-depending breaking, PSI, etc.).
+  ! local
 
   real, dimension(SZI_(G)) :: &
     htot,             & ! total thickness above or below a layer, or the
@@ -1173,7 +1189,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
-    enddo ; enddo ;
+    enddo ; enddo
   endif ! Simmons
 
   ! Polzin:
@@ -1259,7 +1275,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
-    enddo ; enddo;
+    enddo ; enddo
   endif ! Polzin
 
 end subroutine add_int_tide_diffusivity
@@ -1591,6 +1607,5 @@ subroutine tidal_mixing_end(CS)
   deallocate(CS)
 
 end subroutine tidal_mixing_end
-
 
 end module MOM_tidal_mixing

@@ -265,7 +265,8 @@ program SHELF_main
     Time_end = daymax
   endif
 
-  if (is_root_pe()) print *,"Time_step_shelf", time_type_to_real(Time_step_shelf), "TIme_end", time_type_to_real(Time_end)
+  if (is_root_pe()) print *,"Time_step_shelf", time_type_to_real(Time_step_shelf), &
+                            "TIme_end", time_type_to_real(Time_end)
   if (Time >= Time_end) call MOM_error(FATAL, &
     "MOM_driver: The run has been started at or after the end time of the run.")
 

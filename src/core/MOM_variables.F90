@@ -233,6 +233,9 @@ type, public :: vertvisc_type
                          !! convection etc).
     TKE_turb => NULL()  !< The turbulent kinetic energy per unit mass defined
                         !! at the interfaces between each layer, in m2 s-2.
+    logical :: add_Kv_slow !< If True, adds Kv_slow when calculating the
+                        !! 'coupling coefficient' (a[k]) at the interfaces.
+                        !! This is done in find_coupling_coef.
 end type vertvisc_type
 
 !> The BT_cont_type structure contains information about the summed layer
@@ -281,7 +284,8 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
-  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically integrated fields.
+  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically
+                                                           !! integrated fields.
   type(coupler_1d_bc_type), &
                optional, intent(in)    :: gas_fields_ocn   !< If present, this type describes the ocean
                                               !! ocean and surface-ice fields that will participate
@@ -359,9 +363,10 @@ end subroutine deallocate_surface_state
 !> alloc_BT_cont_type allocates the arrays contained within a BT_cont_type and
 !! initializes them to 0.
 subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
-  type(BT_cont_type),    pointer    :: BT_cont
+  type(BT_cont_type),    pointer    :: BT_cont !< The BT_cont_type whose elements will be allocated
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  logical,     optional, intent(in) :: alloc_faces
+  logical,     optional, intent(in) :: alloc_faces !< If present and true, allocate
+                                            !! memory for effective face thicknesses.
 
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -416,33 +421,23 @@ end subroutine dealloc_BT_cont_type
 !> MOM_thermovar_chksum does diagnostic checksums on various elements of a
 !! thermo_var_ptrs type for debugging.
 subroutine MOM_thermovar_chksum(mesg, tv, G)
-  character(len=*),                    intent(in) :: mesg
-  type(thermo_var_ptrs),               intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-  type(ocean_grid_type),               intent(in) :: G    !< The ocean's grid structure
-!   This subroutine writes out chksums for the model's basic state variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
-!  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
-!  (in)      G - The ocean's grid structure.
-  integer :: is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  character(len=*),      intent(in) :: mesg !< A message that appears in the checksum lines
+  type(thermo_var_ptrs), intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(tv%T)) &
-    call hchksum(tv%T, mesg//" tv%T",G%HI)
+    call hchksum(tv%T, mesg//" tv%T", G%HI)
   if (associated(tv%S)) &
-    call hchksum(tv%S, mesg//" tv%S",G%HI)
+    call hchksum(tv%S, mesg//" tv%S", G%HI)
   if (associated(tv%frazil)) &
-    call hchksum(tv%frazil, mesg//" tv%frazil",G%HI)
+    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit",G%HI)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE",G%HI)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables
