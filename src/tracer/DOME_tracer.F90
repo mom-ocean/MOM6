@@ -178,7 +178,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -215,7 +214,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !      This adds the stripes of tracer to every layer.
             CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + tr_y
         enddo
-      enddo; enddo; enddo
+      enddo ; enddo ; enddo
 
       if (NTR > 7) then
         do j=js,je ; do i=is,ie
@@ -276,31 +275,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     deallocate(temp)
   endif
 
-  if (associated(OBC)) then
-    call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
-    if (OBC%specified_v_BCs_exist_globally) then
-      segment => OBC%segment(1)
-      allocate(segment%field(NTR))
-      allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
-!     allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
-      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
-        if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
-        else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
-      enddo ; enddo ; enddo
-      call register_segment_tracer(CS%tr_desc(1), param_file, GV, &
-                                   OBC%segment(1), OBC_array=.true.)
-    else
-      ! This is not expected in the DOME example.
-    endif
-    ! All tracers but the first have 0 concentration in their inflows. As this
-    ! is the default value, the following calls are unnecessary.
-    do m=2,NTR
-      call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
-      call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
-                                   OBC%segment(1), OBC_scalar=0.0)
-    enddo
-  endif
-
 end subroutine initialize_DOME_tracer
 
 !> This subroutine applies diapycnal diffusion and any other column
@@ -311,25 +285,29 @@ end subroutine initialize_DOME_tracer
 !!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
-                                                                !! in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
-                                              !! fluid entrained from the layer above during this
-                                              !! call will be added, in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
-                                              !! fluid entrained from the layer below during this
-                                              !! call will be added, in m or kg m-2.
-  type(forcing),                         intent(in) :: fluxes !< A structure containing pointers to
-                                              !! any possible forcing fields.  Unused fields have NULL ptrs.
-  real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(DOME_tracer_CS),                  pointer    :: CS   !< The control structure returned by a previous
-                                                            !! call to DOME_register_tracer.
-  real,                        optional,intent(in)  :: evap_CFL_limit
-  real,                        optional,intent(in)  :: minimum_forcing_depth
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: ea   !< an array to which the amount of fluid entrained
+                                              !! from the layer above during this call will be
+                                              !! added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: eb   !< an array to which the amount of fluid entrained
+                                              !! from the layer below during this call will be
+                                              !! added, in m or kg m-2.
+  type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
+                                              !! and tracer forcing fields.  Unused fields have NULL ptrs.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  type(DOME_tracer_CS),    pointer    :: CS   !< The control structure returned by a previous
+                                              !! call to DOME_register_tracer.
+  real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
+                                              !! be fluxed out of the top layer in a timestep (nondim)
+  real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
+                                              !! fluxes can be applied, in m
 
 ! Local variables
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
@@ -344,7 +322,7 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
     do m=1,NTR
       do k=1,nz ;do j=js,je ; do i=is,ie
           h_work(i,j,k) = h_old(i,j,k)
-      enddo ; enddo ; enddo;
+      enddo ; enddo ; enddo
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
@@ -392,7 +370,8 @@ end subroutine DOME_tracer_surface_state
 
 !> Clean up memory allocations, if any.
 subroutine DOME_tracer_end(CS)
-  type(DOME_tracer_CS), pointer :: CS
+  type(DOME_tracer_CS), pointer :: CS !< The control structure returned by a previous
+                                      !! call to DOME_register_tracer.
   integer :: m
 
   if (associated(CS)) then

@@ -272,7 +272,7 @@ subroutine sfc_bkgnd_mixing(G, CS)
 
 
   if (.not. CS%Bryan_Lewis_diffusivity) then
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS)
     do j=js,je ; do i=is,ie
       CS%Kd_sfc(i,j) = CS%Kd
     enddo ; enddo
@@ -280,16 +280,16 @@ subroutine sfc_bkgnd_mixing(G, CS)
 
   if (CS%Henyey_IGW_background) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-!$OMP parallel do default(none)
-!shared(is,ie,js,je,Kd_sfc,CS,G,deg_to_rad,epsilon,I_x30) &
-!$OMP                          private(abs_sin)
+!$OMP parallel do default(none) &
+!$OMP shared(is,ie,js,je,CS,G,deg_to_rad,epsilon,I_x30) &
+!$OMP private(abs_sin)
     do j=js,je ; do i=is,ie
       abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
       CS%Kd_sfc(i,j) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
   elseif (CS%Kd_tanh_lat_fn) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G)
     do j=js,je ; do i=is,ie
       !   The transition latitude and latitude range are hard-scaled here, since
       ! this is not really intended for wide-spread use, but rather for
@@ -408,7 +408,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
       CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
       CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
       do k=2,nz
-        CS%kd_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) + 0.5*(kd_lay(i,j,K-1) + kd_lay(i,j,K))
+        CS%kd_bkgnd(i,j,k) = 0.5*(kd_lay(i,j,K-1) + kd_lay(i,j,K))
         CS%kv_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
       enddo
     enddo

@@ -57,7 +57,7 @@ type, public :: geothermal_CS ; private
                              ! W m-2.
   real    :: geothermal_thick !  The thickness over which geothermal heating is
                              ! applied, in m.
-  logical :: apply_geothermal !  If true, geothermal heating will be applied;
+  logical :: apply_geothermal !  If true, geothermal heating will be applied
                              ! otherwise GEOTHERMAL_SCALE has been set to 0 and
                              ! there is no heat to apply.
 
@@ -171,7 +171,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
-  if (.not.ASSOCIATED(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
+  if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
 !  do i=is,ie ; do j=js,je

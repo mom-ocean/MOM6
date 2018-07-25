@@ -7,9 +7,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -86,7 +83,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         do k = 1, nz
           h(i,j,k) = h0 * GV%m_to_H
         enddo
-      end do ; end do
+      enddo ; enddo
 
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
@@ -97,7 +94,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         do k = 1, nz
           h(i,j,k) = h0 * GV%m_to_H
         enddo
-      end do ; end do
+      enddo ; enddo
 
     case default
       call MOM_error(FATAL,"Rossby_front_initialize: "// &
@@ -156,7 +153,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
       zc = min( zc, -Hml(G, G%geoLatT(i,j)) ) ! Bound by depth of mixed layer
       T(i,j,k) = T_ref + dTdz * zc ! Linear temperature profile
     enddo
-  end do ; end do
+  enddo ; enddo
 
 end subroutine Rossby_front_initialize_temperature_salinity
 

@@ -118,9 +118,9 @@ end subroutine HIT_assign
 !! The non-symmetric memory mode will then also work, albeit with a different (less efficient) communication pattern.
 !!
 !! Using the hor_index_type HI:
-!! - declaration of h-point data is of the form `h(HI%%isd:HI%%ied,HI%%jsd:HI%%jed)`;
-!! - declaration of q-point data is of the form `q(HI%%IsdB:HI%%IedB,HI%%JsdB:HI%%JedB)`;
-!! - declaration of u-point data is of the form `u(HI%%IsdB:HI%%IedB,HI%%jsd:HI%%jed)`;
+!! - declaration of h-point data is of the form `h(HI%%isd:HI%%ied,HI%%jsd:HI%%jed)`
+!! - declaration of q-point data is of the form `q(HI%%IsdB:HI%%IedB,HI%%JsdB:HI%%JedB)`
+!! - declaration of u-point data is of the form `u(HI%%IsdB:HI%%IedB,HI%%jsd:HI%%jed)`
 !! - declaration of v-point data is of the form `v(HI%%isd:HI%%ied,HI%%JsdB:HI%%JedB)`.
 !!
 !! For more detail explanation of horizontal indexing see \ref Horizontal_indexing.
