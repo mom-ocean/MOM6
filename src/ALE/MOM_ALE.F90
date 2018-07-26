@@ -1,8 +1,10 @@
 !> This module contains the main regridding routines.
+!!
 !! Regridding comprises two steps:
-!! (1) Interpolation and creation of a new grid based on target interface
-!!     densities (or any other criterion).
-!! (2) Remapping of quantities between old grid and new grid.
+!! 1. Interpolation and creation of a new grid based on target interface
+!!    densities (or any other criterion).
+!! 2. Remapping of quantities between old grid and new grid.
+!!
 !! Original module written by Laurent White, 2008.06.09
 module MOM_ALE
 
@@ -1163,9 +1165,9 @@ end subroutine ALE_update_regrid_weights
 !> Update the vertical grid type with ALE information.
 !! This subroutine sets information in the verticalGrid_type to be
 !! consistent with the use of ALE mode.
-subroutine ALE_updateVerticalGridType( CS, GV )
-  type(ALE_CS),            pointer :: CS  ! module control structure
-  type(verticalGrid_type), pointer :: GV  ! vertical grid information
+subroutine ALE_updateVerticalGridType(CS, GV)
+  type(ALE_CS),            pointer :: CS  !< ALE control structure
+  type(verticalGrid_type), pointer :: GV  !< vertical grid information
 
   integer :: nk
 

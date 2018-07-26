@@ -1,41 +1,23 @@
+!> Piecewise quartic reconstruction functions
 module PQM_functions
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!==============================================================================
-!
-! Date of creation: 2008.06.06
-! L. White
-!
-! This module contains routines that handle one-dimensionnal finite volume
-! reconstruction using the piecewise quartic method (PQM).
-!
-!==============================================================================
 use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
 implicit none ; private
 
 public PQM_reconstruction, PQM_boundary_extrapolation, PQM_boundary_extrapolation_v1
 
-real, parameter :: hNeglect_dflt = 1.E-30
+real, parameter :: hNeglect_dflt = 1.E-30 !< Default negligible cell thickness
 
 contains
 
-!------------------------------------------------------------------------------
-!>  PQM_reconstruction does reconstruction by quartic polynomials within each cell.
+!> Reconstruction by quartic polynomials within each cell.
+!!
+!! It is assumed that the dimension of 'u' is equal to the number of cells
+!! defining 'grid' and 'ppoly'. No consistency check is performed.
 subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
-!------------------------------------------------------------------------------
-! Reconstruction by quartic polynomials within each cell.
-!
-! grid:  one-dimensional grid (see grid.F90)
-! ppoly: piecewise quartic polynomial to be reconstructed (see ppoly.F90)
-! u:     cell averages
-!
-! It is assumed that the dimension of 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -87,22 +69,13 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect 
 
 end subroutine PQM_reconstruction
 
-
-!------------------------------------------------------------------------------
 !> Limit the piecewise quartic method reconstruction
+!!
+!! Standard PQM limiter (White & Adcroft, JCP 2008).
+!!
+!! It is assumed that the dimension of 'u' is equal to the number of cells
+!! defining 'grid' and 'ppoly'. No consistency check is performed.
 subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
-!------------------------------------------------------------------------------
-! Standard PQM limiter (White & Adcroft, JCP 2008).
-!
-! grid:  one-dimensional grid (see grid.F90)
-! ppoly: piecewise quadratic polynomial to be reconstructed (see ppoly.F90)
-! u:     cell averages
-!
-! It is assumed that the dimension of 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
@@ -113,7 +86,6 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions
                                            !! in the same units as h
-
   ! Local variables
   integer :: k            ! loop index
   integer :: inflexion_l
@@ -368,33 +340,22 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
 
 end subroutine PQM_limiter
 
-
-!------------------------------------------------------------------------------
-!> piecewise quartic method boundary extrapolation
+!> Reconstruction by parabolas within boundary cells.
+!!
+!! The following explanations apply to the left boundary cell. The same
+!! reasoning holds for the right boundary cell.
+!!
+!! A parabola needs to be built in the cell and requires three degrees of
+!! freedom, which are the right edge value and slope and the cell average.
+!! The right edge values and slopes are taken to be that of the neighboring
+!! cell (i.e., the left edge value and slope of the neighboring cell).
+!! The resulting parabola is not necessarily monotonic and the traditional
+!! PPM limiter is used to modify one of the edge values in order to yield
+!! a monotonic parabola.
+!!
+!! It is assumed that the size of the array 'u' is equal to the number of cells
+!! defining 'grid' and 'ppoly'. No consistency check is performed here.
 subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
-!------------------------------------------------------------------------------
-! Reconstruction by parabolas within boundary cells.
-!
-! The following explanations apply to the left boundary cell. The same
-! reasoning holds for the right boundary cell.
-!
-! A parabola needs to be built in the cell and requires three degrees of
-! freedom, which are the right edge value and slope and the cell average.
-! The right edge values and slopes are taken to be that of the neighboring
-! cell (i.e., the left edge value and slope of the neighboring cell).
-! The resulting parabola is not necessarily monotonic and the traditional
-! PPM limiter is used to modify one of the edge values in order to yield
-! a monotonic parabola.
-!
-! grid:  one-dimensional grid (properly initialized)
-! ppoly: piecewise linear polynomial to be reconstructed (properly initialized)
-! u:     cell averages
-!
-! It is assumed that the size of the array 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed here.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -402,7 +363,6 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
                                            !! with the same units as u.
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
                                            !! with the same units as u.
-
   ! Local variables
   integer       :: i0, i1
   real          :: u0, u1
@@ -529,32 +489,22 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef )
 end subroutine PQM_boundary_extrapolation
 
 
-!------------------------------------------------------------------------------
-!> pqm boundary extrapolation using a rational function
+!> Reconstruction by parabolas within boundary cells.
+!!
+!! The following explanations apply to the left boundary cell. The same
+!! reasoning holds for the right boundary cell.
+!!
+!! A parabola needs to be built in the cell and requires three degrees of
+!! freedom, which are the right edge value and slope and the cell average.
+!! The right edge values and slopes are taken to be that of the neighboring
+!! cell (i.e., the left edge value and slope of the neighboring cell).
+!! The resulting parabola is not necessarily monotonic and the traditional
+!! PPM limiter is used to modify one of the edge values in order to yield
+!! a monotonic parabola.
+!!
+!! It is assumed that the size of the array 'u' is equal to the number of cells
+!! defining 'grid' and 'ppoly'. No consistency check is performed here.
 subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
-!------------------------------------------------------------------------------
-! Reconstruction by parabolas within boundary cells.
-!
-! The following explanations apply to the left boundary cell. The same
-! reasoning holds for the right boundary cell.
-!
-! A parabola needs to be built in the cell and requires three degrees of
-! freedom, which are the right edge value and slope and the cell average.
-! The right edge values and slopes are taken to be that of the neighboring
-! cell (i.e., the left edge value and slope of the neighboring cell).
-! The resulting parabola is not necessarily monotonic and the traditional
-! PPM limiter is used to modify one of the edge values in order to yield
-! a monotonic parabola.
-!
-! grid:  one-dimensional grid (properly initialized)
-! ppoly: piecewise linear polynomial to be reconstructed (properly initialized)
-! u:     cell averages
-!
-! It is assumed that the size of the array 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed here.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -567,7 +517,6 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef,
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions
                                            !! in the same units as h.
-
   ! Local variables
   integer :: i0, i1
   integer :: inflexion_l
@@ -888,5 +837,13 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coef,
   ppoly_coef(i1,5) = e
 
 end subroutine PQM_boundary_extrapolation_v1
+
+!> \namespace pqm_functions
+!!
+!! Date of creation: 2008.06.06
+!! L. White
+!!
+!! This module contains routines that handle one-dimensionnal finite volume
+!! reconstruction using the piecewise quartic method (PQM).
 
 end module PQM_functions

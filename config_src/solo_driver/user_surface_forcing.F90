@@ -1,48 +1,8 @@
+!> Template for user to code up surface forcing.
 module user_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  Rewritten by Robert Hallberg, June 2009                            *
-!*                                                                     *
-!*    This file contains the subroutines that a user should modify to  *
-!*  to set the surface wind stresses and fluxes of buoyancy or         *
-!*  temperature and fresh water.  They are called when the run-time    *
-!*  parameters WIND_CONFIG or BUOY_CONFIG are set to "USER".  The      *
-!*  standard version has simple examples, along with run-time error    *
-!*  messages that will cause the model to abort if this code has not   *
-!*  been modified.  This code is intended for use with relatively      *
-!*  simple specifications of the forcing.  For more complicated forms, *
-!*  it is probably a good idea to read the forcing from input files    *
-!*  using "file" for WIND_CONFIG and BUOY_CONFIG.                      *
-!*                                                                     *
-!*    USER_wind_forcing should set the surface wind stresses (taux and *
-!*  tauy) perhaps along with the surface friction velocity (ustar).    *
-!*                                                                     *
-!*    USER_buoyancy forcing is used to set the surface buoyancy        *
-!*  forcing, which may include a number of fresh water flux fields     *
-!*  (evap, lprec, fprec, lrunoff, frunoff, and                         *
-!*  vprec) and the surface heat fluxes (sw, lw, latent and sens)       *
-!*  if temperature and salinity are state variables, or it may simply  *
-!*  be the buoyancy flux if it is not.  This routine also has coded a  *
-!*  restoring to surface values of temperature and salinity.           *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, fluxes.                               *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID
@@ -61,26 +21,25 @@ implicit none ; private
 
 public USER_wind_forcing, USER_buoyancy_forcing, USER_surface_forcing_init
 
+!>   This control structure should be used to store any run-time variables
+!! associated with the user-specified forcing.
+!!
+!! It can be readily modified for a specific case, and because it is private there
+!! will be no changes needed in other code (although they will have to be recompiled).
 type, public :: user_surface_forcing_CS ; private
-  !   This control structure should be used to store any run-time variables
-  ! associated with the user-specified forcing.  It can be readily modified
-  ! for a specific case, and because it is private there will be no changes
-  ! needed in other code (although they will have to be recompiled).
   !   The variables in the cannonical example are used for some common
   ! cases, but do not need to be used.
 
-  logical :: use_temperature ! If true, temperature and salinity are used as
-                             ! state variables.
-  logical :: restorebuoy     ! If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !   The density used in the Boussinesq
-                             ! approximation, in kg m-3.
-  real :: G_Earth            !   The gravitational acceleration in m s-2.
-  real :: Flux_const         !   The restoring rate at the surface, in m s-1.
-  real :: gust_const         !   A constant unresolved background gustiness
-                             ! that contributes to ustar, in Pa.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
+  logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
+  real :: Rho0               !< The density used in the Boussinesq approximation, in kg m-3.
+  real :: G_Earth            !< The gravitational acceleration in m s-2.
+  real :: Flux_const         !< The restoring rate at the surface, in m s-1.
+  real :: gust_const         !< A constant unresolved background gustiness
+                             !! that contributes to ustar, in Pa.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                             !! timing of diagnostic output.
 end type user_surface_forcing_CS
 
 contains
@@ -361,5 +320,29 @@ subroutine USER_surface_forcing_init(Time, G, param_file, diag, CS)
   endif
 
 end subroutine USER_surface_forcing_init
+
+!! \namespace user_surface_forcing
+!!
+!! This file contains the subroutines that a user should modify to
+!! to set the surface wind stresses and fluxes of buoyancy or
+!! temperature and fresh water.  They are called when the run-time
+!! parameters WIND_CONFIG or BUOY_CONFIG are set to "USER".  The
+!! standard version has simple examples, along with run-time error
+!! messages that will cause the model to abort if this code has no
+!! been modified.  This code is intended for use with relatively
+!! simple specifications of the forcing.  For more complicated forms,
+!! it is probably a good idea to read the forcing from input files
+!! using "file" for WIND_CONFIG and BUOY_CONFIG.
+!!
+!! USER_wind_forcing() should set the surface wind stresses (taux and
+!! tauy) perhaps along with the surface friction velocity (ustar).
+!!
+!! USER_buoyancy() forcing is used to set the surface buoyancy
+!! forcing, which may include a number of fresh water flux fields
+!! (evap, lprec, fprec, lrunoff, frunoff, and
+!! vprec) and the surface heat fluxes (sw, lw, latent and sens)
+!! if temperature and salinity are state variables, or it may simply
+!! be the buoyancy flux if it is not.  This routine also has coded a
+!! restoring to surface values of temperature and salinity.
 
 end module user_surface_forcing
