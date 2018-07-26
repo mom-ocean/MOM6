@@ -32,13 +32,12 @@ public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_ty
 public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcing
 public set_derived_forcing_fields, copy_back_forcing_fields, set_net_mass_forcing
 
-!> Structure that contains pointers to the boundary forcing
-!! used to drive the liquid ocean simulated by MOM.
-!! Data in this type is allocated in the module
-!! MOM_surface_forcing.F90, of which there are three:
-!! solo, coupled, and ice-shelf. Alternatively, they are
-!! allocated in MESO_surface_forcing.F90, which is a
-!! special case of solo_driver/MOM_surface_forcing.F90.
+!> Structure that contains pointers to the boundary forcing used to drive the
+!! liquid ocean simulated by MOM.
+!!
+!! Data in this type is allocated in the module MOM_surface_forcing.F90, of which there
+!! are three: solo, coupled, and ice-shelf. Alternatively, they are allocated in
+!! MESO_surface_forcing.F90, which is a special case of solo_driver/MOM_surface_forcing.F90.
 type, public :: forcing
 
   ! Pointers in this module should be initialized to NULL.
@@ -107,17 +106,16 @@ type, public :: forcing
                                  !! to net zero ( kg salt/(m^2 s) )
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
-  real, pointer, dimension(:,:) :: &
-    p_surf_full   => NULL(), & !< Pressure at the top ocean interface (Pa).
-                               !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
-    p_surf        => NULL(), & !< Pressure at the top ocean interface (Pa) as used
-                               !! to drive the ocean model. If p_surf is limited,
-                               !! p_surf may be smaller than p_surf_full,
-                               !! otherwise they are the same.
-    p_surf_SSH    => NULL()    !< Pressure at the top ocean interface that is used
-                               !! in corrections to the sea surface height field
-                               !! that is passed back to the calling routines.
-                               !! This may point to p_surf or to p_surf_full.
+  real, pointer, dimension(:,:) :: p_surf_full => NULL()
+                !< Pressure at the top ocean interface (Pa).
+                !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
+  real, pointer, dimension(:,:) :: p_surf => NULL()
+                !< Pressure at the top ocean interface (Pa) as used to drive the ocean model.
+                !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
+  real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
+                !< Pressure at the top ocean interface that is used in corrections to the sea surface
+                !! height field that is passed back to the calling routines.
+                !! p_surf_SSH may point to p_surf or to p_surf_full.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
                                  !! and various types of ice needs to be accumulated, and the
                                  !! surface pressure explicitly reset to zero at the driver level
@@ -135,14 +133,14 @@ type, public :: forcing
     mass_berg  => NULL()      !< mass of icebergs (kg/m2)
 
   ! land ice-shelf related inputs
-  real, pointer, dimension(:,:) :: &
-    ustar_shelf   => NULL(), &   !< friction velocity under ice-shelves (m/s)
+  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves (in m/s)
                                  !! as computed by the ocean at the previous time step.
-    frac_shelf_h  => NULL(), &   !! Fractional ice shelf coverage of h-cells, nondimensional
+  real, pointer, dimension(:,:) :: frac_shelf_h => NULL() !< Fractional ice shelf coverage of h-cells, nondimensional
                                  !! cells, nondimensional from 0 to 1. This is only
                                  !! associated if ice shelves are enabled, and are
                                  !! exactly 0 away from shelves or on land.
-    iceshelf_melt   => NULL()    !< ice shelf melt rate (positive) or freezing (negative) ( m/year )
+  real, pointer, dimension(:,:) :: iceshelf_melt => NULL() !< Ice shelf melt rate (positive)
+                                 !! or freezing (negative) (in m/year)
 
   ! Scalars set by surface forcing modules
   real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
@@ -184,48 +182,50 @@ type, public :: mech_forcing
     taux  => NULL(), & !< zonal wind stress (Pa)
     tauy  => NULL(), & !< meridional wind stress (Pa)
     ustar => NULL(), & !< surface friction velocity scale (m/s)
+    net_mass_src => NULL() !< The net mass source to the ocean, in kg m-2 s-1.
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
-    p_surf_full   => NULL(), & !< Pressure at the top ocean interface (Pa).
-                               !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
-    p_surf        => NULL(), & !< Pressure at the top ocean interface (Pa) as used
-                               !! to drive the ocean model. If p_surf is limited,
-                               !! p_surf may be smaller than p_surf_full,
-                               !! otherwise they are the same.
-    p_surf_SSH    => NULL(), & !< Pressure at the top ocean interface that is used
-                               !! in corrections to the sea surface height field
-                               !! that is passed back to the calling routines.
-                               !! This may point to p_surf or to p_surf_full.
-    net_mass_src  => NULL(), & !< The net mass source to the ocean, in kg m-2 s-1.
+  real, pointer, dimension(:,:) :: p_surf_full => NULL()
+                !< Pressure at the top ocean interface (Pa).
+                !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
+  real, pointer, dimension(:,:) :: p_surf => NULL()
+                !< Pressure at the top ocean interface (Pa) as used to drive the ocean model.
+                !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
+  real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
+                !< Pressure at the top ocean interface that is used in corrections to the sea surface
+                !! height field that is passed back to the calling routines.
+                !! p_surf_SSH may point to p_surf or to p_surf_full.
 
   ! iceberg related inputs
+  real, pointer, dimension(:,:) :: &
     area_berg  => NULL(), &    !< area of ocean surface covered by icebergs (m2/m2)
-    mass_berg  => NULL(), &    !< mass of icebergs (kg/m2)
+    mass_berg  => NULL()       !< mass of icebergs (kg/m2)
 
   ! land ice-shelf related inputs
-    frac_shelf_u  => NULL(), &   !< Fractional ice shelf coverage of u-cells, nondimensional
-                                 !! from 0 to 1. This is only associated if ice shelves are
-                                 !< enabled, and is exactly 0 away from shelves or on land.
-    frac_shelf_v  => NULL(), &   !< Fractional ice shelf coverage of v-cells, nondimensional
-                                 !! from 0 to 1. This is only associated if ice shelves are
-                                 !< enabled, and is exactly 0 away from shelves or on land.
-    rigidity_ice_u => NULL(), &  !< Depth-integrated lateral viscosity of ice
-    rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
+  real, pointer, dimension(:,:) :: frac_shelf_u  => NULL() !< Fractional ice shelf coverage of u-cells,
+                !! nondimensional from 0 to 1. This is only associated if ice shelves are enabled,
+                !! and is exactly 0 away from shelves or on land.
+  real, pointer, dimension(:,:) :: frac_shelf_v  => NULL() !< Fractional ice shelf coverage of v-cells,
+                !! nondimensional from 0 to 1. This is only associated if ice shelves are enabled,
+                !! and is exactly 0 away from shelves or on land.
+  real, pointer, dimension(:,:) :: &
+    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points (m3/s)
+    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points (m3/s)
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
-                                 !! and various types of ice needs to be accumulated, and the
-                                 !! surface pressure explicitly reset to zero at the driver level
-                                 !! when appropriate.
+                                !! and various types of ice needs to be accumulated, and the
+                                !! surface pressure explicitly reset to zero at the driver level
+                                !! when appropriate.
   logical :: accumulate_rigidity = .false. !< If true, the rigidity due to various types of
-                                 !! ice needs to be accumulated, and the rigidity explicitly
-                                 !! reset to zero at the driver level when appropriate.
+                                !! ice needs to be accumulated, and the rigidity explicitly
+                                !! reset to zero at the driver level when appropriate.
 
-  logical :: initialized = .false. !< This indicates whether the appropriate
-                                 !! arrays have been initialized.
+  logical :: initialized = .false. !< This indicates whether the appropriate arrays have been initialized.
 end type mech_forcing
 
 !> Structure that defines the id handles for the forcing type
 type, public :: forcing_diags
 
+  !>@{ Forcing diagnostic handles
   ! mass flux diagnostic handles
   integer :: id_prcme        = -1, id_evap        = -1
   integer :: id_precip       = -1, id_vprec       = -1
@@ -262,7 +262,6 @@ type, public :: forcing_diags
   integer :: id_heat_added          = -1, id_heat_content_massin   = -1
   integer :: id_hfrainds            = -1, id_hfrunoffds            = -1
 
-
   ! global area integrated heat flux diagnostic handles
   integer :: id_total_net_heat_coupler    = -1, id_total_net_heat_surface      = -1
   integer :: id_total_sens                = -1, id_total_LwLatSens             = -1
@@ -297,7 +296,7 @@ type, public :: forcing_diags
   integer :: id_netFWGlobalAdj    = -1
   integer :: id_netFWGlobalScl    = -1
 
-  ! momentum flux diagnostic handls
+  ! momentum flux amd forcing diagnostic handles
   integer :: id_taux  = -1
   integer :: id_tauy  = -1
   integer :: id_ustar = -1
@@ -306,17 +305,17 @@ type, public :: forcing_diags
   integer :: id_TKE_tidal = -1
   integer :: id_buoy      = -1
 
-  ! clock id handle
-  integer :: id_clock_forcing
-
-  ! iceberg id handle
+  ! iceberg diagnostic handles
   integer :: id_ustar_berg = -1
   integer :: id_area_berg = -1
   integer :: id_mass_berg = -1
 
-  !Iceberg + Ice shelf
+  ! Iceberg + Ice shelf diagnostic handles
   integer :: id_ustar_ice_cover = -1
   integer :: id_frac_ice_cover = -1
+  !!@}
+
+  integer :: id_clock_forcing = -1 !< CPU clock id
 
 end type forcing_diags
 
@@ -372,21 +371,19 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
                                                             !! thermodynamic fields. Used to keep
                                                             !! track of the heat flux associated with net
                                                             !! mass fluxes into the ocean.
-  logical,                  intent(in)    :: aggregate_FW     !< For determining how to aggregate forcing.
+  logical,                  intent(in)    :: aggregate_FW   !< For determining how to aggregate forcing.
   real, dimension(SZI_(G)), &
-                  optional, intent(out)  :: nonpenSW        !< non-downwelling SW; use in net_heat.
-                                                            !! Sum over SW bands when diagnosing nonpenSW.
-                                                            !! Units are (K * H).
+                  optional, intent(out)   :: nonpenSW       !< Non-penetrating SW in degC H, used in net_heat.
+                                                            !! Summed over SW bands when diagnosing nonpenSW.
   real, dimension(SZI_(G)), &
-                  optional, intent(out)  :: net_Heat_rate   !< Rate of net surface heating in H K s-1.
+                  optional, intent(out)   :: net_Heat_rate   !< Rate of net surface heating in H K s-1.
   real, dimension(SZI_(G)), &
-                  optional, intent(out)  :: net_salt_rate   !< Surface salt flux into the ocean in ppt H s-1.
+                  optional, intent(out)   :: net_salt_rate   !< Surface salt flux into the ocean in ppt H s-1.
   real, dimension(SZI_(G)), &
-                  optional, intent(out)  :: netmassInOut_rate !< Rate of net mass flux into the ocean in H s-1.
+                  optional, intent(out)   :: netmassInOut_rate !< Rate of net mass flux into the ocean in H s-1.
   real, dimension(:,:),     &
-                  optional, intent(out)  :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating
-                                                            !! in degC H s-1.
-  logical,        optional, intent(in)   :: skip_diags      !< If present and true, skip calculating diagnostics
+                  optional, intent(out)   :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating in degC H s-1.
+  logical,        optional, intent(in)    :: skip_diags      !< If present and true, skip calculating diagnostics
 
   ! local
   real :: htot(SZI_(G))       ! total ocean depth (m for Bouss or kg/m^2 for non-Bouss)
@@ -1044,7 +1041,7 @@ end subroutine MOM_mech_forcing_chksum
 
 !> Write out values of the mechanical forcing arrays at the i,j location. This is a debugging tool.
 subroutine mech_forcing_SinglePointPrint(forces, G, i, j, mesg)
-  type(mech_forcing),      intent(in) :: forces    !< A structure with the driving mechanical forces
+  type(mech_forcing),    intent(in) :: forces !< A structure with the driving mechanical forces
   type(ocean_grid_type), intent(in) :: G      !< Grid type
   character(len=*),      intent(in) :: mesg   !< Message
   integer,               intent(in) :: i      !< i-index

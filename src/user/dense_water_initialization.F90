@@ -22,7 +22,7 @@ public dense_water_initialize_topography
 public dense_water_initialize_TS
 public dense_water_initialize_sponges
 
-character(len=40) :: mdl = "dense_water_initialization"
+character(len=40) :: mdl = "dense_water_initialization" !< Module name
 
 real, parameter :: default_sill  = 0.2 !< Default depth of the sill [nondim]
 real, parameter :: default_shelf = 0.4 !< Default depth of the shelf [nondim]
@@ -36,7 +36,7 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Output topography field
   type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
   real,                             intent(in)  :: max_depth !< Maximum depth of the model
-
+  ! Local variables
   real, dimension(5) :: domain_params ! nondimensional widths of all domain sections
   real :: sill_frac, shelf_frac
   integer :: i, j
@@ -96,11 +96,12 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid control structure
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< EOS structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T, S !< Output state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity (ppt)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
+  ! Local variables
   real :: mld, S_ref, S_range, T_ref
   real :: zi, zmid
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -153,7 +154,6 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
   logical,                 intent(in) :: use_ALE !< ALE flag
   type(sponge_CS),         pointer    :: CSp !< Layered sponge control structure pointer
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE sponge control structure pointer
-
   ! Local variables
   real :: west_sponge_time_scale, west_sponge_width
   real :: east_sponge_time_scale, east_sponge_width
@@ -278,7 +278,7 @@ end subroutine dense_water_initialize_sponges
 
 end module dense_water_initialization
 
-!! \namespace dense_water_initialization
+!> \namespace dense_water_initialization
 !!
 !! This experiment consists of a shelf accumulating dense water, which spills
 !! over an upward slope and a sill, before flowing down a slope into an open

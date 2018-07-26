@@ -172,27 +172,27 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
 
 end subroutine build_rho_column
 
+!> Iteratively build a rho coordinate column
+!!
+!! The algorithm operates as follows within each column:
+!!
+!! 1. Given T & S within each layer, the layer densities are computed.
+!! 2. Based on these layer densities, a global density profile is reconstructed
+!!    (this profile is monotonically increasing and may be discontinuous)
+!! 3. The new grid interfaces are determined based on the target interface
+!!    densities.
+!! 4. T & S are remapped onto the new grid.
+!! 5. Return to step 1 until convergence or until the maximum number of
+!!    iterations is reached, whichever comes first.
 subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_state, &
                                zInterface, h_neglect, h_neglect_edge)
-  !< Iteratively build a rho coordinate column
-  !!
-  !! The algorithm operates as follows within each column:
-  !!
-  !! 1. Given T & S within each layer, the layer densities are computed.
-  !! 2. Based on these layer densities, a global density profile is reconstructed
-  !!    (this profile is monotonically increasing and may be discontinuous)
-  !! 3. The new grid interfaces are determined based on the target interface
-  !!    densities.
-  !! 4. T & S are remapped onto the new grid.
-  !! 5. Return to step 1 until convergence or until the maximum number of
-  !!    iterations is reached, whichever comes first.
-
   type(rho_CS),          intent(in)    :: CS !< Regridding control structure
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
   real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
-  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
+  real, dimension(nz),   intent(in)    :: T  !< T for column
+  real, dimension(nz),   intent(in)    :: S  !< S for column
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
@@ -201,7 +201,6 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                              !! for the purpose of edge value calculations
                                              !! in the same units as h
-
   ! Local variables
   integer   :: k, m
   integer   :: count_nonzero_layers

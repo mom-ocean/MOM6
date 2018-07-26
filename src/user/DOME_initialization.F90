@@ -1,10 +1,12 @@
+!> Configures the model for the "DOME" experiment.
+!! DOME = Dynamics of Overflows and Mixing Experiment
 module DOME_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
@@ -261,8 +263,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   character(len=32)  :: name
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
-  type(tracer_type), pointer      :: tr_ptr
+  type(OBC_segment_type), pointer :: segment => NULL()
+  type(tracer_type), pointer      :: tr_ptr => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -280,7 +282,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
 
   if (OBC%number_of_segments /= 1) then
-    print *, 'Error in DOME OBC segment setup'
+    call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)
     return   !!! Need a better error message here
   endif
   segment => OBC%segment(1)
@@ -375,8 +377,4 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
 
 end subroutine DOME_set_OBC_data
 
-!> \namespace dome_initialization
-!!
-!! The module configures the model for the "DOME" experiment.
-!! DOME = Dynamics of Overflows and Mixing Experiment
 end module DOME_initialization

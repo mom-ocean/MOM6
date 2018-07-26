@@ -1,3 +1,9 @@
+!> Use control-theory to adjust the surface heat flux and precipitation.
+!!
+!! Adjustments are based on the time-mean or periodically (seasonally) varying
+!! anomalies from the observed state.
+!!
+!! The techniques behind this are described in Hallberg and Adcroft (2018, in prep.).
 module MOM_controlled_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -15,10 +21,6 @@ use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_time, get_date, set_time, set_date
 use MOM_time_manager, only : time_type_to_real
 use MOM_variables, only : surface
-!   Forcing is a structure containing pointers to the forcing fields
-! which may be used to drive MOM.  All fluxes are positive downward.
-!   Surface is a structure containing pointers to various fields that
-! may be used describe the surface state of MOM.
 
 implicit none ; private
 
@@ -27,30 +29,33 @@ implicit none ; private
 public apply_ctrl_forcing, register_ctrl_forcing_restarts
 public controlled_forcing_init, controlled_forcing_end
 
+!> Control structure for MOM_controlled_forcing
 type, public :: ctrl_forcing_CS ; private
-  logical :: use_temperature ! If true, temperature and salinity are used as
-                             ! state variables.
-  logical :: do_integrated   ! If true, use time-integrated anomalies to control
-                             ! the surface state.
-  integer :: num_cycle       ! The number of elements in the forcing cycle.
-  real    :: heat_int_rate  ! The rate at which heating anomalies accumulate, in s-1.
-  real    :: prec_int_rate  ! The rate at which precipitation anomalies accumulate, in s-1.
-  real    :: heat_cyc_rate  ! The rate at which cyclical heating anomaliess
-                            ! accumulate, in s-1.
-  real    :: prec_cyc_rate  ! The rate at which cyclical precipitation anomaliess
-                            ! accumulate, in s-1.
-  real    :: Len2           ! The square of the length scale over which the anomalies
-                            ! are smoothed via a Laplacian filter, in m2.
-  real    :: lam_heat       ! A constant of proportionality between SST anomalies
-                            ! and heat fluxes, in W m-2 K-1.
-  real    :: lam_prec       ! A constant of proportionality between SSS anomalies
-                            ! (normalised by mean SSS) and precipitation, in kg m-2.
-  real    :: lam_cyc_heat   ! A constant of proportionality between cyclical SST
-                            ! anomalies and corrective heat fluxes, in W m-2 K-1.
-  real    :: lam_cyc_prec   ! A constant of proportionality between cyclical SSS
-                            ! anomalies (normalised by mean SSS) and corrective
-                            ! precipitation, in kg m-2.
+  logical :: use_temperature !< If true, temperature and salinity are used as
+                             !! state variables.
+  logical :: do_integrated   !< If true, use time-integrated anomalies to control
+                             !! the surface state.
+  integer :: num_cycle       !< The number of elements in the forcing cycle.
+  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate, in s-1.
+  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate, in s-1.
+  real    :: heat_cyc_rate  !< The rate at which cyclical heating anomaliess
+                            !! accumulate, in s-1.
+  real    :: prec_cyc_rate  !< The rate at which cyclical precipitation anomaliess
+                            !! accumulate, in s-1.
+  real    :: Len2           !< The square of the length scale over which the anomalies
+                            !! are smoothed via a Laplacian filter, in m2.
+  real    :: lam_heat       !< A constant of proportionality between SST anomalies
+                            !! and heat fluxes, in W m-2 K-1.
+  real    :: lam_prec       !< A constant of proportionality between SSS anomalies
+                            !! (normalised by mean SSS) and precipitation, in kg m-2.
+  real    :: lam_cyc_heat   !< A constant of proportionality between cyclical SST
+                            !! anomalies and corrective heat fluxes, in W m-2 K-1.
+  real    :: lam_cyc_prec   !< A constant of proportionality between cyclical SSS
+                            !! anomalies (normalised by mean SSS) and corrective
+                            !! precipitation, in kg m-2.
 
+  !>@{ Pointers for data.
+  !! \todo Needs more complete documentation.
   real, pointer, dimension(:) :: &
     avg_time => NULL()
   real, pointer, dimension(:,:) :: &
@@ -62,9 +67,10 @@ type, public :: ctrl_forcing_CS ; private
     avg_SST_anom => NULL(), &
     avg_SSS_anom => NULL(), &
     avg_SSS => NULL()
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  integer :: id_heat_0 = -1 ! See if these are neede later...
+  !!@}
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                            !! regulate the timing of diagnostic output.
+  integer :: id_heat_0 = -1 !< Diagnostic handle
 end type ctrl_forcing_CS
 
 contains
