@@ -1,13 +1,8 @@
 module mom_cap_methods
 
-  ! This is the main driver for MOM6 in CIME
-  ! This file is part of MOM6. See LICENSE.md for the license.
-
-  ! mct modules
   use ESMF,                only: ESMF_time, ESMF_ClockGet, ESMF_TimeGet, ESMF_State, ESMF_Clock
   use ESMF,                only: ESMF_KIND_R8, ESMF_Field, ESMF_SUCCESS, ESMF_LogFoundError
   use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_StateGet, ESMF_FieldGet
-  use perf_mod,            only: t_startf, t_stopf
   use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
@@ -23,10 +18,8 @@ module mom_cap_methods
   public :: mom_export
   public :: mom_import
 
-  integer :: rc,dbrc
-  integer :: import_cnt = 0
-  character(len=1024) :: tmpstr
-
+  integer            :: rc,dbrc
+  integer            :: import_cnt = 0
   logical, parameter :: debug=.false.
 
 !-----------------------------------------------------------------------
@@ -47,7 +40,7 @@ contains
     ! Local variables
     real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
     integer         :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec !< Grid indices
-    integer         :: lbnd1, lbnd2, ubnd1, ubnd2
+    integer         :: lbnd1, lbnd2
     real            :: slp_L, slp_R, slp_C, slope, u_min, u_max
     integer         :: day, secs
     type(ESMF_time) :: currTime
@@ -60,11 +53,6 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_dhdx(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_dhdy(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_bldepth(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fswpen(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_roce_16O(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_roce_HDO(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fco2_ocn(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fdms_ocn(:,:)
     character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
     character(len=*), parameter :: subname = '(mom_export)'
     !-----------------------------------------------------------------------
@@ -117,42 +105,15 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(exportState,"So_fswpen", dataPtr_fswpen, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    !  call State_getFldPtr(exportState,"So_roce_16O", dataPtr_roce_16O, rc=rc)
-    !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !    line=__LINE__, &
-    !    file=__FILE__)) &
-    !    return  ! bail out
-    !  call State_getFldPtr(exportState,"So_roce_HDO", dataPtr_roce_HDO, rc=rc)
-    !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !    line=__LINE__, &
-    !    file=__FILE__)) &
-    !    return  ! bail out
-    !  call State_getFldPtr(exportState,"Faoo_fco2_ocn", dataPtr_fco2_ocn, rc=rc)
-    !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !    line=__LINE__, &
-    !    file=__FILE__)) &
-    !    return  ! bail out
-    !  call State_getFldPtr(exportState,"Faoo_fdms_ocn", dataPtr_fdms_ocn, rc=rc)
-    !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !    line=__LINE__, &
-    !    file=__FILE__)) &
-    !    return  ! bail out
 
     lbnd1 = lbound(dataPtr_t,1)
-    ubnd1 = ubound(dataPtr_t,1)
     lbnd2 = lbound(dataPtr_t,2)
-    ubnd2 = ubound(dataPtr_t,2)
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
-    !Copy from ocean_public to exportstate. ocean_public uses global indexing with no halos.
-    !The mask comes from "grid" that uses the usual MOM domain that has halos
-    !and does not use global indexing.
+    ! Copy from ocean_public to exportstate. ocean_public uses global indexing with no halos.
+    ! The mask comes from "grid" that uses the usual MOM domain that has halos
+    ! and does not use global indexing.
     do j = jsc, jec
       j1 = j + lbnd2 - jsc
       jg = j + grid%jsc - jsc
@@ -294,17 +255,9 @@ contains
     ! Local Variables
     integer                     :: i, j, i1, j1, ig, jg  ! Grid indices
     integer                     :: isc, iec, jsc, jec    ! Grid indices
-    integer                     :: isc_bnd, jsc_bnd, ise_bnd, jse_bnd
-    integer                     :: lbnd1, lbnd2, ubnd1, ubnd2
     integer                     :: i0, j0, is, js, ie, je
+    integer                     :: lbnd1, lbnd2
     real(ESMF_KIND_R8), pointer :: dataPtr_p(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_ifrac(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_duu10n(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_co2prog(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_co2diag(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_lamult(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_ustokes(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_vstokes(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_taux(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_tauy(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_sen(:,:)
@@ -317,15 +270,14 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_swvdf(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_swndr(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_swndf(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_swnet(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rofl(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rofi(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_meltw(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_melth(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_iosalt(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_prec(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rain(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_snow(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_lamult(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_ustokes(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_vstokes(:,:)
     integer                     :: day, secs
     type(ESMF_time)             :: currTime
     logical                     :: do_import
@@ -335,45 +287,7 @@ contains
 
     rc = ESMF_SUCCESS
 
-    ! import_cnt is used to skip using the import state at the first count
-    import_cnt = import_cnt + 1
-
     call State_getFldPtr(importState,'Sa_pslv', dataPtr_p,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(importState,'Si_ifrac', dataPtr_ifrac,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(importState,"So_duu10n", dataPtr_duu10n, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    !  call State_getFldPtr(importState,"Sa_co2prog", dataPtr_co2prog, rc=rc)
-    !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !    line=__LINE__, &
-    !    file=__FILE__)) &
-    !    return  ! bail out
-    !  call State_getFldPtr(importState,"Sa_co2diag", dataPtr_co2diag, rc=rc)
-    !  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !    line=__LINE__, &
-    !    file=__FILE__)) &
-    !    return  ! bail out
-    call State_getFldPtr(importState,"Sw_lamult", dataPtr_lamult, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(importState,"Sw_ustokes", dataPtr_ustokes, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(importState,"Sw_vstokes", dataPtr_vstokes, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -438,11 +352,6 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Foxx_swnet", dataPtr_swnet, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
     call State_getFldPtr(importState,"Foxx_rofl" , dataPtr_rofl, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -453,22 +362,7 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Fioi_meltw", dataPtr_meltw, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(importState,"Fioi_melth", dataPtr_melth, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
     call State_getFldPtr(importState,"Fioi_salt" , dataPtr_iosalt, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(importState,"Faxa_prec" , dataPtr_prec, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -485,11 +379,12 @@ contains
       return  ! bail out
 
     lbnd1 = lbound(dataPtr_p,1)
-    ubnd1 = ubound(dataPtr_p,1)
     lbnd2 = lbound(dataPtr_p,2)
-    ubnd2 = ubound(dataPtr_p,2)
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+
+    ! import_cnt is used to skip using the import state at the first count
+    import_cnt = import_cnt + 1
 
     if ((trim(runtype) == 'initial' .and. import_cnt <= 2)) then
       ! This will skip the first time import information is given
@@ -522,9 +417,10 @@ contains
           ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
           !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
           !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
-          !ice_ocean_boundary%u_flux(i,j)         =&
+
+          !ice_ocean_boundary%u_flux(i,j)         = &
           !         GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
-          !ice_ocean_boundary%v_flux(i,j)         =&
+          !ice_ocean_boundary%v_flux(i,j)         = &
           !         GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
         enddo
       enddo

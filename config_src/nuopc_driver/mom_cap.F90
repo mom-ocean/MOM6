@@ -400,16 +400,8 @@ module mom_cap_mod
 #ifdef CESMCOUPLED
   use mom_cap_methods,          only: mom_import, mom_export
   use esmFlds,                  only: flds_scalar_name, flds_scalar_num
-  use esmFlds,                  only: fldListFr, fldListTo, compocn, compname
   use esmFlds,                  only: flds_scalar_index_nx, flds_scalar_index_ny
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Realize
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Concat
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Getnumflds
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Getfldinfo
-  use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_SetScalar
-  use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_GetScalar
-  use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_Diagnose
-  use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit, shr_file_setIO
+  use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit
   use shr_file_mod,             only: shr_file_getLogUnit, shr_file_getLogLevel
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
 #endif
@@ -689,7 +681,6 @@ contains
     character(80)                          :: stdname, shortname
 #ifdef CESMCOUPLED
     integer                                :: nflds
-    logical                                :: activefld
     character(len=32)                      :: starttype            ! model start type
     character(len=512)                     :: diro
     character(len=512)                     :: logfile
@@ -894,31 +885,121 @@ contains
 
 #ifdef CESMCOUPLED
 
-    ! create import and export field list needed by data models
-    ! call shr_nuopc_fldList_Concat(fldListFr(compocn), fldListTo(compocn), flds_o2x, flds_x2o, flds_scalar_name)
+    !--------- import fields -------------
+    call fld_list_add(fldsToOcn_num, fldsToOcn, trim(flds_scalar_name), "will_provide") ! not in EMC
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_rain"     , "will provide") ! -> mean_prec_rat
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_snow"     , "will provide") ! -> mean_fprec_rate
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn"     , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr"    , "will provide") ! -> mean_net_sw_ir_dif_flx
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr"    , "will provide") ! -> mean_net_sw_vis_dir_flx
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx 
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf"    , "will provide") ! -> mean_net_sw_vis_dif_flx
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux"     , "will provide") ! -> mean_zonal_moment_flx
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy"     , "will provide") ! -> mean_merid_moment_flx
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"      , "will provide") ! -> mean_sensi_heat_flx
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lat"      , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup"     , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap"     , "will provide") ! -> mean_evap_rate
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_salt"     , "will provide") ! -> mean_salt_rate
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"     , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"     , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"       , "will provide") ! -> inst_pres_height_surface
+    
+    ! EMC fields not used
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide") ! for CESM lwup + lwdn
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide") ! not in CESM
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide") ! not in CESM
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide") ! not in CESM
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide") ! not in CESM
 
-    ! advertise import and export fields
-    nflds = shr_nuopc_fldList_Getnumflds(fldListFr(compocn))
-    do n = 1,nflds
-      call shr_nuopc_fldList_Getfldinfo(fldListFr(compocn), n, activefld, stdname, shortname)
-      if (activefld) then
-        call NUOPC_Advertise(exportState, standardName=stdname, shortname=shortname, name=shortname, &
-             TransferOfferGeomObject='will provide', rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-      end if
-      call ESMF_LogWrite(subname//':Fr_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
-    end do
+    ! CESM currently not used
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"     , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"    , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"    , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes"    , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"      , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth"    , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw"    , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide") 
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphidry" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphodry" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphiwet" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ocphidry" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ocphodry" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ocphiwet" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet1"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet2"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet3"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet4"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry1"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry2"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry3"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry4"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_bcphi"    , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_bcpho"    , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_flxdst"   , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "So_duu10n"     , "will provide")
 
-    nflds = shr_nuopc_fldList_Getnumflds(fldListTo(compocn))
-    do n = 1,nflds
-      call shr_nuopc_fldList_Getfldinfo(fldListTo(compocn), n, activefld, stdname, shortname)
-      if (activefld) then
-        call NUOPC_Advertise(importState, standardName=stdname, shortname=shortname, name=shortname, &
-             TransferOfferGeomObject='will provide', rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_file_u)) return
-      end if
-      call ESMF_LogWrite(subname//':To_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
-    end do
+    ! Optional CESM fields currently not used
+    ! call NUOPC_CompAttributeGet(gcomp, name='flds_co2a', value=cvalue, rc=rc)
+    ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! read(cvalue,*) flds_co2a
+    ! call ESMF_LogWrite('flds_co2a = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! call NUOPC_CompAttributeGet(gcomp, name='flds_co2c', value=cvalue, rc=rc)
+    ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! read(cvalue,*) flds_co2c
+    ! call ESMF_LogWrite('flds_co2c = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! if (flds_co2a .or. flds_co2c) then
+    !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_co2prog"    , "will provide")
+    !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_co2diag"    , "will provide")
+    ! end if
+    ! call NUOPC_CompAttributeGet(gcomp, name='ice_ncat', value=cvalue, rc=rc)
+    ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! read(cvalue,*) ice_ncat
+    ! call ESMF_LogWrite('ice_ncat = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! call NUOPC_CompAttributeGet(gcomp, name='flds_i2o_per_cat', value=cvalue, rc=rc)
+    ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
+    ! read(cvalue,*) flds_i2o_per_cat
+    ! call ESMF_LogWrite('flds_i2o_per_cat = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=dbrc)
+    ! if (flds_i2o_per_cat) then
+    !    do num = 1, ice_ncat
+    !       name = 'Si_ifrac_' // cnum
+    !       call fld_list_add(fldsToOcn_num, fldsToOcn, trim(name), "will provide")
+    !       name = 'PFioi_swpen_ifrac_' // cnum
+    !       call fld_list_add(fldsToOcn_num, fldsToOcn, trim(name), "will provide")
+    !    end do
+    !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sf_afrac"      , "will provide")
+    !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sf_afracr"     , "will provide")
+    !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_afracr", "will provide")
+    ! end if
+    ! do n = 1,shr_string_listGetNum(ndep_fields)
+    !    call shr_string_listGetName(ndep_fields, n, name)
+    !    call fld_list_add(fldsToOcn_num, fldsToOcn, trim(name), "will provide")
+    ! end do
+
+    !--------- export fields -------------
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(flds_scalar_name), "will_provide") ! not in EMC
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_omask"      , "will provide") ! -> ocean_mask
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_t"          , "will provide") ! -> sea_surface_temperature
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_s"          , "will provide") ! -> s_surf
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_u"          , "will provide") ! -> ocn_current_zonal
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v"          , "will provide") ! -> ocn_current_merid
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"       , "will provide") ! not in EMC
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"       , "will provide") ! not in EMC
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC 
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"        , "will provide") ! not in EMC
+
+    ! EMC fields not used
+    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide") ! not in CESM
+    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide") ! not in CESM
+
+    ! Optional CESM fields currently not used
+    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen"     , "will provide") ! not in EMC
+    ! if (flds_co2c) then
+    !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide") 
+    ! end if
+
 
 #else
 
@@ -981,8 +1062,13 @@ contains
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide",&
                       data=ocean_public%frazil)
 
+#endif
+
+    write(6,*)'DEBUG: fldstoocn_num= ',fldstoocn_num
+    write(6,*)'DEBUG: fldsfrocn_num= ',fldsfrocn_num
     do n = 1,fldsToOcn_num
-      call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)(i)%shortname, rc=rc)
+       write(6,*)'DEBUG: n, stdname',n,trim(fldsToOcn(n)%stdname)
+      call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)%shortname, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
         file=__FILE__)) &
@@ -990,24 +1076,21 @@ contains
     enddo
 
     do n = 1,fldsFrOcn_num
-      call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)(i)%shortname, rc=rc)
+      call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)%shortname, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
         file=__FILE__)) &
         return  ! bail out
     enddo
 
-#endif
-
-! When running mom6 solo, the rotation angles are not computed internally
-! in MOM6. We need to calculate cos and sin of rotational angle for MOM6;
-! the values are stored in ocean_internalstate%ptr%ocean_grid_ptr%cos_rot and sin_rot
-! The rotation angles are retrieved during run time to rotate incoming
-! and outgoing vectors
-!
-! call calculate_rot_angle(ocean_state, ocean_public)
-! tcraig, this is handled fine internally and if not, then later call this
-!    call initialize_grid_rotation_angle(ocean_grid, PF)
+    ! When running mom6 solo, the rotation angles are not computed internally
+    ! in MOM6. We need to calculate cos and sin of rotational angle for MOM6;
+    ! the values are stored in ocean_internalstate%ptr%ocean_grid_ptr%cos_rot and sin_rot
+    ! The rotation angles are retrieved during run time to rotate incoming
+    ! and outgoing vectors
+    ! call calculate_rot_angle(ocean_state, ocean_public)
+    ! tcraig, this is handled fine internally and if not, then later call this
+    ! call initialize_grid_rotation_angle(ocean_grid, PF)
 
     write(*,*) '----- MOM initialization phase Advertise completed'
 
@@ -1074,8 +1157,6 @@ contains
     character(len=16)                          :: inst_suffix = "" ! char string associated with instance
                                                                    ! (ie. "_0001" or "")
     character(len=64)                          :: cvalue
-    character(len=512)                         :: diro
-    character(len=512)                         :: logfile
     logical                                    :: isPresent
 #endif
     character(len=*),parameter  :: subname='(mom_cap:InitializeRealize)'
@@ -1508,45 +1589,33 @@ contains
     ! realize fields on grid
     !---------------------------------
 
-#ifdef CESMCOUPLED
-    call shr_nuopc_fldList_Realize(importState, fldListTo(compocn), flds_scalar_name, flds_scalar_num, &
-         grid=gridIn, tag=subname//':MOM6Import', rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
 
-    call shr_nuopc_fldList_Realize(exportState, fldListFr(compocn), flds_scalar_name, flds_scalar_num, &
-        grid=gridOut, tag=subname//':MOM6Export', rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
-    call shr_nuopc_methods_State_SetScalar(dble(nxg),flds_scalar_index_nx, exportState, mpicom, &
-        flds_scalar_name, flds_scalar_num, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
-    call shr_nuopc_methods_State_SetScalar(dble(nyg),flds_scalar_index_ny, exportState, mpicom, &
-        flds_scalar_name, flds_scalar_num, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-#else
     call MOM_RealizeFields(importState, gridIn , fldsToOcn_num, fldsToOcn, "Ocn import", rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
     call MOM_RealizeFields(exportState, gridOut, fldsFrOcn_num, fldsFrOcn, "Ocn export", rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+#ifdef CESMCOUPLED
+    call State_SetScalar(dble(nxg),flds_scalar_index_nx, exportState, localPet, &
+        flds_scalar_name, flds_scalar_num, rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+
+    call State_SetScalar(dble(nyg),flds_scalar_index_ny, exportState, localPet, &
+        flds_scalar_name, flds_scalar_num, rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 #endif
 
     call ESMF_StateGet(exportState, itemSearch="sea_surface_temperature", itemCount=icount, rc=rc)
@@ -1557,6 +1626,7 @@ contains
 
     ! Do sst initialization if it's part of export state
     if(icount /= 0) then
+
       call ESMF_StateGet(exportState, itemName='sea_surface_temperature', field=field_t_surf, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
@@ -2110,54 +2180,6 @@ contains
     !call ESMF_LogWrite("Before dumpMomInternal", ESMF_LOGMSG_INFO, rc=rc)
     !write(*,*) 'MOM: --- run phase called ---'
 
-    !--------- import fields -------------
-
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_zonal_moment_flx"     , "will provide",&
-    !                      Ice_ocean_boundary%u_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_merid_moment_flx"     , "will provide",&
-    !                      Ice_ocean_boundary%v_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_sensi_heat_flx"       , "will provide",&
-    !                      Ice_ocean_boundary%t_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_evap_rate"            , "will provide",&
-    !                      Ice_ocean_boundary%q_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_salt_rate"            , "will provide",&
-    !                      Ice_ocean_boundary%salt_flux)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_lw_flx"           , "will provide",&
-    !                      Ice_ocean_boundary%lw_flux  )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_vis_dir_flx"   , "will provide",&
-    !                      Ice_ocean_boundary%sw_flux_vis_dir)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_vis_dif_flx"   , "will provide",&
-    !                      Ice_ocean_boundary%sw_flux_vis_dif)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_ir_dir_flx"    , "will provide",&
-    !                      Ice_ocean_boundary%sw_flux_nir_dir)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_net_sw_ir_dif_flx"    , "will provide",&
-    !                      Ice_ocean_boundary%sw_flux_nir_dif)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_prec_rate"            , "will provide",&
-    !                      Ice_ocean_boundary%lprec  )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_fprec_rate"           , "will provide",&
-    !                      Ice_ocean_boundary%fprec  )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_runoff_rate"          , "will provide",&
-    !                      Ice_ocean_boundary%runoff )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_calving_rate"         , "will provide",&
-    !                      Ice_ocean_boundary%calving)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_runoff_heat_flx"      , "will provide",&
-    !                      Ice_ocean_boundary%runoff_hflx )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mean_calving_heat_flx"     , "will provide",&
-    !                      Ice_ocean_boundary%calving_hflx)
-    ! call dumpMomInternal(mom_grid_i, import_slice, "inst_pres_height_surface"  , "will provide",&
-    !                      Ice_ocean_boundary%p )
-    ! call dumpMomInternal(mom_grid_i, import_slice, "mass_of_overlying_sea_ice" , "will provide",&
-    !                      Ice_ocean_boundary%mi)
-
-    !--------- export fields -------------
-
-    ! call dumpMomInternal(mom_grid_i, export_slice, "ocean_mask"                , "will provide", dataPtr_mask)
-    ! call dumpMomInternal(mom_grid_i, export_slice, "sea_surface_temperature"   , "will provide", ocean_public%t_surf)
-    ! call dumpMomInternal(mom_grid_i, export_slice, "s_surf"                    , "will provide", ocean_public%s_surf )
-    ! call dumpMomInternal(mom_grid_i, export_slice, "ocn_current_zonal"         , "will provide", ocean_public%u_surf )
-    ! call dumpMomInternal(mom_grid_i, export_slice, "ocn_current_merid"         , "will provide", ocean_public%v_surf )
-    ! call dumpMomInternal(mom_grid_i, export_slice, "sea_lev"                   , "will provide", ocean_public%sea_lev)
-
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
 
   end subroutine ModelAdvance
@@ -2522,14 +2544,14 @@ contains
   !-----------------------------------------------------------------------------
 
   subroutine State_GetFldPtr(ST, fldname, fldptr, rc)
-    type(ESMF_State), intent(in) :: ST
-    character(len=*), intent(in) :: fldname
-    real(ESMF_KIND_R8), pointer, intent(in) :: fldptr(:,:)
-    integer, intent(out), optional :: rc
+    type(ESMF_State)   , intent(in)            :: ST
+    character(len=*)   , intent(in)            :: fldname
+    real(ESMF_KIND_R8) , pointer, intent(in)   :: fldptr(:,:)
+    integer            , intent(out), optional :: rc
 
     ! local variables
     type(ESMF_Field) :: lfield
-    integer :: lrc
+    integer          :: lrc
     character(len=*),parameter :: subname='(mom_cap:State_GetFldPtr)'
 
     call ESMF_StateGet(ST, itemName=trim(fldname), field=lfield, rc=lrc)
@@ -2547,23 +2569,63 @@ contains
 
   end subroutine State_GetFldPtr
 
-#ifndef CESMCOUPLED
+  !-----------------------------------------------------------------------------
+
+  subroutine State_SetScalar(value, scalar_id, State, mytask, scalar_name, scalar_num,  rc)
+    ! ----------------------------------------------
+    ! Set scalar data from State for a particular name
+    ! ----------------------------------------------
+    real(ESMF_KIND_R8),intent(in)     :: value
+    integer,           intent(in)     :: scalar_id
+    type(ESMF_State),  intent(inout)  :: State
+    integer,           intent(in)     :: mytask
+    character(len=*),  intent(in)     :: scalar_name   
+    integer,           intent(in)     :: scalar_num 
+    integer,           intent(inout)  :: rc
+
+    ! local variables
+    integer                         :: ierr, len
+    type(ESMF_Field)                :: field
+    real(ESMF_KIND_R8), pointer     :: farrayptr(:,:)
+    character(len=*), parameter     :: subname='(mom_cap:State_SetScalar)'
+
+    rc = ESMF_SUCCESS
+
+    call ESMF_StateGet(State, itemName=trim(scalar_name), field=field, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+    if (mytask == 0) then
+      call ESMF_FieldGet(field, farrayPtr=farrayptr, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+      if (scalar_id < 0 .or. scalar_id > scalar_num) then
+         call ESMF_LogWrite(trim(subname)//": ERROR in scalar_id", &
+              ESMF_LOGMSG_INFO, line=__LINE__, file=u_FILE_u, rc=dbrc)
+        rc = ESMF_FAILURE
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+      endif
+
+      farrayptr(1,scalar_id) = value
+    endif
+
+  end subroutine State_SetScalar
 
   !-----------------------------------------------------------------------------
 
   subroutine MOM_RealizeFields(state, grid, nfields, field_defs, tag, rc)
 
-    type(ESMF_State), intent(inout)             :: state
-    type(ESMF_Grid), intent(in)                 :: grid
-    integer, intent(in)                         :: nfields
-    type(fld_list_type), intent(inout)          :: field_defs(:)
-    character(len=*), intent(in)                :: tag
-    integer, intent(inout)                      :: rc
+    type(ESMF_State)    , intent(inout) :: state
+    type(ESMF_Grid)     , intent(in)    :: grid
+    integer             , intent(in)    :: nfields
+    type(fld_list_type) , intent(inout) :: field_defs(:)
+    character(len=*)    , intent(in)    :: tag
+    integer             , intent(inout) :: rc
 
-    integer                                     :: i
-    type(ESMF_Field)                            :: field
-    integer                                     :: npet, nx, ny, pet, elb(2), eub(2), clb(2), cub(2), tlb(2), tub(2)
-    type(ESMF_VM)                               :: vm
+    integer          :: i
+    type(ESMF_Field) :: field
+    integer          :: npet, nx, ny, pet
+    integer          :: elb(2), eub(2), clb(2), cub(2), tlb(2), tub(2)
+    type(ESMF_VM)    :: vm
     character(len=*),parameter  :: subname='(mom_cap:MOM_RealizeFields)'
 
     rc = ESMF_SUCCESS
@@ -2578,7 +2640,7 @@ contains
             line=__LINE__, &
             file=__FILE__, &
             rc=dbrc)
-          call shr_nuopc_fldList_SetScalarField(field, rc=rc)
+          call SetScalarField(field, rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -2648,6 +2710,38 @@ contains
 
   !-----------------------------------------------------------------------------
 
+  subroutine SetScalarField(field, rc)
+    ! ----------------------------------------------
+    ! create a field with scalar data on the root pe
+    ! ----------------------------------------------
+    type(ESMF_Field), intent(inout)  :: field
+    integer,          intent(inout)  :: rc
+
+    ! local variables
+    type(ESMF_Distgrid) :: distgrid
+    type(ESMF_Grid)     :: grid
+    character(len=*), parameter :: subname='(mom_cap:SetScalarField)'
+
+    rc = ESMF_SUCCESS
+
+    ! create a DistGrid with a single index space element, which gets mapped onto DE 0.
+    distgrid = ESMF_DistGridCreate(minIndex=(/1/), maxIndex=(/1/), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+
+    grid = ESMF_GridCreate(distgrid, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+
+    field = ESMF_FieldCreate(name=trim(flds_scalar_name), grid=grid, &
+      typekind=ESMF_TYPEKIND_R8, &
+      ungriddedLBound=(/1/), &
+      ungriddedUBound=(/flds_scalar_num/), & ! num of scalar values
+      rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+
+  end subroutine SetScalarField
+
+  !-----------------------------------------------------------------------------
+
   subroutine fld_list_add(num, fldlist, stdname, transferOffer, data, shortname)
     ! ----------------------------------------------
     ! Set up a list of field information
@@ -2688,8 +2782,6 @@ contains
     endif
 
   end subroutine fld_list_add
-
-#endif
 
   !-----------------------------------------------------------------------------
 
