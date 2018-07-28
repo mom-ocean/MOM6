@@ -17,6 +17,7 @@ module mom_cap_methods
   ! Public member functions
   public :: mom_export
   public :: mom_import
+  public :: mom_import_nems
 
   integer            :: rc,dbrc
   integer            :: import_cnt = 0
@@ -337,11 +338,6 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Fioi_salt" , dataPtr_osalt, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
     call State_getFldPtr(importState,"Faxa_lwdn" , dataPtr_lwdn, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -394,36 +390,40 @@ contains
     end if
 
     if (do_import) then
-      do j = jsc, jec
-        j1 = j + lbnd2 - jsc
-        jg = j + grid%jsc - jsc
-        do i = isc, iec
-          i1 = i + lbnd1 - isc
-          ig = i + grid%jsc - isc
+       do j = jsc, jec
+          j1 = j + lbnd2 - jsc
+          do i = isc, iec
+             i1 = i + lbnd1 - isc
 
-          ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)
-          ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)
-          ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)
-          ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)
-          ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)
-          ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)
-          ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)
-          ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)
-          ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)
-          ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)
-          ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)
-          ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)
-          ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1)
-          ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
-          !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
-          !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
+             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)
+             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)
+             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)
+             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)
+             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)
+             ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)
+             ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)
+             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)
+             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)
+             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)
+             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)
+             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)
+             ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1)
+             ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
+             !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
+             !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
+          enddo
+       enddo
 
-          !ice_ocean_boundary%u_flux(i,j)         = &
-          !         GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
-          !ice_ocean_boundary%v_flux(i,j)         = &
-          !         GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
-        enddo
-      enddo
+       ! do j = jsc, jec
+       !    jg = j + grid%jsc - jsc
+       !    do i = isc, iec
+       !       ig = i + grid%jsc - isc
+       !       ice_ocean_boundary%u_flux(i,j)         = &
+       !            GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
+       !       ice_ocean_boundary%v_flux(i,j)         = &
+       !            GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
+       !    end do
+       ! end do
     end if
 
     ! debug output
@@ -468,6 +468,189 @@ contains
     end if
 
   end subroutine mom_import
+
+  !-----------------------------------------------------------------------------
+
+  subroutine mom_import_nems(ocean_public, grid, importState, ice_ocean_boundary, rc)
+
+    type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
+    type(ocean_grid_type)         , intent(in)    :: grid               !< Ocean model grid
+    type(ESMF_State)              , intent(inout) :: importState        !< incoming data
+    type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
+    integer                       , intent(inout) :: rc
+
+    ! Local Variables
+    integer                         :: i, j, i1, j1, ig, jg  ! Grid indices
+    integer                         :: isc, iec, jsc, jec    ! Grid indices
+    integer                         :: i0, j0, is, js, ie, je
+    integer                         :: lbnd1, lbnd2
+    integer                         :: ubnd1, ubnd2
+    real(ESMF_KIND_R8), pointer     :: dataPtr_mask(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_p(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_mmmf(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_mzmf(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_sensi(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_evap(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_salt(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_lwflux(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_swvdr(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_swvdf(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_swndr(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_swndf(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_runoff(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_rain(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_snow(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_calving(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_runoff_hflx(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_calving_hflx(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_mi(:,:)
+
+    real(ESMF_KIND_R8), allocatable :: ofld(:,:), ocz(:,:), ocm(:,:)
+    real(ESMF_KIND_R8), allocatable :: mmmf(:,:), mzmf(:,:)
+    integer                         :: day, secs
+    type(ESMF_time)                 :: currTime
+    logical                         :: do_import
+    character(len=*), parameter     :: subname = '(mom_import_nems)'
+    !-----------------------------------------------------------------------
+
+    rc = ESMF_SUCCESS
+
+    call State_getFldPtr(importState,"mean_zonal_moment_flx", dataPtr_mzmf, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_merid_moment_flx", dataPtr_mmmf, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_sensi_heat_flx", dataPtr_sensi, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_evap_rate" , dataPtr_evap, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_salt_rate" , dataPtr_salt, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_net_sw_ir_dif_flx" , dataPtr_swndr, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_net_sw_ir_dir_flx" , dataPtr_swndf, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_net_sw_vis_dir_flx" , dataPtr_swvdr, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_net_sw_vis_dif_flx" , dataPtr_swvdf, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_prec_rate" , dataPtr_rain, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_fprec_rate" , dataPtr_snow, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_runoff_rate" , dataPtr_runoff, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_calving_rate" , dataPtr_calving, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_runoff_heat_flux" , dataPtr_runoff_hflx, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mean_calving_heat_flux" , dataPtr_calving_hflx, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,'inst_pres_height_surface', dataPtr_p,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(importState,"mass_of_overlying_ice" , dataPtr_mi, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+
+    lbnd1 = lbound(dataPtr_p,1)
+    ubnd1 = ubound(dataPtr_p,1)
+    lbnd2 = lbound(dataPtr_p,2)
+    ubnd2 = ubound(dataPtr_p,2)
+
+    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+
+    allocate(mzmf(lbnd1:ubnd1,lbnd2:ubnd2))
+    allocate(mmmf(lbnd1:ubnd1,lbnd2:ubnd2))
+    do j  = lbnd2, ubnd2
+      do i = lbnd1, ubnd1
+        j1 = j - lbnd2 + jsc  ! work around local vs global indexing
+        i1 = i - lbnd1 + isc
+        mzmf(i,j) = grid%cos_rot(i1,j1)*dataPtr_mzmf(i,j) &
+                  + grid%sin_rot(i1,j1)*dataPtr_mmmf(i,j)
+        mmmf(i,j) = grid%cos_rot(i1,j1)*dataPtr_mmmf(i,j) &
+                  - grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j)
+      enddo
+    enddo
+    dataPtr_mzmf = mzmf
+    dataPtr_mmmf = mmmf
+    deallocate(mzmf, mmmf)
+
+    do j = jsc, jec
+       j1 = j + lbnd2 - jsc
+       do i = isc, iec
+          i1 = i + lbnd1 - isc
+
+          ice_ocean_boundary%u_flux(i,j)            =  dataPtr_mzmf(i1,j1)
+          ice_ocean_boundary%v_flux(i,j)            =  dataPtr_mmmf(i1,j1)
+          ice_ocean_boundary%q_flux(i,j)            = -dataPtr_evap(i1,j1)
+          ice_ocean_boundary%t_flux(i,j)            = -dataPtr_sensi(i1,j1)
+          ice_ocean_boundary%salt_flux(i,j)         =  dataPtr_salt(i1,j1)
+          ice_ocean_boundary%lw_flux(i,j)           =  dataPtr_lwflux(i1,j1) 
+          ice_ocean_boundary%sw_flux_vis_dir(i,j)   =  dataPtr_swvdr(i1,j1)
+          ice_ocean_boundary%sw_flux_vis_dif(i,j)   =  dataPtr_swvdf(i1,j1)
+          ice_ocean_boundary%sw_flux_nir_dir(i,j)   =  dataPtr_swndr(i1,j1)
+          ice_ocean_boundary%sw_flux_nir_dif(i,j)   =  dataPtr_swndf(i1,j1)
+          ice_ocean_boundary%lprec(i,j)             =  dataPtr_rain(i1,j1)
+          ice_ocean_boundary%fprec(i,j)             =  dataPtr_snow(i1,j1)
+          ice_ocean_boundary%runoff(i,j)            =  dataPtr_runoff(i1,j1)
+          ice_ocean_boundary%calving(i,j)           =  dataPtr_calving(i1,j1)
+          ice_ocean_boundary%runoff_hflx(i,j)       =  dataPtr_runoff_hflx(i1,j1)
+          ice_ocean_boundary%calving_hflx(i,j)      =  dataPtr_calving_hflx(i1,j1)
+          ice_ocean_boundary%p(i,j)                 =  dataPtr_p(i1,j1)
+          ice_ocean_boundary%mi(i,j)                =  dataPtr_mi(i1,j1)
+       enddo
+    enddo
+
+  end subroutine mom_import_nems
 
   !-----------------------------------------------------------------------------
 

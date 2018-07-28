@@ -404,6 +404,7 @@ module mom_cap_mod
   use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit
   use shr_file_mod,             only: shr_file_getLogUnit, shr_file_getLogLevel
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
+  use shr_nuopc_time_mod,       only: shr_nuopc_time_alarmInit
 #endif
 
   use ESMF                      ! TODO: only: ...
@@ -1064,10 +1065,7 @@ contains
 
 #endif
 
-    write(6,*)'DEBUG: fldstoocn_num= ',fldstoocn_num
-    write(6,*)'DEBUG: fldsfrocn_num= ',fldsfrocn_num
     do n = 1,fldsToOcn_num
-       write(6,*)'DEBUG: n, stdname',n,trim(fldsToOcn(n)%stdname)
       call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)%shortname, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
@@ -2004,7 +2002,7 @@ contains
       return  ! bail out
 
     ! If restart alarm is ringing - write restart file
-    call ESMF_ClockGetAlarm(clock, alarmname='seq_timemgr_alarm_restart', alarm=alarm, rc=rc)
+    call ESMF_ClockGetAlarm(clock, alarmname='alarm_restart', alarm=alarm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -2196,9 +2194,12 @@ contains
     type(ESMF_Time)          :: mstoptime
     type(ESMF_TimeInterval)  :: mtimestep, dtimestep
     character(len=128)       :: mtimestring, dtimestring
-    type(ESMF_Alarm),pointer :: alarmList(:)
-    type(ESMF_Alarm)         :: dalarm
-    integer                  :: alarmcount, n
+    character(len=256)       :: cvalue
+    character(len=256)       :: restart_option ! Restart option units
+    integer                  :: restart_n      ! Number until restart interval
+    integer                  :: restart_ymd    ! Restart date (YYYYMMDD)
+    type(ESMF_ALARM)         :: restart_alarm
+    logical                  :: first_time = .true.
     character(len=*),parameter :: subname='mom_cap:(ModelSetRunClock) '
     !--------------------------------
 
@@ -2242,11 +2243,8 @@ contains
 
       call ESMF_LogWrite(subname//" ERROR in time consistency; "//trim(dtimestring)//" ne "//trim(mtimestring),  &
           ESMF_LOGMSG_ERROR, rc=dbrc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-      rc=ESMF_Failure
+      rc = ESMF_FAILURE
+      return
     endif
 
     !--------------------------------
@@ -2261,47 +2259,49 @@ contains
       file=__FILE__)) &
       return  ! bail out
 
-    !--------------------------------
-    ! copy alarms from driver to model clock if model clock has no alarms (do this only once!)
-    !--------------------------------
+    if (first_time) then
+       !--------------------------------                                                                                 
+       ! set restart alarm
+       !--------------------------------                                                                                 
+       call NUOPC_CompAttributeGet(gcomp, name="restart_option", value=restart_option, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
-    call ESMF_ClockGetAlarmList(mclock, alarmlistflag=ESMF_ALARMLIST_ALL, alarmCount=alarmCount, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+       call NUOPC_CompAttributeGet(gcomp,  name="restart_n", value=cvalue, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       read(cvalue,*) restart_n
 
-    if (alarmCount == 0) then
-      call ESMF_ClockGetAlarmList(dclock, alarmlistflag=ESMF_ALARMLIST_ALL, alarmCount=alarmCount, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
+       call NUOPC_CompAttributeGet(gcomp, name="restart_ymd", value=cvalue, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       read(cvalue,*) restart_ymd
 
-      allocate(alarmList(alarmCount))
-      call ESMF_ClockGetAlarmList(dclock, alarmlistflag=ESMF_ALARMLIST_ALL, alarmList=alarmList, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
+       call shr_nuopc_time_alarmInit(mclock, &
+            alarm   = restart_alarm,         &
+            option  = trim(restart_option),  &
+            opt_n   = restart_n,             &
+            opt_ymd = restart_ymd,           &
+            RefTime = mcurrTime,             &
+            alarmname = 'alarm_restart', rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
-      do n = 1, alarmCount
-        ! call ESMF_AlarmPrint(alarmList(n), rc=rc)
-        ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-        dalarm = ESMF_AlarmCreate(alarmList(n), rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
-        call ESMF_AlarmSet(dalarm, clock=mclock, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
-      enddo
-
-      deallocate(alarmList)
-    endif
+       call ESMF_AlarmSet(restart_alarm, clock=mclock, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       first_time = .false.
+    end if
 
     !--------------------------------
     ! Advance model clock to trigger alarms then reset model clock back to currtime
