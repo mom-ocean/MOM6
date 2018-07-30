@@ -182,6 +182,7 @@ contains
           o2x(ind%o2x_Fioo_q, n) = ocn_public%frazil(ig,jg) * grid%mask2dT(i,j) * I_time_int
         else
           ! Melt_potential already is in W/m^2 (ncouple_per_day is unitless)
+          ! GMM - Hycom cap uses icefrq rather than oceanfrq (ncouple_per_day)
           o2x(ind%o2x_Fioo_q, n) = -ocn_public%melt_potential(ig,jg) * grid%mask2dT(i,j) * ncouple_per_day
         endif
         ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
