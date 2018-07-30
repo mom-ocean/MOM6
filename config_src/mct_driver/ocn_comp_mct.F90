@@ -373,7 +373,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! end if
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_export"
-  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
+  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr, mom_cpl_dt, ncouple_per_day)
 
   call t_stopf('MOM_mct_init')
 
