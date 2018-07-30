@@ -72,7 +72,7 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_EOS,                   only : EOS_init, calculate_density
+use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
@@ -807,7 +807,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
-  call extract_surface_state(CS, sfc_state)
+  call extract_surface_state(CS, sfc_state, dt)
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
@@ -2631,28 +2631,29 @@ end subroutine adjust_ssh_for_p_atm
 !> This subroutine sets the surface (return) properties of the ocean
 !! model by setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
-subroutine extract_surface_state(CS, sfc_state)
+subroutine extract_surface_state(CS, sfc_state, dt)
   type(MOM_control_struct), pointer       :: CS !< Master MOM control structure
   type(surface),            intent(inout) :: sfc_state !< transparent ocean surface state
                                                 !! structure shared with the calling routine
                                                 !! data in this structure is intent out.
+  real,              optional, intent(in) :: dt !< Thermodynamic time step, in s.
 
   ! local
   real :: hu, hv
-  type(ocean_grid_type), pointer :: G => NULL() ! pointer to a structure containing
-                                      ! metrics and related information
+  type(ocean_grid_type), pointer :: G => NULL() !< pointer to a structure containing
+                                      !! metrics and related information
   type(verticalGrid_type), pointer :: GV => NULL()
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & ! u : zonal velocity component (m/s)
-    v => NULL(), & ! v : meridional velocity component (m/s)
-    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))           ! distance from the surface (meter)
-  real :: depth_ml                    ! depth over which to average to
-                                      ! determine mixed layer properties (meter)
-  real :: dh                          ! thickness of a layer within mixed layer (meter)
-  real :: mass                        ! mass per unit area of a layer (kg/m2)
-
-  logical :: use_temperature   ! If true, temp and saln used as state variables.
+    u => NULL(), & !< u : zonal velocity component (m/s)
+    v => NULL(), & !< v : meridional velocity component (m/s)
+    h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  real :: depth(SZI_(CS%G))           !< distance from the surface (meter)
+  real :: depth_ml                    !< depth over which to average to
+                                      !< determine mixed layer properties (meter)
+  real :: dh                          !< thickness of a layer within mixed layer (meter)
+  real :: mass                        !< mass per unit area of a layer (kg/m2)
+  real :: T_freeze                    !< freezing temperature (oC)
+  logical :: use_temperature   !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -2809,6 +2810,22 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
     endif
   endif  ! (CS%Hmix >= 0.0)
+
+  if (allocated(sfc_state%melt_potential)) then
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      ! set melt_potential to zero to avoid passing values set previously
+      sfc_state%melt_potential(i,j) = 0.0
+        ! calculate freezing temp.
+        call calculate_TFreeze(sfc_state%SSS(i,j), CS%tv%P_Ref, T_freeze, CS%tv%eqn_of_state)
+        if (present(dt)) then
+          ! melt_potential, in W/m^2
+          sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * (sfc_state%SST(i,j) - T_freeze) * sfc_state%Hml(i,j)/dt
+        else
+          sfc_state%melt_potential(i,j) = 0.0
+        endif
+    enddo ; enddo
+  endif
 
   if (allocated(sfc_state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
     !$OMP parallel do default(shared)
