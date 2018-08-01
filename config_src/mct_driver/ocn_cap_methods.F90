@@ -182,7 +182,7 @@ contains
           o2x(ind%o2x_Fioo_q, n) = ocn_public%frazil(ig,jg) * grid%mask2dT(i,j) * I_time_int
         else
           ! Melt_potential: change from J/m^2 to W/m^2
-          o2x(ind%o2x_Fioo_q, n) = -ocn_public%melt_potential(ig,jg) * grid%mask2dT(i,j) * I_time_int
+          o2x(ind%o2x_Fioo_q, n) = -ocn_public%melt_potential(ig,jg) * grid%mask2dT(i,j) !* I_time_int * ncouple_per_day
         endif
         ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
         ! in order to update halos. i.e. does not use global indexing.
