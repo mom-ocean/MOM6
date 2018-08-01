@@ -195,7 +195,6 @@ type, public :: MOM_control_struct ; private
                               !! bottom drag viscosities, and related fields
   type(MEKE_type), pointer :: MEKE => NULL() !<  structure containing fields
                               !! related to the Mesoscale Eddy Kinetic Energy
-
   logical :: adiabatic               !< If true, there are no diapycnal mass fluxes, and no calls
                                      !! to routines to calculate or apply diapycnal fluxes.
   logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the
@@ -526,6 +525,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   if (therm_reset) then
     CS%time_in_thermo_cycle = 0.0
+    ! GMM
+    if (allocated(sfc_state%melt_potential)) sfc_state%melt_potential(:,:)  = 0.0
     if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
     if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
     if (associated(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
@@ -807,7 +808,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
-  call extract_surface_state(CS, sfc_state, dt)
+  call extract_surface_state(CS, sfc_state, dt_therm)
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
@@ -2815,15 +2816,17 @@ subroutine extract_surface_state(CS, sfc_state, dt)
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
       ! set melt_potential to zero to avoid passing values set previously
-      sfc_state%melt_potential(i,j) = 0.0
-        ! calculate freezing temp.
-        call calculate_TFreeze(sfc_state%SSS(i,j), CS%tv%P_Ref, T_freeze, CS%tv%eqn_of_state)
+      if (G%mask2dT(i,j)>0.) then
+        ! calculate freezing pot. temp. @ surface
+        call calculate_TFreeze(sfc_state%SSS(i,j), 0.0, T_freeze, CS%tv%eqn_of_state)
         if (present(dt)) then
-          ! melt_potential, in W/m^2
-          sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * (sfc_state%SST(i,j) - T_freeze) * sfc_state%Hml(i,j)/dt
+          ! time accumulated melt_potential, in J/m^2
+          sfc_state%melt_potential(i,j) = sfc_state%melt_potential(i,j) +  (CS%tv%C_p * CS%GV%Rho0 * &
+                                          (sfc_state%SST(i,j) - T_freeze) * CS%Hmix)
         else
           sfc_state%melt_potential(i,j) = 0.0
         endif
+      endif! G%mask2dT
     enddo ; enddo
   endif
 
