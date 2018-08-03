@@ -2817,7 +2817,7 @@ subroutine extract_surface_state(CS, sfc_state)
       if (G%mask2dT(i,j)>0.) then
         ! calculate freezing pot. temp. @ surface
         call calculate_TFreeze(sfc_state%SSS(i,j), 0.0, T_freeze, CS%tv%eqn_of_state)
-        ! time accumulated melt_potential, in W/m^2
+        ! time accumulated melt_potential, in J/m^2
         sfc_state%melt_potential(i,j) = sfc_state%melt_potential(i,j) +  (CS%tv%C_p * CS%GV%Rho0 * &
                                         (sfc_state%SST(i,j) - T_freeze) * CS%Hmix)
       else
