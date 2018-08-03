@@ -2135,8 +2135,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
-  if (CS%debug .or. G%symmetric) &
+  if (CS%debug .or. G%symmetric) then
     call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
+  else ; G%Domain_aux => G%Domain ; endif
   ! Copy common variables from the vertical grid to the horizontal grid.
   ! Consider removing this later?
   G%ke = GV%ke ; G%g_Earth = GV%g_Earth
@@ -2165,8 +2166,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call MOM_grid_end(G) ; deallocate(G)
 
     G => CS%G
-    if (CS%debug .or. CS%G%symmetric) &
+    if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
+    else ; CS%G%Domain_aux => CS%G%Domain ;endif
     G%ke = GV%ke ; G%g_Earth = GV%g_Earth
   endif
 
