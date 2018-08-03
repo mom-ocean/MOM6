@@ -1,47 +1,7 @@
+!> The MOM6 facility for reading and writing restart files, and querying what has been read.
 module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This file contains four subroutines associated with saving       *
-!*  restart files or restoring the model state from files.             *
-!*                                                                     *
-!*    register_restart_field is used to specify the fields that will   *
-!*  be written to restart files.                                       *
-!*                                                                     *
-!*    Save_restart saves a restart file from which a simulation can    *
-!*  be restarted with results that are identical to those which would  *
-!*  have been attained if there had been no interruption.  If this     *
-!*  file would be larger than 2 Gbytes, it is broken up into a number  *
-!*  of smaller files.                                                  *
-!*                                                                     *
-!*    The subroutine restore_state initializes the fields for the      *
-!*  simulations from a number of restart files or other NetCDF files.  *
-!*  Each restart field is initialized from the first file in the       *
-!*  list in which it is found.  The files are separated by spaces,     *
-!*  and all must be in the specified directory.  If 'r' is included    *
-!*  in the list, it is expanded to include all of the restart files    *
-!*  that are found in the directory.                                   *
-!*                                                                     *
-!*    query_initialized returns true if a field (or the entire restart *
-!*  file) has been initialized from a restart file and false otherwise.*
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, bathyT, tr                            *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_domains, only : pe_here, num_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
@@ -66,66 +26,73 @@ public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
 
+!> A type for making arrays of pointers to 4-d arrays
 type p4d
-  real, dimension(:,:,:,:), pointer :: p => NULL()
+  real, dimension(:,:,:,:), pointer :: p => NULL() !< A pointer to a 4d array
 end type p4d
 
+!> A type for making arrays of pointers to 3-d arrays
 type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
+  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3d array
 end type p3d
 
+!> A type for making arrays of pointers to 2-d arrays
 type p2d
-  real, dimension(:,:), pointer :: p => NULL()
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2d array
 end type p2d
 
+!> A type for making arrays of pointers to 1-d arrays
 type p1d
-  real, dimension(:), pointer :: p => NULL()
+  real, dimension(:), pointer :: p => NULL() !< A pointer to a 1d array
 end type p1d
 
+!> A type for making arrays of pointers to scalars
 type p0d
-  real, pointer :: p => NULL()
+  real, pointer :: p => NULL() !< A pointer to a scalar
 end type p0d
 
+!> A structure with information about a single restart field
 type field_restart
-  type(vardesc) :: vars         ! Descriptions of the fields that
-                                ! are to be read from or  written
-                                ! to the restart file.
-  logical :: mand_var           ! If .true. the run will abort if this
-                                ! field is not successfully read
-                                ! from the restart file.
-  logical :: initialized        ! .true. if this field has been read
-                                ! from the restart file.
-  character(len=32) :: var_name ! A name by which a variable may be queried.
+  type(vardesc) :: vars         !< Description of a field that is to be read from or written
+                                !! to the restart file.
+  logical :: mand_var           !< If .true. the run will abort if this field is not successfully
+                                !! read from the restart file.
+  logical :: initialized        !< .true. if this field has been read from the restart file.
+  character(len=32) :: var_name !< A name by which a variable may be queried.
 end type field_restart
 
+!> A restart registry and the control structure for restarts
 type, public :: MOM_restart_CS ; private
-  logical :: restart    ! restart is set to .true. if the run has been started
-                        ! from a full restart file.  Otherwise some fields must
-                        ! be initialized approximately.
-  integer :: novars = 0 ! The number of restart fields that have been registered.
-  logical :: parallel_restartfiles  ! If true, each PE writes its own restart file,
-                                    ! otherwise they are combined internally.
-  logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
-                                    ! and large-file-support is enabled.
-  logical :: new_run                ! If true, the input filenames and restart file
-                                    ! existence will result in a new run that is not
-                                    ! initializedfrom restart files.
-  logical :: new_run_set = .false.  ! If true, new_run has been determined for this restart_CS.
-  logical :: checksum_required      ! If true, require the restart checksums to match and error out otherwise.
-                                    ! Users may want to avoid this comparison if for example the restarts are
-                                    ! made from a run with a different mask_table than the current run,
-                                    ! in which case the checksums will not match and cause crash.
-  character(len=240) :: restartfile ! The name or name root for MOM restart files.
+  logical :: restart    !< restart is set to .true. if the run has been started from a full restart
+                        !! file.  Otherwise some fields must be initialized approximately.
+  integer :: novars = 0 !< The number of restart fields that have been registered.
+  logical :: parallel_restartfiles  !< If true, each PE writes its own restart file,
+                                    !! otherwise they are combined internally.
+  logical :: large_file_support     !< If true, NetCDF 3.6 or later is being used
+                                    !! and large-file-support is enabled.
+  logical :: new_run                !< If true, the input filenames and restart file existence will
+                                    !! result in a new run that is not initialized from restart files.
+  logical :: new_run_set = .false.  !< If true, new_run has been determined for this restart_CS.
+  logical :: checksum_required      !< If true, require the restart checksums to match and error out otherwise.
+                                    !! Users may want to avoid this comparison if for example the restarts are
+                                    !! made from a run with a different mask_table than the current run,
+                                    !! in which case the checksums will not match and cause crash.
+  character(len=240) :: restartfile !< The name or name root for MOM restart files.
 
+  !> An array of descriptions of the registered fields
   type(field_restart), pointer :: restart_field(:) => NULL()
+
+  !>@{ Pointers to the fields that have been registered for restarts
   type(p0d), pointer :: var_ptr0d(:) => NULL()
   type(p1d), pointer :: var_ptr1d(:) => NULL()
   type(p2d), pointer :: var_ptr2d(:) => NULL()
   type(p3d), pointer :: var_ptr3d(:) => NULL()
   type(p4d), pointer :: var_ptr4d(:) => NULL()
-  integer :: max_fields
+  !!@}
+  integer :: max_fields !< The maximum number of restart fields
 end type MOM_restart_CS
 
+!> Register fields for restarts
 interface register_restart_field
   module procedure register_restart_field_ptr4d, register_restart_field_4d
   module procedure register_restart_field_ptr3d, register_restart_field_3d
@@ -134,6 +101,7 @@ interface register_restart_field
   module procedure register_restart_field_ptr0d, register_restart_field_0d
 end interface
 
+!> Indicate whether a field has been read from a restart file
 interface query_initialized
   module procedure query_initialized_name
   module procedure query_initialized_0d, query_initialized_0d_name
@@ -443,10 +411,7 @@ function query_initialized_name(name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine returns .true. if the field referred to by name has
 ! initialized from a restart file, and .false. otherwise.
-!
-! Arguments: name - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -480,10 +445,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -510,10 +472,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -541,10 +500,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -572,10 +528,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -603,10 +556,7 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -635,11 +585,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -675,11 +621,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -715,11 +657,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -755,11 +693,7 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -795,11 +729,7 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -837,16 +767,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                                   !! to the restart file names.
   character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
   type(verticalGrid_type), optional, intent(in) :: GV   !< The ocean's vertical grid structure
-! Arguments: directory - The directory where the restart file goes.
-!  (in)      time - The time of this restart file.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
-!  (in, opt) time_stamped - If true, the restart file names include
-!                           a unique time stamp.  The default is false.
-!  (in, opt) filename - A filename that overrides the name in CS%restartfile.
-!
-!  (in, opt) GV - The ocean's vertical grid structure.
+
+  ! Local variables
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
@@ -1051,16 +973,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
 
-! Arguments: filename - A series of space delimited strings, each of
-!                       which is either "r" or the name of a file
-!                       from which the run is to be restarted.
-!  (in)      directory - The directory where the restart or save
-!                        files should be found.
-!  (out)     day - The time of the restarted run.
-!  (in)      G - The ocean's grid structure.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
-
+  ! Local variables
   character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
   character(len=80) :: fname     ! The name of the current file.
   character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
@@ -1430,15 +1343,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
 
-! Arguments: filename - A series of space delimited strings, each of
-!                       which is either "r" or the name of a file
-!                       from which the run is to be restarted.
-!  (in)      directory - The directory where the restart or save
-!                        files should be found.
-!  (in)      G - The ocean's grid structure.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
-
+  ! Local variables
   character(len=256) :: filepath  ! The path (dir/file) to the file being opened.
   character(len=256) :: fname     ! The name of the current file.
   character(len=8)   :: suffix    ! A suffix (like "_2") that is added to any
@@ -1570,13 +1475,7 @@ subroutine restart_init(param_file, CS, restart_root)
                          intent(in) :: restart_root !< A filename root that overrides the value
                                           !! set by RESTARTFILE to enable the use of this module by
                                           !! other components than MOM.
-! Arguments: param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module.
-!  (in,opt)  restart_root - A filename root that overrides the value in
-!                           RESTARTFILE.  This will enable the use of this
-!                           module by other components.
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_restart"   ! This module's name.
@@ -1651,8 +1550,7 @@ end subroutine restart_end
 
 subroutine restart_error(CS)
   type(MOM_restart_CS),  pointer    :: CS !< A pointer to a MOM_restart_CS object
-! Arguments: CS - A pointer that is set to point to the control structure
-!                 for this module.  (Intent in.)
+
   character(len=16)  :: num  ! String for error messages
 
   if (CS%novars > CS%max_fields) then

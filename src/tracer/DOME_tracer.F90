@@ -1,3 +1,4 @@
+!> A tracer package that is used as a diagnostic in the DOME experiments
 module DOME_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -30,35 +31,30 @@ implicit none ; private
 public register_DOME_tracer, initialize_DOME_tracer
 public DOME_tracer_column_physics, DOME_tracer_surface_state, DOME_tracer_end
 
-! ntr is the number of tracers in this module.
-integer, parameter :: ntr = 11
+integer, parameter :: ntr = 11 !< The number of tracers in this module.
 
+!> The DOME_tracer control structure
 type, public :: DOME_tracer_CS ; private
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
-                                   ! to initialize internally.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
-                                           ! subroutine, in g m-3?
-  real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
-  logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
+  logical :: coupled_tracers = .false. !< These tracers are not offered to the coupler.
+  character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in g m-3?
+  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out.
+  logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
 
-  integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
-             ! if it is used and the surface tracer concentrations are to be
-             ! provided to the coupler.
+  integer, dimension(NTR) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+                                    !! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
 
-  type(vardesc) :: tr_desc(NTR)
+  type(vardesc) :: tr_desc(NTR) !< Descriptions and metadata for the tracers
 end type DOME_tracer_CS
 
 contains
 
-!> This subroutine is used to register tracer fields and subroutines
-!! to be used with MOM.
+!> Register tracer fields and subroutines to be used with MOM.
 function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
@@ -137,8 +133,7 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   register_DOME_tracer = .true.
 end function register_DOME_tracer
 
-!> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
-!! and it sets up the tracer output.
+!> Initializes the NTR tracer fields in tr(:,:,:,:) and sets up the tracer output.
 subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp, param_file)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
@@ -380,38 +375,21 @@ subroutine DOME_tracer_end(CS)
   endif
 end subroutine DOME_tracer_end
 
-!> \namespace DOME_tracer
-!!                                                                     *
-!!  By Robert Hallberg, 2002                                           *
-!!                                                                     *
-!!    This file contains an example of the code that is needed to set  *
-!!  up and use a set (in this case eleven) of dynamically passive      *
-!!  tracers.  These tracers dye the inflowing water or water initially *
-!!  within a range of latitudes or water initially in a range of       *
-!!  depths.                                                            *
-!!                                                                     *
-!!    A single subroutine is called from within each file to register  *
-!!  each of the tracers for reinitialization and advection and to      *
-!!  register the subroutine that initializes the tracers and set up    *
-!!  their output and the subroutine that does any tracer physics or    *
-!!  chemistry along with diapycnal mixing (included here because some  *
-!!  tracers may float or swim vertically or dye diapycnal processes).  *
-!!                                                                     *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q                                        *
-!!    j+1  > o > o >   At ^:  v                                        *
-!!    j    x ^ x ^ x   At >:  u                                        *
-!!    j    > o > o >   At o:  h, tr                                    *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
-!!                                                                     *
-!!*******+*********+*********+*********+*********+*********+*********+**
+!> \namespace dome_tracer
+!!
+!!  By Robert Hallberg, 2002
+!!
+!!    This file contains an example of the code that is needed to set
+!!  up and use a set (in this case eleven) of dynamically passive
+!!  tracers.  These tracers dye the inflowing water or water initially
+!!  within a range of latitudes or water initially in a range of
+!!  depths.
+!!
+!!    A single subroutine is called from within each file to register
+!!  each of the tracers for reinitialization and advection and to
+!!  register the subroutine that initializes the tracers and set up
+!!  their output and the subroutine that does any tracer physics or
+!!  chemistry along with diapycnal mixing (included here because some
+!!  tracers may float or swim vertically or dye diapycnal processes).
 
 end module DOME_tracer
