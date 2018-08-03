@@ -1,32 +1,7 @@
+!> The MOM6 facility to parse input files for runtime parameters
 module MOM_file_parser
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, updated 9/2013.           *
-!*                                                                     *
-!*    The subroutines here parse a set of input files for the value    *
-!*  a named parameter and sets that parameter at run time.  Currently  *
-!*  these files use use one of several formats:                        *
-!*    #define VAR       ! To set the logical VAR to true.              *
-!*    VAR = True        ! To set the logical VAR to true.              *
-!*    #undef VAR        ! To set the logical VAR to false.             *
-!*    VAR = False       ! To set the logical VAR to false.             *
-!*    #define VAR 999   ! To set the real or integer VAR to 999.       *
-!*    VAR = 999         ! To set the real or integer VAR to 999.       *
-!*    #override VAR = 888 ! To override a previously set value.        *
-!*    VAR = 1.1, 2.2, 3.3 ! To set an array of real values.            *
-!*                                                                     *
-!*  In addition, when set by the get_param interface, the values of    *
-!*  parameters are automatically logged, along with defaults, units,   *
-!*  and a description.  It is an error for a variable to be overridden *
-!*  more than once, and MOM6 has a facility to check for unused lines  *
-!*  to set variables, which may indicate miss-spelled or archaic       *
-!*  parameters.  Parameter names are case-specific, and lines may use  *
-!*  a F90 or C++ style comment, starting with ! or //.                 *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : root_PE, broadcast
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
@@ -40,40 +15,45 @@ use MOM_string_functions, only : left_real, left_reals
 
 implicit none ; private
 
-integer, parameter, public :: MAX_PARAM_FILES = 5 ! Maximum number of parameter files.
-integer, parameter :: INPUT_STR_LENGTH = 320 ! Maximum linelength in parameter file.
-integer, parameter :: FILENAME_LENGTH = 200  ! Maximum number of characters in
-                                             ! file names.
+integer, parameter, public :: MAX_PARAM_FILES = 5 !< Maximum number of parameter files.
+integer, parameter :: INPUT_STR_LENGTH = 320 !< Maximum line length in parameter file.
+integer, parameter :: FILENAME_LENGTH = 200  !< Maximum number of characters in file names.
 
 ! The all_PEs_read option should be eliminated with post-riga shared code.
-logical :: all_PEs_read = .false.
+logical :: all_PEs_read = .false. !< If true, all PEs read the input files
+                                  !! TODO: Eliminate this parameter
 
-! Defaults
+!>@{ Default values for parameters
 logical, parameter :: report_unused_default = .false.
 logical, parameter :: unused_params_fatal_default = .false.
 logical, parameter :: log_to_stdout_default = .false.
 logical, parameter :: complete_doc_default = .true.
 logical, parameter :: minimal_doc_default = .true.
+!!@}
 
+!> The valid lines extracted from an input parameter file without comments
 type, private :: file_data_type ; private
-  integer :: num_lines = 0
-  character(len=INPUT_STR_LENGTH), pointer, dimension(:) :: line => NULL()
-  logical,                         pointer, dimension(:) :: line_used => NULL()
+  integer :: num_lines = 0 !< The number of lines in this type
+  character(len=INPUT_STR_LENGTH), pointer, dimension(:) :: line => NULL() !< The line content
+  logical,                         pointer, dimension(:) :: line_used => NULL() !< If true, the line has been read
 end type file_data_type
 
+!> A link in the list of variables that have already had override warnings issued
 type :: link_parameter ; private
-  type(link_parameter), pointer :: next => NULL() ! Facilitates linked list
-  character(len=80) :: name                       ! Parameter name
-  logical :: hasIssuedOverrideWarning = .false.   ! Has a default value
+  type(link_parameter), pointer :: next => NULL() !< Facilitates linked list
+  character(len=80) :: name                       !< Parameter name
+  logical :: hasIssuedOverrideWarning = .false.   !< Has a default value
 end type link_parameter
 
+!> Specify the active parameter block
 type :: parameter_block ; private
-  character(len=240) :: name = ''                 ! Parameter name
+  character(len=240) :: name = ''   !< The active parameter block name
 end type parameter_block
 
+!> A structure that can be parsed to read and document run-time parameters.
 type, public :: param_file_type ; private
   integer  :: nfiles = 0            !< The number of open files.
-  integer  :: iounit(MAX_PARAM_FILES)  !< The unit numbers of open files.
+  integer  :: iounit(MAX_PARAM_FILES) !< The unit numbers of open files.
   character(len=FILENAME_LENGTH)  :: filename(MAX_PARAM_FILES) !< The names of the open files.
   logical  :: NetCDF_file(MAX_PARAM_FILES) !< If true, the input file is in NetCDF.
                                     ! This is not yet implemented.
@@ -88,7 +68,8 @@ type, public :: param_file_type ; private
   logical  :: log_to_stdout = log_to_stdout_default !< If true, all log
                                     !! messages are also sent to stdout.
   logical  :: log_open = .false.    !< True if the log file has been opened.
-  integer  :: stdout, stdlog        !< The units from stdout() and stdlog().
+  integer  :: stdout                !< The unit number from stdout().
+  integer  :: stdlog                !< The unit number from stdlog().
   character(len=240) :: doc_file    !< A file where all run-time parameters, their
                                     !! settings and defaults are documented.
   logical  :: complete_doc = complete_doc_default !< If true, document all
@@ -117,7 +98,7 @@ interface log_param
                    log_param_char, log_param_time, &
                    log_param_int_array, log_param_real_array
 end interface
-!> An overloaded interface to log the values of various types of parameters
+!> An overloaded interface to read and log the values of various types of parameters
 interface get_param
   module procedure get_param_int, get_param_real, get_param_logical, &
                    get_param_char, get_param_char_array, get_param_time, &
@@ -146,7 +127,7 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   logical :: file_exists, unit_in_use, Netcdf_file, may_check
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
 
   may_check = .true. ; if (present(checkable)) may_check = checkable
 
@@ -263,10 +244,7 @@ subroutine close_param_file(CS, quiet_close, component)
                                          !! logging with this call.
   character(len=*), optional, intent(in) :: component   !< If present, this component name is used
                                          !! to generate parameter documentation file names
-! Arguments: CS - the param_file_type to close
-!  (in,opt)  quiet_close - if present and true, do not do any logging with this
-!                          call.
-
+  ! Local variables
   character(len=128) :: docfile_default
   character(len=40)  :: mdl   ! This module's name.
 ! This include declares and sets the variable "version".
@@ -1248,11 +1226,12 @@ end subroutine flag_line_as_read
 
 !> Returns true if an override warning has been issued for the variable varName
 function overrideWarningHasBeenIssued(chain, varName)
-  type(link_parameter), pointer    :: chain
+  type(link_parameter), pointer    :: chain   !< The linked list of variables that have already had
+                                              !! override warnings issued
   character(len=*),     intent(in) :: varName !< The name of the variable being queried for warnings
   logical                          :: overrideWarningHasBeenIssued
 ! Returns true if an override warning has been issued for the variable varName
-  type(link_parameter), pointer :: newLink, this
+  type(link_parameter), pointer :: newLink => NULL(), this => NULL()
   overrideWarningHasBeenIssued = .false.
   this => chain
   do while( associated(this) )
@@ -2023,7 +2002,7 @@ subroutine clearParameterBlock(CS)
   type(param_file_type), intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
 ! Resets the parameter block name to blank
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = ''
@@ -2040,7 +2019,7 @@ subroutine openParameterBlock(CS,blockName,desc)
   character(len=*),           intent(in) :: blockName !< The name of a parameter block being added
   character(len=*), optional, intent(in) :: desc    !< A description of the parameter block being added
 ! Tags blockName onto the end of the active parameter block name
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = pushBlockLevel(block%name,blockName)
@@ -2056,7 +2035,7 @@ subroutine closeParameterBlock(CS)
   type(param_file_type), intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
 ! Remove the lowest level of recursion from the active block name
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
 
   if (associated(CS%blockName)) then
     block => CS%blockName
@@ -2100,5 +2079,30 @@ function popBlockLevel(oldblockName)
       'popBlockLevel: A pop was attempted leaving an empty block name.')
   endif
 end function popBlockLevel
+
+!> \namespace mom_file_parser
+!!
+!!  By Robert Hallberg and Alistair Adcroft, updated 9/2013.
+!!
+!!    The subroutines here parse a set of input files for the value
+!!  a named parameter and sets that parameter at run time.  Currently
+!!  these files use use one of several formats:
+!!    \#define VAR      ! To set the logical VAR to true.
+!!    VAR = True        ! To set the logical VAR to true.
+!!    \#undef VAR       ! To set the logical VAR to false.
+!!    VAR = False       ! To set the logical VAR to false.
+!!    \#define VAR 999  ! To set the real or integer VAR to 999.
+!!    VAR = 999         ! To set the real or integer VAR to 999.
+!!    \#override VAR = 888 ! To override a previously set value.
+!!    VAR = 1.1, 2.2, 3.3  ! To set an array of real values.
+  ! Note that in the comments above, dOxygen translates \# to # .
+!!
+!!  In addition, when set by the get_param interface, the values of
+!!  parameters are automatically logged, along with defaults, units,
+!!  and a description.  It is an error for a variable to be overridden
+!!  more than once, and MOM6 has a facility to check for unused lines
+!!  to set variables, which may indicate miss-spelled or archaic
+!!  parameters.  Parameter names are case-specific, and lines may use
+!!  a F90 or C++ style comment, starting with ! or //.
 
 end module MOM_file_parser

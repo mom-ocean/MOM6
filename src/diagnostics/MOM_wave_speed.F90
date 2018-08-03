@@ -86,7 +86,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T, S
+  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
@@ -566,7 +566,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                      ! factor used in setting speed2_min
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T, S
+  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10

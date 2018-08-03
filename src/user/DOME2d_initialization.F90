@@ -1,3 +1,4 @@
+!> Initialization of the 2D DOME experiment with density water initialized on a coastal shelf.
 module DOME2d_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
