@@ -807,7 +807,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
-  call extract_surface_state(CS, sfc_state, dt_therm)
+  call extract_surface_state(CS, sfc_state)
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
@@ -2631,12 +2631,11 @@ end subroutine adjust_ssh_for_p_atm
 !> This subroutine sets the surface (return) properties of the ocean
 !! model by setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
-subroutine extract_surface_state(CS, sfc_state, dt)
+subroutine extract_surface_state(CS, sfc_state)
   type(MOM_control_struct), pointer       :: CS !< Master MOM control structure
   type(surface),            intent(inout) :: sfc_state !< transparent ocean surface state
                                                 !! structure shared with the calling routine
                                                 !! data in this structure is intent out.
-  real,              optional, intent(in) :: dt !< Thermodynamic time step, in s.
 
   ! local
   real :: hu, hv
@@ -2818,13 +2817,11 @@ subroutine extract_surface_state(CS, sfc_state, dt)
       if (G%mask2dT(i,j)>0.) then
         ! calculate freezing pot. temp. @ surface
         call calculate_TFreeze(sfc_state%SSS(i,j), 0.0, T_freeze, CS%tv%eqn_of_state)
-        if (present(dt)) then
-          ! time accumulated melt_potential, in W/m^2
-          sfc_state%melt_potential(i,j) = sfc_state%melt_potential(i,j) +  (CS%tv%C_p * CS%GV%Rho0 * &
-                                          (sfc_state%SST(i,j) - T_freeze) * CS%Hmix)/dt
-        else
+        ! time accumulated melt_potential, in W/m^2
+        sfc_state%melt_potential(i,j) = sfc_state%melt_potential(i,j) +  (CS%tv%C_p * CS%GV%Rho0 * &
+                                        (sfc_state%SST(i,j) - T_freeze) * CS%Hmix)
+      else
           sfc_state%melt_potential(i,j) = 0.0
-        endif
       endif! G%mask2dT
     enddo ; enddo
   endif
