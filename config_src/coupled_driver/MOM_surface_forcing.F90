@@ -324,7 +324,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
   ! ocean model, rather than using haloless arrays, in which case the last line
   ! would be: (             (/isd,is,ie,ied/), (/jsd,js,je,jed/))
 
-
   if (CS%allow_flux_adjustments) then
     fluxes%heat_added(:,:)=0.0
     fluxes%salt_flux_added(:,:)=0.0
@@ -576,7 +575,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
 
-
+  ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     taux_at_q, & ! Zonal wind stresses at q points (Pa)
     tauy_at_q    ! Meridional wind stresses at q points (Pa)
@@ -611,7 +610,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
 
-  Irho0                  = 1.0/CS%Rho0
+  Irho0 = 1.0/CS%Rho0
 
   ! allocation and initialization if this is the first time that this
   ! mechanical forcing type has been used.
@@ -638,6 +637,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   if ( (associated(IOB%area_berg) .and. (.not. associated(forces%area_berg))) .or. &
        (associated(IOB%mass_berg) .and. (.not. associated(forces%mass_berg))) ) &
     call allocate_mech_forcing(G, forces, iceberg=.true.)
+
   if (associated(IOB%ice_rigidity)) then
     rigidity_at_h(:,:) = 0.0
     call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -672,41 +672,16 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   wind_stagger = CS%wind_stagger
   if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
       (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
+
+  ! Set surface momentum stress related fields as a function of staggering.
   if (wind_stagger == BGRID_NE) then
     ! This is necessary to fill in the halo points.
     taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
-  endif
-  if (wind_stagger == AGRID) then
-    ! This is necessary to fill in the halo points.
-    taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
-  endif
-
-  ! obtain fluxes from IOB; note the staggering of indices
-  do j=js,je ; do i=is,ie
-    if (associated(IOB%area_berg)) &
-      forces%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
-
-    if (associated(IOB%mass_berg)) &
-      forces%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
-
-    if (associated(IOB%ice_rigidity)) &
-      rigidity_at_h(i,j) = IOB%ice_rigidity(i-i0,j-j0) * G%mask2dT(i,j)
-
-    if (wind_stagger == BGRID_NE) then
+    ! obtain fluxes from IOB; note the staggering of indices
+    do j=js,je ; do i=is,ie
       if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    elseif (wind_stagger == AGRID) then
-      if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    else ! C-grid wind stresses.
-      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    endif
-
-  enddo ; enddo
-
-  ! surface momentum stress related fields as function of staggering
-  if (wind_stagger == BGRID_NE) then
+    enddo ; enddo
     if (G%symmetric) &
       call fill_symmetric_edges(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
     call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE, halo=1)
@@ -727,25 +702,14 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
                            (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
     enddo ; enddo
 
-    ! ustar is required for the bulk mixed layer formulation. The background value
-    ! of 0.02 Pa is a relatively small value intended to give reasonable behavior
-    ! in regions of very weak winds.
-
-    do j=js,je ; do i=is,ie
-      tau_mag = 0.0 ; gustiness = CS%gust_const
-      if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
-           (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0) then
-        tau_mag = sqrt(((G%mask2dBu(I,J)*(taux_at_q(I,J)**2 + tauy_at_q(I,J)**2) + &
-            G%mask2dBu(I-1,J-1)*(taux_at_q(I-1,J-1)**2 + tauy_at_q(I-1,J-1)**2)) + &
-           (G%mask2dBu(I,J-1)*(taux_at_q(I,J-1)**2 + tauy_at_q(I,J-1)**2) + &
-            G%mask2dBu(I-1,J)*(taux_at_q(I-1,J)**2 + tauy_at_q(I-1,J)**2)) ) / &
-          ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
-        if (CS%read_gust_2d) gustiness = CS%gust(i,j)
-      endif
-      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
-    enddo ; enddo
-
   elseif (wind_stagger == AGRID) then
+    ! This is necessary to fill in the halo points.
+    taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
+    ! obtain fluxes from IOB; note the staggering of indices
+    do j=js,je ; do i=is,ie
+      if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+    enddo ; enddo
     call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, &
                      stagger=AGRID, halo=1)
 
@@ -765,25 +729,61 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
                            (G%mask2dT(i,j) + G%mask2dT(i,j+1))
     enddo ; enddo
 
+  else ! C-grid wind stresses.
+    do j=js,je ; do i=is,ie
+      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+    enddo ; enddo
+    if (G%symmetric) &
+      call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)
+    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
+  endif   ! endif for wind stress fields
+
+  ! Set surface friction velocity directly or as a function of staggering.
+  ! ustar is required for the bulk mixed layer formulation and other turbulent mixing
+  ! parametizations. The background gustiness (for example with a relatively small value
+  ! of 0.02 Pa) is intended to give reasonable behavior in regions of very weak winds.
+  if (associated(IOB%stress_mag)) then
+    do j=js,je ; do i=is,ie
+      gustiness = CS%gust_const
+      !### SIMPLIFY THE TREATMENT OF GUSTINESS!
+      if (CS%read_gust_2d) then
+        if ((wind_stagger == CGRID_NE) .or. &
+            ((wind_stagger == AGRID) .and. (G%mask2dT(i,j) > 0)) .or. &
+            ((wind_stagger == BGRID_NE) .and. &
+             (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
+              (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0)) ) &
+          gustiness = CS%gust(i,j)
+      endif
+      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
+    enddo ; enddo
+  elseif (wind_stagger == BGRID_NE) then
+    do j=js,je ; do i=is,ie
+      tau_mag = 0.0 ; gustiness = CS%gust_const
+      if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
+           (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0) then
+        tau_mag = sqrt(((G%mask2dBu(I,J)*(taux_at_q(I,J)**2 + tauy_at_q(I,J)**2) + &
+            G%mask2dBu(I-1,J-1)*(taux_at_q(I-1,J-1)**2 + tauy_at_q(I-1,J-1)**2)) + &
+           (G%mask2dBu(I,J-1)*(taux_at_q(I,J-1)**2 + tauy_at_q(I,J-1)**2) + &
+            G%mask2dBu(I-1,J)*(taux_at_q(I-1,J)**2 + tauy_at_q(I-1,J)**2)) ) / &
+          ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
+        if (CS%read_gust_2d) gustiness = CS%gust(i,j)
+      endif
+      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
+    enddo ; enddo
+  elseif (wind_stagger == AGRID) then
     do j=js,je ; do i=is,ie
       gustiness = CS%gust_const
       if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
     enddo ; enddo
-
-  else ! C-grid wind stresses.
-    if (G%symmetric) &
-      call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)
-    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
-
+  else  ! C-grid wind stresses.
     do j=js,je ; do i=is,ie
-      taux2 = 0.0
+      taux2 = 0.0 ; tauy2 = 0.0
       if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
         taux2 = (G%mask2dCu(I-1,j)*forces%taux(I-1,j)**2 + &
                  G%mask2dCu(I,j)*forces%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
-
-      tauy2 = 0.0
       if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
         tauy2 = (G%mask2dCv(i,J-1)*forces%tauy(i,J-1)**2 + &
                  G%mask2dCv(i,J)*forces%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
@@ -794,11 +794,22 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
         forces%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
       endif
     enddo ; enddo
+  endif ! endif for wind friction velocity fields
 
-  endif   ! endif for wind related fields
+  ! Obtain optional ice-berg related fluxes from the IOB type:
+  if (associated(IOB%area_berg)) then ; do j=js,je ; do i=is,ie
+    forces%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+  enddo ; enddo ; endif
 
-  ! sea ice related dynamic fields
+  if (associated(IOB%mass_berg)) then ; do j=js,je ; do i=is,ie
+    forces%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+  enddo ; enddo ; endif
+
+  ! Obtain sea ice related dynamic fields
   if (associated(IOB%ice_rigidity)) then
+    do j=js,je ; do i=is,ie
+      rigidity_at_h(i,j) = IOB%ice_rigidity(i-i0,j-j0) * G%mask2dT(i,j)
+    enddo ; enddo
     call pass_var(rigidity_at_h, G%Domain, halo=1)
     do I=is-1,ie ; do j=js,je
       forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + &
