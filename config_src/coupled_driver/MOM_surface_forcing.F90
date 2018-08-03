@@ -669,132 +669,9 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   endif
   forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
-  wind_stagger = CS%wind_stagger
-  if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
-      (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
-
-  ! Set surface momentum stress related fields as a function of staggering.
-  if (wind_stagger == BGRID_NE) then
-    ! This is necessary to fill in the halo points.
-    taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
-    ! obtain fluxes from IOB; note the staggering of indices
-    do j=js,je ; do i=is,ie
-      if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    enddo ; enddo
-    if (G%symmetric) &
-      call fill_symmetric_edges(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
-    call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE, halo=1)
-
-    do j=js,je ; do I=Isq,Ieq
-      forces%taux(I,j) = 0.0
-      if ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
-        forces%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + &
-                            G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
-                           (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
-    enddo ; enddo
-
-    do J=Jsq,Jeq ; do i=is,ie
-      forces%tauy(i,J) = 0.0
-      if ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J)) > 0) &
-        forces%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
-                            G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
-                           (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
-    enddo ; enddo
-
-  elseif (wind_stagger == AGRID) then
-    ! This is necessary to fill in the halo points.
-    taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
-    ! obtain fluxes from IOB; note the staggering of indices
-    do j=js,je ; do i=is,ie
-      if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    enddo ; enddo
-    call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, &
-                     stagger=AGRID, halo=1)
-
-    do j=js,je ; do I=Isq,Ieq
-      forces%taux(I,j) = 0.0
-      if ((G%mask2dT(i,j) + G%mask2dT(i+1,j)) > 0) &
-        forces%taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + &
-                            G%mask2dT(i+1,j)*taux_at_h(i+1,j)) / &
-                           (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-    enddo ; enddo
-
-    do J=Jsq,Jeq ; do i=is,ie
-      forces%tauy(i,J) = 0.0
-      if ((G%mask2dT(i,j) + G%mask2dT(i,j+1)) > 0) &
-        forces%tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + &
-                            G%mask2dT(i,J+1)*tauy_at_h(i,j+1)) / &
-                           (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-    enddo ; enddo
-
-  else ! C-grid wind stresses.
-    do j=js,je ; do i=is,ie
-      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-    enddo ; enddo
-    if (G%symmetric) &
-      call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)
-    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
-  endif   ! endif for wind stress fields
-
-  ! Set surface friction velocity directly or as a function of staggering.
-  ! ustar is required for the bulk mixed layer formulation and other turbulent mixing
-  ! parametizations. The background gustiness (for example with a relatively small value
-  ! of 0.02 Pa) is intended to give reasonable behavior in regions of very weak winds.
-  if (associated(IOB%stress_mag)) then
-    do j=js,je ; do i=is,ie
-      gustiness = CS%gust_const
-      !### SIMPLIFY THE TREATMENT OF GUSTINESS!
-      if (CS%read_gust_2d) then
-        if ((wind_stagger == CGRID_NE) .or. &
-            ((wind_stagger == AGRID) .and. (G%mask2dT(i,j) > 0)) .or. &
-            ((wind_stagger == BGRID_NE) .and. &
-             (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
-              (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0)) ) &
-          gustiness = CS%gust(i,j)
-      endif
-      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
-    enddo ; enddo
-  elseif (wind_stagger == BGRID_NE) then
-    do j=js,je ; do i=is,ie
-      tau_mag = 0.0 ; gustiness = CS%gust_const
-      if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
-           (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0) then
-        tau_mag = sqrt(((G%mask2dBu(I,J)*(taux_at_q(I,J)**2 + tauy_at_q(I,J)**2) + &
-            G%mask2dBu(I-1,J-1)*(taux_at_q(I-1,J-1)**2 + tauy_at_q(I-1,J-1)**2)) + &
-           (G%mask2dBu(I,J-1)*(taux_at_q(I,J-1)**2 + tauy_at_q(I,J-1)**2) + &
-            G%mask2dBu(I-1,J)*(taux_at_q(I-1,J)**2 + tauy_at_q(I-1,J)**2)) ) / &
-          ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
-        if (CS%read_gust_2d) gustiness = CS%gust(i,j)
-      endif
-      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
-    enddo ; enddo
-  elseif (wind_stagger == AGRID) then
-    do j=js,je ; do i=is,ie
-      gustiness = CS%gust_const
-      if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
-                               sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
-    enddo ; enddo
-  else  ! C-grid wind stresses.
-    do j=js,je ; do i=is,ie
-      taux2 = 0.0 ; tauy2 = 0.0
-      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
-        taux2 = (G%mask2dCu(I-1,j)*forces%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j)*forces%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
-      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
-        tauy2 = (G%mask2dCv(i,J-1)*forces%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J)*forces%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
-
-      if (CS%read_gust_2d) then
-        forces%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
-      else
-        forces%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
-      endif
-    enddo ; enddo
-  endif ! endif for wind friction velocity fields
+  ! Set the wind stresses and ustar.
+  call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux=forces%taux, tauy=forces%tauy, &
+                            ustar=forces%ustar, tau_halo=1)
 
   ! Obtain optional ice-berg related fluxes from the IOB type:
   if (associated(IOB%area_berg)) then ; do j=js,je ; do i=is,ie
@@ -860,7 +737,8 @@ end subroutine convert_IOB_to_forces
 !> This subroutine extracts the wind stresses and related fields like ustar from an
 !! Ice_ocean_boundary_type into optional argument arrays, including changes of units, sign
 !! conventions, and putting the fields into arrays with MOM-standard sized halos.
-subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, ustar, gustless_ustar)
+subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, ustar, &
+                                gustless_ustar, tau_halo)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB  !< An ice-ocean boundary type with fluxes to drive
                                                  !! the ocean in a coupled model
@@ -871,23 +749,24 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
   type(surface_forcing_CS),pointer       :: CS   !< A pointer to the control structure returned by a
                                                  !! previous call to surface_forcing_init.
   real, dimension(SZIB_(G),SZJ_(G)), &
-                 optional, intent(out)   :: taux !< The zonal wind stresses on a C-grid, in Pa.
+                 optional, intent(inout) :: taux !< The zonal wind stresses on a C-grid, in Pa.
   real, dimension(SZI_(G),SZJB_(G)), &
-                 optional, intent(out)   :: tauy !< The meridional wind stresses on a C-grid, in Pa.
+                 optional, intent(inout) :: tauy !< The meridional wind stresses on a C-grid, in Pa.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(out)   :: ustar !< The surface friction velocity, in m s-1.
+                 optional, intent(inout) :: ustar !< The surface friction velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: gustless_ustar !< The surface friction velocity without
                                                  !! any contributions from gustiness, in m s-1.
+  integer,       optional, intent(in)    :: tau_halo !< The halo size of wind stresses to set, 0 by default.
 
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G)) :: &
-    taux_at_u    ! Zonal wind stresses at u points (Pa)
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    tauy_at_v    ! Meridional wind stresses at V points (Pa)
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
-    taux_at_q, & ! Zonal wind stresses at q points (Pa)
-    tauy_at_q    ! Meridional wind stresses at q points (Pa)
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    taux_at_u    ! Zonal wind stresses at u points (Pa) with non-symmetric memory
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    tauy_at_v    ! Meridional wind stresses at V points (Pa) with non-symmetric memory
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    taux_at_q, & ! Zonal wind stresses at q points (Pa) with non-symmetric memory
+    tauy_at_q    ! Meridional wind stresses at q points (Pa) with non-symmetric memory
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     taux_at_h, & ! Zonal wind stresses at h points (Pa)
@@ -900,20 +779,13 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
 
   logical :: do_ustar, do_gustless
   integer :: wind_stagger  ! AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
-  integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
+  integer :: i, j, is, ie, js, je, ish, ieh, jsh, jeh, Isqh, Ieqh, Jsqh, Jeqh, i0, j0, halo
 
-  call cpu_clock_begin(id_clock_forcing)
-
-  isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
-  jsc_bnd = index_bounds(3) ; jec_bnd = index_bounds(4)
+  halo = 0 ; if (present(tau_halo)) halo = tau_halo
   is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
-  Isq  = G%IscB  ; Ieq  = G%IecB   ; Jsq  = G%JscB  ; Jeq  = G%JecB
-  isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
-  IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
-  isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
-  i0 = is - isc_bnd ; j0 = js - jsc_bnd
+  ish  = G%isc-halo  ; ieh   = G%iec+halo  ; jsh  = G%jsc-halo  ; jeh  = G%jec+halo
+  Isqh = G%IscB-halo ; Ieqh  = G%IecB+halo ; Jsqh = G%JscB-halo ; Jeqh = G%JecB+halo
+  i0 = is - index_bounds(1) ; j0 = js - index_bounds(3)
 
   Irho0 = 1.0/CS%Rho0
 
@@ -934,18 +806,16 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
         if (associated(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
         if (associated(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       enddo ; enddo
-      if (G%symmetric) &
-        call fill_symmetric_edges(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
-      call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE, halo=1)
+      call pass_vector(taux_at_q, tauy_at_q, G%Domain_aux, stagger=BGRID_NE, halo=1+halo)
 
-      if (present(taux)) then ; do j=js,je ; do I=Isq,Ieq
+      if (present(taux)) then ; do j=jsh,jeh ; do I=Isqh,Ieqh
         taux(I,j) = 0.0
         if ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
           taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
                       (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
       enddo ; enddo ; endif
 
-      if (present(tauy)) then ; do J=Jsq,Jeq ; do i=is,ie
+      if (present(tauy)) then ; do J=Jsqh,Jeqh ; do i=ish,ieh
         tauy(i,J) = 0.0
         if ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J)) > 0) &
           tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
@@ -960,17 +830,20 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
         if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
         if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       enddo ; enddo
-      call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, &
-                       stagger=AGRID, halo=1)
+      if (halo == 0) then
+        call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, stagger=AGRID, halo=1)
+      else
+        call pass_vector(taux_at_h, tauy_at_h, G%Domain, stagger=AGRID, halo=1+halo)
+      endif
 
-      if (present(taux)) then ; do j=js,je ; do I=Isq,Ieq
+      if (present(taux)) then ; do j=jsh,jeh ; do I=Isqh,Ieqh
         taux(I,j) = 0.0
         if ((G%mask2dT(i,j) + G%mask2dT(i+1,j)) > 0) &
           taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + G%mask2dT(i+1,j)*taux_at_h(i+1,j)) / &
                       (G%mask2dT(i,j) + G%mask2dT(i+1,j))
       enddo ; enddo ; endif
 
-      if (present(tauy)) then ; do J=Jsq,Jeq ; do i=is,ie
+      if (present(tauy)) then ; do J=Jsqh,Jeqh ; do i=ish,ieh
         tauy(i,J) = 0.0
         if ((G%mask2dT(i,j) + G%mask2dT(i,j+1)) > 0) &
           tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + G%mask2dT(i,J+1)*tauy_at_h(i,j+1)) / &
@@ -978,19 +851,18 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
       enddo ; enddo ; endif
 
     else ! C-grid wind stresses.
+      taux_at_u(:,:) = 0.0 ; tauy_at_v(:,:) = 0.0
       do j=js,je ; do i=is,ie
         if (associated(IOB%u_flux)) taux_at_u(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
         if (associated(IOB%v_flux)) tauy_at_v(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       enddo ; enddo
-      if (G%symmetric) &
-        call fill_symmetric_edges(taux_at_u, tauy_at_v, G%Domain)
-      call pass_vector(taux_at_u, tauy_at_v, G%Domain, halo=1)
+      call pass_vector(taux_at_u, tauy_at_v, G%Domain_aux, halo=1+halo)
 
-      if (present(taux)) then ; do j=js,je ; do I=Isq,Ieq
+      if (present(taux)) then ; do j=jsh,jeh ; do I=Isqh,Ieqh
         taux(I,j) = G%mask2dCu(I,j)*taux_at_u(I,j)
       enddo ; enddo ; endif
 
-      if (present(tauy)) then ; do J=Jsq,Jeq ; do i=is,ie
+      if (present(tauy)) then ; do J=Jsqh,Jeqh ; do i=ish,ieh
         tauy(i,J) = G%mask2dCv(i,J)*tauy_at_v(i,J)
       enddo ; enddo ; endif
 
