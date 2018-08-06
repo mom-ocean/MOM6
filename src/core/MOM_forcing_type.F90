@@ -1742,15 +1742,15 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 end subroutine register_forcing_type_diags
 
 !> Accumulate the forcing over time steps
-subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
-  type(forcing),         intent(in)    :: flux_tmp !< A temporary structure with current
-                                                 !!thermodynamic forcing fields
-  type(mech_forcing),    intent(in)    :: forces !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes !< A structure containing time-averaged
-                                                 !! thermodynamic forcing fields
-  real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  real,                  intent(out)   :: wt2  !< The relative weight of the new fluxes
+subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
+  type(forcing),             intent(in)    :: flux_tmp !< A temporary structure with current
+                                                   !! thermodynamic forcing fields
+  type(forcing),             intent(inout) :: fluxes !< A structure containing time-averaged
+                                                   !! thermodynamic forcing fields
+  real,                      intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
+  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
+  real,                      intent(out)   :: wt2  !< The relative weight of the new fluxes
+  type(mech_forcing), optional, intent(in) :: forces !< A structure with the driving mechanical forces
 
   ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
@@ -1774,15 +1774,29 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
   wt2 = 1.0 - wt1 ! = dt / (fluxes%dt_buoy_accum + dt)
   fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + dt
 
-  ! Copy over the pressure fields.
-  do j=js,je ; do i=is,ie
-    fluxes%p_surf(i,j) = forces%p_surf(i,j)
-    fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
-  enddo ; enddo
+  ! Copy over the pressure fields and accumulate averages of ustar, either from the forcing
+  ! type or from the temporary fluxes type.
+  if (present(forces)) then
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = forces%p_surf(i,j)
+      fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
+
+      fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*forces%ustar(i,j)
+    enddo ; enddo
+  else
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = flux_tmp%p_surf(i,j)
+      fluxes%p_surf_full(i,j) = flux_tmp%p_surf_full(i,j)
+
+      fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*flux_tmp%ustar(i,j)
+    enddo ; enddo
+  endif
 
   ! Average the water, heat, and salt fluxes, and ustar.
   do j=js,je ; do i=is,ie
-    fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*forces%ustar(i,j)
+!### Replace the expression for ustar_gustless with this one...
+!    fluxes%ustar_gustless(i,j) = wt1*fluxes%ustar_gustless(i,j) + wt2*flux_tmp%ustar_gustless(i,j)
+    fluxes%ustar_gustless(i,j) = flux_tmp%ustar_gustless(i,j)
 
     fluxes%evap(i,j) = wt1*fluxes%evap(i,j) + wt2*flux_tmp%evap(i,j)
     fluxes%lprec(i,j) = wt1*fluxes%lprec(i,j) + wt2*flux_tmp%lprec(i,j)
@@ -1922,8 +1936,11 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
                                                      !! as used to calculate ustar.
 
   real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  real :: Irho0        ! Inverse of the mean density in (m^3/kg)
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  Irho0 = 1.0/Rho0
 
   if (associated(forces%taux) .and. associated(forces%tauy) .and. &
       associated(fluxes%ustar_gustless)) then
@@ -1940,13 +1957,15 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) / Rho0)
+!### Change to:
+!      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
     enddo ; enddo
   endif
 
 end subroutine set_derived_forcing_fields
 
 
-!> This subroutine calculates determines the net mass source to th eocean from
+!> This subroutine calculates determines the net mass source to the ocean from
 !! a (thermodynamic) forcing type and stores it in a mech_forcing type.
 subroutine set_net_mass_forcing(fluxes, forces, G)
   type(forcing),           intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
