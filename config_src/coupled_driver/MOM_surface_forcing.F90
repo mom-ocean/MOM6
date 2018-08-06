@@ -544,6 +544,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
 
   endif
 
+  ! Set the wind stresses and ustar.
+  if (associated(fluxes%ustar) .and. associated(fluxes%ustar_gustless)) then
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, ustar=fluxes%ustar, &
+                              gustless_ustar=fluxes%ustar_gustless)
+  elseif (associated(fluxes%ustar)) then
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, ustar=fluxes%ustar)
+  elseif (associated(fluxes%ustar_gustless)) then
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, gustless_ustar=fluxes%ustar_gustless)
+  endif
+
   if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
       coupler_type_initialized(IOB%fluxes)) &
     call coupler_type_copy_data(IOB%fluxes, fluxes%tr_fluxes)
@@ -862,7 +872,9 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
         ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
       if (do_gustless) then ; do j=js,je ; do i=is,ie
-        gustless_ustar(i,j) = sqrt(Irho0*IOB%stress_mag(i-i0,j-j0))
+        gustless_ustar(i,j) = sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
+!### Change to:
+!        gustless_ustar(i,j) = sqrt(Irho0 * IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
     elseif (wind_stagger == BGRID_NE) then
       do j=js,je ; do i=is,ie
@@ -877,7 +889,9 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0*tau_mag)
+        if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
+!### Change to:
+!        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
     elseif (wind_stagger == AGRID) then
       do j=js,je ; do i=is,ie
@@ -885,7 +899,9 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0*tau_mag)
+        if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
+!### Change to:
+!        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
     else  ! C-grid wind stresses.
       do j=js,je ; do i=is,ie
@@ -902,7 +918,9 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0*tau_mag)
+        if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
+!### Change to:
+!        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
     endif ! endif for wind friction velocity fields
   endif
