@@ -23,11 +23,9 @@ use MOM_domains, only : TO_ALL, Omit_Corners
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
-use MOM_forcing_type, only : allocate_forcing_type
-use MOM_forcing_type, only : forcing, mech_forcing
-use MOM_forcing_type, only : forcing_accumulate, copy_common_forcing_fields
-use MOM_forcing_type, only : copy_back_forcing_fields, set_net_mass_forcing
-use MOM_forcing_type, only : set_derived_forcing_fields
+use MOM_forcing_type, only : forcing, mech_forcing, allocate_forcing_type
+use MOM_forcing_type, only : fluxes_accumulate, get_net_mass_forcing
+use MOM_forcing_type, only : copy_back_forcing_fields
 use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
@@ -535,7 +533,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
-    call forcing_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
+    call fluxes_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
     ! Some of the fields that exist in both the forcing and mech_forcing types
     ! (now just ustar) are time-averages must be copied back to the forces type.
     call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
@@ -544,7 +542,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
-  call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
+  if (associated(OS%forces%net_mass_src)) &
+    call get_net_mass_forcing(OS%fluxes, OS%grid, OS%forces%net_mass_src)
 
   if (OS%use_waves) then
     call Update_Surface_Waves(OS%grid, OS%GV, OS%time, ocean_coupling_time_step, OS%waves)

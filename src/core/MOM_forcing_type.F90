@@ -26,11 +26,13 @@ implicit none ; private
 
 public extractFluxes1d, extractFluxes2d, optics_type
 public MOM_forcing_chksum, MOM_mech_forcing_chksum
-public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
+public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d
+public forcing_accumulate, fluxes_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
 public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
 public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcing
-public set_derived_forcing_fields, copy_back_forcing_fields, set_net_mass_forcing
+public set_derived_forcing_fields, copy_back_forcing_fields
+public set_net_mass_forcing, get_net_mass_forcing
 
 !> Structure that contains pointers to the boundary forcing used to drive the
 !! liquid ocean simulated by MOM.
@@ -1741,8 +1743,29 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
 end subroutine register_forcing_type_diags
 
-!> Accumulate the forcing over time steps
-subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
+!> Accumulate the forcing over time steps, taking input from a mechanical forcing type
+!! and a temporary forcing-flux type.
+subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
+  type(forcing),         intent(in)    :: flux_tmp !< A temporary structure with current
+                                                 !!thermodynamic forcing fields
+  type(mech_forcing),    intent(in)    :: forces !< A structure with the driving mechanical forces
+  type(forcing),         intent(inout) :: fluxes !< A structure containing time-averaged
+                                                 !! thermodynamic forcing fields
+  real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  real,                  intent(out)   :: wt2  !< The relative weight of the new fluxes
+
+  ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
+  ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
+  ! and increments the amount of time over which the buoyancy forcing should be
+  ! applied, all via a call to fluxes accumulate.
+
+  call fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
+
+end subroutine forcing_accumulate
+
+!> Accumulate the thermodynamic fluxes over time steps
+subroutine fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
   type(forcing),             intent(in)    :: flux_tmp !< A temporary structure with current
                                                    !! thermodynamic forcing fields
   type(forcing),             intent(inout) :: fluxes !< A structure containing time-averaged
@@ -1880,7 +1903,7 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
     call coupler_type_increment_data(flux_tmp%tr_fluxes, fluxes%tr_fluxes, &
                               scale_factor=wt2, scale_prev=wt1)
 
-end subroutine forcing_accumulate
+end subroutine fluxes_accumulate
 
 !> This subroutine copies the computational domains of common forcing fields
 !! from a mech_forcing type to a (thermodynamic) forcing type.
@@ -1970,34 +1993,45 @@ end subroutine set_derived_forcing_fields
 subroutine set_net_mass_forcing(fluxes, forces, G)
   type(forcing),           intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
   type(mech_forcing),      intent(inout) :: forces   !< A structure with the driving mechanical forces
-  type(ocean_grid_type),   intent(in)    :: G        !< grid type
+  type(ocean_grid_type),   intent(in)    :: G        !< The ocean grid type 
+
+  if (associated(forces%net_mass_src)) &
+    call get_net_mass_forcing(fluxes, G, forces%net_mass_src)
+
+end subroutine set_net_mass_forcing
+
+!> This subroutine calculates determines the net mass source to the ocean from
+!! a (thermodynamic) forcing type and stores it in a provided array.
+subroutine get_net_mass_forcing(fluxes, G, net_mass_src)
+  type(forcing),                    intent(in)  :: fluxes !< A structure containing thermodynamic forcing fields
+  type(ocean_grid_type),            intent(in)  :: G      !< The ocean grid type
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: net_mass_src !< The net mass flux of water into the ocean
+                                                          !! in kg m-2 s-1.
 
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  if (associated(forces%net_mass_src)) then
-    forces%net_mass_src(:,:) = 0.0
-    if (associated(fluxes%lprec)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%lprec(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%fprec)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%fprec(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%vprec)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%vprec(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%lrunoff)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%lrunoff(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%frunoff)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%frunoff(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%evap)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%evap(i,j)
-    enddo ; enddo ; endif
-  endif
+  net_mass_src(:,:) = 0.0
+  if (associated(fluxes%lprec)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%lprec(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%fprec)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%fprec(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%vprec)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%vprec(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%lrunoff)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%lrunoff(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%frunoff)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%frunoff(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%evap)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%evap(i,j)
+  enddo ; enddo ; endif
 
-end subroutine set_net_mass_forcing
+end subroutine get_net_mass_forcing
 
 !> This subroutine copies the computational domains of common forcing fields
 !! from a mech_forcing type to a (thermodynamic) forcing type.
