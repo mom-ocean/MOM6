@@ -505,9 +505,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
-    ! Fields that exist in both the forcing and mech_forcing types must be copied.
-    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid, skip_pres=.true.)
-
 #ifdef _USE_GENERIC_TRACER
     call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
@@ -516,6 +513,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%fluxes%fluxes_used = .false.
     OS%fluxes%dt_buoy_accum = dt_coupling
   else
+    ! The previous fluxes have not been used yet, so translate the input fluxes
+    ! into a temporary type and then accumulate them in about 20 lines.
     OS%flux_tmp%C_p = OS%fluxes%C_p
     if (do_thermo) &
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
@@ -536,16 +535,15 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
-    call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
+    call forcing_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
     ! Some of the fields that exist in both the forcing and mech_forcing types
-    ! (e.g., ustar) are time-averages must be copied back to the forces type.
+    ! (now just ustar) are time-averages must be copied back to the forces type.
     call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
 
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
-  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%use_waves) then
@@ -573,8 +571,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   else
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
     dt_dyn = dt_coupling / real(n_max)
-    thermo_does_span_coupling = (OS%thermo_spans_coupling .and. &
-                                (OS%dt_therm > 1.5*dt_coupling))
+    thermo_does_span_coupling = (OS%thermo_spans_coupling .and. (OS%dt_therm > 1.5*dt_coupling))
 
     if (thermo_does_span_coupling) then
       dt_therm = dt_coupling * floor(OS%dt_therm / dt_coupling + 0.001)
