@@ -42,8 +42,6 @@ public set_net_mass_forcing, get_net_mass_forcing
 !! MESO_surface_forcing.F90, which is a special case of solo_driver/MOM_surface_forcing.F90.
 type, public :: forcing
 
-  ! Pointers in this module should be initialized to NULL.
-
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
     ustar         => NULL(), & !< surface friction velocity scale (m/s)
@@ -154,11 +152,10 @@ type, public :: forcing
 
   logical :: fluxes_used = .true. !< If true, all of the heat, salt, and mass
                                   !! fluxes have been applied to the ocean.
-  real :: dt_buoy_accum  = -1.0   !< The amount of time over which the buoyancy fluxes
+  real :: dt_buoy_accum = -1.0    !< The amount of time over which the buoyancy fluxes
                                   !! should be applied, in s.  If negative, this forcing
                                   !! type variable has not yet been inialized.
 
-  ! heat capacity
   real :: C_p                !< heat capacity of seawater ( J/(K kg) ).
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
@@ -169,7 +166,7 @@ type, public :: forcing
      !! This is not a convenient convention, but imposed on MOM6 by the coupler.
 
   ! For internal error tracking
-  integer :: num_msg = 0 !< Number of messages issues about excessive SW penetration
+  integer :: num_msg = 0 !< Number of messages issued about excessive SW penetration
   integer :: max_msg = 2 !< Maximum number of messages to issue about excessive SW penetration
 
 end type forcing
@@ -213,6 +210,8 @@ type, public :: mech_forcing
   real, pointer, dimension(:,:) :: &
     rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points (m3/s)
     rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points (m3/s)
+  real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
+                                !! have been averaged, in s.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
                                 !! and various types of ice needs to be accumulated, and the
                                 !! surface pressure explicitly reset to zero at the driver level

@@ -573,7 +573,7 @@ end subroutine convert_IOB_to_fluxes
 !> This subroutine translates the Ice_ocean_boundary_type into a MOM
 !! mechanical forcing type, including changes of units, sign conventions,
 !! and putting the fields into arrays with MOM-standard halos.
-subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
+subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS, dt_forcing, reset_avg)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
@@ -584,15 +584,22 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
+  real,          optional, intent(in)    :: dt_forcing !< A time interval over which to apply the
+                                                   !! current value of ustar as a weighted running
+                                                   !! average, in s, or if 0 do not average ustar.
+                                                   !! Missing is equivalent to 0.
+  logical,       optional, intent(in)    :: reset_avg !< If true, reset the time average.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    rigidity_at_h  ! Ice rigidity at tracer points (m3 s-1)
+    rigidity_at_h, &  ! Ice rigidity at tracer points (m3 s-1)
+    ustar_tmp         ! A temporary array of ustars.
 
   real :: I_GEarth      ! 1.0 / G%G_Earth  (s^2/m)
   real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice) ( m^5/(s*kg) )
   real :: mass_ice      ! mass of sea ice at a face (kg/m^2)
   real :: mass_eff      ! effective mass of sea ice for rigidity (kg/m^2)
+  real :: wt1, wt2      ! Relative weights of previous and current values of ustar, ND.
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
@@ -645,6 +652,23 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
+  ! Set the weights for forcing fields that use running time averages.
+  if (present(reset_avg)) then ; if (reset_avg) forces%dt_force_accum = 0.0 ; endif
+  wt1 = 0.0 ; wt2 = 1.0
+  if (present(dt_forcing)) then
+    if ((forces%dt_force_accum > 0.0) .and. (dt_forcing > 0.0)) then 
+      wt1 = forces%dt_force_accum / (forces%dt_force_accum + dt_forcing)
+      wt2 = 1.0 - wt1
+    endif
+    if (dt_forcing > 0.0) then
+      forces%dt_force_accum = max(forces%dt_force_accum, 0.0) + dt_forcing
+    else
+      forces%dt_force_accum = 0.0 ! Reset the averaging time interval.
+    endif
+  else
+    forces%dt_force_accum = 0.0 ! Reset the averaging time interval.
+  endif
+
   ! applied surface pressure from atmosphere and cryosphere
   if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
@@ -667,8 +691,16 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
   ! Set the wind stresses and ustar.
-  call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux=forces%taux, tauy=forces%tauy, &
-                            ustar=forces%ustar, tau_halo=1)
+  if (wt1 <= 0.0) then
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux=forces%taux, tauy=forces%tauy, &
+                              ustar=forces%ustar, tau_halo=1)
+  else
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux=forces%taux, tauy=forces%tauy, &
+                              ustar=ustar_tmp, tau_halo=1)
+    do j=js,je ; do i=is,ie
+      forces%ustar(i,j) = wt1*forces%ustar(i,j) + wt2*ustar_tmp(i,j)
+    enddo ; enddo
+  endif
 
   ! Obtain optional ice-berg related fluxes from the IOB type:
   if (associated(IOB%area_berg)) then ; do j=js,je ; do i=is,ie
