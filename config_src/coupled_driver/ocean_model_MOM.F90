@@ -241,11 +241,12 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
-  character(len=48)  :: stagger
-  integer :: secs, days
+  character(len=48)  :: stagger ! A string indicating the staggering locations for the
+                                ! surface velocities returned to the coupler.
+!  integer :: secs, days
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: use_temperature
-  type(time_type) :: dt_geometric, dt_savedays, dt_from_base
+!  type(time_type) :: dt_geometric, dt_savedays, dt_from_base
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
@@ -430,7 +431,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                  ! start of a call to step_MOM.
   integer :: index_bnds(4)       ! The computational domain index bounds in the
                                  ! ice-ocean boundary type.
-  real :: weight          ! Flux accumulation weight
+  real :: weight          ! Flux accumulation weight of the current fluxes.
   real :: dt_coupling     ! The coupling time step in seconds.
   integer :: nts          ! The number of baroclinic dynamics time steps
                           ! within dt_coupling.
@@ -444,13 +445,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                                        ! multiple dynamic timesteps.
   logical :: do_dyn       ! If true, step the ocean dynamics and transport.
   logical :: do_thermo    ! If true, step the ocean thermodynamics.
-  logical :: step_thermo           ! If true, take a thermodynamic step.
-  integer :: secs, days
+  logical :: step_thermo  ! If true, take a thermodynamic step.
+  integer :: secs, days   ! Integer number of days and seconds in the timestep.
   integer :: is, ie, js, je
 
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   dt_coupling = 86400.0*real(days) + real(secs)
+!###  dt_coupling = time_type_to_real(Ocean_coupling_time_step)
 
   if (time_start_update /= OS%Time) then
     call MOM_error(WARNING, "update_ocean_model: internal clock does not "//&
@@ -472,75 +474,59 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  ! Translate Ice_ocean_boundary into fluxes.
+  ! Translate Ice_ocean_boundary into fluxes and forces.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
 
-  weight = 1.0
+  if (do_dyn) then
+    call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, OS%grid, &
+                               OS%forcing_CSp, dt_forcing=dt_coupling, reset_avg=OS%fluxes%fluxes_used)
+    if (OS%use_ice_shelf) &
+      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+    if (OS%icebergs_alter_ocean) &
+      call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+  endif
 
-  call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
-                             OS%grid, OS%forcing_CSp)
-
-  if (OS%fluxes%fluxes_used) then
-    if (do_thermo) &
+  if (do_thermo) then
+    if (OS%fluxes%fluxes_used) then
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%sfc_state, &
-                               OS%restore_salinity, OS%restore_temp)
+                                 OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity, &
+                                 OS%restore_temp)
 
-    ! Add ice shelf fluxes
-    if (OS%use_ice_shelf) then
-      if (do_thermo) &
+      ! Add ice shelf fluxes
+      if (OS%use_ice_shelf) &
         call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
-      if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
-    endif
-    if (OS%icebergs_alter_ocean)  then
-      if (do_dyn) &
-        call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
-                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-      if (do_thermo) &
+      if (OS%icebergs_alter_ocean) &
         call iceberg_fluxes(OS%grid, OS%fluxes, OS%use_ice_shelf, &
-                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-    endif
-
-#ifdef _USE_GENERIC_TRACER
-    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
-    call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
-#endif
-    ! Indicate that there are new unused fluxes.
-    OS%fluxes%fluxes_used = .false.
-    OS%fluxes%dt_buoy_accum = dt_coupling
-  else
-    ! The previous fluxes have not been used yet, so translate the input fluxes
-    ! into a temporary type and then accumulate them in about 20 lines.
-    OS%flux_tmp%C_p = OS%fluxes%C_p
-    if (do_thermo) &
-      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
-
-    if (OS%use_ice_shelf) then
-      if (do_thermo) &
-        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
-      if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
-    endif
-    if (OS%icebergs_alter_ocean)  then
-      if (do_dyn) &
-        call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-      if (do_thermo) &
-        call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
-                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
-    endif
-
-    call fluxes_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
-    ! Some of the fields that exist in both the forcing and mech_forcing types
-    ! (now just ustar) are time-averages must be copied back to the forces type.
-    call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
 
 #ifdef _USE_GENERIC_TRACER
-    call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
+      call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
+      call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, 1.0) !here weight=1, so just saving the current fluxes
 #endif
+      ! Indicate that there are new unused fluxes.
+      OS%fluxes%fluxes_used = .false.
+      OS%fluxes%dt_buoy_accum = dt_coupling
+    else
+      ! The previous fluxes have not been used yet, so translate the input fluxes
+      ! into a temporary type and then accumulate them in about 20 lines.
+      OS%flux_tmp%C_p = OS%fluxes%C_p
+      call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
+                                 OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity, &
+                                 OS%restore_temp)
+
+      if (OS%use_ice_shelf) &
+        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
+      if (OS%icebergs_alter_ocean) &
+        call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
+                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
+
+      call fluxes_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
+#ifdef _USE_GENERIC_TRACER
+      call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
+#endif
+    endif
   endif
   if (associated(OS%forces%net_mass_src)) &
     call get_net_mass_forcing(OS%fluxes, OS%grid, OS%forces%net_mass_src)
@@ -613,6 +599,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
         if (step_thermo) then
           ! Back up Time2 to the start of the thermodynamic segment.
+          !### Use ticks here for more precision.
+          !Time2 = Time2 - real_to_time_type(dtdia - dt_dyn)
           Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
@@ -621,6 +609,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       endif
 
       t_elapsed_seg = t_elapsed_seg + dt_dyn
+      !### Use ticks here for more precision.
+      ! Time2 = Time1 + real_to_time_type(t_elapsed_seg)
       Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
     enddo
   endif
