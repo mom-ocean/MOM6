@@ -138,7 +138,7 @@ program MOM_main
   real :: dt_dyn, dtdia, t_elapsed_seg
   integer :: n, n_max, nts, n_last_thermo
   logical :: diabatic_first, single_step_call
-  type(time_type) :: Time2
+  type(time_type) :: Time2, time_chg
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
                                 ! incremental restart files are saved and whether they
@@ -388,7 +388,7 @@ program MOM_main
   endif
 
   call get_param(param_file, mod_name, "SINGLE_STEPPING_CALL", single_step_call, &
-                 "If true, advance the state of MOM with a single step \n"//&
+                 "If true, advance the state of MOMtime_chg with a single step \n"//&
                  "including both dynamics and thermodynamics.  If false \n"//&
                  "the two phases are advanced with separate calls.", default=.true.)
   call get_param(param_file, mod_name, "DT_THERM", dt_therm, &
@@ -550,14 +550,14 @@ program MOM_main
 !   This is here to enable fractional-second time steps.
     elapsed_time = elapsed_time + dt_forcing
     if (elapsed_time > 2e9) then
-      ! This is here to ensure that the conversion from a real to an integer
-      ! can be accurately represented in long runs (longer than ~63 years).
-      ! It will also ensure that elapsed time does not lose resolution of order
-      ! the timetype's resolution, provided that the timestep and tick are
-      ! larger than 10-5 seconds.  If a clock with a finer resolution is used,
-      ! a smaller value would be required.
-      segment_start_time = segment_start_time + set_time(int(floor(elapsed_time)))
-      elapsed_time = elapsed_time - floor(elapsed_time)
+      ! This is here to ensure that the conversion from a real to an integer can be accurately
+      ! represented in long runs (longer than ~63 years). It will also ensure that elapsed time
+      ! does not lose resolution of order the timetype's resolution, provided that the timestep and
+      ! tick are larger than 10-5 seconds.  If a clock with a finer resolution is used, a smaller
+      ! value would be required.
+      time_chg = real_to_time_type(elapsed_time)
+      segment_start_time = segment_start_time + time_chg
+      elapsed_time = elapsed_time - time_type_to_real(time_chg)
     endif
     if (elapsed_time_master) then
       Master_Time = segment_start_time + real_to_time_type(elapsed_time)
