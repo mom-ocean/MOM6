@@ -388,7 +388,7 @@ program MOM_main
   endif
 
   call get_param(param_file, mod_name, "SINGLE_STEPPING_CALL", single_step_call, &
-                 "If true, advance the state of MOMtime_chg with a single step \n"//&
+                 "If true, advance the state of MOM with a single step \n"//&
                  "including both dynamics and thermodynamics.  If false \n"//&
                  "the two phases are advanced with separate calls.", default=.true.)
   call get_param(param_file, mod_name, "DT_THERM", dt_therm, &
