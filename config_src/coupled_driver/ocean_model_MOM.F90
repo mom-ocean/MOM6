@@ -37,10 +37,10 @@ use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
 use MOM_surface_forcing, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing, only : forcing_save_restart
-use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
-use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager, only : operator(/=), operator(<=), operator(>=)
-use MOM_time_manager, only : operator(<), real_to_time_type, time_type_to_real
+use MOM_time_manager, only : time_type, operator(>), operator(+), operator(-)
+use MOM_time_manager, only : operator(*), operator(/), operator(/=)
+use MOM_time_manager, only : operator(<=), operator(>=), operator(<)
+use MOM_time_manager, only : real_to_time_type, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables, only : surface
@@ -243,10 +243,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
   character(len=48)  :: stagger ! A string indicating the staggering locations for the
                                 ! surface velocities returned to the coupler.
-!  integer :: secs, days
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
-  logical :: use_temperature
-!  type(time_type) :: dt_geometric, dt_savedays, dt_from_base
+  logical :: use_temperature ! If true, temperature and salinity are state variables.
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
@@ -446,13 +444,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   logical :: do_dyn       ! If true, step the ocean dynamics and transport.
   logical :: do_thermo    ! If true, step the ocean thermodynamics.
   logical :: step_thermo  ! If true, take a thermodynamic step.
-  integer :: secs, days   ! Integer number of days and seconds in the timestep.
   integer :: is, ie, js, je
 
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
-  call get_time(Ocean_coupling_time_step, secs, days)
-  dt_coupling = 86400.0*real(days) + real(secs)
-!###  dt_coupling = time_type_to_real(Ocean_coupling_time_step)
+  dt_coupling = time_type_to_real(Ocean_coupling_time_step)
 
   if (time_start_update /= OS%Time) then
     call MOM_error(WARNING, "update_ocean_model: internal clock does not "//&
@@ -599,9 +594,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
         if (step_thermo) then
           ! Back up Time2 to the start of the thermodynamic segment.
-          !### Use ticks here for more precision.
-          !Time2 = Time2 - real_to_time_type(dtdia - dt_dyn)
-          Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
+          Time2 = Time2 - real_to_time_type(dtdia - dt_dyn)
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
@@ -609,9 +602,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       endif
 
       t_elapsed_seg = t_elapsed_seg + dt_dyn
-      !### Use ticks here for more precision.
-      ! Time2 = Time1 + real_to_time_type(t_elapsed_seg)
-      Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
+      Time2 = Time1 + real_to_time_type(t_elapsed_seg)
     enddo
   endif
 
