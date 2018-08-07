@@ -48,7 +48,8 @@ program MOM_main
   use MOM_string_functions,only : uppercase
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
-  use MOM_time_manager,    only : time_type, set_date, set_time, get_date, time_type_to_real
+  use MOM_time_manager,    only : time_type, set_date, set_time, get_date
+  use MOM_time_manager,    only : real_to_time_type, time_type_to_real
   use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
@@ -356,7 +357,7 @@ program MOM_main
   endif
   ntstep = MAX(1,ceiling(dt_forcing/dt - 0.001))
 
-  Time_step_ocean = set_time(int(floor(dt_forcing+0.5)))
+  Time_step_ocean = real_to_time_type(dt_forcing)
   elapsed_time_master = (abs(dt_forcing - time_type_to_real(Time_step_ocean)) > 1.0e-12*dt_forcing)
   if (elapsed_time_master) &
     call MOM_mesg("Using real elapsed time for the master clock.", 2)
@@ -532,7 +533,7 @@ program MOM_main
             dtdia = dt_dyn*(n - n_last_thermo)
             ! Back up Time2 to the start of the thermodynamic segment.
             if (n > n_last_thermo+1) &
-              Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
+              Time2 = Time2 - real_to_time_type(dtdia - dt_dyn)
             call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MOM_CSp, &
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_forcing)
@@ -541,7 +542,7 @@ program MOM_main
         endif
 
         t_elapsed_seg = t_elapsed_seg + dt_dyn
-        Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
+        Time2 = Time1 + real_to_time_type(t_elapsed_seg)
       enddo
     endif
 
@@ -559,7 +560,7 @@ program MOM_main
       elapsed_time = elapsed_time - floor(elapsed_time)
     endif
     if (elapsed_time_master) then
-      Master_Time = segment_start_time + set_time(int(floor(elapsed_time+0.5)))
+      Master_Time = segment_start_time + real_to_time_type(elapsed_time)
     else
       Master_Time = Master_Time + Time_step_ocean
     endif
