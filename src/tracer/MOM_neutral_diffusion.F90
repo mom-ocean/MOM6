@@ -31,61 +31,60 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public neutral_diffusion
-public neutral_diffusion_init
-public neutral_diffusion_end
+public neutral_diffusion, neutral_diffusion_init, neutral_diffusion_end
 public neutral_diffusion_calc_coeffs
 public neutral_diffusion_unit_tests
 
+!> The control structure for the MOM_neutral_diffusion module
 type, public :: neutral_diffusion_CS ; private
-  integer :: nkp1   ! Number of interfaces for a column = nk + 1
-  integer :: nsurf  ! Number of neutral surfaces
-  integer :: deg = 2 ! Degree of polynomial used for reconstructions
-  logical :: continuous_reconstruction = .true.   ! True if using continuous PPM reconstruction at interfaces
-  logical :: refine_position = .false.
-  logical :: debug = .false.
-  integer :: max_iter ! Maximum number of iterations if refine_position is defined
-  real :: tolerance   ! Convergence criterion representing difference from true neutrality
-  real :: ref_pres    ! Reference pressure, negative if using locally referenced neutral density
+  integer :: nkp1   !< Number of interfaces for a column = nk + 1
+  integer :: nsurf  !< Number of neutral surfaces
+  integer :: deg = 2 !< Degree of polynomial used for reconstructions
+  logical :: continuous_reconstruction = .true. !< True if using continuous PPM reconstruction at interfaces
+  logical :: refine_position = .false. !< If true, iterate to refine the corresponding positions
+                                       !! in neighboring columns
+  logical :: debug = .false. !< If true, write verbose debugging messages
+  integer :: max_iter !< Maximum number of iterations if refine_position is defined
+  real :: tolerance   !< Convergence criterion representing difference from true neutrality
+  real :: ref_pres    !< Reference pressure, negative if using locally referenced neutral density
 
   ! Positions of neutral surfaces in both the u, v directions
-  real,    allocatable, dimension(:,:,:) :: uPoL  ! Non-dimensional position with left layer uKoL-1, u-point
-  real,    allocatable, dimension(:,:,:) :: uPoR  ! Non-dimensional position with right layer uKoR-1, u-point
-  integer, allocatable, dimension(:,:,:) :: uKoL  ! Index of left interface corresponding to neutral surface,
-                                                  ! at a u-point
-  integer, allocatable, dimension(:,:,:) :: uKoR  ! Index of right interface corresponding to neutral surface,
-                                                  ! at a u-point
-  real,    allocatable, dimension(:,:,:) :: uHeff ! Effective thickness at u-point (H units)
-  real,    allocatable, dimension(:,:,:) :: vPoL  ! Non-dimensional position with left layer uKoL-1, v-point
-  real,    allocatable, dimension(:,:,:) :: vPoR  ! Non-dimensional position with right layer uKoR-1, v-point
-  integer, allocatable, dimension(:,:,:) :: vKoL  ! Index of left interface corresponding to neutral surface,
-                                                  ! at a v-point
-  integer, allocatable, dimension(:,:,:) :: vKoR  ! Index of right interface corresponding to neutral surface,
-                                                  ! at a v-point
-  real,    allocatable, dimension(:,:,:) :: vHeff ! Effective thickness at v-point (H units)
+  real,    allocatable, dimension(:,:,:) :: uPoL  !< Non-dimensional position with left layer uKoL-1, u-point
+  real,    allocatable, dimension(:,:,:) :: uPoR  !< Non-dimensional position with right layer uKoR-1, u-point
+  integer, allocatable, dimension(:,:,:) :: uKoL  !< Index of left interface corresponding to neutral surface,
+                                                  !! at a u-point
+  integer, allocatable, dimension(:,:,:) :: uKoR  !< Index of right interface corresponding to neutral surface,
+                                                  !! at a u-point
+  real,    allocatable, dimension(:,:,:) :: uHeff !< Effective thickness at u-point (H units)
+  real,    allocatable, dimension(:,:,:) :: vPoL  !< Non-dimensional position with left layer uKoL-1, v-point
+  real,    allocatable, dimension(:,:,:) :: vPoR  !< Non-dimensional position with right layer uKoR-1, v-point
+  integer, allocatable, dimension(:,:,:) :: vKoL  !< Index of left interface corresponding to neutral surface,
+                                                  !! at a v-point
+  integer, allocatable, dimension(:,:,:) :: vKoR  !< Index of right interface corresponding to neutral surface,
+                                                  !! at a v-point
+  real,    allocatable, dimension(:,:,:) :: vHeff !< Effective thickness at v-point (H units)
   ! Coefficients of polynomial reconstructions for temperature and salinity
   real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_T !< Polynomial coefficients for temperature
-  real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_S !< Polynomial coefficients for temperature
+  real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_S !< Polynomial coefficients for salinity
   ! Variables needed for continuous reconstructions
-  real,    allocatable, dimension(:,:,:) :: dRdT ! dRho/dT (kg/m3/degC) at interfaces
-  real,    allocatable, dimension(:,:,:) :: dRdS ! dRho/dS (kg/m3/ppt) at interfaces
-  real,    allocatable, dimension(:,:,:) :: Tint ! Interface T (degC)
-  real,    allocatable, dimension(:,:,:) :: Sint ! Interface S (ppt)
-  real,    allocatable, dimension(:,:,:) :: Pint ! Interface pressure (Pa)
+  real,    allocatable, dimension(:,:,:) :: dRdT !< dRho/dT (kg/m3/degC) at interfaces
+  real,    allocatable, dimension(:,:,:) :: dRdS !< dRho/dS (kg/m3/ppt) at interfaces
+  real,    allocatable, dimension(:,:,:) :: Tint !< Interface T (degC)
+  real,    allocatable, dimension(:,:,:) :: Sint !< Interface S (ppt)
+  real,    allocatable, dimension(:,:,:) :: Pint !< Interface pressure (Pa)
   ! Variables needed for discontinuous reconstructions
-  real,    allocatable, dimension(:,:,:,:) :: T_i     ! Top edge reconstruction of temperature (degC)
-  real,    allocatable, dimension(:,:,:,:) :: S_i     ! Top edge reconstruction of salinity (ppt)
-  real,    allocatable, dimension(:,:,:,:) :: dRdT_i     ! dRho/dT (kg/m3/degC) at top edge
-  real,    allocatable, dimension(:,:,:,:) :: dRdS_i     ! dRho/dS (kg/m3/ppt) at top edge
-  integer, allocatable, dimension(:,:)     :: ns     ! Number of interfacs in a column
-  logical, allocatable, dimension(:,:,:) :: stable_cell  ! True if the cell is stably stratified wrt
-                                                         ! to the next cell
+  real,    allocatable, dimension(:,:,:,:) :: T_i    !< Top edge reconstruction of temperature (degC)
+  real,    allocatable, dimension(:,:,:,:) :: S_i    !< Top edge reconstruction of salinity (ppt)
+  real,    allocatable, dimension(:,:,:,:) :: dRdT_i !< dRho/dT (kg/m3/degC) at top edge
+  real,    allocatable, dimension(:,:,:,:) :: dRdS_i !< dRho/dS (kg/m3/ppt) at top edge
+  integer, allocatable, dimension(:,:)     :: ns     !< Number of interfacs in a column
+  logical, allocatable, dimension(:,:,:) :: stable_cell !< True if the cell is stably stratified wrt to the next cell
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                             !! regulate the timing of diagnostic output.
+  integer :: id_uhEff_2d = -1 !< Diagnostic IDs
+  integer :: id_vhEff_2d = -1 !< Diagnostic IDs
 
-  type(diag_ctrl), pointer :: diag ! structure to regulate output
-  integer :: id_uhEff_2d = -1
-  integer :: id_vhEff_2d = -1
-
-  real    :: C_p ! heat capacity of seawater (J kg-1 K-1)
+  real    :: C_p !< heat capacity of seawater (J kg-1 K-1)
   type(EOS_type), pointer :: EOS !< Equation of state parameters
   type(remapping_CS)       :: remap_CS      !< Remapping control structure used to create sublayers
   type(ndiff_aux_CS_type), pointer :: ndiff_aux_CS !< Store parameters for iteratively finding neutral surface
@@ -93,7 +92,7 @@ end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40)  :: mdl = "MOM_neutral_diffusion" ! module name
+character(len=40)  :: mdl = "MOM_neutral_diffusion" !< module name
 
 contains
 
@@ -1268,9 +1267,9 @@ real function absolute_position(n,ns,Pint,Karr,NParr,k_surface)
   real,    intent(in) :: Pint(n+1)    !< Position of interfaces (Pa)
   integer, intent(in) :: Karr(ns)     !< Index of interface above position
   real,    intent(in) :: NParr(ns)    !< Non-dimensional position within layer Karr(:)
-
+  integer, intent(in) :: k_surface    !< k-interface to query
   ! Local variables
-  integer :: k_surface, k
+  integer :: k
 
   k = Karr(k_surface)
   if (k>n) stop 'absolute_position: k>nk is out of bounds!'

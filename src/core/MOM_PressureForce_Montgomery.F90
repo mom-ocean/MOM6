@@ -37,8 +37,10 @@ type, public :: PressureForce_Mont_CS ; private
   real, pointer :: PFu_bc(:,:,:) => NULL()   !< Accelerations due to pressure
   real, pointer :: PFv_bc(:,:,:) => NULL()   !< gradients deriving from density
                                              !! gradients within layers, m s-2.
+  !>@{ Diagnostic IDs
   integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  !!@}
+  type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< The tidal forcing control structure
 end type PressureForce_Mont_CS
 
 contains

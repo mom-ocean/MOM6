@@ -66,8 +66,8 @@ module MOM_generic_tracer
                               ! initialization code if they are not found in the
                               ! restart files.
 
-     type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+     type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
      type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
      !   The following pointer will be directed to the first element of the
@@ -435,28 +435,29 @@ contains
   !! flux as a source.
   subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, CS, tv, optics, &
         evap_CFL_limit, minimum_forcing_depth)
-    type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
-    type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
-                                                                !! in m or kg !m-2.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
-                                                                !! in m or kg !m-2.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
-                                              !! fluid entrained from the layer !above during this
-                                              !! call will be added, in m or kg !m-2.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
-                                              !! fluid entrained from the layer !below during this
-                                              !! call will be added, in m or kg !m-2.
-    type(forcing),                         intent(in) :: fluxes
+    type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+    type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(in) :: ea    !< The amount of fluid entrained from the layer
+                                                 !! above during this call, in m or kg m-2.
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(in) :: eb    !< The amount of fluid entrained from the layer
+                                                 !! below during this call, in m or kg m-2.
+    type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
+                                                 !! and tracer forcing fields.
     real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml  !< Mixed layer depth
-    real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
-    type(MOM_generic_tracer_CS),           pointer    :: CS   !< Pointer to the control structure for this module.
-    type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-    type(optics_type),                     intent(in) :: optics
-    real,                        optional,intent(in)  :: evap_CFL_limit !< Limits how much water can be fluxed out of
-                                                              !! the top layer Stored previously in diabatic CS.
-    real,                        optional,intent(in)  :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                                              !!  can be applied Stored previously in diabatic CS.
+    real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+    type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
+    type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+    type(optics_type),       intent(in) :: optics !< The structure containing optical properties.
+    real,          optional, intent(in) :: evap_CFL_limit !< Limits how much water can be fluxed out of
+                                                !! the top layer Stored previously in diabatic CS.
+    real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
+                                                !!  can be applied Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
     !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
@@ -661,7 +662,7 @@ contains
   function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, xgmin, ygmin, zgmin, &
                                       xgmax, ygmax, zgmax , G, CS, names, units)
     use mpp_utilities_mod, only: mpp_array_global_min_max
-    integer,                        intent(in)    :: ind_start
+    integer,                        intent(in)    :: ind_start !< The index of the tracer to start with
     logical, dimension(:),          intent(out)   :: got_minmax !< Indicates whether the global min and
                                                             !! max are found for each tracer
     real, dimension(:),             intent(out)   :: gmin   !< Global minimum of each tracer, in kg
@@ -708,7 +709,6 @@ contains
     allocate(geo_z(nk))
     do k=1,nk ; geo_z(k) = real(k) ; enddo
 
-
     m=ind_start ; g_tracer=>CS%g_tracer_list
     do
       call g_tracer_get_alias(g_tracer,names(m))
@@ -721,13 +721,11 @@ contains
 
       tr_ptr => tr_field(:,:,:,1)
 
-
       call mpp_array_global_min_max(tr_ptr, grid_tmask,isd,jsd,isc,iec,jsc,jec,nk , gmin(m), gmax(m), &
                                     G%geoLonT,G%geoLatT,geo_z,xgmin(m), ygmin(m), zgmin(m), &
                                     xgmax(m), ygmax(m), zgmax(m))
 
       got_minmax(m) = .true.
-
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
@@ -824,8 +822,9 @@ contains
   end subroutine MOM_generic_flux_init
 
   subroutine MOM_generic_tracer_fluxes_accumulate(flux_tmp, weight)
-    type(forcing),         intent(in)    :: flux_tmp
-    real,                  intent(in)    :: weight
+    type(forcing), intent(in)    :: flux_tmp  !< A structure containing pointers to
+                                              !! thermodynamic and tracer forcing fields.
+    real,          intent(in)    :: weight    !< A weight for accumulating this flux
 
    call generic_tracer_coupler_accumulate(flux_tmp%tr_fluxes, weight)
 
@@ -834,7 +833,7 @@ contains
   !> Copy the requested tracer into an array.
   subroutine MOM_generic_tracer_get(name,member,array, CS)
     character(len=*),         intent(in)  :: name   !< Name of requested tracer.
-    character(len=*),         intent(in)  :: member !< ??
+    character(len=*),         intent(in)  :: member !< The tracer element to return.
     real, dimension(:,:,:),   intent(out) :: array  !< Array filled by this routine.
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
 
