@@ -1,30 +1,13 @@
+!> Debug accelerations at a given point
+!!
+!!    The two subroutines in this file write out all of the terms
+!! in the u- or v-momentum balance at a given point.  Usually
+!! these subroutines are called after the velocities exceed some
+!! threshold, in order to determine which term is culpable.
+!! often this is done for debugging purposes.
 module MOM_PointAccel
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!***********************************************************************
-!*                                                                     *
-!*     The two subroutines in this file write out all of the terms     *
-!*  in the u- or v-momentum balance at a given point.  Usually         *
-!*  these subroutines are called after the velocities exceed some      *
-!*  threshold, in order to determine which term is culpable.           *
-!*  often this is done for debugging purposes.                         *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h  *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, vbt, vhtr        *
-!*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, ubt, uhtr        *
-!*    j    > o > o >   At o:  h, bathyT, tr, T, S                      *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_domains, only : pe_here
@@ -44,32 +27,36 @@ implicit none ; private
 
 public write_u_accel, write_v_accel, PointAccel_init
 
+!> The control structure for the MOM_PointAccel module
 type, public :: PointAccel_CS ; private
-  character(len=200) :: u_trunc_file ! The complete path to files in which a
-  character(len=200) :: v_trunc_file ! column's worth of accelerations are
-                                     ! written if velocity truncations occur.
-  integer :: u_file, v_file ! The unit numbers for opened u- or v- truncation
-                            ! files, or -1 if they have not yet been opened.
-  integer :: cols_written   ! The number of columns whose output has been
-                            ! written by this PE during the current run.
-  integer :: max_writes     ! The maximum number of times any PE can write out
-                            ! a column's worth of accelerations during a run.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields.
+  character(len=200) :: u_trunc_file !< The complete path to the file in which a column's worth of
+                                     !! u-accelerations are written if u-velocity truncations occur.
+  character(len=200) :: v_trunc_file !< The complete path to the file in which a column's worth of
+                                     !! v-accelerations are written if v-velocity truncations occur.
+  integer :: u_file         !< The unit number for an opened u-truncation files, or -1 if it has not yet been opened.
+  integer :: v_file         !< The unit number for an opened v-truncation files, or -1 if it has not yet been opened.
+  integer :: cols_written   !< The number of columns whose output has been
+                            !! written by this PE during the current run.
+  integer :: max_writes     !< The maximum number of times any PE can write out
+                            !! a column's worth of accelerations during a run.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
 ! The following are pointers to many of the state variables and accelerations
 ! that are used to step the physical model forward.  They all use the same
 ! names as the variables they point to in MOM.F90
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), v_av => NULL(), & ! Time average velocities in m s-1.
-    u_prev => NULL(), v_prev => NULL(), & ! Previous velocities in m s-1.
-    T => NULL(), S => NULL(), &     ! Temperature and salinity in C and psu.
-    pbce => NULL(), &               ! pbce times eta gives the baroclinic
-                                    ! pressure anomaly in each layer due to
-                                    ! free surface height anomalies.
-                                    ! pbce has units of m s-2.
-    u_accel_bt => NULL(), &         ! Barotropic acclerations in m s-2.
-    v_accel_bt => NULL()
+    u_av => NULL(), &       !< Time average u-velocity in m s-1.
+    v_av => NULL(), &       !< Time average velocity in m s-1.
+    u_prev => NULL(), &     !< Previous u-velocity in m s-1.
+    v_prev => NULL(), &     !< Previous v-velocity in m s-1.
+    T => NULL(), &          !< Temperature in deg C.
+    S => NULL(), &          !< Salinity in ppt
+    u_accel_bt => NULL(), & !< Barotropic u-acclerations in m s-2.
+    v_accel_bt => NULL()    !< Barotropic v-acclerations in m s-2.
+  real, pointer, dimension(:,:,:) :: pbce => NULL() !< pbce times eta gives the baroclinic
+                            !! pressure anomaly in each layer due to free surface height anomalies.
+                            !! pbce has units of m s-2.
 
 end type PointAccel_CS
 
@@ -102,11 +89,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
-
-! This subroutine writes to an output file all of the accelerations
-! that have been applied to a column of zonal velocities over the
-! previous timestep.  This subroutine is called from vertvisc.
-
+  ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, du
@@ -434,30 +417,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
-
-! This subroutine writes to an output file all of the accelerations
-! that have been applied to a column of meridional velocities over
-! the previous timestep.  This subroutine is called from vertvisc.
-
-! Arguments: i - The zonal index of the column to be documented.
-!  (in)      J - The meridional index of the column to be documented.
-!  (in)      vm - The new meridional velocity, in m s-1.
-!  (in)      hin - The layer thickness, in m.
-!  (in)      ADp - A structure pointing to the various accelerations in
-!                  the momentum equations.
-!  (in)      CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      dt - The model's dynamics time step.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PointAccel_init.
-!  (in)      str - The surface wind stress integrated over a time
-!                  step, in m2 s-1.
-!  (in)      a - The layer coupling coefficients from vertvisc, m.
-!  (in)      hv - The layer thicknesses at velocity grid points, from
-!                 vertvisc, in m.
-
+  ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, dv
@@ -757,7 +717,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
 
 end subroutine write_v_accel
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine initializes the parameters regulating how truncations are logged.
 subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   type(ocean_internal_state), &
                         target, intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers
@@ -773,17 +733,6 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
                                                       !! directory paths.
   type(PointAccel_CS),          pointer       :: CS   !< A pointer that is set to point to the
                                                       !! control structure for this module.
-
-! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
-!                  accelerations that make up the ocean's physical state.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      dirs - A structure containing several relevant directory paths.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PointAccel" ! This module's name.
@@ -826,4 +775,5 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   CS%u_file = -1 ; CS%v_file = -1 ; CS%cols_written = 0
 
 end subroutine PointAccel_init
+
 end module MOM_PointAccel

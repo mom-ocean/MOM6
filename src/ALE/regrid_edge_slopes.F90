@@ -1,36 +1,51 @@
+!> Routines that estimate edge slopes to be used in
+!! high-order reconstruction schemes.
 module regrid_edge_slopes
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!==============================================================================
-!
-! Date of creation: 2008.06.09
-! L. White
-!
-! This module contains routines that estimate edge slopes to be used in
-! high-order reconstruction schemes.
-!
-!==============================================================================
 use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
 use polynomial_functions, only : evaluation_polynomial
 
-
 implicit none ; private
 
-! -----------------------------------------------------------------------------
-! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public edge_slopes_implicit_h3
 public edge_slopes_implicit_h5
 
-!   Specifying a dimensional parameter value, as is done here, is a terrible idea.
-real, parameter :: hNeglect_dflt = 1.E-30
+! Specifying a dimensional parameter value, as is done here, is a terrible idea.
+real, parameter :: hNeglect_dflt = 1.E-30 !< Default negligible cell thickness
 
 contains
 
-
 !------------------------------------------------------------------------------
 !> Compute ih4 edge slopes (implicit third order accurate)
+!! in the same units as h.
+!!
+!! Compute edge slopes based on third-order implicit estimates. Note that
+!! the estimates are fourth-order accurate on uniform grids
+!!
+!! Third-order implicit estimates of edge slopes are based on a two-cell
+!! stencil. A tridiagonal system is set up and is based on expressing the
+!! edge slopes in terms of neighboring cell averages. The generic
+!! relationship is
+!!
+!! \f[
+!! \alpha u'_{i-1/2} + u'_{i+1/2} + \beta u'_{i+3/2} =
+!! a \bar{u}_i + b \bar{u}_{i+1}
+!! \f]
+!!
+!! and the stencil looks like this
+!!
+!!          i     i+1
+!!   ..--o------o------o--..
+!!     i-1/2  i+1/2  i+3/2
+!!
+!! In this routine, the coefficients \f$\alpha\f$, \f$\beta\f$, a and b are computed,
+!! the tridiagonal system is built, boundary conditions are prescribed and
+!! the system is solved to yield edge-slope estimates.
+!!
+!! There are N+1 unknowns and we are able to write N-1 equations. The
+!! boundary conditions close the system.
 subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
@@ -38,33 +53,6 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect )
   real, dimension(:,:), intent(inout) :: edge_slopes !< Returned edge slopes, with the
                                            !! same units as u divided by the units of h.
   real, optional,       intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
-! -----------------------------------------------------------------------------
-! Compute edge slopes based on third-order implicit estimates. Note that
-! the estimates are fourth-order accurate on uniform grids
-!
-! Third-order implicit estimates of edge slopes are based on a two-cell
-! stencil. A tridiagonal system is set up and is based on expressing the
-! edge slopes in terms of neighboring cell averages. The generic
-! relationship is
-!
-! \alpha u'_{i-1/2} + u'_{i+1/2} + \beta u'_{i+3/2} =
-! a \bar{u}_i + b \bar{u}_{i+1}
-!
-! and the stencil looks like this
-!
-!          i     i+1
-!   ..--o------o------o--..
-!     i-1/2  i+1/2  i+3/2
-!
-! In this routine, the coefficients \alpha, \beta, a and b are computed,
-! the tridiagonal system is built, boundary conditions are prescribed and
-! the system is solved to yield edge-slope estimates.
-!
-! There are N+1 unknowns and we are able to write N-1 equations. The
-! boundary conditions close the system.
-! -----------------------------------------------------------------------------
-
   ! Local variables
   integer               :: i, j                 ! loop indexes
   real                  :: h0, h1               ! cell widths
