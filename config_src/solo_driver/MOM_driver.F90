@@ -571,8 +571,7 @@ program MOM_main
     endif ; endif
 
     call enable_averaging(dt_forcing, Time, diag)
-    call mech_forcing_diags(forces, fluxes, dt_forcing, grid, diag, &
-                            surface_forcing_CSp%handles)
+    call mech_forcing_diags(forces, dt_forcing, grid, diag, surface_forcing_CSp%handles)
     call disable_averaging(diag)
 
     if (.not. offline_tracer_mode) then
