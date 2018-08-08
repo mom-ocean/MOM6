@@ -20,7 +20,7 @@ use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
 use MOM_domains, only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains, only : TO_ALL, Omit_Corners
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing, allocate_forcing_type
@@ -143,7 +143,8 @@ type, public :: ocean_state_type ; private
                               !! restart file is saved at the end of a run segment
                               !! unless Restart_control is negative.
 
-  integer :: nstep = 0        !< The number of calls to update_ocean.
+  integer :: nstep = 0        !< The number of calls to update_ocean that update the dynamics.
+  integer :: nstep_thermo = 0 !< The number of calls to update_ocean that update the thermodynamics.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
   logical :: use_waves        !< If true use wave coupling.
 
@@ -375,8 +376,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call close_param_file(param_file)
   call diag_mediator_close_registration(OS%diag)
 
-  if (is_root_pe()) &
-    write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
+  call MOM_mesg('==== Completed MOM6 Coupled Initialization ====', 2)
 
   call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
@@ -485,7 +485,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
 #ifdef _USE_GENERIC_TRACER
       call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
-      call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, 1.0) !here weight=1, so just saving the current fluxes
+      call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, 1.0) ! Here weight=1, so just store the current fluxes
 #endif
       ! Indicate that there are new unused fluxes.
       OS%fluxes%fluxes_used = .false.
@@ -505,25 +505,31 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
       call fluxes_accumulate(OS%flux_tmp, OS%fluxes, dt_coupling, OS%grid, weight)
 #ifdef _USE_GENERIC_TRACER
-      call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
+       ! Incorporate the current tracer fluxes into the running averages
+      call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight)
 #endif
     endif
   endif
-  if (associated(OS%forces%net_mass_src) .and. .not.OS%forces%net_mass_src_set) &
+
+  ! The net mass forcing is not currently used in the MOM6 dynamics solvers, so this is may be unnecessary.
+  if (do_dyn .and. associated(OS%forces%net_mass_src) .and. .not.OS%forces%net_mass_src_set) &
     call get_net_mass_forcing(OS%fluxes, OS%grid, OS%forces%net_mass_src)
 
-  if (OS%use_waves) then
+  if (OS%use_waves .and. do_thermo) then
+    ! For now, the waves are only updated on the thermodynamics steps, because that is where
+    ! the wave intensities are actually used to drive mixing.  At some point, the wave updates
+    ! might also need to become a part of the ocean dynamics, according to B. Reichl.
     call Update_Surface_Waves(OS%grid, OS%GV, OS%time, ocean_coupling_time_step, OS%waves)
   endif
 
-  if (OS%nstep==0) then
+  if ((OS%nstep==0) .and. (OS%nstep_thermo==0)) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
 
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  if (OS%offline_tracer_mode) then
+  if (OS%offline_tracer_mode .and. do_thermo) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
     ! The call sequence is being orchestrated from outside of update_ocean_model.
@@ -593,14 +599,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
-  OS%nstep = OS%nstep + 1
+  if (do_dyn) OS%nstep = OS%nstep + 1
+  if (do_thermo) OS%nstep_thermo = OS%nstep_thermo + 1
 
-  call enable_averaging(dt_coupling, OS%Time, OS%diag)
-  call mech_forcing_diags(OS%forces, OS%fluxes, dt_coupling, OS%grid, &
-                          OS%diag, OS%forcing_CSp%handles)
-  call disable_averaging(OS%diag)
+  if (do_dyn) then
+    call enable_averaging(dt_coupling, OS%Time, OS%diag)
+    call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%diag, OS%forcing_CSp%handles)
+    call disable_averaging(OS%diag)
+  endif
 
-  if (OS%fluxes%fluxes_used) then
+  if (OS%fluxes%fluxes_used .and. do_thermo) then
     call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
     call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
                              OS%grid, OS%diag, OS%forcing_CSp%handles)

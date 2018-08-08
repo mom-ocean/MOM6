@@ -298,7 +298,7 @@ type, public :: forcing_diags
   integer :: id_netFWGlobalAdj    = -1
   integer :: id_netFWGlobalScl    = -1
 
-  ! momentum flux amd forcing diagnostic handles
+  ! momentum flux and forcing diagnostic handles
   integer :: id_taux  = -1
   integer :: id_tauy  = -1
   integer :: id_ustar = -1
@@ -1038,6 +1038,11 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, haloshift)
                   haloshift=hshift, symmetric=.true.)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
+  if (associated(forces%ustar)) &
+    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift)
+  if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
+    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
+                  forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true.)
 
 end subroutine MOM_mech_forcing_chksum
 
@@ -2054,9 +2059,8 @@ end subroutine copy_back_forcing_fields
 
 !> Offer mechanical forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
-subroutine mech_forcing_diags(forces, fluxes, dt, G, diag, handles)
+subroutine mech_forcing_diags(forces, dt, G, diag, handles)
   type(mech_forcing),    intent(in)    :: forces   !< A structure with the driving mechanical forces
-  type(forcing),         intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
   real,                  intent(in)    :: dt       !< time step
   type(ocean_grid_type), intent(in)    :: G        !< grid type
   type(diag_ctrl),       intent(in)    :: diag     !< diagnostic type
@@ -2071,20 +2075,15 @@ subroutine mech_forcing_diags(forces, fluxes, dt, G, diag, handles)
 
     if ((handles%id_taux > 0) .and. associated(forces%taux)) &
       call post_data(handles%id_taux, forces%taux, diag)
+
     if ((handles%id_tauy > 0) .and. associated(forces%tauy)) &
       call post_data(handles%id_tauy, forces%tauy, diag)
-    if ((handles%id_ustar > 0) .and. associated(fluxes%ustar)) &
-      call post_data(handles%id_ustar, fluxes%ustar, diag)
-    if (handles%id_ustar_berg > 0) &
-      call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
-    if (handles%id_area_berg > 0) &
-      call post_data(handles%id_area_berg, fluxes%area_berg, diag)
-    if (handles%id_mass_berg > 0) &
-      call post_data(handles%id_mass_berg, fluxes%mass_berg, diag)
-    if (handles%id_frac_ice_cover > 0) &
-      call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
-    if (handles%id_ustar_ice_cover > 0) &
-      call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
+
+    if ((handles%id_mass_berg > 0) .and. associated(forces%mass_berg)) &
+      call post_data(handles%id_mass_berg, forces%mass_berg, diag)
+
+    if ((handles%id_area_berg > 0) .and. associated(forces%area_berg)) &
+      call post_data(handles%id_area_berg, forces%area_berg, diag)
 
   endif
 
@@ -2575,8 +2574,19 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
     if ((handles%id_buoy > 0) .and. associated(fluxes%buoy))                         &
       call post_data(handles%id_buoy, fluxes%buoy, diag)
 
+    if ((handles%id_ustar > 0) .and. associated(fluxes%ustar)) &
+      call post_data(handles%id_ustar, fluxes%ustar, diag)
 
-  endif
+    if ((handles%id_ustar_berg > 0) .and. associated(fluxes%ustar_berg)) &
+      call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
+
+    if ((handles%id_frac_ice_cover > 0) .and. associated(fluxes%frac_shelf_h)) &
+      call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
+
+    if ((handles%id_ustar_ice_cover > 0) .and. associated(fluxes%ustar_shelf)) &
+      call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
+
+  endif  ! query_averaging_enabled
 
   call cpu_clock_end(handles%id_clock_forcing)
 end subroutine forcing_diagnostics
