@@ -5,6 +5,7 @@ module MOM
 
 ! Infrastructure modules
 use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
+use MOM_debugging,            only : check_redundant
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum
 use MOM_checksum_packages,    only : MOM_accel_chksum, MOM_surface_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -71,8 +72,7 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_debugging,             only : check_redundant
-use MOM_EOS,                   only : EOS_init, calculate_density
+use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
@@ -193,7 +193,6 @@ type, public :: MOM_control_struct ; private
                     !! bottom drag viscosities, and related fields
   type(MEKE_type), pointer :: MEKE => NULL() !<  structure containing fields
                     !! related to the Mesoscale Eddy Kinetic Energy
-
   logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
                     !! to routines to calculate or apply diapycnal fluxes.
   logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the diabatic
@@ -545,6 +544,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   if (therm_reset) then
     CS%time_in_thermo_cycle = 0.0
+    if (allocated(sfc_state%melt_potential)) sfc_state%melt_potential(:,:)  = 0.0
     if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
     if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
     if (associated(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
@@ -2660,20 +2660,20 @@ subroutine extract_surface_state(CS, sfc_state)
 
   ! local
   real :: hu, hv
-  type(ocean_grid_type), pointer :: G => NULL() ! pointer to a structure containing
-                                      ! metrics and related information
+  type(ocean_grid_type), pointer :: G => NULL() !< pointer to a structure containing
+                                      !! metrics and related information
   type(verticalGrid_type), pointer :: GV => NULL()
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & ! u : zonal velocity component (m/s)
-    v => NULL(), & ! v : meridional velocity component (m/s)
-    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))           ! distance from the surface (meter)
-  real :: depth_ml                    ! depth over which to average to
-                                      ! determine mixed layer properties (meter)
-  real :: dh                          ! thickness of a layer within mixed layer (meter)
-  real :: mass                        ! mass per unit area of a layer (kg/m2)
-
-  logical :: use_temperature   ! If true, temp and saln used as state variables.
+    u => NULL(), & !< u : zonal velocity component (m/s)
+    v => NULL(), & !< v : meridional velocity component (m/s)
+    h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  real :: depth(SZI_(CS%G))           !< distance from the surface (meter)
+  real :: depth_ml                    !< depth over which to average to
+                                      !< determine mixed layer properties (meter)
+  real :: dh                          !< thickness of a layer within mixed layer (meter)
+  real :: mass                        !< mass per unit area of a layer (kg/m2)
+  real :: T_freeze                    !< freezing temperature (oC)
+  logical :: use_temperature   !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -2830,6 +2830,22 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
     endif
   endif  ! (CS%Hmix >= 0.0)
+
+  if (allocated(sfc_state%melt_potential)) then
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      ! set melt_potential to zero to avoid passing values set previously
+      if (G%mask2dT(i,j)>0.) then
+        ! calculate freezing pot. temp. @ surface
+        call calculate_TFreeze(sfc_state%SSS(i,j), 0.0, T_freeze, CS%tv%eqn_of_state)
+        ! time accumulated melt_potential, in J/m^2
+        sfc_state%melt_potential(i,j) = sfc_state%melt_potential(i,j) +  (CS%tv%C_p * CS%GV%Rho0 * &
+                                        (sfc_state%SST(i,j) - T_freeze) * CS%Hmix)
+      else
+          sfc_state%melt_potential(i,j) = 0.0
+      endif! G%mask2dT
+    enddo ; enddo
+  endif
 
   if (allocated(sfc_state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
     !$OMP parallel do default(shared)
