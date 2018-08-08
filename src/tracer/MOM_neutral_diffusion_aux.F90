@@ -20,6 +20,7 @@ public refine_nondim_position
 public check_neutral_positions
 public kahan_sum
 
+!> The control structure for this module
 type, public :: ndiff_aux_CS_type ; private
   integer :: nterm        !< Number of terms in polynomial (deg+1)
   integer :: max_iter     !< Maximum number of iterations
@@ -27,10 +28,9 @@ type, public :: ndiff_aux_CS_type ; private
   real :: xtol            !< Criterion for how much position changes (nondim)
   real :: ref_pres        !< Determines whether a constant reference pressure is used everywhere or locally referenced
                           !< density is done. ref_pres <-1 is the latter, ref_pres >= 0. otherwise
-  logical :: force_brent = .false.  !< Use Brent's method instead of Newton even when second derivatives are available
-  logical :: debug
+  logical :: force_brent = .false. !< Use Brent's method instead of Newton even when second derivatives are available
+  logical :: debug        !< If true, write verbose debugging messages and checksusm
   type(EOS_type), pointer :: EOS !< Pointer to equation of state used in the model
-
 end type ndiff_aux_CS_type
 
 contains

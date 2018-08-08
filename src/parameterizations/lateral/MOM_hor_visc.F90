@@ -1,73 +1,7 @@
+!> Calculates horizontal viscosity and viscous stresses
 module MOM_hor_visc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002.                        *
-!*                                                                     *
-!*    This program contains the subroutine that calculates the         *
-!*  effects of horizontal viscosity, including parameterizations of    *
-!*  the value of the viscosity itself. horizontal_viscosity calc-      *
-!*  ulates the acceleration due to some combination of a biharmonic    *
-!*  viscosity and a Laplacian viscosity. Either or both may use a      *
-!*  coefficient that depends on the shear and strain of the flow.      *
-!*  All metric terms are retained.  The Laplacian is calculated as     *
-!*  the divergence of a stress tensor, using the form suggested by     *
-!*  Smagorinsky (1993).  The biharmonic is calculated by twice         *
-!*  applying the divergence of the stress tensor that is used to       *
-!*  calculate the Laplacian, but without the dependence on thickness   *
-!*  in the first pass.  This form permits a variable viscosity, and    *
-!*  indicates no acceleration for either resting fluid or solid body   *
-!*  rotation.                                                          *
-!*                                                                     *
-!*    set_up_hor_visc calculates and stores the values of a number of  *
-!*  metric functions that are used in horizontal_viscosity.  It is     *
-!*  called by horizontal_viscosity the first time that the latter is   *
-!*  called.                                                            *
-!*                                                                     *
-!*    The form of the Laplacian viscosity is:                          *
-!*                                                                     *
-!*    diffu = 1/h * {d/dx[KH*h*sh_xx] + d/dy[KH*h*sh_xy]}              *
-!*    diffv = 1/h * {d/dx[KH*h*sh_xy] - d/dy[KH*h*sh_xx]}              *
-!*                                                                     *
-!*    sh_xx = du/dx - dv/dy         sh_xy = du/dy + dv/dx              *
-!*                                                                     *
-!*  with appropriate metric terms thrown in.  KH may either be a       *
-!*  constant or may vary with the shear, as proposed by Smagorinsky.   *
-!*  The form of this term is discussed extensively in Griffies and     *
-!*  Hallberg (MWR, 2000), and the implementation here follows that     *
-!*  discussion closely.                                                *
-!*                                                                     *
-!*    Only free slip boundary conditions have been coded, although     *
-!*  no slip boundary conditions could be used with the Laplacian       *
-!*  viscosity.  For a western boundary, for example, the boundary      *
-!*  conditions with the biharmonic operator would be written as:       *
-!*    dv/dx = 0, d^3v/dx^3 = 0, u = 0, d^2u/dx^2 = 0 ,                 *
-!*  while for a Laplacian operator, they are simply:                   *
-!*    dv/dx = 0, u = 0 .                                               *
-!*  These boundary conditions are largely dictated by the use of       *
-!*  a an Arakawa C-grid and by the varying layer thickness.            *
-!*                                                                     *
-!*                                                                     *
-!*                                                                     *
-!*                                                                     *
-!*                                                                     *
-!* Macros written all in capital letters are defined in MOM_memory.h.  *
-!*                                                                     *
-!*     A small fragment of the C-grid is shown below:                  *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu, hq, str_xy, sh_xy         *
-!*    j+1  > o > o >   At ^:  v, diffv, v0                             *
-!*    j    x ^ x ^ x   At >:  u, diffu, u0                             *
-!*    j    > o > o >   At o:  h, str_xx, sh_xx                         *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : diag_ctrl, time_type
@@ -88,133 +22,159 @@ implicit none ; private
 
 public horizontal_viscosity, hor_visc_init, hor_visc_end
 
+!> Control structure for horizontal viscosity
 type, public :: hor_visc_CS ; private
-  logical :: Laplacian       ! Use a Laplacian horizontal viscosity if true.
-  logical :: biharmonic      ! Use a biharmonic horizontal viscosity if true.
-  logical :: no_slip         ! If true, no slip boundary conditions are used.
-                             ! Otherwise free slip boundary conditions are assumed.
-                             ! The implementation of the free slip boundary
-                             ! conditions on a C-grid is much cleaner than the
-                             ! no slip boundary conditions. The use of free slip
-                             ! b.c.s is strongly encouraged. The no slip b.c.s
-                             ! are not implemented with the biharmonic viscosity.
-  logical :: bound_Kh        ! If true, the Laplacian coefficient is locally
-                             ! limited to guarantee stability.
-  logical :: better_bound_Kh ! If true, use a more careful bounding of the
-                             ! Laplacian viscosity to guarantee stability.
-  logical :: bound_Ah        ! If true, the biharmonic coefficient is locally
-                             ! limited to guarantee stability.
-  logical :: better_bound_Ah ! If true, use a more careful bounding of the
-                             ! biharmonic viscosity to guarantee stability.
-  real    :: bound_coef      ! The nondimensional coefficient of the ratio of
-                             ! the viscosity bounds to the theoretical maximum
-                             ! for stability without considering other terms.
-                             ! The default is 0.8.
-  logical :: Smagorinsky_Kh  ! If true, use Smagorinsky nonlinear eddy
-                             ! viscosity. KH is the background value.
-  logical :: Smagorinsky_Ah  ! If true, use a biharmonic form of Smagorinsky
-                             ! nonlinear eddy viscosity. AH is the background.
-  logical :: Leith_Kh        ! If true, use 2D Leith nonlinear eddy
-                             ! viscosity. KH is the background value.
-  logical :: Modified_Leith  ! If true, use extra component of Leith viscosity
-                             ! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
-  logical :: Leith_Ah        ! If true, use a biharmonic form of 2D Leith
-                             ! nonlinear eddy viscosity. AH is the background.
-  logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
-                             ! viscosity is modified to include a term that
-                             ! scales quadratically with the velocity shears.
-  logical :: use_Kh_bg_2d    ! Read 2d background viscosity from a file.
-  real    :: Kh_bg_min       ! The minimum value allowed for Laplacian horizontal
-                             ! viscosity. The default is 0.0
-  logical :: use_land_mask   ! Use the land mask for the computation of thicknesses
-                             ! at velocity locations. This eliminates the dependence on
-                             ! arbitrary values over land or outside of the domain.
-                             ! Default is False to maintain answers with legacy experiments
-                             ! but should be changed to True for new experiments.
+  logical :: Laplacian       !< Use a Laplacian horizontal viscosity if true.
+  logical :: biharmonic      !< Use a biharmonic horizontal viscosity if true.
+  logical :: no_slip         !< If true, no slip boundary conditions are used.
+                             !! Otherwise free slip boundary conditions are assumed.
+                             !! The implementation of the free slip boundary
+                             !! conditions on a C-grid is much cleaner than the
+                             !! no slip boundary conditions. The use of free slip
+                             !! b.c.s is strongly encouraged. The no slip b.c.s
+                             !! are not implemented with the biharmonic viscosity.
+  logical :: bound_Kh        !< If true, the Laplacian coefficient is locally
+                             !! limited to guarantee stability.
+  logical :: better_bound_Kh !< If true, use a more careful bounding of the
+                             !! Laplacian viscosity to guarantee stability.
+  logical :: bound_Ah        !< If true, the biharmonic coefficient is locally
+                             !! limited to guarantee stability.
+  logical :: better_bound_Ah !< If true, use a more careful bounding of the
+                             !! biharmonic viscosity to guarantee stability.
+  real    :: bound_coef      !< The nondimensional coefficient of the ratio of
+                             !! the viscosity bounds to the theoretical maximum
+                             !! for stability without considering other terms.
+                             !! The default is 0.8.
+  logical :: Smagorinsky_Kh  !< If true, use Smagorinsky nonlinear eddy
+                             !! viscosity. KH is the background value.
+  logical :: Smagorinsky_Ah  !< If true, use a biharmonic form of Smagorinsky
+                             !! nonlinear eddy viscosity. AH is the background.
+  logical :: Leith_Kh        !< If true, use 2D Leith nonlinear eddy
+                             !! viscosity. KH is the background value.
+  logical :: Modified_Leith  !< If true, use extra component of Leith viscosity
+                             !! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
+  logical :: Leith_Ah        !< If true, use a biharmonic form of 2D Leith
+                             !! nonlinear eddy viscosity. AH is the background.
+  logical :: bound_Coriolis  !< If true & SMAGORINSKY_AH is used, the biharmonic
+                             !! viscosity is modified to include a term that
+                             !! scales quadratically with the velocity shears.
+  logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
+  real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
+                             !! viscosity, in m2 s-1. The default is 0.0
+  logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
+                             !! at velocity locations. This eliminates the dependence on
+                             !! arbitrary values over land or outside of the domain.
+                             !! Default is False to maintain answers with legacy experiments
+                             !! but should be changed to True for new experiments.
+  logical :: anisotropic     !< If true, allow anisotropic component to the viscosity.
+  real    :: Kh_aniso        !< The anisotropic viscosity in m2 s-1.
+  logical :: dynamic_aniso   !< If true, the anisotropic viscosity is recomputed as a function
+                             !! of state. This is set depending on ANISOTROPIC_MODE.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
+                      !< The background Laplacian viscosity at h points, in units
+                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_2d
+                      !< The background Laplacian viscosity at h points, in units
+                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Ah_bg_xx
+                      !< The background biharmonic viscosity at h points, in units
+                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm_Const2_xx
+                      !< A constant relating the biharmonic viscosity to the
+                      !! square of the velocity shear, in m4 s.  This value is
+                      !! set to be the magnitude of the Coriolis terms once the
+                      !! velocity differences reach a value of order 1/2 MAXVEL.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
+                      !< The amount by which stresses through h points are reduced
+                      !! due to partial barriers. Nondimensional.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_bg_xx,        &! The background Laplacian viscosity at h points, in units
-                      ! of m2 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_bg_2d,        &! The background Laplacian viscosity at h points, in units
-                      ! of m2 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Ah_bg_xx,        &! The background biharmonic viscosity at h points, in units
-                      ! of m4 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_Max_xx,       &! The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xx,       &! The maximum permitted biharmonic viscosity, m4 s-1.
-    Biharm_Const2_xx,&! A constant relating the biharmonic viscosity to the
-                      ! square of the velocity shear, in m4 s.  This value is
-                      ! set to be the magnitude of the Coriolis terms once the
-                      ! velocity differences reach a value of order 1/2 MAXVEL.
+    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points
+    n1n1_m_n2n2_h     !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
 
-    reduction_xx      ! The amount by which stresses through h points are reduced
-                      ! due to partial barriers. Nondimensional.
-
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
+                      !< The background Laplacian viscosity at q points, in units
+                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Ah_bg_xy
+                      !< The background biharmonic viscosity at q points, in units
+                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !! viscosity and the Smagorinsky and Leith viscosities.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm_Const2_xy
+                      !< A constant relating the biharmonic viscosity to the
+                      !! square of the velocity shear, in m4 s.  This value is
+                      !! set to be the magnitude of the Coriolis terms once the
+                      !! velocity differences reach a value of order 1/2 MAXVEL.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: reduction_xy
+                      !< The amount by which stresses through q points are reduced
+                      !! due to partial barriers. Nondimensional.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_bg_xy,        &! The background Laplacian viscosity at q points, in units
-                      ! of m2 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Ah_bg_xy,        &! The background biharmonic viscosity at q points, in units
-                      ! of m4 s-1. The actual viscosity may be the larger of this
-                      ! viscosity and the Smagorinsky and Leith viscosities.
-    Kh_Max_xy,       &! The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xy,       &! The maximum permitted biharmonic viscosity, m4 s-1.
-    Biharm_Const2_xy,&! A constant relating the biharmonic viscosity to the
-                      ! square of the velocity shear, in m4 s.  This value is
-                      ! set to be the magnitude of the Coriolis terms once the
-                      ! velocity differences reach a value of order 1/2 MAXVEL.
-    reduction_xy      ! The amount by which stresses through q points are reduced
-                      ! due to partial barriers. Nondimensional.
+    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
+    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points
+    n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points
 
-! The following variables are precalculated combinations of metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dx2h, dy2h, &       ! dx^2  and dy^2  at h points, in m2
-    dx_dyT, dy_dxT      ! dx/dy and dy/dx at h points, nondim
+    dx2h,   & !< Pre-calculated dx^2 at h points, in m2
+    dy2h,   & !< Pre-calculated dy^2 at h points, in m2
+    dx_dyT, & !< Pre-calculated dx/dy at h points, nondim
+    dy_dxT    !< Pre-calculated dy/dx at h points, nondim
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    dx2q, dy2q, &       ! dx^2  and dy^2  at q points, in m2
-    dx_dyBu, dy_dxBu    ! dx/dy and dy/dx at q points, nondim
+    dx2q,    & !< Pre-calculated dx^2 at q points, in m2
+    dy2q,    & !< Pre-calculated dy^2 at q points, in m2
+    dx_dyBu, & !< Pre-calculated dx/dy at q points, nondim
+    dy_dxBu    !< Pre-calculated dy/dx at q points, nondim
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    Idx2dyCu, Idxdy2u   ! 1/(dx^2 dy) and 1/(dx dy^2) at u points, in m-3
+    Idx2dyCu, & !< 1/(dx^2 dy) at u points, in m-3
+    Idxdy2u     !< 1/(dx dy^2) at u points, in m-3
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    Idx2dyCv, Idxdy2v   ! 1/(dx^2 dy) and 1/(dx dy^2) at v points, in m-3
+    Idx2dyCv, & !< 1/(dx^2 dy) at v points, in m-3
+    Idxdy2v     !< 1/(dx dy^2) at v points, in m-3
 
-! The following variables are precalculated time-invariant combinations of
-! parameters and metric terms.
+  ! The following variables are precalculated time-invariant combinations of
+  ! parameters and metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Laplac_Const_xx, &  ! Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xx, &  ! Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xx, & ! Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xx    ! Biharmonic metric-dependent constants (nondim)
+    Laplac_Const_xx,  & !< Laplacian  metric-dependent constants (nondim)
+    Biharm_Const_xx,  & !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_Const_xx, & !< Laplacian  metric-dependent constants (nondim)
+    Biharm5_Const_xx    !< Biharmonic metric-dependent constants (nondim)
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Laplac_Const_xy, &  ! Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xy, &  ! Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xy, & ! Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xy    ! Biharmonic metric-dependent constants (nondim)
+    Laplac_Const_xy,  & !< Laplacian  metric-dependent constants (nondim)
+    Biharm_Const_xy,  & !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_Const_xy, & !< Laplacian  metric-dependent constants (nondim)
+    Biharm5_Const_xy    !< Biharmonic metric-dependent constants (nondim)
 
-  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic timing
+  type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
-  ! diagnostic ids
+  !>@{
+  !! Diagnostic id
   integer :: id_diffu     = -1, id_diffv         = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
+  !!@}
 
 end type hor_visc_CS
 
 contains
 
-!>    This subroutine determines the acceleration due to the
-!! horizontal viscosity.  A combination of biharmonic and Laplacian
-!! forms can be used.  The coefficient may either be a constant or
-!! a shear-dependent form.  The biharmonic is determined by twice
-!! taking the divergence of an appropriately defined stress tensor.
-!! The Laplacian is determined by doing so once.
-!!   To work, the following fields must be set outside of the usual
-!! is to ie range before this subroutine is called:
-!!  v[is-2,is-1,ie+1,ie+2], u[is-2,is-1,ie+1,ie+2], and h[is-1,ie+1],
-!! with a similarly sized halo in the y-direction.
+!> Calculates the acceleration due to the horizontal viscosity.
+!!
+!! A combination of biharmonic and Laplacian forms can be used. The coefficient
+!! may either be a constant or a shear-dependent form. The biharmonic is
+!! determined by twice taking the divergence of an appropriately defined stress
+!! tensor. The Laplacian is determined by doing so once.
+!!
+!! To work, the following fields must be set outside of the usual
+!! is:ie range before this subroutine is called:
+!!   u[is-2:ie+2,js-2:je+2]
+!!   v[is-2:ie+2,js-2:je+2]
+!!   h[is-1:ie+1,js-1:je+1]
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, OBC)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
@@ -238,37 +198,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   type(hor_visc_CS),             pointer     :: CS     !< Pontrol structure returned by a previous
                                                        !! call to hor_visc_init.
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
-
-! Arguments:
-!  (in)      u      - zonal velocity (m/s)
-!  (in)      v      - meridional velocity (m/s)
-!  (in)      h      - layer thickness (m or kg m-2); h units are referred to as H.
-!  (out)     diffu  - zonal acceleration due to convergence of
-!                     along-coordinate stress tensor (m/s2)
-!  (out)     diffv  - meridional acceleration due to convergence of
-!                     along-coordinate stress tensor (m/s2)
-!  (inout)   MEKE   - pointer to a structure containing fields related to
-!                     Mesoscale Eddy Kinetic Energy
-!  (in)      VarMix - pointer to a structure with fields that specify the
-!                     spatially variable viscosities
-!  (in)      G      - ocean grid structure
-!  (in)      GV     - The ocean's vertical grid structure.
-!  (in)      CS     - control structure returned by a previous call to
-!                     hor_visc_init
-!  (in)      OBC    - pointer to an open boundary condition type
-
-!  By R. Hallberg, August 1998 - November 1998.
-!    This subroutine determines the acceleration due to the
-!  horizontal viscosity.  A combination of biharmonic and Laplacian
-!  forms can be used.  The coefficient may either be a constant or
-!  a shear-dependent form.  The biharmonic is determined by twice
-!  taking the divergence of an appropriately defined stress tensor.
-!  The Laplacian is determined by doing so once.
-!    To work, the following fields must be set outside of the usual
-!  is to ie range before this subroutine is called:
-!   v[is-2,is-1,ie+1,ie+2], u[is-2,is-1,ie+1,ie+2], and h[is-1,ie+1],
-!  with a similarly sized halo in the y-direction.
-
+  ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     u0, &   ! Laplacian of u (m-1 s-1)
     h_u     ! Thickness interpolated to u points, in H.
@@ -335,8 +265,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                     ! Laplacian viscosity is rescaled
   real :: RoScl     ! The scaling function for MEKE source term
   real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
+  real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
 
-  logical :: rescale_Kh
+  logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
@@ -372,46 +303,44 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       call MOM_error(FATAL, "MOM_hor_visc: VarMix%Res_fn_h and " //&
         "VarMix%Res_fn_q both need to be associated with Resoln_scaled_Kh.")
   endif
+  legacy_bound = (CS%Smagorinsky_Kh .or. CS%Leith_Kh) .and. &
+                 (CS%bound_Kh .and. .not.CS%better_bound_Kh)
+
+  ! Coefficient for modified Leith
+  if (CS%Modified_Leith) then
+    mod_Leith = 1.0
+  else
+    mod_Leith = 0.0
+  endif
 
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
   use_MEKE_Ku = associated(MEKE%Ku)
 
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
-!$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
-!$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
-!$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
-!$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
-!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
-!$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
-!$OMP                                  div_xx, div_xx_dx, div_xx_dy, mod_Leith,       &
-!$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
+  !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
+  !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
+  !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
+  !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
+  !$OMP                                  mod_Leith, legacy_bound)                       &
+  !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
+  !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
+  !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
+  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
+  !$OMP                                  div_xx, div_xx_dx, div_xx_dy, local_strain,    &
+  !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
-!    This code uses boundary conditions that are consistent with
-!  free slip and no normal flow boundary conditions.  The boundary
-!  conditions for the western boundary, for example, are:
-!    dv/dx = 0,  d^3v/dx^3 = 0,    u = 0,     d^2u/dx^2 = 0 .
-!  The overall scheme is second order accurate.
-!    All of the metric terms are retained, and the repeated use of
-!  the symmetric stress tensor insures that no stress is applied with
-!  no flow or solid-body rotation, even with non-constant values of
-!  of the biharmonic viscosity.
+    ! The following are the forms of the horizontal tension and horizontal
+    ! shearing strain advocated by Smagorinsky (1993) and discussed in
+    ! Griffies and Hallberg (2000).
 
-!  The following are the forms of the horizontal tension and hori-
-!  shearing strain advocated by Smagorinsky (1993) and discussed in
-!  Griffies and Hallberg (MWR, 2000).
+    ! Calculate horizontal tension
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       sh_xx(i,j) = (CS%DY_dxT(i,j)*(G%IdyCu(I,j) * u(I,j,k) - &
                                     G%IdyCu(I-1,j) * u(I-1,j,k)) - &
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
-      div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
-                          G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
-                         (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
-                          G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
-                                    (h(i,j,k) + h_neglect)
     enddo ; enddo
+
     ! Components for the shearing strain
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
@@ -419,7 +348,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     enddo ; enddo
 
     ! Interpolate the thicknesses to velocity points.
-    ! The extra wide halos are to accomodate the cross-corner-point projections
+    ! The extra wide halos are to accommodate the cross-corner-point projections
     ! in OBCs, which are not ordinarily be necessary, and might not be necessary
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
@@ -546,6 +475,20 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
     enddo ; endif
 
+    ! Calculate horizontal divergence (not from continuity) if needed.
+    ! h_u and h_v include modifications at OBCs from above.
+    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+        div_xx(i,j) = ((G%dyCu(I  ,j) * u(I  ,j,k) * h_u(I  ,j) - &
+                        G%dyCu(I-1,j) * u(I-1,j,k) * h_u(I-1,j) ) + &
+                       (G%dxCv(i,J  ) * v(i,J  ,k) * h_v(i,J  ) - &
+                        G%dxCv(i,J-1) * v(i,J-1,k) * h_v(i,J-1) ) )*G%IareaT(i,j)/ &
+                                  (h(i,j,k) + h_neglect)
+      enddo ; enddo
+    endif
+
+    ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
+    ! dudy and dvdx include modifications at OBCs from above.
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
@@ -556,27 +499,29 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
     endif
 
-    if (CS%no_slip) then
-      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
-    else
-      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
-    endif
-
-! Vorticity gradient
-    do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
-      vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
-    enddo ; enddo
-
-    do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
-      vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
-    enddo ; enddo
-
-! Divergence gradient
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      ! Calculate relative vorticity (including no-slip boundary conditions at the 2-D land-sea mask).
+      ! dudy and dvdx include modifications at OBCs from above.
+      if (CS%no_slip) then
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      else
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      endif
+
+      ! Vorticity gradient
+      do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+        vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
+      enddo ; enddo
+
+      do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+        vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
+      enddo ; enddo
+
+      ! Divergence gradient
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
         div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
       enddo ; enddo
@@ -586,14 +531,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
     endif
 
-! Coefficient for modified Leith
-    if (CS%Modified_Leith) then
-      mod_Leith = 1.0
-    else
-      mod_Leith = 0.0
-    endif
-
-!  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
+    !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
         u0(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*sh_xx(i+1,j) - CS%DY2h(i,j)*sh_xx(i,j)) + &
@@ -641,23 +579,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if (CS%Laplacian) then
         ! Determine the Laplacian viscosity at h points, using the
         ! largest value from several parameterizations.
-        Kh_scale = 1.0 ; if (rescale_Kh) Kh_scale = VarMix%Res_fn_h(i,j)
-        KhSm = 0.0; KhLth = 0.0
-        if ((CS%Smagorinsky_Kh) .or. (CS%Leith_Kh)) then
-          if (CS%Smagorinsky_Kh) &
-            KhSm = CS%LAPLAC_CONST_xx(i,j) * Shear_mag
-          if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xx(i,j) * Vort_mag
-          Kh = Kh_scale * MAX(KhLth, MAX(CS%Kh_bg_xx(i,j), KhSm))
-          if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
-            Kh = MIN(Kh, CS%Kh_Max_xx(i,j))
-        else
-          Kh = Kh_scale * CS%Kh_bg_xx(i,j)
-        endif
+        Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xx(i,j) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xx(i,j) * Vort_mag )
+        ! All viscosity contributions above are subject to resolution scaling
+        if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
+        ! Older method of bounding for stability
+        if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xx(i,j))
+        Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
+        if (use_MEKE_Ku) Kh = Kh + MEKE%Ku(i,j) ! *Add* the MEKE contribution (might be negative)
+        if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * ( 1. - CS%n1n2_h(i,j)**2 ) ! *Add* the tension component
+                                                                               ! of anisotropic viscosity
 
-        if (use_MEKE_Ku) then
-          Kh = Kh + MEKE%Ku(i,j)
-        endif
+        ! Newer method of bounding for stability
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xx(i,j)) then
             visc_bound_rem = 0.0
@@ -675,9 +609,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         str_xx(i,j) = 0.0
       endif ! Laplacian
 
+      if (CS%anisotropic) then
+        ! Shearing-strain averaged to h-points
+        local_strain = 0.25 * ( (sh_xy(I,J) + sh_xy(I-1,J-1)) + (sh_xy(I-1,J) + sh_xy(I,J-1)) )
+        ! *Add* the shear-strain contribution to the xx-component of stress
+        str_xx(i,j) = str_xx(i,j) - CS%Kh_aniso * CS%n1n2_h(i,j) * CS%n1n1_m_n2n2_h(i,j) * local_strain
+      endif
+
       if (CS%biharmonic) then
-!       Determine the biharmonic viscosity at h points, using the
-!       largest value from several parameterizations.
+        ! Determine the biharmonic viscosity at h points, using the
+        ! largest value from several parameterizations.
         AhSm = 0.0; AhLth = 0.0
         if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah)) then
           if (CS%Smagorinsky_Ah) then
@@ -693,9 +634,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
-       else
-         Ah = CS%Ah_bg_xx(i,j)
-       endif ! Smagorinsky_Ah or Leith_Ah
+        else
+          Ah = CS%Ah_bg_xx(i,j)
+        endif ! Smagorinsky_Ah or Leith_Ah
 
         if (CS%better_bound_Ah) then
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
@@ -764,8 +705,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
-!      hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
-!          ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
+      !hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
+      !    ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
       hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
           ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
 
@@ -798,26 +739,22 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if (CS%Laplacian) then
         ! Determine the Laplacian viscosity at q points, using the
         ! largest value from several parameterizations.
-        Kh_scale = 1.0 ; if (rescale_Kh) Kh_scale = VarMix%Res_fn_q(I,J)
-        KhSm = 0.0; KhLth = 0.0
-        if ((CS%Smagorinsky_Kh) .or. (CS%Leith_Kh)) then
-          if (CS%Smagorinsky_Kh) &
-            KhSm = CS%LAPLAC_CONST_xy(I,J) * Shear_mag
-          if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xy(I,J) * Vort_mag
-          Kh = Kh_scale * MAX(MAX(CS%Kh_bg_xy(I,J), KhSm), KhLth)
-          if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
-            Kh = MIN(Kh, CS%Kh_Max_xy(I,J))
-        else
-          Kh = Kh_scale * CS%Kh_bg_xy(I,J)
-        endif
-        if (use_MEKE_Ku) then
+        Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xy(I,J) * Vort_mag)
+        ! All viscosity contributions above are subject to resolution scaling
+        if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
+        ! Older method of bounding for stability
+        if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xy(i,j))
+        Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
+        if (use_MEKE_Ku) then ! *Add* the MEKE contribution (might be negative)
           Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
         endif
-        ! Place a floor on the viscosity, if desired.
-        Kh = MAX(Kh,CS%Kh_bg_min)
+        if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * CS%n1n2_q(I,J)**2 ! *Add* the shear component
+                                                                      ! of anisotropic viscosity
 
+        ! Newer method of bounding for stability
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xy(I,J)) then
             visc_bound_rem = 0.0
@@ -835,10 +772,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         str_xy(I,J) = 0.0
       endif ! Laplacian
 
+      if (CS%anisotropic) then
+        ! Horizontal-tension averaged to q-points
+        local_strain = 0.25 * ( (sh_xx(i,j) + sh_xx(i+1,j+1)) + (sh_xx(i+1,j) + sh_xx(i,j+1)) )
+        ! *Add* the tension contribution to the xy-component of stress
+        str_xy(I,J) = str_xy(I,J) - CS%Kh_aniso * CS%n1n2_q(i,j) * CS%n1n1_m_n2n2_q(i,j) * local_strain
+      endif
+
       if (CS%biharmonic) then
       ! Determine the biharmonic viscosity at q points, using the
       ! largest value from several parameterizations.
-      AhSm = 0.0; AhLth = 0.0
+        AhSm = 0.0 ; AhLth = 0.0
         if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
           if (CS%Smagorinsky_Ah) then
             if (CS%bound_Coriolis) then
@@ -877,8 +821,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
     enddo ; enddo
 
+    ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
     do j=js,je ; do I=Isq,Ieq
-!  Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
       diffu(I,j,k) = ((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
@@ -899,7 +843,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo
     endif
 
-!  Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
+    ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
       diffv(i,J,k) = ((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
@@ -921,7 +865,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
-    ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
+      ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
               (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
@@ -986,7 +930,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   enddo ! end of k loop
 
-! Offer fields for diagnostic averaging.
+  ! Offer fields for diagnostic averaging.
   if (CS%id_diffu>0)     call post_data(CS%id_diffu, diffu, CS%diag)
   if (CS%id_diffv>0)     call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
@@ -1005,35 +949,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     call post_data(CS%id_FrictWorkIntz, FrictWorkIntz, CS%diag)
   endif
 
-
 end subroutine horizontal_viscosity
 
-!> This subroutine allocates space for and calculates static variables
-!! used by this module. The metrics may be 0, 1, or 2-D arrays,
-!! while fields like the background viscosities are 2-D arrays.
-!! ALLOC is a macro defined in MOM_memory.h to either allocate
-!! for dynamic memory, or do nothing when using static memory.
+!> Allocates space for and calculates static variables used by horizontal_viscosity().
+!! hor_visc_init calculates and stores the values of a number of metric functions that
+!! are used in horizontal_viscosity().
 subroutine hor_visc_init(Time, G, param_file, diag, CS)
-  type(time_type),         intent(in)    :: Time !< current model time.
+  type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
-  type(diag_ctrl), target, intent(inout) :: diag !< structure to regulate diagnostic output.
-  type(hor_visc_CS), pointer             :: CS   !< pointer to the control structure for this module
-
-! This subroutine allocates space for and calculates static variables
-! used by this module. The metrics may be 0, 1, or 2-D arrays,
-! while fields like the background viscosities are 2-D arrays.
-! ALLOC is a macro defined in MOM_memory.h to either allocate
-! for dynamic memory, or do nothing when using static memory.
-!
-! Arguments:
-!  (in)      Time       - current model time
-!  (in)      G          - ocean grid structure
-!  (in)      param_file - structure to parse for model parameter values
-!  (in)      diag       - structure to regulate diagnostic output
-!  (in/out)  CS         - pointer to the control structure for this module
-
+  type(diag_ctrl), target, intent(inout) :: diag !< Structure to regulate diagnostic output.
+  type(hor_visc_CS), pointer             :: CS   !< Pointer to the control structure for this module
+  ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
   real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
                 ! u0v is the Laplacian sensitivities to the v velocities
@@ -1073,6 +1001,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
+  real    :: aniso_grid_dir(2) ! Vector (n1,n2) for anisotropic direction
+  integer :: aniso_mode    ! Selects the mode for setting the anisotropic direction
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
@@ -1104,6 +1034,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%bound_Coriolis = .false.
   CS%Modified_Leith = .false.
+  CS%anisotropic = .false.
+  CS%dynamic_aniso = .false.
 
   Kh = 0.0 ; Ah = 0.0
 
@@ -1168,6 +1100,32 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "If true, the Laplacian coefficient is locally limited \n"//&
                  "to be stable with a better bounding than just BOUND_KH.", &
                  default=CS%bound_Kh)
+    call get_param(param_file, mdl, "ANISOTROPIC_VISCOSITY", CS%anisotropic, &
+                 "If true, allow anistropic viscosity in the Laplacian\n"//&
+                 "horizontal viscosity.", default=.false.)
+  endif
+  if (CS%anisotropic .or. get_all) then
+    call get_param(param_file, mdl, "KH_ANISO", CS%Kh_aniso, &
+                 "The background Laplacian anisotropic horizontal viscosity.", &
+                 units = "m2 s-1", default=0.0)
+    call get_param(param_file, mdl, "ANISOTROPIC_MODE", aniso_mode, &
+                 "Selects the mode for setting the direction of anistropy.\n"//&
+                 "\t 0 - Points along the grid i-direction.\n"//&
+                 "\t 1 - Points towards East.\n"//&
+                 "\t 2 - Points along the flow direction, U/|U|.", &
+                 default=0)
+    select case (aniso_mode)
+      case (0)
+        call get_param(param_file, mdl, "ANISO_GRID_DIR", aniso_grid_dir, &
+                 "The vector pointing in the direction of anistropy for\n"//&
+                 "horizont viscosity. n1,n2 are the i,j components relative\n"//&
+                 "to the grid.", units = "nondim", fail_if_missing=.true.)
+      case (1)
+        call get_param(param_file, mdl, "ANISO_GRID_DIR", aniso_grid_dir, &
+                 "The vector pointing in the direction of anistropy for\n"//&
+                 "horizont viscosity. n1,n2 are the i,j components relative\n"//&
+                 "to the spherical coordinates.", units = "nondim", fail_if_missing=.true.)
+    end select
   endif
 
   call get_param(param_file, mdl, "BIHARMONIC", CS%biharmonic, &
@@ -1308,6 +1266,24 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
   ALLOC_(CS%reduction_xy(IsdB:IedB,JsdB:JedB)) ; CS%reduction_xy(:,:) = 0.0
+
+  if (CS%anisotropic) then
+    ALLOC_(CS%n1n2_h(isd:ied,jsd:jed)) ; CS%n1n2_h(:,:) = 0.0
+    ALLOC_(CS%n1n1_m_n2n2_h(isd:ied,jsd:jed)) ; CS%n1n1_m_n2n2_h(:,:) = 0.0
+    ALLOC_(CS%n1n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n2_q(:,:) = 0.0
+    ALLOC_(CS%n1n1_m_n2n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n1_m_n2n2_q(:,:) = 0.0
+    select case (aniso_mode)
+      case (0)
+        call align_aniso_tensor_to_grid(CS, aniso_grid_dir(1), aniso_grid_dir(2))
+      case (1)
+      ! call align_aniso_tensor_to_grid(CS, aniso_grid_dir(1), aniso_grid_dir(2))
+      case (2)
+        CS%dynamic_aniso = .true.
+      case default
+        call MOM_error(FATAL, "MOM_hor_visc: "//&
+             "Runtime parameter ANISOTROPIC_MODE is out of range.")
+    end select
+  endif
 
   if (CS%use_Kh_bg_2d) then
     ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
@@ -1639,11 +1615,30 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
 end subroutine hor_visc_init
 
+!> Calculates factors in the anisotropic orientation tensor to be align with the grid.
+!! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
+subroutine align_aniso_tensor_to_grid(CS, n1, n2)
+  type(hor_visc_CS), pointer :: CS !< Control structure for horizontal viscosity
+  real,              intent(in) :: n1 !< i-component of direction vector (nondim)
+  real,              intent(in) :: n2 !< j-component of direction vector (nondim)
+  ! Local variables
+  real :: recip_n2_norm
+
+  ! For normalizing n=(n1,n2) in case arguments are not a unit vector
+  recip_n2_norm = n1**2 + n2**2
+  if (recip_n2_norm > 0.) recip_n2_norm = 1./recip_n2_norm
+
+  CS%n1n2_h(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
+  CS%n1n2_q(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
+  CS%n1n1_m_n2n2_h(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
+  CS%n1n1_m_n2n2_q(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
+
+end subroutine align_aniso_tensor_to_grid
+
+!> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
-! This subroutine deallocates any variables allocated in hor_visc_init.
-! Argument:  CS - The control structure returned by a previous call to
-!                 hor_visc_init.
-  type(hor_visc_CS), pointer :: CS
+  type(hor_visc_CS), pointer :: CS !< The control structure returned by a
+                                   !! previous call to hor_visc_init.
 
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
@@ -1681,8 +1676,316 @@ subroutine hor_visc_end(CS)
       DEALLOC_(CS%Biharm5_Const_xx) ; DEALLOC_(CS%Biharm5_Const_xy)
     endif
   endif
+  if (CS%anisotropic) then
+    DEALLOC_(CS%n1n2_h)
+    DEALLOC_(CS%n1n2_q)
+    DEALLOC_(CS%n1n1_m_n2n2_h)
+    DEALLOC_(CS%n1n1_m_n2n2_q)
+  endif
   deallocate(CS)
 
 end subroutine hor_visc_end
+
+
+!> \namespace mom_hor_visc
+!!
+!! This module contains the subroutine horizontal_viscosity() that calculates the
+!! effects of horizontal viscosity, including parameterizations of the value of
+!! the viscosity itself. horizontal_viscosity() calculates the acceleration due to
+!! some combination of a biharmonic viscosity and a Laplacian viscosity. Either or
+!! both may use a coefficient that depends on the shear and strain of the flow.
+!! All metric terms are retained. The Laplacian is calculated as the divergence of
+!! a stress tensor, using the form suggested by Smagorinsky (1993). The biharmonic
+!! is calculated by twice applying the divergence of the stress tensor that is
+!! used to calculate the Laplacian, but without the dependence on thickness in the
+!! first pass. This form permits a variable viscosity, and indicates no
+!! acceleration for either resting fluid or solid body rotation.
+!!
+!! The form of the viscous accelerations is discussed extensively in Griffies and
+!! Hallberg (2000), and the implementation here follows that discussion closely.
+!! We use the notation of Smith and McWilliams (2003) with the exception that the
+!! isotropic viscosity is \f$\kappa_h\f$.
+!!
+!! \section section_horizontal_viscosity Horizontal viscosity in MOM
+!!
+!! In general, the horizontal stress tensor can be written as
+!! \f[
+!! {\bf \sigma} =
+!! \begin{pmatrix}
+!! \frac{1}{2} \left( \sigma_D + \sigma_T \right) & \frac{1}{2} \sigma_S \\\\
+!! \frac{1}{2} \sigma_S & \frac{1}{2} \left( \sigma_D - \sigma_T \right)
+!! \end{pmatrix}
+!! \f]
+!! where \f$\sigma_D\f$, \f$\sigma_T\f$ and \f$\sigma_S\f$ are stresses associated with
+!! invariant factors in the strain-rate tensor. For a Newtonian fluid, the stress
+!! tensor is usually linearly related to the strain-rate tensor. The horizontal
+!! strain-rate tensor is
+!! \f[
+!! \dot{\bf e} =
+!! \begin{pmatrix}
+!! \frac{1}{2} \left( \dot{e}_D + \dot{e}_T \right) & \frac{1}{2} \dot{e}_S \\\\
+!! \frac{1}{2} \dot{e}_S & \frac{1}{2} \left( \dot{e}_D - \dot{e}_T \right)
+!! \end{pmatrix}
+!! \f]
+!! where \f$\dot{e}_D = \partial_x u + \partial_y v\f$ is the horizontal divergence,
+!! \f$\dot{e}_T = \partial_x u - \partial_y v\f$ is the horizontal tension, and
+!! \f$\dot{e}_S = \partial_y u + \partial_x v\f$ is the horizontal shear strain.
+!!
+!! The trace of the stress tensor, \f$tr(\bf \sigma) = \sigma_D\f$, is usually
+!! absorbed into the pressure and only the deviatoric stress tensor considered.
+!! From here on, we drop \f$\sigma_D\f$. The trace of the strain tensor, \f$tr(\bf e) =
+!! \dot{e}_D\f$ is non-zero for horizontally divergent flow but only enters the
+!! stress tensor through \f$\sigma_D\f$ and so we will drop \f$\sigma_D\f$ from
+!! calculations of the strain tensor in the code. Therefore the horizontal stress
+!! tensor can be considered to be
+!! \f[
+!! {\bf \sigma} =
+!! \begin{pmatrix}
+!! \frac{1}{2} \sigma_T & \frac{1}{2} \sigma_S \\\\
+!! \frac{1}{2} \sigma_S & - \frac{1}{2} \sigma_T
+!! \end{pmatrix}
+!! .\f]
+!!
+!! The stresses above are linearly related to the strain through a viscosity
+!! coefficient, \f$\kappa_h\f$:
+!! \f{eqnarray*}{
+!! \sigma_T & = & 2 \kappa_h \dot{e}_T \\\\
+!! \sigma_S & = & 2 \kappa_h \dot{e}_S
+!! .
+!! \f}
+!!
+!! The viscosity \f$\kappa_h\f$ may either be a constant or variable. For example,
+!! \f$\kappa_h\f$ may vary with the shear, as proposed by Smagorinsky (1993).
+!!
+!! The accelerations resulting form the divergence of the stress tensor are
+!! \f{eqnarray*}{
+!! \hat{\bf x} \cdot \left( \nabla \cdot {\bf \sigma} \right)
+!! & = &
+!! \partial_x \left( \frac{1}{2} \sigma_T \right)
+!! + \partial_y \left( \frac{1}{2} \sigma_S \right)
+!! \\\\
+!! & = &
+!! \partial_x \left( \kappa_h \dot{e}_T \right)
+!! + \partial_y \left( \kappa_h \dot{e}_S \right)
+!! \\\\
+!! \hat{\bf y} \cdot \left( \nabla \cdot {\bf \sigma} \right)
+!! & = &
+!! \partial_x \left( \frac{1}{2} \sigma_S \right)
+!! + \partial_y \left( \frac{1}{2} \sigma_T \right)
+!! \\\\
+!! & = &
+!! \partial_x \left( \kappa_h \dot{e}_S \right)
+!! + \partial_y \left( - \kappa_h \dot{e}_T \right)
+!! .
+!! \f}
+!!
+!! The form of the Laplacian viscosity in general coordinates is:
+!! \f{eqnarray*}{
+!! \hat{\bf x} \cdot \left( \nabla \cdot \sigma \right)
+!! & = &
+!! \frac{1}{h} \left[ \partial_x \left( \kappa_h h \dot{e}_T \right)
+!! + \partial_y \left( \kappa_h h \dot{e}_S \right) \right]
+!! \\\\
+!! \hat{\bf y} \cdot \left( \nabla \cdot \sigma \right)
+!! & = &
+!! \frac{1}{h} \left[ \partial_x \left( \kappa_h h \dot{e}_S \right)
+!! - \partial_y \left( \kappa_h h \dot{e}_T \right) \right]
+!! .
+!! \f}
+!!
+!! \subsection section_laplacian_viscosity_coefficient Laplacian viscosity coefficient
+!!
+!! The horizontal viscosity coefficient, \f$\kappa_h\f$, can have multiple components.
+!! The isotropic components are:
+!!   - A uniform background component, \f$\kappa_{bg}\f$.
+!!   - A constant but spatially variable 2D map, \f$\kappa_{2d}(x,y)\f$.
+!!   - A ''MICOM'' viscosity, \f$U_\nu \Delta(x,y)\f$, which uses a constant
+!! velocity scale, \f$U_\nu\f$ and a measure of the grid-spacing \f$\Delta(x,y)^2 =
+!! \frac{2 \Delta x^2 \Delta y^2}{\Delta x^2 + \Delta y^2}\f$.
+!!   - A function of
+!! latitude, \f$\kappa_{\phi}(x,y) = \kappa_{\pi/2} |\sin(\phi)|^n\f$.
+!!   - A dynamic Smagorinsky viscosity, \f$\kappa_{Sm}(x,y,t) = C_{Sm} \Delta^2 \sqrt{\dot{e}_T^2 + \dot{e}_S^2}\f$.
+!!   - A dynamic Leith viscosity, \f$\kappa_{Lth}(x,y,t) =
+!!                                    C_{Lth} \Delta^3 \sqrt{|\nabla \zeta|^2 + |\nabla \dot{e}_D|^2}\f$.
+!!
+!! A maximum stable viscosity, \f$\kappa_{max}(x,y)\f$ is calculated based on the
+!! grid-spacing and time-step and used to clip calculated viscosities.
+!!
+!! The static components of \f$\kappa_h\f$ are first combined as follows:
+!! \f[
+!! \kappa_{static} = \min \left[ \max\left(
+!! \kappa_{bg},
+!! U_\nu \Delta(x,y),
+!! \kappa_{2d}(x,y),
+!! \kappa_\phi(x,y)
+!! \right)
+!! , \kappa_{max}(x,y) \right]
+!! \f]
+!! and stored in the module control structure as variables <code>Kh_bg_xx</code> and
+!! <code>Kh_bg_xy</code> for the tension (h-points) and shear (q-points) components
+!! respectively.
+!!
+!! The full viscosity includes the dynamic components as follows:
+!! \f[
+!! \kappa_h(x,y,t) = r(\Delta,L_d)
+!! \max \left( \kappa_{static}, \kappa_{Sm}, \kappa_{Lth} \right)
+!! \f]
+!! where \f$r(\Delta,L_d)\f$ is a resolution function.
+!!
+!! The dynamic Smagorinsky and Leith viscosity schemes are exclusive with each
+!! other.
+!!
+!! \subsection section_viscous_boundary_conditions Viscous boundary conditions
+!!
+!! Free slip boundary conditions have been coded, although no slip boundary
+!! conditions can be used with the Laplacian viscosity based on the 2D land-sea
+!! mask. For a western boundary, for example, the boundary conditions with the
+!! biharmonic operator would be written as:
+!! \f[
+!!   \partial_x v = 0 ; \partial_x^3 v = 0 ; u = 0 ; \partial_x^2 u = 0 ,
+!! \f]
+!! while for a Laplacian operator, they are simply
+!! \f[
+!!   \partial_x v = 0 ; u = 0 .
+!! \f]
+!! These boundary conditions are largely dictated by the use of an Arakawa
+!! C-grid and by the varying layer thickness.
+!!
+!! \subsection section_anisotropic_viscosity Anisotropic viscosity
+!!
+!! Large et al., 2001, proposed enhancing viscosity in a particular direction and the
+!! approach was generalized in Smith and McWilliams, 2003. We use the second form of their
+!! two coefficient anisotropic viscosity (section 4.3). We also replace their
+!! \f$A^\prime\f$ nd $D$ such that \f$2A^\prime = 2 \kappa_h + D\f$ and
+!! \f$\kappa_a = D\f$ so that \f$\kappa_h\f$ can be considered the isotropic
+!! viscosity and \f$\kappa_a=D\f$ can be consider the anisotropic viscosity. The
+!! direction of anisotropy is defined by a unit vector \f$\hat{\bf
+!! n}=(n_1,n_2)\f$.
+!!
+!! The contributions to the stress tensor are
+!! \f[
+!! \begin{pmatrix}
+!! \sigma_T \\\\ \sigma_S
+!! \end{pmatrix}
+!! =
+!! \left[
+!! \begin{pmatrix}
+!! 2 \kappa_h + \kappa_a & 0 \\\\
+!! 0 & 2 \kappa_h
+!! \end{pmatrix}
+!! + 2 \kappa_a n_1 n_2
+!! \begin{pmatrix}
+!! - 2 n_1 n_2 & n_1^2 - n_2^2 \\\\
+!! n_1^2 - n_2^2 & 2 n_1 n_2
+!! \end{pmatrix}
+!! \right]
+!! \begin{pmatrix}
+!! \dot{e}_T \\\\ \dot{e}_S
+!! \end{pmatrix}
+!! \f]
+!! Dissipation of kinetic energy requires \f$\kappa_h \geq 0\f$ and \f$2 \kappa_h + \kappa_a \geq 0\f$.
+!! Note that when anisotropy is aligned with the x-direction, \f$n_1 = \pm 1\f$, then
+!! \f$n_2 = 0\f$ and the cross terms vanish. The accelerations in this aligned limit
+!! with constant coefficients become
+!! \f{eqnarray*}{
+!! \hat{\bf x} \cdot \nabla \cdot {\bf \sigma}
+!! & = &
+!! \partial_x \left( \left( \kappa_h + \frac{1}{2} \kappa_a \right) \dot{e}_T \right)
+!! + \partial_y \left( \kappa_h \dot{e}_S \right)
+!! \\\\
+!! & = &
+!! \left( \kappa_h + \kappa_a \right) \partial_{xx} u
+!! + \kappa_h \partial_{yy} u
+!! - \frac{1}{2} \kappa_a \partial_x \left( \partial_x u + \partial_y v \right)
+!! \\\\
+!! \hat{\bf y} \cdot \nabla \cdot {\bf \sigma}
+!! & = &
+!! \partial_x \left( \kappa_h \dot{e}_S \right)
+!! - \partial_y \left( \left( \kappa_h + \frac{1}{2} \kappa_a \right) \dot{e}_T \right)
+!! \\\\
+!! & = &
+!! \kappa_h \partial_{xx} v
+!! + \left( \kappa_h + \kappa_a \right) \partial_{yy} v
+!! - \frac{1}{2} \kappa_a \partial_y \left( \partial_x u + \partial_y v \right)
+!! \f}
+!! which has contributions akin to a negative divergence damping (a divergence
+!! enhancement?) but which is weaker than the enhanced tension terms by half.
+!!
+!! \subsection section_viscous_discretization Discretization
+!!
+!! The horizontal tension, \f$\dot{e}_T\f$, is stored in variable <code>sh_xx</code> and
+!! discretized as
+!! \f[
+!! \dot{e}_T
+!! = \frac{\Delta y}{\Delta x} \delta_i \left( \frac{1}{\Delta y} u \right)
+!! - \frac{\Delta x}{\Delta y} \delta_j \left( \frac{1}{\Delta x} v \right)
+!! .
+!! \f]
+!! The horizontal divergent strain, \f$\dot{e}_D\f$, is stored in variable
+!! <code>div_xx</code> and discretized as
+!! \f[
+!! \dot{e}_D
+!! = \frac{1}{h A} \left( \delta_i \left( \overline{h}^i \Delta y \, u \right)
+!! + \delta_j \left( \overline{h}^j\Delta x \, v \right) \right)
+!! .
+!! \f]
+!! Note that for expediency this is the exact discretization used in the
+!! continuity equation.
+!!
+!! The horizontal shear strain, \f$\dot{e}_S\f$, is stored in variable <code>sh_xy</code>
+!! and discretized as
+!! \f[
+!! \dot{e}_S = v_x + u_y
+!! \f]
+!! where
+!! \f{align*}{
+!! v_x &= \frac{\Delta y}{\Delta x} \delta_i \left( \frac{1}{\Delta y} v \right) \\\\
+!! u_y &= \frac{\Delta x}{\Delta y} \delta_j \left( \frac{1}{\Delta x} u \right)
+!! \f}
+!! which are calculated separately so that no-slip or free-slip boundary
+!! conditions can be applied to \f$v_x\f$ and \f$u_y\f$ where appropriate.
+!!
+!! The tendency for the x-component of the divergence of stress is stored in
+!! variable <code>diffu</code> and discretized as
+!! \f[
+!! \hat{\bf x} \cdot \left( \nabla \cdot {\bf \sigma} \right) =
+!! \frac{1}{A \overline{h}^i} \left(
+!! \frac{1}{\Delta y} \delta_i \left( h \Delta y^2 \kappa_h \dot{e}_T \right) +
+!! \frac{1}{\Delta x} \delta_j \left( \tilde{h}^{ij} \Delta x^2 \kappa_h \dot{e}_S \right)
+!! \right)
+!! .
+!! \f]
+!!
+!! The tendency for the y-component of the divergence of stress is stored in
+!! variable <code>diffv</code> and discretized as
+!! \f[
+!! \hat{\bf y} \cdot \left( \nabla \cdot {\bf \sigma} \right) =
+!! \frac{1}{A \overline{h}^j} \left(
+!! \frac{1}{\Delta y} \delta_i \left( \tilde{h}^{ij} \Delta y^2 A_M \dot{e}_S \right)
+!! - \frac{1}{\Delta x} \delta_j \left( h \Delta x^2 A_M \dot{e}_T \right)
+!! \right)
+!! .
+!! \f]
+!!
+!! \subsection section_viscous_refs References
+!!
+!! Griffies, S.M., and Hallberg, R.W., 2000: Biharmonic friction with a
+!! Smagorinsky-like viscosity for use in large-scale eddy-permitting ocean models.
+!! Monthly Weather Review, 128(8), 2935-2946.
+!! https://doi.org/10.1175/1520-0493(2000)128%3C2935:BFWASL%3E2.0.CO;2
+!!
+!! Large, W.G., Danabasoglu, G., McWilliams, J.C., Gent, P.R. and Bryan, F.O.,
+!! 2001: Equatorial circulation of a global ocean climate model with
+!! anisotropic horizontal viscosity.
+!! Journal of Physical Oceanography, 31(2), pp.518-536.
+!! https://doi.org/10.1175/1520-0485(2001)031%3C0518:ECOAGO%3E2.0.CO;2
+!!
+!! Smagorinsky, J., 1993: Some historical remarks on the use of nonlinear
+!! viscosities. Large eddy simulation of complex engineering and geophysical
+!! flows, 1, 69-106.
+!!
+!! Smith, R.D., and McWilliams, J.C., 2003: Anisotropic horizontal viscosity for
+!! ocean models. Ocean Modelling, 5(2), 129-156.
+!! https://doi.org/10.1016/S1463-5003(02)00016-1
 
 end module MOM_hor_visc
