@@ -51,6 +51,8 @@ type, public :: regridding_CS
   !!  target_density(k+1) = coordinateResolution(k) + coordinateResolution(k)
   !! It is only used in "rho" mode.
   real, dimension(:), allocatable :: target_density
+
+  !> A flag to indicate that the target_density arrays has been filled with data.
   logical :: target_density_set = .false.
 
   !> This array is set by function set_regrid_max_depths()
@@ -104,12 +106,12 @@ type, public :: regridding_CS
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .true.
 
-  type(zlike_CS),  pointer :: zlike_CS  => null()
-  type(sigma_CS),  pointer :: sigma_CS  => null()
-  type(rho_CS),    pointer :: rho_CS    => null()
-  type(hycom_CS),  pointer :: hycom_CS  => null()
-  type(slight_CS), pointer :: slight_CS => null()
-  type(adapt_CS),  pointer :: adapt_CS  => null()
+  type(zlike_CS),  pointer :: zlike_CS  => null() !< Control structure for z-like coordinate generator
+  type(sigma_CS),  pointer :: sigma_CS  => null() !< Control structure for sigma coordinate generator
+  type(rho_CS),    pointer :: rho_CS    => null() !< Control structure for rho coordinate generator
+  type(hycom_CS),  pointer :: hycom_CS  => null() !< Control structure for hybrid coordinate generator
+  type(slight_CS), pointer :: slight_CS => null() !< Control structure for Slight-coordinate generator
+  type(adapt_CS),  pointer :: adapt_CS  => null() !< Control structure for adaptive coordinate generator
 
 end type
 
@@ -137,7 +139,7 @@ character(len=*), parameter, public :: regriddingCoordinateModeDoc = &
                  " SLIGHT - stretched coordinates above continuous isopycnal\n"//&
                  " ADAPTIVE - optimize for smooth neutral density surfaces"
 
-! Documentation for regridding interpolation schemes
+!> Documentation for regridding interpolation schemes
 character(len=*), parameter, public :: regriddingInterpSchemeDoc = &
                  " P1M_H2     (2nd-order accurate)\n"//&
                  " P1M_H4     (2nd-order accurate)\n"//&
@@ -149,8 +151,12 @@ character(len=*), parameter, public :: regriddingInterpSchemeDoc = &
                  " P3M_IH6IH5 (4th-order accurate)\n"//&
                  " PQM_IH4IH3 (4th-order accurate)\n"//&
                  " PQM_IH6IH5 (5th-order accurate)"
+
+!> Default interpolation scheme
 character(len=*), parameter, public :: regriddingDefaultInterpScheme = "P1M_H2"
+!> Default mode for boundary extrapolation
 logical, parameter, public :: regriddingDefaultBoundaryExtrapolation = .false.
+!> Default minimum thickness for some coordinate generation modes
 real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
 
 #undef __DO_SAFETY_CHECKS__

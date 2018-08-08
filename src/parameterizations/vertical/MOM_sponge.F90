@@ -1,58 +1,7 @@
+!> Implements sponge regions in isopycnal mode
 module MOM_sponge
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, March 1999-June 2000                           *
-!*                                                                     *
-!*    This program contains the subroutines that implement sponge      *
-!*  regions, in which the stratification and water mass properties     *
-!*  are damped toward some profiles.  There are three externally       *
-!*  callable subroutines in this file.                                 *
-!*                                                                     *
-!*    initialize_sponge determines the mapping from the model          *
-!*  variables into the arrays of damped columns.  This remapping is    *
-!*  done for efficiency and to conserve memory.  Only columns which    *
-!*  have positive inverse damping times and which are deeper than a    *
-!*  supplied depth are placed in sponges.  The inverse damping         *
-!*  time is also stored in this subroutine, and memory is allocated    *
-!*  for all of the reference profiles which will subsequently be       *
-!*  provided through calls to set_up_sponge_field.  The first two      *
-!*  arguments are a two-dimensional array containing the damping       *
-!*  rates, and the interface heights to damp towards.                  *
-!*                                                                     *
-!*    set_up_sponge_field is called to provide a reference profile     *
-!*  and the location of the field that will be damped back toward      *
-!*  that reference profile.  A third argument, the number of layers    *
-!*  in the field is also provided, but this should always be nz.       *
-!*                                                                     *
-!*    Apply_sponge damps all of the fields that have been registered   *
-!*  with set_up_sponge_field toward their reference profiles.  The     *
-!*  four arguments are the thickness to be damped, the amount of time  *
-!*  over which the damping occurs, and arrays to which the movement    *
-!*  of fluid into a layer from above and below will be added. The      *
-!*  effect on momentum of the sponge may be accounted for later using  *
-!*  the movement of water recorded in these later arrays.              *
-!*                                                                     *
-!*    All of the variables operated upon in this file are defined at   *
-!*  the thickness points.                                              *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, T, S, Iresttime, ea, eb               *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms, only : sum_across_PEs
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
@@ -73,76 +22,81 @@ implicit none ; private
 public set_up_sponge_field, set_up_sponge_ML_density
 public initialize_sponge, apply_sponge, sponge_end, init_sponge_diags
 
-type :: p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
+!> A structure for creating arrays of pointers to 3D arrays
+type, public :: p3d
+  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array
 end type p3d
-type :: p2d
-  real, dimension(:,:), pointer :: p => NULL()
+!> A structure for creating arrays of pointers to 2D arrays
+type, public :: p2d
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array
 end type p2d
 
+!> This control structure holds memory and parameters for the MOM_sponge module
 type, public :: sponge_CS ; private
-  logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
-                             ! nkml sublayers and nkbl buffer layer.
-  integer :: nz              ! The total number of layers.
-  integer :: isc, iec, jsc, jec  ! The index ranges of the computational domain.
-  integer :: isd, ied, jsd, jed  ! The index ranges of the data domain.
-  integer :: num_col         ! The number of sponge points within the
-                             ! computational domain.
-  integer :: fldno = 0       ! The number of fields which have already been
-                             ! registered by calls to set_up_sponge_field
-  integer, pointer :: col_i(:) => NULL()  ! Arrays containing the i- and j- indicies
-  integer, pointer :: col_j(:) => NULL()  ! of each of the columns being damped.
-  real, pointer :: Iresttime_col(:) => NULL()  ! The inverse restoring time of
-                             ! each column.
-  real, pointer :: Rcv_ml_ref(:) => NULL() ! The value toward which the mixed layer
-                             ! coordinate-density is being damped, in kg m-3.
-  real, pointer :: Ref_eta(:,:) => NULL() ! The value toward which the interface
-                             ! heights are being damped, in m.
-  type(p3d) :: var(MAX_FIELDS_)  ! Pointers to the fields that are being damped.
-  type(p2d) :: Ref_val(MAX_FIELDS_)  ! The values to which the fields are damped.
+  logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
+                       !! nkml sublayers and nkbl buffer layer.
+  integer :: nz        !< The total number of layers.
+  integer :: isc       !< The starting i-index of the computational domain at h.
+  integer :: iec       !< The ending i-index of the computational domain at h.
+  integer :: jsc       !< The starting j-index of the computational domain at h.
+  integer :: jec       !< The ending j-index of the computational domain at h.
+  integer :: isd       !< The starting i-index of the data domain at h.
+  integer :: ied       !< The ending i-index of the data domain at h.
+  integer :: jsd       !< The starting j-index of the data domain at h.
+  integer :: jed       !< The ending j-index of the data domain at h.
+  integer :: num_col   !< The number of sponge points within the computational domain.
+  integer :: fldno = 0 !< The number of fields which have already been
+                       !! registered by calls to set_up_sponge_field
+  integer, pointer :: col_i(:) => NULL() !< Array of the i-indicies of each of the columns being damped.
+  integer, pointer :: col_j(:) => NULL() !< Array of the j-indicies of each of the columns being damped.
+  real, pointer :: Iresttime_col(:) => NULL() !< The inverse restoring time of each column.
+  real, pointer :: Rcv_ml_ref(:) => NULL() !< The value toward which the mixed layer
+                             !! coordinate-density is being damped, in kg m-3.
+  real, pointer :: Ref_eta(:,:) => NULL() !< The value toward which the interface
+                             !! heights are being damped, in m.
+  type(p3d) :: var(MAX_FIELDS_) !< Pointers to the fields that are being damped.
+  type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
 
-  logical :: do_i_mean_sponge     ! If true, apply sponges to the i-mean fields.
-  real, pointer :: Iresttime_im(:) => NULL()  ! The inverse restoring time of
-                             ! each row for i-mean sponges.
-  real, pointer :: Rcv_ml_ref_im(:) => NULL() ! The value toward which the i-mean
-                             ! mixed layer coordinate-density is being damped,
-                             ! in kg m-3.
-  real, pointer :: Ref_eta_im(:,:) => NULL() ! The value toward which the i-mean
-                             ! interface heights are being damped, in m.
-  type(p2d) :: Ref_val_im(MAX_FIELDS_)  ! The values toward which the i-means of
-                             ! fields are damped.
+  logical :: do_i_mean_sponge !< If true, apply sponges to the i-mean fields.
+  real, pointer :: Iresttime_im(:) => NULL() !< The inverse restoring time of
+                             !! each row for i-mean sponges.
+  real, pointer :: Rcv_ml_ref_im(:) => NULL() !! The value toward which the i-mean
+                             !< mixed layer coordinate-density is being damped, in kg m-3.
+  real, pointer :: Ref_eta_im(:,:) => NULL() !< The value toward which the i-mean
+                             !! interface heights are being damped, in m.
+  type(p2d) :: Ref_val_im(MAX_FIELDS_) !< The values toward which the i-means of
+                             !! fields are damped.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  integer :: id_w_sponge = -1
-
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                             !! regulate the timing of diagnostic output.
+  integer :: id_w_sponge = -1 !< A diagnostic ID
 end type sponge_CS
 
 contains
 
+!> This subroutine determines the number of points which are within
+!! sponges in this computational domain.  Only points that have
+!! positive values of Iresttime and which mask2dT indicates are ocean
+!! points are included in the sponges.  It also stores the target interface
+!! heights.
 subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
                              Iresttime_i_mean, int_height_i_mean)
-  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)),       intent(in) :: Iresttime
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: int_height
-  type(param_file_type),                  intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(sponge_CS),                        pointer    :: CS
-  real, dimension(SZJ_(G)),     optional, intent(in) :: Iresttime_i_mean
-  real, dimension(SZJ_(G),SZK_(G)+1), optional, intent(in) :: int_height_i_mean
+  type(ocean_grid_type), intent(in) :: G          !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in) :: Iresttime  !< The inverse of the restoring time, in s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                         intent(in) :: int_height !< The interface heights to damp back toward, in m.
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(sponge_CS),       pointer    :: CS         !< A pointer that is set to point to the control
+                                                  !! structure for this module
+  real, dimension(SZJ_(G)), &
+               optional, intent(in) :: Iresttime_i_mean !< The inverse of the restoring time for
+                                                             !! the zonal mean properties, in s-1.
+  real, dimension(SZJ_(G),SZK_(G)+1), &
+               optional, intent(in) :: int_height_i_mean !< The interface heights toward which to
+                                                             !! damp the zonal mean heights, in m.
 
-!   This subroutine determines the number of points which are within
-! sponges in this computational domain.  Only points that have
-! positive values of Iresttime and which mask2dT indicates are ocean
-! points are included in the sponges.  It also stores the target interface
-! heights.
 
-! Arguments: Iresttime - The inverse of the restoring time, in s-1.
-!  (in)      int_height - The interface heights to damp back toward, in m.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
@@ -173,8 +127,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   CS%do_i_mean_sponge = present(Iresttime_i_mean)
 
   CS%nz = G%ke
-  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
-  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
+!  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
+!  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   ! CS%bulkmixedlayer may be set later via a call to set_up_sponge_ML_density.
   CS%bulkmixedlayer = .false.
 
@@ -226,21 +180,15 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
 
 end subroutine initialize_sponge
 
+!> This subroutine sets up diagnostics for the sponges.  It is separate
+!! from initialize_sponge because it requires fields that are not readily
+!! availble where initialize_sponge is called.
 subroutine init_sponge_diags(Time, G, diag, CS)
-  type(time_type),       target, intent(in)    :: Time
+  type(time_type),       target, intent(in)    :: Time !< The current model time
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(diag_ctrl),       target, intent(inout) :: diag
-  type(sponge_CS),               pointer       :: CS
-
-!   This subroutine sets up diagnostics for the sponges.  It is separate
-! from initialize_sponge because it requires fields that are not readily
-! availble where initialize_sponge is called.
-
-! Arguments:  Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
+  type(diag_ctrl),       target, intent(inout) :: diag !< A structure that is used to regulate diagnostic output
+  type(sponge_CS),               pointer       :: CS   !< A pointer to the control structure for this module that
+                                                       !! is set by a previous call to initialize_sponge.
 
   if (.not.associated(CS)) return
 
@@ -250,25 +198,21 @@ subroutine init_sponge_diags(Time, G, diag, CS)
 
 end subroutine init_sponge_diags
 
+!> This subroutine stores the reference profile for the variable
+!! whose address is given by f_ptr. nlay is the number of layers in
+!! this variable.
 subroutine set_up_sponge_field(sp_val, f_ptr, G, nlay, CS, sp_val_i_mean)
-  type(ocean_grid_type),                            intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in) :: sp_val
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr
-  integer,                                          intent(in) :: nlay
-  type(sponge_CS),                                  pointer    :: CS
-  real, dimension(SZJ_(G),SZK_(G)),       optional, intent(in) :: sp_val_i_mean
-!   This subroutine stores the reference profile for the variable
-! whose address is given by f_ptr. nlay is the number of layers in
-! this variable.
-
-! Arguments: sp_val - The reference profiles of the quantity being
-!                     registered.
-!  (in)      f_ptr - a pointer to the field which will be damped.
-!  (in)      nlay - the number of layers in this quantity.
-!  (in/out)  CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
-!  (in,opt)  sp_val_i_mean - The i-mean reference value for this field with
-!                 i-mean sponges.
+  type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(in) :: sp_val !< The reference profiles of the quantity being registered.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 target, intent(in) :: f_ptr  !< a pointer to the field which will be damped
+  integer,               intent(in) :: nlay   !< the number of layers in this quantity
+  type(sponge_CS),       pointer    :: CS     !< A pointer to the control structure for this module that
+                                              !! is set by a previous call to initialize_sponge.
+  real, dimension(SZJ_(G),SZK_(G)),&
+               optional, intent(in) :: sp_val_i_mean !< The i-mean reference value for
+                                              !! this field with i-mean sponges.
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages
@@ -318,11 +262,17 @@ subroutine set_up_sponge_field(sp_val, f_ptr, G, nlay, CS, sp_val_i_mean)
 end subroutine set_up_sponge_field
 
 
+!> This subroutine stores the reference value for mixed layer density.  It is handled differently
+!! from other values because it is only used in determining which layers can be inflated.
 subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: sp_val
-  type(sponge_CS),                    pointer    :: CS
-  real, dimension(SZJ_(G)), optional, intent(in) :: sp_val_i_mean
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in) :: sp_val !< The reference values of the mixed layer density, in kg m-3
+  type(sponge_CS),       pointer    :: CS   !< A pointer to the control structure for this module that is
+                                            !! set by a previous call to initialize_sponge.
+  real, dimension(SZJ_(G)), &
+               optional, intent(in) :: sp_val_i_mean !< the reference values of the zonal mean mixed
+                                            !! layer density in kg m-3, for use if Iresttime_i_mean > 0.
 !   This subroutine stores the reference value for mixed layer density.  It is
 ! handled differently from other values because it is only used in determining
 ! which layers can be inflated.
@@ -359,19 +309,26 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
 
 end subroutine set_up_sponge_ML_density
 
+!> This subroutine applies damping to the layers thicknesses, mixed layer buoyancy, and a variety of
+!! tracers for every column where there is damping.
 subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
-  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea  !< an array to which the amount of
-                                                    !! fluid entrained from the layer above during
-                                                    !! this call will be added, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: eb !< an array to which the amount of
-                                                          !! fluid entrained from the layer below
-                                                          !! during this call will be added, in H.
-  type(sponge_CS),                          pointer       :: CS
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: Rcv_ml
+  type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: h   !< Layer thicknesses, in H (usually m or kg m-2)
+  real,                    intent(in)    :: dt  !< The amount of time covered by this call, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: ea  !< An array to which the amount of fluid entrained
+                                                !! from the layer above during this call will be
+                                                !! added, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: eb  !< An array to which the amount of fluid entrained
+                                                !! from the layer below during this call will be
+                                                !! added, in H.
+  type(sponge_CS),         pointer       :: CS  !< A pointer to the control structure for this module
+                                                !! that is set by a previous call to initialize_sponge.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(inout) :: Rcv_ml !<  The coordinate density of the mixed layer in kg m-2.
 
 ! This subroutine applies damping to the layers thicknesses, mixed
 ! layer buoyancy, and a variety of tracers for every column where
@@ -634,10 +591,10 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
 end subroutine apply_sponge
 
+!> This call deallocates any memory in the sponge control structure.
 subroutine sponge_end(CS)
-  type(sponge_CS),              pointer       :: CS
-!  (in)      CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
+  type(sponge_CS),         pointer    :: CS   !< A pointer to the control structure for this module
+                                              !! that is set by a previous call to initialize_sponge.
   integer :: m
 
   if (.not.associated(CS)) return
@@ -662,5 +619,38 @@ subroutine sponge_end(CS)
   deallocate(CS)
 
 end subroutine sponge_end
+
+!> \namespace mom_sponge
+!!
+!! By Robert Hallberg, March 1999-June 2000
+!!
+!!   This program contains the subroutines that implement sponge
+!! regions, in which the stratification and water mass properties
+!! are damped toward some profiles.  There are three externally
+!! callable subroutines in this file.
+!!
+!!   initialize_sponge determines the mapping from the model
+!! variables into the arrays of damped columns.  This remapping is
+!! done for efficiency and to conserve memory.  Only columns which
+!! have positive inverse damping times and which are deeper than a
+!! supplied depth are placed in sponges.  The inverse damping
+!! time is also stored in this subroutine, and memory is allocated
+!! for all of the reference profiles which will subsequently be
+!! provided through calls to set_up_sponge_field.  The first two
+!! arguments are a two-dimensional array containing the damping
+!! rates, and the interface heights to damp towards.
+!!
+!!   set_up_sponge_field is called to provide a reference profile
+!! and the location of the field that will be damped back toward
+!! that reference profile.  A third argument, the number of layers
+!! in the field is also provided, but this should always be nz.
+!!
+!!   Apply_sponge damps all of the fields that have been registered
+!! with set_up_sponge_field toward their reference profiles.  The
+!! four arguments are the thickness to be damped, the amount of time
+!! over which the damping occurs, and arrays to which the movement
+!! of fluid into a layer from above and below will be added. The
+!! effect on momentum of the sponge may be accounted for later using
+!! the movement of water recorded in these later arrays.
 
 end module MOM_sponge

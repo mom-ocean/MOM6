@@ -32,53 +32,61 @@ implicit none ; private
 
 public tracer_hordiff, tracer_hor_diff_init, tracer_hor_diff_end
 
+!> The ocntrol structure for along-layer and epineutral tracer diffusion
 type, public :: tracer_hor_diff_CS ; private
-  real    :: dt             ! The baroclinic dynamics time step, in s.
-  real    :: KhTr           ! The along-isopycnal tracer diffusivity in m2/s.
-  real    :: KhTr_Slope_Cff ! The non-dimensional coefficient in KhTr formula
-  real    :: KhTr_min       ! Minimum along-isopycnal tracer diffusivity in m2/s.
-  real    :: KhTr_max       ! Maximum along-isopycnal tracer diffusivity in m2/s.
-  real    :: KhTr_passivity_coeff ! Passivity coefficient that scales Rd/dx (default = 0)
-                                  ! where passivity is the ratio between along-isopycnal
-                                  ! tracer mixing and thickness mixing
-  real    :: KhTr_passivity_min   ! Passivity minimum (default = 1/2)
-  real    :: ML_KhTR_scale        ! With Diffuse_ML_interior, the ratio of the
-                                  ! truly horizontal diffusivity in the mixed
-                                  ! layer to the epipycnal diffusivity.  Nondim.
-  real    :: max_diff_CFL         ! If positive, locally limit the along-isopycnal
-                                  ! tracer diffusivity to keep the diffusive CFL
-                                  ! locally at or below this value. Nondim.
-  logical :: Diffuse_ML_interior  ! If true, diffuse along isopycnals between
-                                  ! the mixed layer and the interior.
-  logical :: check_diffusive_CFL  ! If true, automatically iterate the diffusion
-                                  ! to ensure that the diffusive equivalent of
-                                  ! the CFL limit is not violated.
-  logical :: use_neutral_diffusion ! If true, use the neutral_diffusion module from within
-                                   ! tracer_hor_diff.
-  type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() ! Control structure for neutral diffusion.
-  type(diag_ctrl), pointer :: diag ! structure to regulate timing of diagnostic output.
-  logical :: debug                 ! If true, write verbose checksums for debugging purposes.
-  logical :: show_call_tree        ! Display the call tree while running. Set by VERBOSITY level.
-  logical :: first_call = .true.
+  real    :: dt             !< The baroclinic dynamics time step, in s.
+  real    :: KhTr           !< The along-isopycnal tracer diffusivity in m2/s.
+  real    :: KhTr_Slope_Cff !< The non-dimensional coefficient in KhTr formula
+  real    :: KhTr_min       !< Minimum along-isopycnal tracer diffusivity in m2/s.
+  real    :: KhTr_max       !< Maximum along-isopycnal tracer diffusivity in m2/s.
+  real    :: KhTr_passivity_coeff !< Passivity coefficient that scales Rd/dx (default = 0)
+                                  !! where passivity is the ratio between along-isopycnal
+                                  !! tracer mixing and thickness mixing
+  real    :: KhTr_passivity_min   !< Passivity minimum (default = 1/2)
+  real    :: ML_KhTR_scale        !< With Diffuse_ML_interior, the ratio of the
+                                  !! truly horizontal diffusivity in the mixed
+                                  !! layer to the epipycnal diffusivity.  Nondim.
+  real    :: max_diff_CFL         !< If positive, locally limit the along-isopycnal
+                                  !! tracer diffusivity to keep the diffusive CFL
+                                  !! locally at or below this value. Nondim.
+  logical :: Diffuse_ML_interior  !< If true, diffuse along isopycnals between
+                                  !! the mixed layer and the interior.
+  logical :: check_diffusive_CFL  !< If true, automatically iterate the diffusion
+                                  !! to ensure that the diffusive equivalent of
+                                  !! the CFL limit is not violated.
+  logical :: use_neutral_diffusion !< If true, use the neutral_diffusion module from within
+                                   !! tracer_hor_diff.
+  type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  logical :: debug                 !< If true, write verbose checksums for debugging purposes.
+  logical :: show_call_tree        !< Display the call tree while running. Set by VERBOSITY level.
+  logical :: first_call = .true.   !< This is true until after the first call
+  !>@{ Diagnostic IDs
   integer :: id_KhTr_u  = -1
   integer :: id_KhTr_v  = -1
   integer :: id_KhTr_h  = -1
   integer :: id_CFL     = -1
   integer :: id_khdt_x  = -1
   integer :: id_khdt_y  = -1
+  !!@}
 
-  type(group_pass_type) :: pass_t !For group halo pass, used in both
-                                  !tracer_hordiff and tracer_epipycnal_ML_diff
+  type(group_pass_type) :: pass_t !< For group halo pass, used in both
+                                  !! tracer_hordiff and tracer_epipycnal_ML_diff
 end type tracer_hor_diff_CS
 
+!> A type that can be used to create arrays of pointers to 2D arrays
 type p2d
-  real, dimension(:,:), pointer :: p => NULL()
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array of reals
 end type p2d
+!> A type that can be used to create arrays of pointers to 2D integer arrays
 type p2di
-  integer, dimension(:,:), pointer :: p => NULL()
+  integer, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array of integers
 end type p2di
 
+!>@{ CPU time clocks
 integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
+!!@}
 
 contains
 

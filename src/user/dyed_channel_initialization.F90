@@ -1,3 +1,4 @@
+!> Initialization for the dyed_channel configuration
 module dyed_channel_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -23,24 +24,26 @@ implicit none ; private
 public dyed_channel_set_OBC_tracer_data, dyed_channel_OBC_end
 public register_dyed_channel_OBC, dyed_channel_update_flow
 
-!> Control structure for tidal bay open boundaries.
+!> Control structure for dyed-channel open boundaries.
 type, public :: dyed_channel_OBC_CS ; private
   real :: zonal_flow = 8.57         !< Mean inflow
   real :: tidal_amp = 0.0           !< Sloshing amplitude
   real :: frequency  = 0.0          !< Sloshing frequency
 end type dyed_channel_OBC_CS
 
-integer :: ntr = 0
+integer :: ntr = 0 !< Number of dye tracers
+                   !! \todo This is a module variable. Move this variable into the control structure.
 
 contains
 
 !> Add dyed channel to OBC registry.
 function register_dyed_channel_OBC(param_file, CS, OBC_Reg)
   type(param_file_type),     intent(in) :: param_file !< parameter file.
-  type(dyed_channel_OBC_CS), pointer    :: CS         !< tidal bay control structure.
+  type(dyed_channel_OBC_CS), pointer    :: CS         !< Dyed channel control structure.
   type(OBC_registry_type),   pointer    :: OBC_Reg    !< OBC registry.
+  ! Local variables
   logical                               :: register_dyed_channel_OBC
-  character(len=32)  :: casename = "dyed channel"     !< This case's name.
+  character(len=32)  :: casename = "dyed channel"     ! This case's name.
   character(len=40)  :: mdl = "register_dyed_channel_OBC" ! This subroutine's name.
 
   if (associated(CS)) then
@@ -68,7 +71,7 @@ end function register_dyed_channel_OBC
 
 !> Clean up the dyed_channel OBC from registry.
 subroutine dyed_channel_OBC_end(CS)
-  type(dyed_channel_OBC_CS), pointer :: CS    !< tidal bay control structure.
+  type(dyed_channel_OBC_CS), pointer :: CS    !< Dyed channel control structure.
 
   if (associated(CS)) then
     deallocate(CS)
@@ -85,15 +88,14 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
                                                 !! to parse for model parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
-
-! Local variables
+  ! Local variables
   character(len=40)  :: mdl = "dyed_channel_set_OBC_tracer_data" ! This subroutine's name.
   character(len=80)  :: name, longname
   integer :: i, j, k, l, itt, isd, ied, jsd, jed, m, n
   integer :: IsdB, IedB, JsdB, JedB
   real :: dye
-  type(OBC_segment_type), pointer :: segment
-  type(tracer_type), pointer      :: tr_ptr
+  type(OBC_segment_type), pointer :: segment => NULL()
+  type(tracer_type), pointer      :: tr_ptr => NULL()
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
         'dyed_channel_set_OBC_data() was called but OBC type was not initialized!')
@@ -133,17 +135,16 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
-  type(dyed_channel_OBC_CS),  pointer    :: CS  !< tidal bay control structure.
+  type(dyed_channel_OBC_CS),  pointer    :: CS  !< Dyed channel control structure.
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
   type(time_type),            intent(in) :: Time !< model time.
-
-! Local variables
+  ! Local variables
   character(len=40)  :: mdl = "dyed_channel_update_flow" ! This subroutine's name.
   character(len=80)  :: name
   real :: flow, time_sec, PI
   integer :: i, j, k, l, itt, isd, ied, jsd, jed, m, n
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
         'dyed_channel_update_flow() was called but OBC type was not initialized!')
@@ -190,5 +191,6 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
 end subroutine dyed_channel_update_flow
 
 !> \namespace dyed_channel_initialization
+!!
 !! Setting dyes, one for painting the inflow on each side.
 end module dyed_channel_initialization

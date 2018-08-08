@@ -166,17 +166,13 @@ program MOM_main
 contains
 
 subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
-  type(ocean_grid_type), intent(in)             :: G    !< The ocean's grid structure
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
-  type(param_file_type), intent(in)             :: param_file !< A structure to parse for run-time parameters
-  real,                  intent(in)             :: max_depth
-! Arguments: D          - the bottom depth in m. Intent out.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D    !< The ocean bottom depth in m
+  type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
+  real,                             intent(in)  :: max_depth !< The maximum ocean depth in m
 
 ! This subroutine sets up the benchmark test case topography
-  real :: min_depth            ! The minimum and maximum depths in m.
+  real :: min_depth            ! The minimum ocean depth in m.
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !

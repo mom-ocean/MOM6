@@ -1,15 +1,7 @@
+!> Routines for error handling and I/O management
 module MOM_error_handler
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By R. Hallberg, 2005-2012.                                         *
-!*                                                                     *
-!*    This module wraps the mpp_mod error handling code and the        *
-!*  mpp functions stdlog() and stdout() that return open unit numbers. *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use mpp_mod, only : mpp_error, NOTE, WARNING, FATAL
 use mpp_mod, only : mpp_pe, mpp_root_pe, stdlog, stdout
@@ -21,18 +13,19 @@ public MOM_set_verbosity, MOM_get_verbosity, MOM_verbose_enough
 public callTree_showQuery, callTree_enter, callTree_leave, callTree_waypoint
 public assert
 
-! Verbosity level:
-!  0 - FATAL messages only
-!  1 - FATAL + WARNING messages only
-!  2 - FATAL + WARNING + NOTE messages only [default]
-!  3 - above + informational
-!  4 -
-!  5 -
-!  6 - above + call tree
-!  7 -
-!  8 -
-!  9 - anything and everything (also set with #define DEBUG)
 integer :: verbosity = 6
+!< Verbosity level:
+!!  0 - FATAL messages only
+!!  1 - FATAL + WARNING messages only
+!!  2 - FATAL + WARNING + NOTE messages only [default]
+!!  3 - above + informational
+!!  4 -
+!!  5 -
+!!  6 - above + call tree
+!!  7 -
+!!  8 -
+!!  9 - anything and everything (also set with DEBUG=True)
+
 !   Note that this module default will only hold until the
 ! VERBOSITY parameter is parsed and the given default imposed.
 ! We set it to 6 here so that the call tree will print before
@@ -41,8 +34,8 @@ integer :: verbosity = 6
 ! a type passed by argument (preferred for most data) for convenience
 ! and to reduce obfuscation of code
 
-! The level of calling within the call tree
 integer :: callTreeIndentLevel = 0
+!< The level of calling within the call tree
 
 contains
 
