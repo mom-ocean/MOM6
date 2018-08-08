@@ -16,7 +16,7 @@ module ocn_cpl_indices
     integer :: o2x_So_dhdx       !< Zonal slope in the sea surface height
     integer :: o2x_So_dhdy       !< Meridional lope in the sea surface height
     integer :: o2x_So_bldepth    !< Boundary layer depth (m)
-    integer :: o2x_Fioo_q        !< Heat flux?
+    integer :: o2x_Fioo_q        !< Ocean melt and freeze potential (W/m2)
     integer :: o2x_Faoo_fco2_ocn !< CO2 flux
     integer :: o2x_Faoo_fdms_ocn !< DMS flux
 
