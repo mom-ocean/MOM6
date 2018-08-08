@@ -149,10 +149,6 @@ type, public :: ocean_state_type ; private
 
   logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
                               !! ocean dynamics and forcing fluxes.
-  logical :: restore_salinity !< If true, the coupled MOM driver adds a term to
-                              !! restore salinity to a specified value.
-  logical :: restore_temp     !< If true, the coupled MOM driver adds a term to
-                              !! restore sst to a specified value.
   real :: press_to_z          !< A conversion factor between pressure and ocean
                               !! depth in m, usually 1/(rho_0*g), in m Pa-1.
   real :: C_p                 !< The heat capacity of seawater, in J K-1 kg-1.
@@ -311,14 +307,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   else ; call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
 
-  call get_param(param_file, mdl, "RESTORE_SALINITY",OS%restore_salinity, &
-                 "If true, the coupled driver will add a globally-balanced \n"//&
-                 "fresh-water flux that drives sea-surface salinity \n"//&
-                 "toward specified values.", default=.false.)
-  call get_param(param_file, mdl, "RESTORE_TEMPERATURE",OS%restore_temp, &
-                 "If true, the coupled driver will add a  \n"//&
-                 "heat flux that drives sea-surface temperauture \n"//&
-                 "toward specified values.", default=.false.)
   call get_param(param_file, mdl, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
@@ -343,7 +331,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                               do_integrals=.true., gas_fields_ocn=gas_fields_ocn)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
-                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
+                            OS%forcing_CSp)
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
@@ -486,8 +474,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (do_thermo) then
     if (OS%fluxes%fluxes_used) then
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
-                                 OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity, &
-                                 OS%restore_temp)
+                                 OS%grid, OS%forcing_CSp, OS%sfc_state)
 
       ! Add ice shelf fluxes
       if (OS%use_ice_shelf) &
@@ -508,8 +495,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       ! into a temporary type and then accumulate them in about 20 lines.
       OS%flux_tmp%C_p = OS%fluxes%C_p
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
-                                 OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity, &
-                                 OS%restore_temp)
+                                 OS%grid, OS%forcing_CSp, OS%sfc_state)
 
       if (OS%use_ice_shelf) &
         call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
@@ -523,7 +509,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #endif
     endif
   endif
-  if (associated(OS%forces%net_mass_src)) &
+  if (associated(OS%forces%net_mass_src) .and. .not.OS%forces%net_mass_src_set) &
     call get_net_mass_forcing(OS%fluxes, OS%grid, OS%forces%net_mass_src)
 
   if (OS%use_waves) then
