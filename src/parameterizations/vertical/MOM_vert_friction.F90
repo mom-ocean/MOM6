@@ -2,7 +2,7 @@
 module MOM_vert_friction
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
+use MOM_domains,       only : pass_var, To_All, Omit_corners
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_debugging, only : uvchksum, hchksum
@@ -29,6 +29,7 @@ public vertvisc, vertvisc_remnant, vertvisc_coef
 public vertvisc_limit_vel, vertvisc_init, vertvisc_end
 public updateCFLtruncationValue
 
+!> The control structure with parameters and memory for the MOM_vert_friction module
 type, public :: vertvisc_CS ; private
   real    :: Hmix            !< The mixed layer thickness in m.
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
@@ -66,13 +67,10 @@ type, public :: vertvisc_CS ; private
     a_v                !< The v-drag coefficient across an interface, in m s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     h_v                !< The effective layer thickness at v-points, m or kg m-2.
-  !>@{
-  !! The surface coupling coefficient under ice shelves
-  !! in m s-1. Retained to determine stress under shelves.
-  real, pointer, dimension(:,:) :: &
-    a1_shelf_u => NULL(), &
-    a1_shelf_v => NULL()
-  !>@}
+  real, pointer, dimension(:,:) :: a1_shelf_u => NULL() !< The u-momentum coupling coefficient under
+                           !! ice shelves in m s-1. Retained to determine stress under shelves.
+  real, pointer, dimension(:,:) :: a1_shelf_v => NULL() !< The v-momentum coupling coefficient under
+                           !! ice shelves in m s-1. Retained to determine stress under shelves.
 
   logical :: split          !< If true, use the split time stepping scheme.
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
@@ -99,27 +97,28 @@ type, public :: vertvisc_CS ; private
                             !! thickness for viscosity.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   integer :: nkml           !< The number of layers in the mixed layer.
-  integer, pointer :: ntrunc  !< The number of times the velocity has been
-                              !! truncated since the last call to write_energy.
-  !>@{
-  !! The complete path to files in which a column's worth of
-  !! accelerations are written when velocity truncations occur.
-  character(len=200) :: u_trunc_file
-  character(len=200) :: v_trunc_file
-  !>@}
+  integer, pointer :: ntrunc !< The number of times the velocity has been
+                            !! truncated since the last call to write_energy.
+  character(len=200) :: u_trunc_file  !< The complete path to a file in which a column of
+                            !! u-accelerations are written if velocity truncations occur.
+  character(len=200) :: v_trunc_file !< The complete path to a file in which a column of
+                            !! v-accelerations are written if velocity truncations occur.
+  logical :: StokesMixing   !< If true, do Stokes drift mixing via the Lagrangian current
+                            !! (Eulerian plus Stokes drift).  False by default and set
+                            !! via STOKES_MIXING_COMBINED.
 
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
 
-  !>@{
-  !! Diagnostic identifiers
+  !>@{ Diagnostic identifiers
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
+  integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   !>@}
 
-  type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
-  logical :: StokesMixing
+  type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
+                              !! for recording accelerations leading to velocity truncations
 end type vertvisc_CS
 
 contains
@@ -142,12 +141,12 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                     taux_bot, tauy_bot, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
-  real, intent(inout), &
-    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u      !< Zonal velocity in m s-1
-  real, intent(inout), &
-    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
-  real, intent(in), &
-    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: u      !< Zonal velocity in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(inout) :: v      !< Meridional velocity in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h      !< Layer thickness in H
   type(mech_forcing),    intent(in)      :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),   intent(inout)   :: visc   !< Viscosities and bottom drag
   real,                  intent(in)      :: dt     !< Time increment in s
@@ -459,15 +458,17 @@ end subroutine vertvisc
 subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   type(ocean_grid_type), intent(in)   :: G    !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV   !< Ocean vertical grid structure
-  type(vertvisc_type), intent(in)     :: visc !< Viscosities and bottom drag
-  !> Fraction of a time-step's worth of a barotopic acceleration that
-  !! a layer experiences after viscosity is applied in the zonal direction
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: visc_rem_u
-  !> Fraction of a time-step's worth of a barotopic acceleration that
-  !! a layer experiences after viscosity is applied in the meridional direction
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: visc_rem_v
-  real, intent(in)           :: dt !< Time increment in s
-  type(vertvisc_CS), pointer :: CS !< Vertical viscosity control structure
+  type(vertvisc_type),   intent(in)   :: visc !< Viscosities and bottom drag
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                         intent(inout) :: visc_rem_u !< Fraction of a time-step's worth of a
+                                              !! barotopic acceleration that a layer experiences
+                                              !! after viscosity is applied in the zonal direction
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                         intent(inout) :: visc_rem_v !< Fraction of a time-step's worth of a
+                                              !! barotopic acceleration that a layer experiences
+                                              !! after viscosity is applied in the meridional direction
+  real,                  intent(in)    :: dt  !< Time increment in s
+  type(vertvisc_CS),     pointer       :: CS  !< Vertical viscosity control structure
 
   ! Local variables
 
@@ -564,19 +565,19 @@ end subroutine vertvisc_remnant
 !! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 !! applying the implicit vertical viscosity via vertvisc().
 subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
-  type(ocean_grid_type), intent(in)      :: G      !< Ocean grid structure
+  type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
-  real, intent(in), &
-    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u      !< Zonal velocity in m s-1
-  real, intent(in), &
-    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
-  real, intent(in), &
-    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
-  type(mech_forcing),  intent(in)        :: forces !< A structure with the driving mechanical forces
-  type(vertvisc_type), intent(in)        :: visc   !< Viscosities and bottom drag
-  real, intent(in)                       :: dt     !< Time increment in s
-  type(vertvisc_CS), pointer             :: CS     !< Vertical viscosity control structure
-  type(ocean_OBC_type),  pointer         :: OBC    !< Open boundary condition structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: u      !< Zonal velocity in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(in)    :: v      !< Meridional velocity in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h      !< Layer thickness in H
+  type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
+  type(vertvisc_type),     intent(in)    :: visc   !< Viscosities and bottom drag
+  real,                    intent(in)    :: dt     !< Time increment in s
+  type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
+  type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary condition structure
 
   ! Field from forces used in this subroutine:
   !   ustar: the friction velocity in m s-1, used here as the mixing
@@ -614,6 +615,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
                   ! based on harmonic mean thicknesses, in m or kg m-2.
     h_ml          ! The mixed layer depth, in m or kg m-2.
   real, allocatable, dimension(:,:) :: hML_u, hML_v
+  real, allocatable, dimension(:,:,:) :: Kv_v, & !< Total vertical viscosity at u-points
+                                         Kv_u    !< Total vertical viscosity at v-points
   real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
@@ -646,6 +649,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
+  if (CS%id_Kv_u > 0) then
+    allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,G%ke)) ; Kv_u(:,:,:) = 0.0
+  endif
+
+  if (CS%id_Kv_v > 0) then
+    allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,G%ke)) ; Kv_v(:,:,:) = 0.0
+  endif
+
   if (CS%debug .or. (CS%id_hML_u > 0)) then
     allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
   endif
@@ -662,12 +673,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-!$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,forces,hML_u, &
-!$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
-!$OMP                     firstprivate(i_hbbl)                                             &
-!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,   &
-!$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,zi_dir, &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt,z_clear)
+  !$OMP parallel do default(private) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,forces,hML_u, &
+  !$OMP                                     OBC,h_neglect,dt,m_to_H,I_valBL,Kv_u) &
+  !$OMP                     firstprivate(i_hbbl)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -821,16 +829,20 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) ; enddo ; enddo
     endif
 
+    ! Diagnose total Kv at u-points
+    if (CS%id_Kv_u > 0) then
+      do k=1,nz ; do I=Isq,Ieq
+        if (do_i(I)) Kv_u(I,j,k) = 0.5 * (CS%a_u(I,j,K)+CS%a_u(I,j,K+1)) * CS%h_u(I,j,k)
+      enddo ; enddo
+    endif
+
   enddo
 
 
   ! Now work on v-points.
-!$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
-!$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
-!$OMP                     firstprivate(i_hbbl)                                                &
-!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,zi_dir, &
-!$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt,z_clear)
+  !$OMP parallel do default(private) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
+  !$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL,Kv_v) &
+  !$OMP                     firstprivate(i_hbbl)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -984,6 +996,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) CS%a_v(i,J,K) = a(i,K) ; enddo ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) ; enddo ; enddo
     endif
+
+    ! Diagnose total Kv at v-points
+    if (CS%id_Kv_v > 0) then
+      do k=1,nz ; do i=is,ie
+        if (do_i(I)) Kv_v(i,J,k) = 0.5 * (CS%a_v(i,J,K)+CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
+      enddo ; enddo
+    endif
+
   enddo ! end of v-point j loop
 
   if (CS%debug) then
@@ -997,6 +1017,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   endif
 
 ! Offer diagnostic fields for averaging.
+  if (CS%id_Kv_slow > 0) call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
+  if (CS%id_Kv_u > 0) call post_data(CS%id_Kv_u, Kv_u, CS%diag)
+  if (CS%id_Kv_v > 0) call post_data(CS%id_Kv_v, Kv_v, CS%diag)
   if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)
   if (CS%id_av_vv > 0) call post_data(CS%id_av_vv, CS%a_v, CS%diag)
   if (CS%id_h_u > 0) call post_data(CS%id_h_u, CS%h_u, CS%diag)
@@ -1014,41 +1037,33 @@ end subroutine vertvisc_coef
 !! adjacent layer thicknesses are used to calculate a[k] near the bottom.
 subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                               dt, j, G, GV, CS, visc, forces, work_on_u, OBC, shelf)
-  type(ocean_grid_type), intent(in)                 :: G  !< Ocean grid structure
-  type(verticalGrid_type),               intent(in) :: GV !< Ocean vertical grid structure
-  !> Coupling coefficient across interfaces, in m s-1
-  real,    dimension(SZIB_(G),SZK_(GV)+1), intent(out) :: a
-  !> Thickness at velocity points, in H
-  real,    dimension(SZIB_(G),SZK_(GV)),   intent(in)  :: hvel
-  !> If true, determine coupling coefficient for a column
-  logical, dimension(SZIB_(G)),            intent(in)  :: do_i
-  !> Harmonic mean of thicknesses around a velocity grid point, in H
-  real,    dimension(SZIB_(G),SZK_(GV)),   intent(in)  :: h_harm
-  !> Bottom boundary layer thickness, in H
-  real,    dimension(SZIB_(G)),            intent(in)  :: bbl_thick
-  !> Bottom boundary layer viscosity, in m2 s-1
-  real,    dimension(SZIB_(G)),            intent(in)  :: kv_bbl
-  !> Estimate of interface heights above the bottom,
-  !! normalised by the bottom boundary layer thickness
-  real,    dimension(SZIB_(G),SZK_(GV)+1), intent(in)  :: z_i
-  !> Mixed layer depth, in H
-  real,    dimension(SZIB_(G)),         intent(out) :: h_ml
-  !> j-index to find coupling coefficient for
-  integer,                              intent(in)  :: j
-  !> Time increment, in s
-  real,                                 intent(in)  :: dt
-  !> Vertical viscosity control structure
-  type(vertvisc_CS), pointer                        :: CS
-  !> Structure containing viscosities and bottom drag
-  type(vertvisc_type), intent(in)                   :: visc
-  type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
-  !> If true, u-points are being calculated, otherwise v-points
-  logical,                              intent(in)  :: work_on_u
-  !> Open boundary condition structure
-  type(ocean_OBC_type),  pointer         :: OBC
-  !> If present and true, use a surface boundary condition
-  !! appropriate for an ice shelf.
-  logical, optional,                    intent(in)  :: shelf
+  type(ocean_grid_type),     intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),   intent(in)  :: GV !< Ocean vertical grid structure
+  real, dimension(SZIB_(G),SZK_(GV)+1), &
+                             intent(out) :: a  !< Coupling coefficient across interfaces, in m s-1
+  real, dimension(SZIB_(G),SZK_(GV)), &
+                             intent(in)  :: hvel !< Thickness at velocity points, in H
+  logical, dimension(SZIB_(G)), &
+                             intent(in)  :: do_i !< If true, determine coupling coefficient for a column
+  real, dimension(SZIB_(G),SZK_(GV)), &
+                             intent(in)  :: h_harm !< Harmonic mean of thicknesses around a velocity
+                                                   !! grid point, in H
+  real, dimension(SZIB_(G)), intent(in)  :: bbl_thick !< Bottom boundary layer thickness, in H
+  real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, in m2 s-1
+  real, dimension(SZIB_(G),SZK_(GV)+1), &
+                             intent(in)  :: z_i  !< Estimate of interface heights above the bottom,
+                                                 !! normalized by the bottom boundary layer thickness
+  real, dimension(SZIB_(G)), intent(out) :: h_ml !< Mixed layer depth, in H
+  integer,                   intent(in)  :: j    !< j-index to find coupling coefficient for
+  real,                      intent(in)  :: dt   !< Time increment, in s
+  type(vertvisc_CS),         pointer     :: CS   !< Vertical viscosity control structure
+  type(vertvisc_type),       intent(in)  :: visc !< Structure containing viscosities and bottom drag
+  type(mech_forcing),        intent(in)  :: forces !< A structure with the driving mechanical forces
+  logical,                   intent(in)  :: work_on_u !< If true, u-points are being calculated,
+                                                  !! otherwise they are v-points
+  type(ocean_OBC_type),      pointer     :: OBC   !< Open boundary condition structure
+  logical,         optional, intent(in)  :: shelf !< If present and true, use a surface boundary
+                                                  !! condition appropriate for an ice shelf.
 
   ! Local variables
 
@@ -1156,6 +1171,56 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
             do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j+1,k) ; enddo
+          endif
+        endif ; enddo
+      endif
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        a(i,K) = a(i,K) + Kv_add(i,K)
+      endif ; enddo ; enddo
+    endif
+  endif
+
+  if (associated(visc%Kv_shear_Bu)) then
+    if (work_on_u) then
+      do K=2,nz ; do I=Is,Ie ; If (do_i(I)) then
+        a(I,K) = a(I,K) + (2.*0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
+      endif ; enddo ; enddo
+    else
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        a(i,K) = a(i,K) + (2.*0.5)*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
+      endif ; enddo ; enddo
+    endif
+  endif
+
+  ! add "slow" varying vertical viscosity (e.g., from background, tidal etc)
+  if (associated(visc%Kv_slow) .and. (visc%add_Kv_slow)) then
+    ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
+    if (work_on_u) then
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        Kv_add(i,K) = Kv_add(i,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
+      endif ; enddo ; enddo
+      if (do_OBCs) then
+        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
+          endif
+        endif ; enddo
+      endif
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        a(i,K) = a(i,K) + Kv_add(i,K)
+      endif ; enddo ; enddo
+    else
+      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
+        Kv_add(i,K) = Kv_add(i,K) + 1.0*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
+      endif ; enddo ; enddo
+      if (do_OBCs) then
+        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1497,21 +1562,22 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 
 end subroutine vertvisc_limit_vel
 
-!> Initialise the vertical friction module
+!> Initialize the vertical friction module
 subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                          ntrunc, CS)
-  !> "MOM Internal State", a set of pointers to the fields and accelerations
-  !! that make up the ocean's physical state
-  type(ocean_internal_state), target, intent(in) :: MIS
-  type(time_type), target, intent(in)    :: Time       !< Current model time
-  type(ocean_grid_type),   intent(in)    :: G          !< Ocean grid structure
-  type(verticalGrid_type), intent(in)    :: GV         !< Ocean vertical grid structure
+  type(ocean_internal_state), &
+                   target, intent(in)    :: MIS    !< The "MOM Internal State", a set of pointers
+                                                   !! to the fields and accelerations that make
+                                                   !! up the ocean's physical state
+  type(time_type), target, intent(in)    :: Time   !< Current model time
+  type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(param_file_type),   intent(in)    :: param_file !< File to parse for parameters
-  type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostic control structure
-  type(accel_diag_ptrs),   intent(inout) :: ADp        !< Acceleration diagnostic pointers
-  type(directories),       intent(in)    :: dirs       !< Relevant directory paths
-  integer, target,         intent(inout) :: ntrunc     !< Number of velocity truncations
-  type(vertvisc_CS),       pointer       :: CS         !< Vertical viscosity control structure
+  type(diag_ctrl), target, intent(inout) :: diag   !< Diagnostic control structure
+  type(accel_diag_ptrs),   intent(inout) :: ADp    !< Acceleration diagnostic pointers
+  type(directories),       intent(in)    :: dirs   !< Relevant directory paths
+  integer, target,         intent(inout) :: ntrunc !< Number of velocity truncations
+  type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
 
   ! Local variables
 
@@ -1671,17 +1737,30 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   ALLOC_(CS%a_v(isd:ied,JsdB:JedB,nz+1)) ; CS%a_v(:,:,:) = 0.0
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
+  CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
+     'Slow varying vertical viscosity', 'm2 s-1')
+
+  CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
+     'Total vertical viscosity at u-points', 'm2 s-1')
+
+  CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
+     'Total vertical viscosity at v-points', 'm2 s-1')
+
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'm s-1')
+
   CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
      'Meridional Viscous Vertical Coupling Coefficient', 'm s-1')
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
      'Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+
   CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
      'Thickness at Meridional Velocity Points for Viscosity', thickness_units)
+
   CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+
   CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units)
 
@@ -1708,8 +1787,8 @@ end subroutine vertvisc_init
 subroutine updateCFLtruncationValue(Time, CS, activate)
   type(time_type), target, intent(in)    :: Time     !< Current model time
   type(vertvisc_CS),       pointer       :: CS       !< Vertical viscosity control structure
-  !> Whether to record the value of Time as the beginning of the ramp period
-  logical, optional,       intent(in)    :: activate
+  logical, optional,       intent(in)    :: activate !< Specifiy whether to record the value of
+                                                     !! Time as the beginning of the ramp period
 
   ! Local variables
   real :: deltaTime, wghtA
@@ -1744,7 +1823,9 @@ end subroutine updateCFLtruncationValue
 
 !> Clean up and deallocate the vertical friction module
 subroutine vertvisc_end(CS)
-  type(vertvisc_CS),   pointer       :: CS
+  type(vertvisc_CS), pointer :: CS !< Vertical viscosity control structure that
+                                   !! will be deallocated in this subroutine.
+
   DEALLOC_(CS%a_u) ; DEALLOC_(CS%h_u)
   DEALLOC_(CS%a_v) ; DEALLOC_(CS%h_v)
   if (associated(CS%a1_shelf_u)) deallocate(CS%a1_shelf_u)

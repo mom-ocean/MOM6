@@ -93,7 +93,7 @@ type, public :: tracer_type
   character(len=48)               :: cmor_tendprefix = ""     !< The CMOR variable prefix for tendencies of this
                                                               !! tracer, required because CMOR does not follow any
                                                               !! discernable pattern for these names.
-  integer :: ind_tr_squared = -1
+  integer :: ind_tr_squared = -1 !< The tracer registry index for the square of this tracer
 
   !### THESE CAPABILITIES HAVE NOT YET BEEN IMPLEMENTED.
   logical :: advect_tr = .true.     !< If true, this tracer should be advected
@@ -101,6 +101,7 @@ type, public :: tracer_type
   logical :: remap_tr = .true.      !< If true, this tracer should be vertically remapped
 
   integer :: diag_form = 1  !< An integer indicating which template is to be used to label diagnostics.
+  !>@{ Diagnostic IDs
   integer :: id_tr = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
@@ -109,6 +110,7 @@ type, public :: tracer_type
   integer :: id_remap_conc = -1, id_remap_cont = -1, id_remap_cont_2d = -1
   integer :: id_tendency = -1, id_trxh_tendency = -1, id_trxh_tendency_2d = -1
   integer :: id_tr_vardec = -1
+  !!@}
 end type tracer_type
 
 !> Type to carry basic tracer information
@@ -727,11 +729,11 @@ end subroutine MOM_tracer_chksum
 
 !> Calculates and prints the global inventory of all tracers in the registry.
 subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
-  character(len=*),                         intent(in) :: mesg   !< message that appears on the chksum lines
-  type(ocean_grid_type),                    intent(in) :: G      !< ocean grid structure
-  type(tracer_type),                        intent(in) :: Tr(:)  !< array of all of registered tracers
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h      !< Layer thicknesses
-  integer,                                  intent(in) :: ntr    !< number of registered tracers
+  character(len=*),                         intent(in) :: mesg !< message that appears on the chksum lines
+  type(ocean_grid_type),                    intent(in) :: G    !< ocean grid structure
+  type(tracer_type), dimension(:),          intent(in) :: Tr   !< array of all of registered tracers
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses
+  integer,                                  intent(in) :: ntr  !< number of registered tracers
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: tr_inv !< Tracer inventory
   real :: total_inv
@@ -743,7 +745,7 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
     do k=1,nz ; do j=js,je ; do i=is,ie
       tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%areaT(i,j)*G%mask2dT(i,j)
     enddo ; enddo ; enddo
-    total_inv = reproducing_sum(tr_inv, is, ie, js, je)
+    total_inv = reproducing_sum(tr_inv, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
     if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg
   enddo
 
@@ -792,7 +794,7 @@ end subroutine tracer_registry_init
 
 !> This routine closes the tracer registry module.
 subroutine tracer_registry_end(Reg)
-  type(tracer_registry_type), pointer :: Reg
+  type(tracer_registry_type), pointer :: Reg !< The tracer registry that will be deallocated
   if (associated(Reg)) deallocate(Reg)
 end subroutine tracer_registry_end
 

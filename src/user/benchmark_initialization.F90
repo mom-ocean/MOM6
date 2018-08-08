@@ -1,3 +1,4 @@
+!> Initialization for the "bench mark" configuration
 module benchmark_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -23,7 +24,6 @@ public benchmark_init_temperature_salinity
 
 contains
 
-! -----------------------------------------------------------------------------
 !> This subroutine sets up the benchmark test case topography.
 subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
@@ -31,8 +31,7 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
                                       intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
-
-! This subroutine sets up the benchmark test case topography
+  ! Local variables
   real :: min_depth            ! The minimum and maximum depths in m.
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
@@ -67,10 +66,8 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
   enddo ; enddo
 
 end subroutine benchmark_initialize_topography
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
-!> This subroutine initializes layer thicknesses for the benchmark test case,
+!> Initializes layer thicknesses for the benchmark test case,
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
@@ -88,7 +85,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, &
                                                       !! reference pressure in Pa.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
+  ! Local variables
   real :: e0(SZK_(GV)+1)     ! The resting interface heights, in m, usually !
                              ! negative because it is positive upward.      !
   real :: e_pert(SZK_(GV)+1) ! Interface height perturbations, positive     !
@@ -193,11 +190,8 @@ subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, &
   enddo ; enddo
 
 end subroutine benchmark_initialize_thickness
-! -----------------------------------------------------------------------------
 
-! -----------------------------------------------------------------------------
-!> This function puts the initial layer temperatures and salinities
-!! into T(:,:,:) and S(:,:,:).
+!> Initializes layer temperatures and salinities for benchmark
 subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
                eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
@@ -215,7 +209,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
                                                                    !! reference pressure in Pa.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
+  ! Local variables
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: pres(SZK_(G))      ! Reference pressure in kg m-3.             !
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in !
@@ -274,9 +268,5 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
   enddo ; enddo
 
 end subroutine benchmark_init_temperature_salinity
-! -----------------------------------------------------------------------------
 
-!! \namespace benchmark_initialization
-!!
-!! The module configures the model for the benchmark experiment.
 end module benchmark_initialization

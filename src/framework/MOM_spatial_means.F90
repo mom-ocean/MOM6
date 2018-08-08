@@ -1,3 +1,4 @@
+!> Functions and routines to take area, volume, mass-weighted, layerwise, zonal or meridional means
 module MOM_spatial_means
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -170,14 +171,7 @@ subroutine global_i_mean(array, i_mean, G, mask)
   real, dimension(SZI_(G),SZJ_(G)), &
                           optional, intent(in)    :: mask !< An array used for weighting the i-mean
 
-!    This subroutine determines the global mean of a field along rows of
-!  constant i, returning it in a 1-d array using the local indexing.
-
-! Arguments: array - The 2-d array whose i-mean is to be taken.
-!  (out)     i_mean - Global mean of array along its i-axis.
-!  (in)      G - The ocean's grid structure.
-!  (in)      mask - An array used for weighting the i-mean.
-
+  ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
@@ -251,14 +245,7 @@ subroutine global_j_mean(array, j_mean, G, mask)
   real, dimension(SZI_(G),SZJ_(G)), &
                           optional, intent(in)    :: mask !< An array used for weighting the j-mean
 
-!    This subroutine determines the global mean of a field along rows of
-!  constant j, returning it in a 1-d array using the local indexing.
-
-! Arguments: array - The 2-d array whose j-mean is to be taken.
-!  (out)     j_mean - Global mean of array along its j-axis.
-!  (in)      G - The ocean's grid structure.
-!  (in)      mask - An array used for weighting the j-mean.
-
+  ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
