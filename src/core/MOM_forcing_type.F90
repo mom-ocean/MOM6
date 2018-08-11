@@ -1998,7 +1998,7 @@ end subroutine set_derived_forcing_fields
 subroutine set_net_mass_forcing(fluxes, forces, G)
   type(forcing),           intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
   type(mech_forcing),      intent(inout) :: forces   !< A structure with the driving mechanical forces
-  type(ocean_grid_type),   intent(in)    :: G        !< The ocean grid type 
+  type(ocean_grid_type),   intent(in)    :: G        !< The ocean grid type
 
   if (associated(forces%net_mass_src)) &
     call get_net_mass_forcing(fluxes, G, forces%net_mass_src)
