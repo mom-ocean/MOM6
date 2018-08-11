@@ -642,7 +642,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS, dt_forc
   if (present(reset_avg)) then ; if (reset_avg) forces%dt_force_accum = 0.0 ; endif
   wt1 = 0.0 ; wt2 = 1.0
   if (present(dt_forcing)) then
-    if ((forces%dt_force_accum > 0.0) .and. (dt_forcing > 0.0)) then 
+    if ((forces%dt_force_accum > 0.0) .and. (dt_forcing > 0.0)) then
       wt1 = forces%dt_force_accum / (forces%dt_force_accum + dt_forcing)
       wt2 = 1.0 - wt1
     endif
