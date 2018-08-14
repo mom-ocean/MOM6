@@ -808,7 +808,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   next_var = 0
   nz = 1 ; if (present(GV)) nz = GV%ke
 
-  restart_time = time_type_to_real(time)
+  restart_time = time_type_to_real(time) / 86400.0
 
   restartname = trim(CS%restartfile)
   if (present(filename)) restartname = trim(filename)
@@ -1027,7 +1027,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     t1 = time_vals(1)
     deallocate(time_vals)
 
-    day = real_to_time_type(t1)
+    day = real_to_time_type(t1*86400.0)
     exit
   enddo
 
