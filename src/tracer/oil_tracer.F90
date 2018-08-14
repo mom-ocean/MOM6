@@ -14,7 +14,7 @@ use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
+use MOM_time_manager, only : time_type, time_type_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
@@ -334,7 +334,6 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   real :: Isecs_per_year = 1.0 / (365.0*86400.0)
   real :: year, h_total, ldecay
-  integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -356,10 +355,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     enddo
   endif
 
-  !   Set the surface value of tracer 1 to increase exponentially
-  ! with a 30 year time scale.
-  call get_time(CS%Time, secs, days)
-  year = (86400.0*days + real(secs)) * Isecs_per_year
+  year = time_type_to_real(CS%Time) * Isecs_per_year
 
   ! Decay tracer (limit decay rate to 1/dt - just in case)
   do m=2,CS%ntr

@@ -35,7 +35,7 @@ module MOM_generic_tracer
   use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
-  use MOM_time_manager, only : time_type, get_time, set_time
+  use MOM_time_manager, only : time_type, set_time
   use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
   use MOM_tracer_Z_init, only : tracer_Z_init
