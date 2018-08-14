@@ -498,7 +498,7 @@ contains
     !
     g_tracer=>CS%g_tracer_list
     do
-       if (allocated(g_tracer%trunoff)) then
+       if (_ALLOCATED(g_tracer%trunoff)) then
           call g_tracer_get_alias(g_tracer,g_tracer_name)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'stf',   stf_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
