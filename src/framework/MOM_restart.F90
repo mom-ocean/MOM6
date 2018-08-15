@@ -14,7 +14,7 @@ use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
-use MOM_time_manager, only : time_type, time_type_to_real, real_to_time_type
+use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum
@@ -1027,7 +1027,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     t1 = time_vals(1)
     deallocate(time_vals)
 
-    day = real_to_time_type(t1*86400.0)
+    day = real_to_time(t1*86400.0)
     exit
   enddo
 
