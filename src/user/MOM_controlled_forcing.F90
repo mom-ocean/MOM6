@@ -19,7 +19,7 @@ use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_date, set_date
-use MOM_time_manager, only : time_type_to_real, real_to_time_type
+use MOM_time_manager, only : time_type_to_real, real_to_time
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -121,7 +121,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
   if (.not.associated(CS)) return
   if ((CS%num_cycle <= 0) .and. (.not.CS%do_integrated)) return
 
-  day_end = day_start + real_to_time_type(dt)
+  day_end = day_start + real_to_time(dt)
 
   do j=js,je ; do i=is,ie
     virt_heat(i,j) = 0.0 ; virt_precip(i,j) = 0.0

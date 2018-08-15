@@ -7,7 +7,7 @@ use MOM_coms, only : root_PE, broadcast
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_error_handler, only : is_root_pe, stdlog, stdout
 use MOM_time_manager, only : get_time, time_type, get_ticks_per_second
-use MOM_time_manager, only : set_date, get_date, real_to_time_type
+use MOM_time_manager, only : set_date, get_date, real_to_time, operator(-), set_time
 use MOM_document, only : doc_param, doc_module, doc_init, doc_end, doc_type
 use MOM_document, only : doc_openBlock, doc_closeBlock
 use MOM_string_functions, only : left_int, left_ints, slasher
@@ -854,8 +854,8 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
     else
       time_unit = 1.0 ; if (present(timeunit)) time_unit = timeunit
       read( value_string(1), *) real_time
-      value = real_to_time_type(real_time*time_unit)
-   endif
+      value = real_to_time(real_time*time_unit)
+    endif
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
