@@ -14,8 +14,8 @@ use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
-use MOM_time_manager, only : time_type, get_time, get_date, set_date, set_time
-use MOM_time_manager, only : days_in_month
+use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
+use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum
 use mpp_io_mod,      only:  mpp_attribute_exist, mpp_get_atts
@@ -801,15 +801,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
   ! With parallel read & write, it is possible to disable the following...
 
-! jgj: this was set to 4294967292, changed to 4294967295 (see mpp_parameter.F90)
-  if (CS%large_file_support) max_file_size = 4294967295_8
+  ! The maximum file size is 4294967292, according to the NetCDF documentation.
+  if (CS%large_file_support) max_file_size = 4294967292_8
 
   num_files = 0
   next_var = 0
   nz = 1 ; if (present(GV)) nz = GV%ke
 
-  call get_time(time,seconds,days)
-  restart_time = real(days) + real(seconds)/86400.0
+  restart_time = time_type_to_real(time) / 86400.0
 
   restartname = trim(CS%restartfile)
   if (present(filename)) restartname = trim(filename)
@@ -982,7 +981,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=80) :: varname    ! A variable's name.
   integer :: num_file        ! The number of files (restart files and others
                              ! explicitly in filename) that are open.
-  integer :: i, n, m, start_of_day, num_days, missing_fields
+  integer :: i, n, m, missing_fields
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
@@ -1028,9 +1027,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     t1 = time_vals(1)
     deallocate(time_vals)
 
-    start_of_day = INT((t1 - INT(t1)) *86400) ! Number of seconds.
-    num_days = INT(t1)
-    day = set_time(start_of_day, num_days)
+    day = real_to_time(t1*86400.0)
     exit
   enddo
 
