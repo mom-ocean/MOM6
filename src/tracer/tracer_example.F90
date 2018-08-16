@@ -14,7 +14,7 @@ use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
+use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
