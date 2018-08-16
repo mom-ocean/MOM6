@@ -32,11 +32,11 @@ use MOM_io,                  only : file_exists, MOM_read_data, MOM_read_vector,
 use MOM_io,                  only : EAST_FACE, NORTH_FACE, num_timelevels
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
-use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, set_time
+use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
 use MOM_variables,           only : surface
-use MESO_surface_forcing,    only : MESO_wind_forcing, MESO_buoyancy_forcing
+use MESO_surface_forcing,    only : MESO_buoyancy_forcing
 use MESO_surface_forcing,    only : MESO_surface_forcing_init, MESO_surface_forcing_CS
 use Neverland_surface_forcing, only : Neverland_wind_forcing, Neverland_buoyancy_forcing
 use Neverland_surface_forcing, only : Neverland_surface_forcing_init, Neverland_surface_forcing_CS
@@ -226,7 +226,6 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
   ! Local variables
   real :: dt                     ! length of time in seconds over which fluxes applied
   type(time_type) :: day_center  ! central time of the fluxes.
-  integer :: intdt
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -234,8 +233,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
   call callTree_enter("set_forcing, MOM_surface_forcing.F90")
 
   day_center = day_start + day_interval/2
-  call get_time(day_interval, intdt)
-  dt = real(intdt)
+  dt = time_type_to_real(day_interval)
 
   if (CS%first_call_set_forcing) then
     ! Allocate memory for the mechanical and thermodyanmic forcing fields.
@@ -275,8 +273,6 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call wind_forcing_const(sfc_state, forces, 0., 0., day_center, G, CS)
     elseif (trim(CS%wind_config) == "const") then
       call wind_forcing_const(sfc_state, forces, CS%tau_x0, CS%tau_y0, day_center, G, CS)
-    elseif (trim(CS%wind_config) == "MESO") then
-      call MESO_wind_forcing(sfc_state, forces, day_center, G, CS%MESO_forcing_CSp)
     elseif (trim(CS%wind_config) == "Neverland") then
       call Neverland_wind_forcing(sfc_state, forces, day_center, G, CS%Neverland_forcing_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
@@ -369,13 +365,10 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, CS)
   ! Local variables
   real :: mag_tau
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   call callTree_enter("wind_forcing_const, MOM_surface_forcing.F90")
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   !set steady surface wind stresses, in units of Pa.
   mag_tau = sqrt( tau_x0**2 + tau_y0**2)
@@ -414,13 +407,10 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, CS)
   ! Local variables
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   call callTree_enter("wind_forcing_2gyre, MOM_surface_forcing.F90")
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   !set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
@@ -450,13 +440,10 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
   ! Local variables
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   call callTree_enter("wind_forcing_1gyre, MOM_surface_forcing.F90")
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
@@ -484,25 +471,22 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
   ! Local variables
   real :: PI, y
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   call callTree_enter("wind_forcing_gyres, MOM_surface_forcing.F90")
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! steady surface wind stresses (Pa)
   PI = 4.0*atan(1.0)
 
-  do j=jsd,jed ; do I=is-1,IedB
+  do j=js-1,je+1 ; do I=is-1,Ieq
     y = (G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat
     forces%taux(I,j) = CS%gyres_taux_const +                            &
              (   CS%gyres_taux_sin_amp*sin(CS%gyres_taux_n_pis*PI*y)    &
                + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) )
   enddo ; enddo
 
-  do J=js-1,JedB ; do i=isd,ied
+  do J=js-1,Jeq ; do i=is-1,ie+1
     forces%tauy(i,J) = 0.0
   enddo ; enddo
 
@@ -535,16 +519,13 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
   integer :: time_lev                ! The time level that is used for a field.
   integer :: days, seconds
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: read_Ustar
 
   call callTree_enter("wind_forcing_from_file, MOM_surface_forcing.F90")
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call get_time(day,seconds,days)
+  call get_time(day, seconds, days)
   time_lev_daily = days - 365*floor(real(days) / 365.0)
 
   if (time_lev_daily < 31) then ; time_lev_monthly = 0
@@ -774,7 +755,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   Irho0 = 1.0/CS%Rho0
 
   ! Read the buoyancy forcing file
-  call get_time(day,seconds,days)
+  call get_time(day, seconds, days)
 
   time_lev_daily = days - 365*floor(real(days) / 365.0)
 
