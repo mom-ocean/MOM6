@@ -12,8 +12,7 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_verticalgrid,  only : verticalGrid_type
 use MOM_safe_alloc,    only : safe_alloc_ptr
-use MOM_time_manager,  only : time_type, operator(+), operator(/), get_time,&
-                              time_type_to_real,real_to_time_type
+use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_variables,     only : thermo_var_ptrs, surface
 use data_override_mod, only : data_override_init, data_override
 
