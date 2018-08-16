@@ -40,7 +40,7 @@ use MOM_surface_forcing, only : forcing_save_restart
 use MOM_time_manager, only : time_type, operator(>), operator(+), operator(-)
 use MOM_time_manager, only : operator(*), operator(/), operator(/=)
 use MOM_time_manager, only : operator(<=), operator(>=), operator(<)
-use MOM_time_manager, only : real_to_time_type, time_type_to_real
+use MOM_time_manager, only : real_to_time, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables, only : surface
@@ -600,7 +600,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
         if (step_thermo) then
           ! Back up Time1 to the start of the thermodynamic segment.
-          Time1 = Time1 - real_to_time_type(dtdia - dt_dyn)
+          Time1 = Time1 - real_to_time(dtdia - dt_dyn)
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
@@ -608,7 +608,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
       endif
 
       t_elapsed_seg = t_elapsed_seg + dt_dyn
-      Time1 = Time_seg_start + real_to_time_type(t_elapsed_seg)
+      Time1 = Time_seg_start + real_to_time(t_elapsed_seg)
     enddo
   endif
 
