@@ -75,7 +75,7 @@ use Phillips_initialization, only : Phillips_initialize_sponges
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
-use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
+use idealized_hurricane, only : idealized_hurricane_TS_init
 use SCM_CVMix_tests, only: SCM_CVMix_tests_TS_init
 use dyed_channel_initialization, only : dyed_channel_set_OBC_tracer_data
 use dyed_obcs_initialization, only : dyed_obcs_set_OBC_data
@@ -369,7 +369,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                     tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
-        case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
+        case ("SCM_ideal_hurr"); call idealized_hurricane_TS_init ( tv%T, &
                                           tv%S, h, G, GV, PF, just_read_params=just_read)
         case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init (tv%T, &
                                            tv%S, h, G, GV, PF, just_read_params=just_read)
