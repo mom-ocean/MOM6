@@ -1953,11 +1953,11 @@ subroutine write_static_fields(G, GV, tv, diag)
   if (id > 0) call post_data(id, G%dx_Cv, diag, .true.)
 
   id = register_static_field('ocean_model', 'sin_rot', diag%axesT1, &
-        'sine of the clockwise angle of the ocean grid north to true north', 'radians')
+        'sine of the clockwise angle of the ocean grid north to true north', 'none')
   if (id > 0) call post_data(id, G%sin_rot, diag, .true.)
 
   id = register_static_field('ocean_model', 'cos_rot', diag%axesT1, &
-        'cosine of the clockwise angle of the ocean grid north to true north', 'radians')
+        'cosine of the clockwise angle of the ocean grid north to true north', 'none')
   if (id > 0) call post_data(id, G%cos_rot, diag, .true.)
 
 
