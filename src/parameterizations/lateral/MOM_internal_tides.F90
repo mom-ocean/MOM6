@@ -18,9 +18,7 @@ use MOM_grid, only          : ocean_grid_type
 use MOM_io, only            : slasher, vardesc, MOM_read_data
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
 use MOM_spatial_means, only : global_area_mean
-use MOM_time_manager, only  : time_type, operator(+), operator(/), operator(-)
-use MOM_time_manager, only  : get_time, get_date, set_time, set_date
-use MOM_time_manager, only  : time_type_to_real
+use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
@@ -592,12 +590,7 @@ subroutine sum_En(G, CS, En, label)
   integer :: m,fr,a
   real :: En_sum, tmpForSumming, En_sum_diff, En_sum_pdiff
   character(len=160) :: mesg  ! The text of an error message
-  integer :: seconds
-  real :: Isecs_per_day = 1.0 / 86400.0
   real :: days
-
-  call get_time(CS%Time, seconds)
-  days = real(seconds) * Isecs_per_day
 
   En_sum = 0.0
   tmpForSumming = 0.0
@@ -614,6 +607,7 @@ subroutine sum_En(G, CS, En, label)
   CS%En_sum = En_sum
   !! Print to screen
   !if (is_root_pe()) then
+  !  days = time_type_to_real(CS%Time) / 86400.0
   !  write(mesg,*) trim(label)//': days =', days, ', En_sum=', En_sum, &
   !                ', En_sum_diff=', En_sum_diff, ', Percent change=', En_sum_pdiff, '%'
   !  call MOM_mesg(mesg)

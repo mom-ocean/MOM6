@@ -760,14 +760,12 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   nz      = GV%ke
   ppt2mks = 0.001
 
-  if (associated(Reg)) then
-    ntr = Reg%ntr
-  else
-    ntr = 0
-  endif
+  ntr = 0 ; if (associated(Reg)) ntr = Reg%ntr
 
   if (present(dt)) then
     Idt = 1.0/dt
+    work_conc(:,:,:) = 0.0
+    work_cont(:,:,:) = 0.0
   endif
 
   ! Remap tracer
@@ -801,22 +799,23 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
       endif ; enddo ; enddo
 
       ! tendency diagnostics.
-      if (Tr%id_remap_conc > 0) then
-        call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag)
+      if (present(dt)) then
+        if (Tr%id_remap_conc > 0) then
+          call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag)
+        endif
+        if (Tr%id_remap_cont > 0) then
+          call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag)
+        endif
+        if (Tr%id_remap_cont_2d > 0) then
+          do j = G%jsc,G%jec ; do i = G%isc,G%iec
+            work_2d(i,j) = 0.0
+            do k = 1,GV%ke
+              work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
+            enddo
+          enddo ; enddo
+          call post_data(Tr%id_remap_cont_2d, work_2d, CS_ALE%diag)
+        endif
       endif
-      if (Tr%id_remap_cont > 0) then
-        call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag)
-      endif
-      if (Tr%id_remap_cont_2d > 0) then
-        do j = G%jsc,G%jec ; do i = G%isc,G%iec
-          work_2d(i,j) = 0.0
-          do k = 1,GV%ke
-            work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
-          enddo
-        enddo ; enddo
-        call post_data(Tr%id_remap_cont_2d, work_2d, CS_ALE%diag)
-      endif
-
     enddo ! m=1,ntr
 
   endif   ! endif for ntr > 0
@@ -866,7 +865,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   endif
 
   if (CS_ALE%id_vert_remap_h > 0) call post_data(CS_ALE%id_vert_remap_h, h_old, CS_ALE%diag)
-  if (CS_ALE%id_vert_remap_h_tendency > 0) then
+  if ((CS_ALE%id_vert_remap_h_tendency > 0) .and. present(dt)) then
     do k = 1, nz ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
       work_cont(i,j,k) = (h_new(i,j,k) - h_old(i,j,k))*Idt
     enddo ; enddo ; enddo
