@@ -72,7 +72,7 @@ use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
+use MOM_time_manager, only : time_type, real_to_time, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
@@ -267,7 +267,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
-  call enable_averaging(0.5*dt,Time_local-set_time(int(0.5*dt)), CS%diag)
+  call enable_averaging(0.5*dt,Time_local-real_to_time(0.5*dt), CS%diag)
 !   Here the first half of the thickness fluxes are offered for averaging.
   if (CS%id_uh > 0) call post_data(CS%id_uh, uh, CS%diag)
   if (CS%id_vh > 0) call post_data(CS%id_vh, vh, CS%diag)
