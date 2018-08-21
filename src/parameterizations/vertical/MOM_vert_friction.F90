@@ -219,13 +219,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   !Check if Stokes mixing allowed if requested (present and associated)
   DoStokesMixing=.false.
   if (CS%StokesMixing) then
-    if (present(Waves)) then
-      DoStokesMixing = associated(Waves)
-      if (.not. DoStokesMixing) then
-        call MOM_error(FATAL,"Stokes Mixing called without allocated"//&
-                       "Waves Control Structure")
-      endif
-    endif
+    if (present(Waves)) DoStokesMixing = associated(Waves)
+    if (.not. DoStokesMixing) &
+      call MOM_error(FATAL,"Stokes Mixing called without allocated"//&
+                     "Waves Control Structure")
   endif
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
