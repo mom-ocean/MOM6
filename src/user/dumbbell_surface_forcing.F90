@@ -162,6 +162,7 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
 
   call get_time(day,isecs,idays)
   rdays = real(idays) + real(isecs)/8.64e4
+  ! This could be:  rdays = time_type_to_real(day)/8.64e4
 
   ! Allocate and zero out the forcing arrays, as necessary.
   call safe_alloc_ptr(fluxes%p_surf, isd, ied, jsd, jed)
