@@ -1102,7 +1102,7 @@ subroutine restore_state(filename, directory, day, G, CS)
             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
-                           no_domain=.true., timelevel=1)
+                           G%Domain%mpp_domain, timelevel=1)
             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p)
           elseif ((pos == 0) .and. associated(CS%var_ptr2d(m)%p)) then  ! Read a non-decomposed 2d array.
             ! Probably should query the field type to make sure that the sizes are right.
