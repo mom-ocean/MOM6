@@ -1368,8 +1368,12 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
     enddo
     fname = filename(start_char:m-1)
     start_char = m
-    do while ((start_char <= len_trim(filename)) .and. (filename(start_char:start_char) == ' '))
-      start_char = start_char + 1
+    do while (start_char <= len_trim(filename))
+      if (filename(start_char:start_char) == ' ') then
+        start_char = start_char + 1
+      else
+        exit
+      endif
     enddo
 
     if ((fname(1:1)=='r') .and. ( len_trim(fname) == 1)) then
