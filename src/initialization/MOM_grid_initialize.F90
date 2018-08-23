@@ -220,7 +220,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   SGdom%niglobal = 2*G%domain%niglobal
   SGdom%njglobal = 2*G%domain%njglobal
   SGdom%layout(:) = G%domain%layout(:)
-  SGdom%use_io_layout = G%domain%use_io_layout
   SGdom%io_layout(:) = G%domain%io_layout(:)
   global_indices(1) = 1+SGdom%nihalo
   global_indices(2) = SGdom%niglobal+SGdom%nihalo
@@ -241,8 +240,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
             symmetry=.true., name="MOM_MOSAIC")
   endif
 
-  if (SGdom%use_io_layout) &
-    call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
+  call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
   deallocate(exni)
   deallocate(exnj)
 
