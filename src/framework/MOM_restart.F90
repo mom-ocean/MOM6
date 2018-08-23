@@ -9,7 +9,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : read_field, write_field, MOM_read_data, read_data, get_filename_appendix
+use MOM_io, only : write_field, MOM_read_data, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
@@ -1093,117 +1093,46 @@ subroutine restore_state(filename, directory, day, G, CS)
             call mpp_get_atts(fields(i),checksum=checksum_file)
             is_there_a_checksum = .true.
           endif
-          if (.NOT. CS%checksum_required ) is_there_a_checksum = .false. ! Do not need to do data checksumming.
+          if (.NOT. CS%checksum_required) is_there_a_checksum = .false. ! Do not need to do data checksumming.
 
           if (associated(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
             call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
-                           no_domain=.true., timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
+                           G%Domain%mpp_domain, timelevel=1)
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
                            G%Domain%mpp_domain, timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p)
-          elseif ((pos == 0) .and. associated(CS%var_ptr2d(m)%p)) then  ! Read a non-decomposed 2d array.
-            ! Probably should query the field type to make sure that the sizes are right.
-            call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                           no_domain=.true., timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-          elseif ((pos == 0) .and. associated(CS%var_ptr3d(m)%p)) then  ! Read a non-decomposed 3d array.
-            ! Probably should query the field type to make sure that the sizes are right.
-            call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                           no_domain=.true., timelevel=1)
-             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-          elseif ((pos == 0) .and. associated(CS%var_ptr4d(m)%p)) then  ! Read a non-decomposed 4d array.
-            ! Probably should query the field type to make sure that the sizes are right.
-            call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                           no_domain=.true., timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-          elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
-            if (associated(CS%var_ptr3d(m)%p)) then
-              ! Read 3d array...  Time level 1 is always used.
-              call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                             G%Domain, 1, position=pos)
-              if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-            elseif (associated(CS%var_ptr2d(m)%p)) then ! Read 2d array...
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p)
+          elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
+            if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                             G%Domain, 1, position=pos)
-              if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-            elseif (associated(CS%var_ptr4d(m)%p)) then ! Read 4d array...
+                                 G%Domain, timelevel=1, position=pos)
+            else ! This array is not domain-decomposed.  This variant may be under-tested.
+              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                             no_domain=.true., timelevel=1)
+            endif
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+          elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
+            if (pos /= 0) then
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                                 G%Domain, timelevel=1, position=pos)
+            else ! This array is not domain-decomposed.  This variant may be under-tested.
+              call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                             no_domain=.true., timelevel=1)
+            endif
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+          elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
+            if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                             G%Domain, 1, position=pos)
-              if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-            else
-              call MOM_error(FATAL, "MOM_restart restore_state: "//&
-                              "No pointers set for "//trim(varname))
+                                 G%Domain, timelevel=1, position=pos)
+            else ! This array is not domain-decomposed.  This variant may be under-tested.
+              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                             no_domain=.true., timelevel=1)
             endif
-          else ! Do not use an io_layout.  !### GET RID OF THIS BRANCH ONCE read_data_4d_new IS AVAILABLE.
-            ! This file is decomposed onto the current processors.  We need
-            ! to check whether the sizes look right, and abort if not.
-            call get_file_atts(fields(i),ndim=ndim,siz=sizes)
-
-            !   NOTE: The index ranges f var_ptrs always start with 1, so with
-            ! symmetric memory the staggering is swapped from NE to SW!
-            is0 = 1-G%isd
-            if ((pos == EAST_FACE) .or. (pos == CORNER)) is0 = 1-G%IsdB
-            if (sizes(1) == G%iec-G%isc+1) then
-              isL = G%isc+is0 ; ieL = G%iec+is0
-            elseif (sizes(1) == G%IecB-G%IscB+1) then
-              isL = G%IscB+is0 ; ieL = G%IecB+is0
-            elseif (((pos == EAST_FACE) .or. (pos == CORNER)) .and. &
-                    (G%IscB == G%isc) .and. (sizes(1) == G%iec-G%isc+2)) then
-              ! This is reading a symmetric file in a non-symmetric model.
-              isL = G%isc-1+is0 ; ieL = G%iec+is0
-            else
-              call MOM_error(WARNING, "MOM_restart restore_state, "//trim(varname)//&
-                    " has the wrong i-size in "//trim(unit_path(n)))
-              exit
-            endif
-
-            js0 = 1-G%jsd
-            if ((pos == NORTH_FACE) .or. (pos == CORNER)) js0 = 1-G%JsdB
-            if (sizes(2) == G%jec-G%jsc+1) then
-              jsL = G%jsc+js0 ; jeL = G%jec+js0
-            elseif (sizes(2) == G%jecB-G%jscB+1) then
-              jsL = G%jscB+js0 ; jeL = G%jecB+js0
-            elseif (((pos == NORTH_FACE) .or. (pos == CORNER)) .and. &
-                    (G%JscB == G%jsc) .and. (sizes(2) == G%jec-G%jsc+2)) then
-              ! This is reading a symmetric file in a non-symmetric model.
-              jsL = G%jsc-1+js0 ; jeL = G%jec+js0
-            else
-              call MOM_error(WARNING, "MOM_restart restore_state, "//trim(varname)//&
-                    " has the wrong j-size in "//trim(unit_path(n)))
-              exit
-            endif
-
-            if (associated(CS%var_ptr3d(m)%p)) then
-              if (ntime == 0) then
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-              else
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), 1)
-              endif
-            elseif (associated(CS%var_ptr2d(m)%p)) then
-              if (ntime == 0) then
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-              else
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), 1)
-              endif
-            elseif (associated(CS%var_ptr4d(m)%p)) then
-              if (ntime == 0) then
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-              else
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), 1)
-              endif
-            else
-              call MOM_error(FATAL, "MOM_restart restore_state: "//&
-                              "No pointers set for "//trim(varname))
-            endif
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+          else
+            call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
           endif
 
           if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
@@ -1412,24 +1341,11 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
                            threading = MULTIPLE, fileset = SINGLE_FILE)
           if (present(global_files)) global_files(n) = .true.
         elseif (CS%parallel_restartfiles) then
-          if (G%Domain%use_io_layout) then
-            ! Look for decomposed files using the I/O Layout.
-            fexists = file_exists(filepath, G%Domain)
-            if (fexists .and. (present(units))) &
-              call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                             domain=G%Domain%mpp_domain)
-          else
-            ! Look for any PE-specific files of the form NAME.nc.####.
-            if (num_PEs()>10000) then
-              write(filepath, '(a,i6.6)' ) trim(filepath)//'.', pe_here()
-            else
-              write(filepath, '(a,i4.4)' ) trim(filepath)//'.', pe_here()
-            endif
-            inquire(file=filepath, exist=fexists)
-            if (fexists .and. (present(units))) &
-              call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                             threading = MULTIPLE, fileset = SINGLE_FILE)
-          endif
+          ! Look for decomposed files using the I/O Layout.
+          fexists = file_exists(filepath, G%Domain)
+          if (fexists .and. (present(units))) &
+            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+                           domain=G%Domain%mpp_domain)
           if (fexists .and. present(global_files)) global_files(n) = .false.
         endif
 
