@@ -503,7 +503,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
     do k=1,nz ; do i=is,ie
       h(i,k) = h_3d(i,j,k) ; u(i,k) = u_3d(i,j,k) ; v(i,k) = v_3d(i,j,k)
       h_orig(i,k) = h_3d(i,j,k)
-      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = GV%Angstrom
+      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = GV%Angstrom_H
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
       do n=1,nsw
         opacity_band(n,i,k) = GV%H_to_m*optics%opacity_band(n,i,j,k)
@@ -1169,7 +1169,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     C2, &              ! Temporary variable with units of kg m-3 H-1.
     r_SW_top           ! Temporary variables with units of H kg m-3.
 
-  Angstrom = GV%Angstrom
+  Angstrom = GV%Angstrom_H
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
   g_H2_2Rho0 = (GV%g_Earth * GV%H_to_m**2) / (2.0 * GV%Rho0)
   Idt        = 1.0/dt
@@ -1931,7 +1931,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
               endif
               h_ent = h_ent + dh_Newt
 
-              if (ABS(dh_Newt) < 0.2*GV%Angstrom) exit
+              if (ABS(dh_Newt) < 0.2*GV%Angstrom_H) exit
             enddo
           endif
 
@@ -2597,7 +2597,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   Rho0xG = GV%Rho0 * GV%g_Earth
   Idt_H2 = GV%H_to_m**2 / dt_diag
   I2Rho0 = 0.5 / GV%Rho0
-  Angstrom = GV%Angstrom
+  Angstrom = GV%Angstrom_H
 
   ! This is hard coding of arbitrary and dimensional numbers.
   h_min_bl_thick = 5.0 * GV%m_to_H
@@ -3532,10 +3532,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
         ! temperature and salinity.  If none is available a pseudo-orthogonal
         ! extrapolation is used.  The 10.0 and 0.9 in the following are
         ! arbitrary but probably about right.
-        if ((h(i,k+1) < 10.0*GV%Angstrom) .or. &
+        if ((h(i,k+1) < 10.0*GV%Angstrom_H) .or. &
             ((RcvTgt(k+1)-Rcv(i,nkmb)) >= 0.9*(Rcv(i,k1) - Rcv(i,0)))) then
           if (k>=nz-1) then ; orthogonal_extrap = .true.
-          elseif ((h(i,k+2) <= 10.0*GV%Angstrom) .and. &
+          elseif ((h(i,k+2) <= 10.0*GV%Angstrom_H) .and. &
               ((RcvTgt(k+1)-Rcv(i,nkmb)) < 0.9*(Rcv(i,k+2)-Rcv(i,0)))) then
             k1 = k+2
           else ; orthogonal_extrap = .true. ; endif
@@ -3782,7 +3782,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
                  "layers before sorting when ML_RESORT is true.", &
                  units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA.
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  ustar_min_dflt = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
+  ustar_min_dflt = 2e-4*CS%omega*(GV%Angstrom_m + GV%H_to_m*GV%H_subroundoff)
   call get_param(param_file, mdl, "BML_USTAR_MIN", CS%ustar_min, &
                  "The minimum value of ustar that should be used by the \n"//&
                  "bulk mixed layer model in setting vertical TKE decay \n"//&

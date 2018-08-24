@@ -190,7 +190,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
   nkml = max(GV%nkml, 1)
-  Angstrom = GV%Angstrom
+  Angstrom = GV%Angstrom_H
   ssh(:,:) = ssh_in
   linear_velocity_profiles = .true.
   ! Update the halos

@@ -98,9 +98,9 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+        h(i,j,k) = GV%Angstrom_H
       else
         h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
       endif

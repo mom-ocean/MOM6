@@ -115,14 +115,14 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
 
     ! Make sure there is no division by 0.
-    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
+    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_m, &
                                  GV%H_to_m*GV%H_subroundoff)
     if ( CS%Opacity_scheme == DOUBLE_EXP ) then
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
-             0.1*GV%Angstrom_z,GV%H_to_m*GV%H_subroundoff)
+             0.1*GV%Angstrom_m,GV%H_to_m*GV%H_subroundoff)
       enddo ; enddo ; enddo
       if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
         !$OMP parallel do default(shared)

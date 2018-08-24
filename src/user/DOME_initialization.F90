@@ -116,9 +116,9 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+        h(i,j,k) = GV%Angstrom_H
       else
         h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
       endif
@@ -190,12 +190,12 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
+!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_m*(nz-k+1)-G%bathyT(i,j))
       e_dense = -G%bathyT(i,j)
       if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
       else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
-          eta(i,j,K) = GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
+      if (eta(i,j,K) < GV%Angstrom_m*(nz-k+1)-G%bathyT(i,j)) &
+          eta(i,j,K) = GV%Angstrom_m*(nz-k+1)-G%bathyT(i,j)
     enddo
     eta(i,j,nz+1) = -G%bathyT(i,j)
 

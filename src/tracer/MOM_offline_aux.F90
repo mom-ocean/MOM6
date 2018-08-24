@@ -70,7 +70,7 @@ subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
       ! add a bit of mass to avoid truncation errors.  This will lead to
       ! non-conservation of tracers
       h_new(i,j,k) = h_new(i,j,k) + &
-        max(GV%Angstrom, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
+        max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
 
       ! Convert back to thickness
       h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
@@ -294,7 +294,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i+1,j))
       if ( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "barotropic redistribution")
@@ -364,7 +364,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i,j+1))
       if ( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) then
           call MOM_error(WARNING,"Column integral of vh does not match after "//&
           "barotropic redistribution")
@@ -400,7 +400,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
-  min_h = GV%Angstrom*0.1
+  min_h = GV%Angstrom_H*0.1
 
   do j=js,je
     ! Copy over uh and cell volume to working arrays
@@ -460,7 +460,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i+1,j))
       if (abs(uh_col - sum(uh2d(I,:)))>uh_neglect) then
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "upwards redistribution")
@@ -498,7 +498,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
-  min_h = 0.1*GV%Angstrom
+  min_h = 0.1*GV%Angstrom_H
 
   do i=is,ie
     ! Copy over uh and cell volume to working arrays
@@ -558,7 +558,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i,j+1))
       if ( ABS(vh_col-SUM(vh2d(J,:))) > vh_neglect) then
         call MOM_error(WARNING,"Column integral of vh does not match after "//&
                                "upwards redistribution")
