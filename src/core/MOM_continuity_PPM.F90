@@ -144,7 +144,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   logical :: x_first
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  h_min = GV%Angstrom
+  h_min = GV%Angstrom_H
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_continuity_PPM: Module must be initialized before it is used.")
@@ -312,7 +312,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_x(h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), G, LB, &
-                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
+                                2.0*GV%Angstrom_H, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
     endif
     do I=ish-1,ieh ; visc_rem(I,k) = 1.0 ; enddo
   enddo
@@ -1129,7 +1129,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_y(h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), G, LB, &
-                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
+                                2.0*GV%Angstrom_H, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
     endif
     do i=ish,ieh ; visc_rem(i,k) = 1.0 ; enddo
   enddo
@@ -2255,7 +2255,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
                  "tolerance for SSH is 4 times this value.  The default \n"//&
                  "is 0.5*NK*ANGSTROM, and this should not be set less x\n"//&
                  "than about 10^-15*MAXIMUM_DEPTH.", units="m", &
-                 default=0.5*G%ke*GV%Angstrom_z)
+                 default=0.5*G%ke*GV%Angstrom_m)
 
   call get_param(param_file, mdl, "ETA_TOLERANCE_AUX", CS%tol_eta_aux, &
                  "The tolerance for free-surface height discrepancies \n"//&

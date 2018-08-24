@@ -195,9 +195,9 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+          h(i,j,k) = GV%Angstrom_H
         else
           h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
         endif
@@ -539,9 +539,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
          eta1D(nz+1) = -1.0*G%bathyT(i,j)
          do k=nz,1,-1
            eta1D(k) = e0(k)
-           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-             eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-             h(i,j,k) = GV%Angstrom_z
+           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
+             eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+             h(i,j,k) = GV%Angstrom_m
            else
              h(i,j,k) = eta1D(k) - eta1D(k+1)
            endif

@@ -4056,7 +4056,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
   ALLOC_(CS%IareaT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IareaT(:,:) = 0.0
-  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = GV%Angstrom_z !### Change to 0.0?
+  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = GV%Angstrom_m !### Change to 0.0?
   ALLOC_(CS%IdxCu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IdxCu(:,:) = 0.0
   ALLOC_(CS%IdyCv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%IdyCv(:,:) = 0.0
   ALLOC_(CS%dy_Cu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_Cu(:,:) = 0.0

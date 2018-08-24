@@ -137,7 +137,7 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   do j=js,je ; do i=is,ie
     e_interface = -G%bathyT(i,j)
     do k=nz,1,-1
-      h(i,j,k) = max( GV%Angstrom, GV%m_to_H * (e0(k) - e_interface) )
+      h(i,j,k) = max( GV%Angstrom_H, GV%m_to_H * (e0(k) - e_interface) )
       e_interface = max( e0(k), e_interface - GV%H_to_m * h(i,j,k) )
     enddo
 

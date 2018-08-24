@@ -1387,7 +1387,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
-  H_report = 6.0 * GV%Angstrom
+  H_report = 6.0 * GV%Angstrom_H
   dt_Rho0 = dt / GV%Rho0
 
   if (len_trim(CS%u_trunc_file) > 0) then

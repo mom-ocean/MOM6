@@ -441,10 +441,10 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
         h_above(i,1) = 0.0 ; h_below(i,nz+1) = 0.0
       enddo
       do K=nz,1,-1 ; do i=is,ie
-        h_below(i,K) = h_below(i,K+1) + max(h(i,j,k)-GV%Angstrom, 0.0)
+        h_below(i,K) = h_below(i,K+1) + max(h(i,j,k)-GV%Angstrom_H, 0.0)
       enddo ; enddo
       do K=2,nz+1 ; do i=is,ie
-        h_above(i,K) = h_above(i,K-1) + max(h(i,j,k-1)-GV%Angstrom, 0.0)
+        h_above(i,K) = h_above(i,K-1) + max(h(i,j,k-1)-GV%Angstrom_H, 0.0)
       enddo ; enddo
       do K=2,nz
         ! w is positive for an upward (lightward) flux of mass, resulting
@@ -471,7 +471,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
         enddo
 
         h(i,j,k) = max(h(i,j,k) + (w_int(i,j,K+1) - w_int(i,j,K)), &
-                       min(h(i,j,k), GV%Angstrom))
+                       min(h(i,j,k), GV%Angstrom_H))
       enddo ; enddo
     endif ; enddo
 
@@ -506,7 +506,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
       do k=nz,nkmb+1,-1
         if (GV%Rlay(k) > Rcv_ml(i,j)) then
           w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*GV%m_to_H, &
-                    ((wb + h(i,j,k)) - GV%Angstrom))
+                    ((wb + h(i,j,k)) - GV%Angstrom_H))
           wm = 0.5*(w-ABS(w))
           do m=1,CS%fldno
             CS%var(m)%p(i,j,k) = (h(i,j,k)*CS%var(m)%p(i,j,k) + &
@@ -518,7 +518,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
             CS%var(m)%p(i,j,k) = I1pdamp * &
               (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(k,c)*damp)
           enddo
-          w = wb + (h(i,j,k) - GV%Angstrom)
+          w = wb + (h(i,j,k) - GV%Angstrom_H)
           wm = 0.5*(w-ABS(w))
         endif
         eb(i,j,k) = eb(i,j,k) + wpb
@@ -530,7 +530,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
       if (wb < 0) then
         do k=nkmb,1,-1
-          w = MIN((wb + (h(i,j,k) - GV%Angstrom)),0.0)
+          w = MIN((wb + (h(i,j,k) - GV%Angstrom_H)),0.0)
           h(i,j,k)  = h(i,j,k)  + (wb - w)
           ea(i,j,k) = ea(i,j,k) - w
           wb = w
@@ -562,7 +562,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
       wb = 0.0
       do k=nz,1,-1
         w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*GV%m_to_H, &
-                  ((wb + h(i,j,k)) - GV%Angstrom))
+                  ((wb + h(i,j,k)) - GV%Angstrom_H))
         wm = 0.5*(w - ABS(w))
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = (h(i,j,k)*CS%var(m)%p(i,j,k) + &
