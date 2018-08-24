@@ -153,8 +153,8 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     ! are strictly positive
     do k = nz,1,-1
 
-      if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_Z) ) then
-        z_inter(k) = z_inter(k+1) + GV%Angstrom_Z
+      if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_m) ) then
+        z_inter(k) = z_inter(k+1) + GV%Angstrom_m
       endif
 
     enddo

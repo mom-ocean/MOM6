@@ -78,11 +78,11 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=nz,2,-1 ! Make sure interfaces increase upwards
-      eta1D(K) = max( eta1D(K), eta1D(K+1) + GV%Angstrom_Z )
+      eta1D(K) = max( eta1D(K), eta1D(K+1) + GV%Angstrom_m )
     enddo
     eta1D(1) = 0. ! Force bottom interface to bottom
     do k=2,nz ! Make sure interfaces decrease downwards
-      eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_Z )
+      eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_m )
     enddo
     do k=nz,1,-1
       h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))

@@ -1783,10 +1783,10 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       hold(i,j,nz) = h(i,j,nz)
       h(i,j,nz) = h(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1))
       if (h(i,j,1) <= 0.0) then
-        h(i,j,1) = GV%Angstrom
+        h(i,j,1) = GV%Angstrom_H
       endif
       if (h(i,j,nz) <= 0.0) then
-        h(i,j,nz) = GV%Angstrom
+        h(i,j,nz) = GV%Angstrom_H
       endif
     enddo
     do k=2,nz-1 ; do i=is,ie
@@ -1794,7 +1794,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       h(i,j,k) = h(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
                     (eb(i,j,k) - ea(i,j,k+1)))
       if (h(i,j,k) <= 0.0) then
-        h(i,j,k) = GV%Angstrom
+        h(i,j,k) = GV%Angstrom_H
       endif
     enddo ; enddo
   enddo
@@ -2228,12 +2228,12 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   !$OMP parallel do default(shared)
   do k=1,nz
     do i=is-1,ie+1
-      hold(i,js-1,k) = GV%Angstrom ; ea(i,js-1,k) = 0.0 ; eb(i,js-1,k) = 0.0
-      hold(i,je+1,k) = GV%Angstrom ; ea(i,je+1,k) = 0.0 ; eb(i,je+1,k) = 0.0
+      hold(i,js-1,k) = GV%Angstrom_H ; ea(i,js-1,k) = 0.0 ; eb(i,js-1,k) = 0.0
+      hold(i,je+1,k) = GV%Angstrom_H ; ea(i,je+1,k) = 0.0 ; eb(i,je+1,k) = 0.0
     enddo
     do j=js,je
-      hold(is-1,j,k) = GV%Angstrom ; ea(is-1,j,k) = 0.0 ; eb(is-1,j,k) = 0.0
-      hold(ie+1,j,k) = GV%Angstrom ; ea(ie+1,j,k) = 0.0 ; eb(ie+1,j,k) = 0.0
+      hold(is-1,j,k) = GV%Angstrom_H ; ea(is-1,j,k) = 0.0 ; eb(is-1,j,k) = 0.0
+      hold(ie+1,j,k) = GV%Angstrom_H ; ea(ie+1,j,k) = 0.0 ; eb(ie+1,j,k) = 0.0
     enddo
   enddo
 

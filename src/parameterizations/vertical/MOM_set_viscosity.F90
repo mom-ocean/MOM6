@@ -282,7 +282,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
   Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth)*GV%m_to_H
-  Vol_quit = 0.9*GV%Angstrom + h_neglect
+  Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   C2pi_3 = 8.0*atan(1.0)/3.0
 
@@ -521,7 +521,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
           if (htot_vel>=CS%Hbbl) exit ! terminate the k loop
 
           hweight = MIN(CS%Hbbl - htot_vel, h_at_vel(i,k))
-          if (hweight < 1.5*GV%Angstrom + h_neglect) cycle
+          if (hweight < 1.5*GV%Angstrom_H + h_neglect) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -795,18 +795,18 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
               dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = (vol-Vol_0)
            !  dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = max(vol-Vol_0, 0.0)
 
-           !### The following code is more robust when GV%Angstrom=0, but it
+           !### The following code is more robust when GV%Angstrom_H=0, but it
            !### changes answers.
-           !   Vol_tol = max(0.5*GV%Angstrom + GV%H_subroundoff, 1e-14*vol)
-           !   Vol_quit = max(0.9*GV%Angstrom + GV%H_subroundoff, 1e-14*vol)
+           !   Vol_tol = max(0.5*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
+           !   Vol_quit = max(0.9*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
 
            !   if (dVol <= 0.0) then
            !     L(K) = L0
            !     Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
            !   elseif (a*a*dVol**3 < Vol_tol*dV_dL2**2 * &
            !                     (dV_dL2*Vol_tol - 2.0*a*L0*dVol)) then
-              if (a*a*dVol**3 < GV%Angstrom*dV_dL2**2 * &
-                                (0.25*dV_dL2*GV%Angstrom - a*L0*dVol)) then
+              if (a*a*dVol**3 < GV%Angstrom_H*dV_dL2**2 * &
+                                (0.25*dV_dL2*GV%Angstrom_H - a*L0*dVol)) then
                 ! One iteration of Newton's method should give an estimate
                 ! that is accurate to within Vol_tol.
                 L(K) = sqrt(L0*L0 + dVol / dV_dL2)
@@ -1159,7 +1159,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   use_EOS = associated(tv%eqn_of_state)
   dt_Rho0 = dt/GV%H_to_kg_m2
   h_neglect = GV%H_subroundoff
-  h_tiny = 2.0*GV%Angstrom + h_neglect
+  h_tiny = 2.0*GV%Angstrom_H + h_neglect
   g_H_Rho0 = (GV%g_Earth * GV%H_to_m) / GV%Rho0
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
 
@@ -1346,7 +1346,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*GV%Angstrom + h_neglect) cycle
+          if (hweight <= 1.5*GV%Angstrom_H + h_neglect) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -1591,7 +1591,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*GV%Angstrom + h_neglect) cycle
+          if (hweight <= 1.5*GV%Angstrom_H + h_neglect) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -1910,7 +1910,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
+    CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_m + GV%H_to_m*GV%H_subroundoff)
   else
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &

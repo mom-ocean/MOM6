@@ -34,8 +34,8 @@ type, public :: verticalGrid_type
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq !< If true, make the Boussinesq approximation.
-  real :: Angstrom      !< A one-Angstrom thickness in the model thickness units.
-  real :: Angstrom_z    !< A one-Angstrom thickness in m.
+  real :: Angstrom_H    !< A one-Angstrom thickness in the model thickness units.
+  real :: Angstrom_m    !< A one-Angstrom thickness in m.
   real :: H_subroundoff !< A thickness that is so small that it can be added to a thickness of
                         !! Angstrom or larger without changing it at the bit level, in thickness units.
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
@@ -87,7 +87,7 @@ subroutine verticalGridInit( param_file, GV )
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
-  call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_z, &
+  call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_m, &
                  "The minumum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
   call get_param(param_file, mdl, "H_RESCALE_POWER", H_power, &
@@ -128,14 +128,14 @@ subroutine verticalGridInit( param_file, GV )
     GV%H_to_kg_m2 = GV%Rho0 * GV%H_to_m
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
-    GV%Angstrom = GV%m_to_H * GV%Angstrom_z
+    GV%Angstrom_H = GV%m_to_H * GV%Angstrom_m
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = GV%Rho0 * GV%kg_m2_to_H
     GV%H_to_m = GV%H_to_kg_m2 / GV%Rho0
-    GV%Angstrom = GV%Angstrom_z*1000.0*GV%kg_m2_to_H
+    GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
   endif
-  GV%H_subroundoff = 1e-20 * max(GV%Angstrom,GV%m_to_H*1e-17)
+  GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
   GV%H_to_Pa = GV%g_Earth * GV%H_to_kg_m2
 
 ! Log derivative values.

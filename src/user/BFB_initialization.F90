@@ -137,11 +137,11 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
     ! do k = 1,nz; eta(i,j,k) = H0(k); enddo
     ! if (G%geoLatT(i,j) > 40.0) then
     !   do k = 1,nz
-    !     eta(i,j,k) = -G%Angstrom_z*(k-1)
+    !     eta(i,j,k) = -G%Angstrom_m*(k-1)
     !   enddo
     ! elseif (G%geoLatT(i,j) > 20.0) then
     !   do k = 1,nz
-    !     eta(i,j,k) = min(H0(k) + (G%geoLatT(i,j) - 20.0)*(G%max_depth - nz*G%Angstrom_z)/20.0, -(k-1)*G%angstrom_z)
+    !     eta(i,j,k) = min(H0(k) + (G%geoLatT(i,j) - 20.0)*(G%max_depth - nz*G%Angstrom_m)/20.0, -(k-1)*G%Angstrom_m)
     !   enddo
     ! endif
     eta(i,j,nz+1) = -G%max_depth

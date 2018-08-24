@@ -762,7 +762,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
     ! in sigma-0.
       do k=kb(i)-1,kmb+1,-1
         if (rho_0(i,kmb) > rho_0(i,k)) exit
-        if (h(i,j,k)>2.0*GV%Angstrom) kb(i) = k
+        if (h(i,j,k)>2.0*GV%Angstrom_H) kb(i) = k
       enddo
     enddo
 
@@ -786,15 +786,15 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
       htot(i) = GV%H_to_m*h(i,j,kmb)
       mFkb(i) = 0.0
       if (kb(i) < nz) &
-        mFkb(i) = ds_dsp1(i,kb(i)) * (GV%H_to_m*(h(i,j,kmb) - GV%Angstrom))
+        mFkb(i) = ds_dsp1(i,kb(i)) * (GV%H_to_m*(h(i,j,kmb) - GV%Angstrom_H))
     enddo
     do k=1,kmb-1 ; do i=is,ie
       htot(i) = htot(i) + GV%H_to_m*h(i,j,k)
-      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(GV%H_to_m*(h(i,j,k) - GV%Angstrom))
+      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(GV%H_to_m*(h(i,j,k) - GV%Angstrom_H))
     enddo ; enddo
   else
     do i=is,i
-      maxEnt(i,1) = 0.0 ; htot(i) = GV%H_to_m*(h(i,j,1) - GV%Angstrom)
+      maxEnt(i,1) = 0.0 ; htot(i) = GV%H_to_m*(h(i,j,1) - GV%Angstrom_H)
     enddo
   endif
   do k=kb_min,nz-1 ; do i=is,ie
@@ -803,12 +803,12 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
     elseif (k > kb(i)) then
       maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
 !        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i)) ! BITWISE CHG
-      htot(i) = htot(i) + GV%H_to_m*(h(i,j,k) - GV%Angstrom)
+      htot(i) = htot(i) + GV%H_to_m*(h(i,j,k) - GV%Angstrom_H)
     endif
   enddo ; enddo
 
   do i=is,ie
-    htot(i) = GV%H_to_m*(h(i,j,nz) - GV%Angstrom) ; maxEnt(i,nz) = 0.0
+    htot(i) = GV%H_to_m*(h(i,j,nz) - GV%Angstrom_H) ; maxEnt(i,nz) = 0.0
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
   do k=nz-1,kb_min,-1
@@ -817,7 +817,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
       if (k<kb(i)) then ; do_i(i) = .false. ; cycle ; endif
       i_rem = i_rem + 1  ! Count the i-rows that are still being worked on.
       maxEnt(i,k) = MIN(maxEnt(i,k),dsp1_ds(i,k+1)*maxEnt(i,k+1) + htot(i))
-      htot(i) = htot(i) + GV%H_to_m*(h(i,j,k) - GV%Angstrom)
+      htot(i) = htot(i) + GV%H_to_m*(h(i,j,k) - GV%Angstrom_H)
     endif ; enddo
     if (i_rem == 0) exit
   enddo ! k-loop
@@ -1964,7 +1964,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "length scale.", default=.false.)
   if (CS%ML_radiation) then
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_subroundoff*GV%H_to_m)
+    CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_m + GV%H_subroundoff*GV%H_to_m)
 
     call get_param(param_file, mdl, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration \n"//&

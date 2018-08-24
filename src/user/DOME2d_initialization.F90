@@ -146,9 +146,9 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
         eta1D(nz+1) = -1.0*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-            eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-            h(i,j,k) = GV%Angstrom
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+            h(i,j,k) = GV%Angstrom_H
           else
             h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
           endif
@@ -156,8 +156,8 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
 
         x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
         if ( x <= dome2d_width_bay ) then
-          h(i,j,1:nz-1) = GV%Angstrom
-          h(i,j,nz) = GV%m_to_H * dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom
+          h(i,j,1:nz-1) = GV%Angstrom_H
+          h(i,j,nz) = GV%m_to_H * dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_H
         endif
 
       enddo ; enddo
@@ -447,9 +447,9 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom_z
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+          h(i,j,k) = GV%Angstrom_m
         else
           h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
@@ -485,9 +485,9 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom_z
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+          h(i,j,k) = GV%Angstrom_m
         else
           h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
@@ -495,8 +495,8 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
 
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
-        h(i,j,1:nz-1) = GV%Angstrom
-        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom
+        h(i,j,1:nz-1) = GV%Angstrom_H
+        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_H
       endif
 
       eta(i,j,nz+1) = -G%bathyT(i,j)

@@ -102,7 +102,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   logical :: prev_avail
   integer :: file
 
-  Angstrom = GV%Angstrom + GV%H_subroundoff
+  Angstrom = GV%Angstrom_H + GV%H_subroundoff
 
 !  if (.not.associated(CS)) return
   nz = G%ke
@@ -430,7 +430,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   logical :: prev_avail
   integer :: file
 
-  Angstrom = GV%Angstrom + GV%H_subroundoff
+  Angstrom = GV%Angstrom_H + GV%H_subroundoff
 
 !  if (.not.associated(CS)) return
   nz = G%ke
