@@ -30,7 +30,7 @@ use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WR
 use mpp_io_mod,           only : MPP_APPEND, MPP_MULTI, MPP_OVERWR, MPP_NETCDF, MPP_RDONLY
 use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
-use mpp_io_mod,           only : read_field=>mpp_read, io_infra_init=>mpp_io_init
+use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 use netcdf
 
@@ -38,7 +38,7 @@ implicit none ; private
 
 public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, read_data, read_field
+public :: get_file_times, open_file, read_axis_data, read_data
 public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
@@ -154,9 +154,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   endif
 
   one_file = .true.
-  if (domain_set) then
-    one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
-  endif
+  if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
@@ -398,9 +396,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     endif
 
     one_file = .true.
-    if (domain_set) then
-      one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
-    endif
+    if (domain_set) one_file = (thread == SINGLE_FILE)
 
     if (one_file) then
       call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
@@ -1012,7 +1008,7 @@ end subroutine MOM_io_init
 !!
 !!   * write_field: write a field to an open file.
 !!   * write_time: write a value of the time axis to an open file.
-!!   * read_field: read a field from an open file.
+!!   * read_data: read a variable from an open file.
 !!   * read_time: read a time from an open file.
 !!
 !!   * name_output_file: provide a name for an output file based on a
