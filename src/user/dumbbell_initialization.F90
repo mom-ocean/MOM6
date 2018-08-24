@@ -135,16 +135,16 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
       e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * &
                 ( (real(K)-1.5) / real(nz-1) ) ) / S_range
       e0(K) = nint(2048.*e0(K))/2048. ! Force round numbers ... the above expression has irrational factors ...
-      e0(K) = min(real(1-K)*GV%Angstrom_z, e0(K)) ! Bound by surface
+      e0(K) = min(real(1-K)*GV%Angstrom_m, e0(K)) ! Bound by surface
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
     enddo
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom_z
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+          h(i,j,k) = GV%Angstrom_m
         else
           h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif

@@ -382,7 +382,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   stencil = 1
   if (usePPM .and. .not. useHuynh) stencil = 2
 
-  min_h = 0.1*GV%Angstrom
+  min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
   dt=1.0/Idt
 
@@ -711,7 +711,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   stencil = 1
   if (usePPM .and. .not. useHuynh) stencil = 2
 
-  min_h = 0.1*GV%Angstrom
+  min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
   dt=1.0/Idt
   !do i=is,ie ; ts2(i) = 0.0 ; enddo

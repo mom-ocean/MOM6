@@ -222,7 +222,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
   h_neglect = GV%H_subroundoff
-  h_tiny = GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
+  h_tiny = GV%Angstrom_H  ! Perhaps this should be set to h_neglect instead.
 
   !$OMP parallel do default(private) shared(Isq,Ieq,Jsq,Jeq,G,Area_h)
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2

@@ -660,9 +660,9 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
       call adjustEtaToFitBathymetry(G, GV, eta, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) then
-          eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom
+        if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) then
+          eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
+          h(i,j,k) = GV%Angstrom_H
         else
           h(i,j,k) = GV%m_to_H * (eta(i,j,K) - eta(i,j,K+1))
         endif
@@ -688,7 +688,7 @@ end subroutine initialize_thickness_from_file
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !!
 !! If the bottom most interface is below the topography then the bottom-most
-!! layers are contracted to GV%Angstrom_z.
+!! layers are contracted to GV%Angstrom_m.
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the
@@ -725,9 +725,9 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
     ! Collapse layers to thinnest possible if the thickness less than
     ! the thinnest possible (or negative).
-    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) then
-      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
-      h(i,j,k) = GV%Angstrom_z
+    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) then
+      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
+      h(i,j,k) = GV%Angstrom_m
     else
       h(i,j,k) = (eta(i,j,K) - eta(i,j,K+1))
     endif
@@ -807,9 +807,9 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+        h(i,j,k) = GV%Angstrom_H
       else
         h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
       endif
@@ -885,9 +885,9 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+        h(i,j,k) = GV%Angstrom_H
       else
         h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
       endif
@@ -1055,9 +1055,9 @@ subroutine depress_surface(h, G, GV, param_file, tv, just_read_params)
       do k=1,nz
         if (eta(i,j,K) <= eta_sfc(i,j)) exit
         if (eta(i,j,K+1) >= eta_sfc(i,j)) then
-          h(i,j,k) = GV%Angstrom
+          h(i,j,k) = GV%Angstrom_H
         else
-          h(i,j,k) = max(GV%Angstrom, h(i,j,k) * &
+          h(i,j,k) = max(GV%Angstrom_H, h(i,j,k) * &
               (eta_sfc(i,j) - eta(i,j,K+1)) / (eta(i,j,K) - eta(i,j,K+1)) )
         endif
       enddo
@@ -1757,8 +1757,8 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
       eta(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) &
-        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
+      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) &
+        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
     enddo ; enddo ; enddo
     ! Set the inverse damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
@@ -1783,8 +1783,8 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     enddo ; enddo
 
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) &
-        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
+      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) &
+        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
     enddo ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
       h(i,j,k) = eta(i,j,k)-eta(i,j,k+1)
@@ -2246,9 +2246,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
       call adjustEtaToFitBathymetry(G, GV, zi, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_z)) then
-          zi(i,j,K) = zi(i,j,K+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom
+        if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_m)) then
+          zi(i,j,K) = zi(i,j,K+1) + GV%Angstrom_m
+          h(i,j,k) = GV%Angstrom_H
         else
           h(i,j,k) = GV%m_to_H * (zi(i,j,K) - zi(i,j,K+1))
         endif
@@ -2374,7 +2374,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   write(0,*) ' ==================================================================== '
   write(0,*) ''
   write(0,*) h
-  call cut_off_column_top(nk, tv, GV%Rho0, GV%g_Earth, -e(nk+1), GV%Angstrom, &
+  call cut_off_column_top(nk, tv, GV%Rho0, GV%g_Earth, -e(nk+1), GV%Angstrom_H, &
                T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
   write(0,*) h
 

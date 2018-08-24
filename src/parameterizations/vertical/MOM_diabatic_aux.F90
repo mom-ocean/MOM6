@@ -177,7 +177,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
           endif
 
           hc = (tv%C_p*GV%H_to_kg_m2) * h(i,j,k)
-          if (h(i,j,k) <= 10.0*GV%Angstrom) then
+          if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
               fraz_col(i) = fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k))
@@ -340,7 +340,7 @@ subroutine adjust_salt(h, tv, G, GV, CS)
       if ((G%mask2dT(i,j) > 0.0) .and. &
            ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
         mc = GV%H_to_kg_m2 * h(i,j,k)
-        if (h(i,j,k) <= 10.0*GV%Angstrom) then
+        if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
           ! Very thin layers should not be adjusted by the salt flux
           if (tv%S(i,j,k) < S_min) then
             salt_add_col(i,j) = salt_add_col(i,j) +  mc * (S_min - tv%S(i,j,k))
@@ -421,7 +421,7 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
       do i=is,ie
         T(i,k)=tv%T(i,j,k); S(i,k)=tv%S(i,j,k)
         ! avoid very small thickness
-        h_2d(i,k)=MAX(h(i,j,k), GV%Angstrom)
+        h_2d(i,k)=MAX(h(i,j,k), GV%Angstrom_H)
       enddo
 
       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
@@ -845,7 +845,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly.
-  H_limit_fluxes = max(GV%Angstrom, 1.E-30*GV%m_to_H)
+  H_limit_fluxes = max(GV%Angstrom_H, 1.E-30*GV%m_to_H)
 
   ! diagnostic to see if need to create mass to avoid grounding
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.

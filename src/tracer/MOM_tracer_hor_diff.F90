@@ -696,7 +696,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   enddo ; enddo
   if (PEmax_kRho > nz) PEmax_kRho = nz ! PEmax_kRho could have been nz+1.
 
-  h_exclude = 10.0*(GV%Angstrom + GV%H_subroundoff)
+  h_exclude = 10.0*(GV%Angstrom_H + GV%H_subroundoff)
 !$OMP parallel default(none) shared(is,ie,js,je,nkmb,G,GV,h,h_exclude,num_srt,k0_srt, &
 !$OMP                               rho_srt,h_srt,PEmax_kRho,k_end_srt,rho_coord,max_srt) &
 !$OMP                       private(ns,tmp,itmp)

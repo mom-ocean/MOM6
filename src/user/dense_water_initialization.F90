@@ -229,10 +229,10 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
         do k = nz,1,-1
           eta1D(k) = e0(k)
 
-          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
             ! is this layer vanished?
-            eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-            h(i,j,k) = GV%Angstrom_z
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+            h(i,j,k) = GV%Angstrom_m
           else
             h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
