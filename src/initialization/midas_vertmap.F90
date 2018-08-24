@@ -71,7 +71,8 @@ end function wright_eos_2d
 function alpha_wright_eos_2d(T,S,p) result(drho_dT)
   real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and Salinity (psu)
   real, intent(in) :: p !< pressure (Pa)
-  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dT !< partial derivative of density with respect to temperature (kg m-3 C-1)
+  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dT !< partial derivative of density with
+                                                          !! respect to temperature (kg m-3 C-1)
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom,I_denom2
@@ -110,7 +111,8 @@ end function alpha_wright_eos_2d
 function beta_wright_eos_2d(T,S,p) result(drho_dS)
   real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and salinity (psu)
   real, intent(in) :: p !< pressure (Pa)
-  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with respect to salinity (kg m-3 PSU-1)
+  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with 
+                                                          !! respect to salinity (kg m-3 PSU-1)
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom,I_denom2
@@ -150,7 +152,8 @@ function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,
   integer, intent(in)                          :: nkbl !< The number of buffer layers
   real, intent(in)                             :: land_fill !< fill in data over land (1)
   real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet !< The wet mask for the source data (valid points)
-  real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs !< The number of input levels with valid data
+  real, dimension(size(tr_in,1),size(tr_in,2)), &
+                          optional, intent(in) :: nlevs !< The number of input levels with valid data
   logical, optional, intent(in)                :: debug !< optional debug flag
   integer, optional, intent(in)                :: i_debug !< i-index of point for debugging
   integer, optional, intent(in)                :: j_debug !< j-index of point for debugging
@@ -283,14 +286,12 @@ function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,
               ! For the piecewise parabolic form add the following...
               !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
 
-              if (debug_) then
-                 if (PRESENT(i_debug)) then
-                    if (i == i_debug.and.j == j_debug) then
-                       print *,'0004 k,kz,nlevs,sl_tr,tr = ',k,kz,nlevs_data(i,j),sl_tr,tr(i,j,k)
-                       print *,'0005 k,kz,tr(kz),tr(kz-1),tr(kz+1) = ',k,kz,tr_1d(kz),tr_1d(kz-1),tr_1d(kz+1),z_edges(kz+2)
-                    endif
-                 endif
-              endif
+              if (debug_) then ; if (PRESENT(i_debug)) then
+                if (i == i_debug.and.j == j_debug) then
+                  print *,'0004 k,kz,nlevs,sl_tr,tr = ',k,kz,nlevs_data(i,j),sl_tr,tr(i,j,k)
+                  print *,'0005 k,kz,tr(kz),tr(kz-1),tr(kz+1) = ',k,kz,tr_1d(kz),tr_1d(kz-1),tr_1d(kz+1),z_edges(kz+2)
+                endif
+              endif ; endif
 
            endif
            k_bot_prev = k_bot
