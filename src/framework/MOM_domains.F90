@@ -118,7 +118,6 @@ type, public :: MOM_domain_type
                                 !! domain in the i-direction in a define_domain call.
   integer :: Y_FLAGS            !< Flag that specifies the properties of the
                                 !! domain in the j-direction in a define_domain call.
-  logical :: use_io_layout      !< True if an I/O layout is available.
   logical, pointer :: maskmap(:,:) => NULL() !< A pointer to an array indicating
                                 !! which logical processors are actually used for
                                 !! the ocean code. The other logical processors
@@ -1401,11 +1400,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(njproc_nm), layout(2), &
-                 "The number of processors in the x-direction. With \n"//& !### FIX THIS COMMENT
+                 "The number of processors in the y-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(layout_nm), layout, &
-                 "The processor layout that was acutally used.",&
+                 "The processor layout that was actually used.",&
                  layoutParam=.true.)
 
   ! Idiot check that fewer PEs than columns have been requested
@@ -1490,7 +1489,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   MOM_dom%Y_FLAGS = Y_FLAGS
   MOM_dom%layout = layout
   MOM_dom%io_layout = io_layout
-  MOM_dom%use_io_layout = (io_layout(1) + io_layout(2) > 0)
 
   if (is_static) then
   !   A requirement of equal sized compute domains is necessary when STATIC_MEMORY_
@@ -1554,7 +1552,6 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
 
   MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
   MOM_dom%layout(:) = MD_in%layout(:) ; MOM_dom%io_layout(:) = MD_in%io_layout(:)
-  MOM_dom%use_io_layout = (MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0)
 
   if (associated(MD_in%maskmap)) then
     mask_table_exists = .true.
