@@ -634,7 +634,7 @@ contains
           ice_ocean_boundary%q_flux(i,j)            = -dataPtr_evap(i1,j1)
           ice_ocean_boundary%t_flux(i,j)            = -dataPtr_sensi(i1,j1)
           ice_ocean_boundary%salt_flux(i,j)         =  dataPtr_salt(i1,j1)
-          ice_ocean_boundary%lw_flux(i,j)           =  dataPtr_lwflux(i1,j1) 
+          ice_ocean_boundary%lw_flux(i,j)           =  dataPtr_lwflux(i1,j1)
           ice_ocean_boundary%sw_flux_vis_dir(i,j)   =  dataPtr_swvdr(i1,j1)
           ice_ocean_boundary%sw_flux_vis_dif(i,j)   =  dataPtr_swvdf(i1,j1)
           ice_ocean_boundary%sw_flux_nir_dir(i,j)   =  dataPtr_swndr(i1,j1)

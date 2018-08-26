@@ -399,8 +399,8 @@ module mom_cap_mod
   use MOM_ocean_model,          only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
 #ifdef CESMCOUPLED
   use mom_cap_methods,          only: mom_import, mom_export
-  use esmFlds,                  only: flds_scalar_name, flds_scalar_num
-  use esmFlds,                  only: flds_scalar_index_nx, flds_scalar_index_ny
+  use shr_nuopc_scalars_mod,    only: flds_scalar_name, flds_scalar_num
+  use shr_nuopc_scalars_mod,    only: flds_scalar_index_nx, flds_scalar_index_ny
   use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit
   use shr_file_mod,             only: shr_file_getLogUnit, shr_file_getLogLevel
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
@@ -893,7 +893,7 @@ contains
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr"    , "will provide") ! -> mean_net_sw_ir_dif_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr"    , "will provide") ! -> mean_net_sw_vis_dir_flx
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx 
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf"    , "will provide") ! -> mean_net_sw_vis_dif_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux"     , "will provide") ! -> mean_zonal_moment_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy"     , "will provide") ! -> mean_merid_moment_flx
@@ -905,7 +905,7 @@ contains
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"       , "will provide") ! -> inst_pres_height_surface
-    
+
     ! EMC fields not used
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide") ! for CESM lwup + lwdn
@@ -922,7 +922,7 @@ contains
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"      , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth"    , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw"    , "will provide")
-    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide") 
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphidry" , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphodry" , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphiwet" , "will provide")
@@ -988,7 +988,7 @@ contains
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v"          , "will provide") ! -> ocn_current_merid
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"       , "will provide") ! not in EMC
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"       , "will provide") ! not in EMC
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC 
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"        , "will provide") ! not in EMC
 
     ! EMC fields not used
@@ -998,7 +998,7 @@ contains
     ! Optional CESM fields currently not used
     ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen"     , "will provide") ! not in EMC
     ! if (flds_co2c) then
-    !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide") 
+    !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide")
     ! end if
 
 
@@ -2260,9 +2260,9 @@ contains
       return  ! bail out
 
     if (first_time) then
-       !--------------------------------                                                                                 
+       !--------------------------------
        ! set restart alarm
-       !--------------------------------                                                                                 
+       !--------------------------------
        call NUOPC_CompAttributeGet(gcomp, name="restart_option", value=restart_option, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -2579,8 +2579,8 @@ contains
     integer,           intent(in)     :: scalar_id
     type(ESMF_State),  intent(inout)  :: State
     integer,           intent(in)     :: mytask
-    character(len=*),  intent(in)     :: scalar_name   
-    integer,           intent(in)     :: scalar_num 
+    character(len=*),  intent(in)     :: scalar_name
+    integer,           intent(in)     :: scalar_num
     integer,           intent(inout)  :: rc
 
     ! local variables
