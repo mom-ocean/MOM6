@@ -16,7 +16,6 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_string_functions, only : uppercase
-use MOM_time_manager, only : time_type, set_time
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
