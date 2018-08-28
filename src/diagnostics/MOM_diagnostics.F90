@@ -1822,6 +1822,8 @@ subroutine write_static_fields(G, GV, tv, diag)
   real    :: tmp_h(SZI_(G),SZJ_(G))
   integer :: id, i, j
 
+  tmp_h(:,:) = 0.0
+
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_north')
   if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
@@ -1902,8 +1904,9 @@ subroutine write_static_fields(G, GV, tv, diag)
     if (G%Zd_to_m == 1.0) then
       call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
     else
-      tmp_h(:,:) = 0.
-      tmp_h(G%isc:G%iec,G%jsc:G%jec) = G%bathyT(G%isc:G%iec,G%jsc:G%jec) / G%Zd_to_m
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        tmp_h(i,j) = G%bathyT(i,j) * G%Zd_to_m
+      enddo ; enddo
       call post_data(id, tmp_h, diag, .true., mask=G%mask2dT)
     endif
   endif
@@ -1977,8 +1980,9 @@ subroutine write_static_fields(G, GV, tv, diag)
         cmor_long_name='Sea Area Fraction', &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) then
-    tmp_h(:,:) = 0.
-    tmp_h(G%isc:G%iec,G%jsc:G%jec) = 100. * G%mask2dT(G%isc:G%iec,G%jsc:G%jec)
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      tmp_h(i,j) = 100. * G%mask2dT(i,j)
+    enddo ; enddo
     call post_data(id, tmp_h, diag, .true.)
   endif
 
