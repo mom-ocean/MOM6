@@ -2136,8 +2136,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call copy_dyngrid_to_MOM_grid(dG, G)
   call destroy_dyn_horgrid(dG)
 
-  ! This could be moved earlier, perhaps just after MOM_initialize_fixed.
-!  if (G%Zd_to_m /= GV%Z_to_m) call rescale_grid_bathymetry(G, GV%Z_to_m)
+  ! This could replace an earlier call to rescale_dyn_horgrid_bathymetry just after MOM_initialize_fixed.
+  !  if (G%Zd_to_m /= GV%Z_to_m) call rescale_grid_bathymetry(G, GV%Z_to_m)
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)

@@ -269,14 +269,14 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
 
     if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
       call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), &
-                              G%Zd_to_m*GV%m_to_H*G%bathyT(i,j), sum(h(i,j,:)), &
+                              GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), &
                               zInterfaces, zScale=GV%m_to_H)
     elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
       call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
-                              G%Zd_to_m*GV%m_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+                              GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
-                            G%Zd_to_m*G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
+                            G%Zd_to_m*G%bathyT(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
     elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
 !     call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &

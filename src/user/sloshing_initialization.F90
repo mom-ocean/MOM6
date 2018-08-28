@@ -64,18 +64,14 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real    :: displ(SZK_(G)+1)
-  real    :: z_unif(SZK_(G)+1)   ! Fractional uniform interface heights, nondim.
-  real    :: z_inter(SZK_(G)+1)  ! Interface heights, in depth units.
-  real    :: x
-  real    :: a0
-  real    :: m_to_Z              ! A conversion factor from m to depth units.
-  real    :: total_height
-  real    :: weight_z
-  real    :: x1, y1, x2, y2
-  real    :: t
-  logical :: just_read    ! If true, just read parameters but set nothing.
-  integer :: n
+  real    :: displ(SZK_(G)+1)   ! The interface displacement in depth units.
+  real    :: z_unif(SZK_(G)+1)  ! Fractional uniform interface heights, nondim.
+  real    :: z_inter(SZK_(G)+1) ! Interface heights, in depth units.
+  real    :: a0                 ! The displacement amplitude in depth units.
+  real    :: weight_z           ! A (misused?) depth-space weighting, in inconsistent units.
+  real    :: x1, y1, x2, y2     ! Dimensonless parameters.
+  real    :: x, t               ! Dimensionless depth coordinates?
+  logical :: just_read          ! If true, just read parameters but set nothing.
 
   integer :: i, j, k, is, ie, js, je, nx, nz
 
@@ -83,8 +79,6 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
   if (just_read) return ! This subroutine has no run-time parameters.
-
-  m_to_Z = 1.0 / G%Zd_to_m
 
   ! Define thicknesses
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -95,7 +89,6 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     enddo
 
     ! 1. Define stratification
-    n = 3
     do k = 1,nz+1
 
       ! Thin pycnocline in the middle
@@ -121,14 +114,14 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     enddo
 
     ! 2. Define displacement
-    a0 = 75.0 * m_to_Z ! 75m Displacement amplitude in depth units.
+    a0 = 75.0 * GV%m_to_Z ! 75m Displacement amplitude in depth units.
     do k = 1,nz+1
 
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1.0
 
       x = G%geoLonT(i,j) / G%len_lon
       !### Perhaps the '+ weight_z' here should be '* weight_z' - RWH
-      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * m_to_Z
+      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * GV%m_to_Z
 
       if ( k == 1 ) then
         displ(k) = 0.0
@@ -144,22 +137,16 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
 
     ! 3. The last interface must coincide with the seabed
     z_inter(nz+1) = -G%bathyT(i,j)
-
     ! Modify interface heights to make sure all thicknesses are strictly positive
     do k = nz,1,-1
-
       if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_Z) ) then
         z_inter(k) = z_inter(k+1) + GV%Angstrom_Z
       endif
-
     enddo
 
     ! 4. Define layers
-    total_height = 0.0
     do k = 1,nz
-      h(i,j,k) = G%Zd_to_m*GV%m_to_H * (z_inter(k) - z_inter(k+1))
-
-      total_height = total_height + h(i,j,k)
+      h(i,j,k) = GV%Z_to_H * (z_inter(k) - z_inter(k+1))
     enddo
 
   enddo ; enddo
