@@ -614,10 +614,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     zh, &         ! An estimate of the interface's distance from the bottom
                   ! based on harmonic mean thicknesses, in m or kg m-2.
     h_ml          ! The mixed layer depth, in m or kg m-2.
-  real, allocatable, dimension(:,:) :: hML_u, hML_v
-  real, allocatable, dimension(:,:,:) :: Kv_v, & !< Total vertical viscosity at u-points
-                                         Kv_u    !< Total vertical viscosity at v-points
-  real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
+  real, allocatable, dimension(:,:) :: hML_u ! Diagnostic of the mixed layer depth at u points, in m.
+  real, allocatable, dimension(:,:) :: hML_v ! Diagnostic of the mixed layer depth at v points, in m.
+  real, allocatable, dimension(:,:,:) :: Kv_u !< Total vertical viscosity at u-points, in m2 s-1.
+  real, allocatable, dimension(:,:,:) :: Kv_v !< Total vertical viscosity at v-points, in m2 s-1.
+  real :: zcol(SZI_(G)) ! The height of an interface at h-points, in H (m or kg m-2).
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
@@ -691,7 +692,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       h_delta(I,k) = h(i+1,j,k) - h(i,j,k)
     endif ; enddo ; enddo
     do I=Isq,Ieq
-      Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * G%Zd_to_m*GV%m_to_H
+      Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * GV%Z_to_H
       zi_dir(I) = 0
     enddo
 
@@ -700,11 +701,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do I=Isq,Ieq ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
           do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(I,k) = 0. ; enddo
-          Dmin(I) = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
+          Dmin(I) = G%bathyT(i,j) * GV%Z_to_H
           zi_dir(I) = -1
         elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
           do k=1,nz ; h_harm(I,k) = h(i+1,j,k) ; h_arith(I,k) = h(i+1,j,k) ; h_delta(I,k) = 0. ; enddo
-          Dmin(I) = G%bathyT(i+1,j) * G%Zd_to_m*GV%m_to_H
+          Dmin(I) = G%bathyT(i+1,j) * GV%Z_to_H
           zi_dir(I) = 1
         endif
       endif ; enddo
@@ -727,7 +728,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       endif ; enddo ; enddo ! i & k loops
     else ! Not harmonic_visc
       do I=Isq,Ieq ; zh(I) = 0.0 ; z_i(I,nz+1) = 0.0 ; enddo
-      do i=Isq,Ieq+1 ; zcol(i) = -G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H ; enddo
+      do i=Isq,Ieq+1 ; zcol(i) = -G%bathyT(i,j) * GV%Z_to_H ; enddo
       do k=nz,1,-1
         do i=Isq,Ieq+1 ; zcol(i) = zcol(i) + h(i,j,k) ; enddo
         do I=Isq,Ieq ; if (do_i(I)) then
@@ -858,7 +859,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       h_delta(i,k) = h(i,j+1,k) - h(i,j,k)
     endif ; enddo ; enddo
     do i=is,ie
-      Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * G%Zd_to_m*GV%m_to_H
+      Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * GV%Z_to_H
       zi_dir(i) = 0
     enddo
 
@@ -867,11 +868,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
           do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(i,k) = 0. ; enddo
-          Dmin(I) = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
+          Dmin(I) = G%bathyT(i,j) * GV%Z_to_H
           zi_dir(I) = -1
         elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
           do k=1,nz ; h_harm(i,k) = h(i,j+1,k) ; h_arith(i,k) = h(i,j+1,k) ; h_delta(i,k) = 0. ; enddo
-          Dmin(i) = G%bathyT(i,j+1) * G%Zd_to_m*GV%m_to_H
+          Dmin(i) = G%bathyT(i,j+1) * GV%Z_to_H
           zi_dir(i) = 1
         endif
       endif ; enddo
@@ -896,8 +897,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     else ! Not harmonic_visc
       do i=is,ie
         zh(i) = 0.0 ; z_i(i,nz+1) = 0.0
-        zcol1(i) = -G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
-        zcol2(i) = -G%bathyT(i,j+1) * G%Zd_to_m*GV%m_to_H
+        zcol1(i) = -G%bathyT(i,j) * GV%Z_to_H
+        zcol2(i) = -G%bathyT(i,j+1) * GV%Z_to_H
       enddo
       do k=nz,1,-1 ; do i=is,ie ; if (do_i(i)) then
         zh(i) = zh(i) + h_harm(i,k)
