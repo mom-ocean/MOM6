@@ -71,11 +71,12 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
+use MOM_dyn_horgrid,           only : rescale_dyn_horgrid_bathymetry
 use MOM_debugging,             only : check_redundant
 use MOM_EOS,                   only : EOS_init, calculate_density
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
-use MOM_grid,                  only : ocean_grid_type, set_first_direction
-use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
+use MOM_grid,                  only : ocean_grid_type, MOM_grid_init, MOM_grid_end
+use MOM_grid,                  only : set_first_direction, rescale_grid_bathymetry
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
@@ -1956,6 +1957,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Allocate initialize time-invariant MOM variables.
   call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+  ! This could replace a later call to rescale_grid_bathymetry.
+  if (dG%Zd_to_m /= GV%Z_to_m) call rescale_dyn_horgrid_bathymetry(dG, GV%Z_to_m)
+
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
@@ -2131,6 +2135,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call MOM_grid_init(G, param_file, HI, bathymetry_at_vel=bathy_at_vel)
   call copy_dyngrid_to_MOM_grid(dG, G)
   call destroy_dyn_horgrid(dG)
+
+  ! This could be moved earlier, perhaps just after MOM_initialize_fixed.
+!  if (G%Zd_to_m /= GV%Z_to_m) call rescale_grid_bathymetry(G, GV%Z_to_m)
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
@@ -2893,10 +2900,10 @@ subroutine extract_surface_state(CS, sfc_state)
     numberOfErrors=0 ! count number of errors
     do j=js,je; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
-        localError = sfc_state%sea_lev(i,j)<=-G%bathyT(i,j)       &
+        localError = sfc_state%sea_lev(i,j)<=-G%Zd_to_m*G%bathyT(i,j) &
                 .or. sfc_state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j)<=-CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j)+G%bathyT(i,j) < CS%bad_vol_col_thick
+                .or. sfc_state%sea_lev(i,j) + G%Zd_to_m*G%bathyT(i,j) < CS%bad_vol_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &
@@ -2909,7 +2916,7 @@ subroutine extract_surface_state(CS, sfc_state)
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),8(a,es11.4,x))') &
                 'Extreme surface sfc_state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
-                'D=',G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
+                'D=',G%Zd_to_m*G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
@@ -2917,7 +2924,7 @@ subroutine extract_surface_state(CS, sfc_state)
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),6(a,es11.4))') &
                 'Extreme surface sfc_state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
-                'D=',G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
+                'D=',G%Zd_to_m*G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
             endif

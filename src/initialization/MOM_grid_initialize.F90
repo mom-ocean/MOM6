@@ -1209,7 +1209,8 @@ subroutine initialize_masks(G, PF)
   type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: PF  !< Parameter file structure
   ! Local variables
-  real :: Dmin, min_depth, mask_depth
+  real :: Dmin ! The depth for masking in the same units as G%bathyT.
+  real :: min_depth, mask_depth ! Depths in m.
   character(len=40)  :: mdl = "MOM_grid_init initialize_masks"
   integer :: i, j
 
@@ -1225,8 +1226,8 @@ subroutine initialize_masks(G, PF)
                  "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
                  units="m", default=-9999.0)
 
-  Dmin = min_depth
-  if (mask_depth>=0.) Dmin = mask_depth
+  Dmin = min_depth / G%Zd_to_m
+  if (mask_depth>=0.) Dmin = mask_depth / G%Zd_to_m
 
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 

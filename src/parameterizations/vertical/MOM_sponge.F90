@@ -334,25 +334,12 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 ! layer buoyancy, and a variety of tracers for every column where
 ! there is damping.
 
-! Arguments: h -  Layer thickness, in m.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (out)     ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in H.
-!  (out)     eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in H.
-!  (in)      CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
-!  (inout,opt)  Rcv_ml - The coordinate density of the mixed layer.
-
+  ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     w_int, &       ! Water moved upward across an interface within a timestep,
                    ! in H.
     e_D            ! Interface heights that are dilated to have a value of 0
-                   ! at the surface, in m.
+                   ! at the surface, in the same units as G%bathyT (m or Z).
   real, dimension(SZI_(G), SZJ_(G)) :: &
     eta_anom, &    ! Anomalies in the interface height, relative to the i-mean
                    ! target value, in m.
@@ -407,7 +394,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
     do j=js,je ; do i=is,ie ; e_D(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      e_D(i,j,K) = e_D(i,j,K+1) + h(i,j,k)*GV%H_to_m
+      e_D(i,j,K) = e_D(i,j,K+1) + h(i,j,k)*GV%H_to_Z
     enddo ; enddo ; enddo
     do j=js,je
       do i=is,ie
@@ -420,8 +407,8 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
     do k=2,nz
       do j=js,je ; do i=is,ie
-        eta_anom(i,j) = e_D(i,j,k) - CS%Ref_eta_im(j,k)
-        if (CS%Ref_eta_im(j,K) < -G%bathyT(i,j)) eta_anom(i,j) = 0.0
+        eta_anom(i,j) = e_D(i,j,k)*G%Zd_to_m - CS%Ref_eta_im(j,k)
+        if (CS%Ref_eta_im(j,K) < -G%bathyT(i,j)*G%Zd_to_m) eta_anom(i,j) = 0.0
       enddo ; enddo
       call global_i_mean(eta_anom(:,:), eta_mean_anom(:,K), G)
     enddo

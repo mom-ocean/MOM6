@@ -161,7 +161,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, &
 !  Gv%Angstrom_m thick, and 2.  the interfaces are where they should be    !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
 
     do k=nz,2,-1
       T_int = 0.5*(T0(k) + T0(k-1))

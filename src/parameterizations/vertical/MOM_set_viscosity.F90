@@ -160,11 +160,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
   real :: Rhtot            ! Running sum of thicknesses times the
                            ! layer potential densities in H kg m-3.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    D_u, &      ! Bottom depth interpolated to u points, in m.
+    D_u, &      ! Bottom depth interpolated to u points, in depth units (m).
     mask_u      ! A mask that disables any contributions from u points that
                 ! are land or past open boundary conditions, nondim., 0 or 1.
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    D_v, &      ! Bottom depth interpolated to v points, in m.
+    D_v, &      ! Bottom depth interpolated to v points, in depth units (m).
     mask_v      ! A mask that disables any contributions from v points that
                 ! are land or past open boundary conditions, nondim., 0 or 1.
   real, dimension(SZIB_(G),SZK_(G)) :: &
@@ -696,7 +696,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
 
         ! Convert the D's to the units of thickness.
-        Dp = m_to_H*Dp ; Dm = m_to_H*Dm ; D_vel = m_to_H*D_vel
+        Dp = GV%Z_to_H*Dp ; Dm = GV%Z_to_H*Dm ; D_vel = GV%Z_to_H*D_vel
 
         a_3 = (Dp + Dm - 2.0*D_vel) ; a = 3.0*a_3 ; a_12 = 0.25*a_3
         slope = Dp - Dm

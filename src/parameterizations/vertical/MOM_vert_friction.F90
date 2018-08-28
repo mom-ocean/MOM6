@@ -691,7 +691,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       h_delta(I,k) = h(i+1,j,k) - h(i,j,k)
     endif ; enddo ; enddo
     do I=Isq,Ieq
-      Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * m_to_H
+      Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * G%Zd_to_m*GV%m_to_H
       zi_dir(I) = 0
     enddo
 
@@ -700,11 +700,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do I=Isq,Ieq ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
           do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(I,k) = 0. ; enddo
-          Dmin(I) = G%bathyT(i,j) * m_to_H
+          Dmin(I) = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
           zi_dir(I) = -1
         elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
           do k=1,nz ; h_harm(I,k) = h(i+1,j,k) ; h_arith(I,k) = h(i+1,j,k) ; h_delta(I,k) = 0. ; enddo
-          Dmin(I) = G%bathyT(i+1,j) * m_to_H
+          Dmin(I) = G%bathyT(i+1,j) * G%Zd_to_m*GV%m_to_H
           zi_dir(I) = 1
         endif
       endif ; enddo
@@ -727,7 +727,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       endif ; enddo ; enddo ! i & k loops
     else ! Not harmonic_visc
       do I=Isq,Ieq ; zh(I) = 0.0 ; z_i(I,nz+1) = 0.0 ; enddo
-      do i=Isq,Ieq+1 ; zcol(i) = -G%bathyT(i,j) * m_to_H ; enddo
+      do i=Isq,Ieq+1 ; zcol(i) = -G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H ; enddo
       do k=nz,1,-1
         do i=Isq,Ieq+1 ; zcol(i) = zcol(i) + h(i,j,k) ; enddo
         do I=Isq,Ieq ; if (do_i(I)) then
@@ -858,7 +858,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       h_delta(i,k) = h(i,j+1,k) - h(i,j,k)
     endif ; enddo ; enddo
     do i=is,ie
-      Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * m_to_H
+      Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * G%Zd_to_m*GV%m_to_H
       zi_dir(i) = 0
     enddo
 
@@ -867,11 +867,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
           do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(i,k) = 0. ; enddo
-          Dmin(I) = G%bathyT(i,j) * m_to_H
+          Dmin(I) = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
           zi_dir(I) = -1
         elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
           do k=1,nz ; h_harm(i,k) = h(i,j+1,k) ; h_arith(i,k) = h(i,j+1,k) ; h_delta(i,k) = 0. ; enddo
-          Dmin(i) = G%bathyT(i,j+1) * m_to_H
+          Dmin(i) = G%bathyT(i,j+1) * G%Zd_to_m*GV%m_to_H
           zi_dir(i) = 1
         endif
       endif ; enddo
@@ -896,8 +896,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     else ! Not harmonic_visc
       do i=is,ie
         zh(i) = 0.0 ; z_i(i,nz+1) = 0.0
-        zcol1(i) = -G%bathyT(i,j) * m_to_H
-        zcol2(i) = -G%bathyT(i,j+1) * m_to_H
+        zcol1(i) = -G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
+        zcol2(i) = -G%bathyT(i,j+1) * G%Zd_to_m*GV%m_to_H
       enddo
       do k=nz,1,-1 ; do i=is,ie ; if (do_i(i)) then
         zh(i) = zh(i) + h_harm(i,k)

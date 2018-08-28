@@ -904,7 +904,7 @@ subroutine check_remapping_grid( G, GV, h, dzInterface, msg )
   !$OMP parallel do default(shared)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
-      if (G%mask2dT(i,j)>0.) call check_grid_column( GV%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
+      if (G%mask2dT(i,j)>0.) call check_grid_column( GV%ke, G%Zd_to_m*G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
     enddo
   enddo
 
@@ -1147,7 +1147,7 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
       endif
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*GV%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%Zd_to_m*GV%m_to_H
 
       ! Determine water column thickness
       totalThickness = 0.0
@@ -1236,7 +1236,7 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
       endif
 
       ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)*GV%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%Zd_to_m*GV%m_to_H
 
       ! Determine water column height
       totalThickness = 0.0
@@ -1340,7 +1340,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*GV%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%Zd_to_m*GV%m_to_H
 
       call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
@@ -1445,7 +1445,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      depth = G%bathyT(i,j) * GV%m_to_H
+      depth = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
 
       z_col(1) = 0. ! Work downward rather than bottom up
       do K = 1, GV%ke
@@ -1576,7 +1576,7 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      depth = G%bathyT(i,j) * GV%m_to_H
+      depth = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
       z_col(1) = 0. ! Work downward rather than bottom up
       do K=1,nz
         z_col(K+1) = z_col(K) + h(i, j, k) ! Work in units of h (m or Pa)
@@ -1704,7 +1704,7 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
     do i = G%isc-1,G%iec+1
 
       ! Local depth
-      local_depth = G%bathyT(i,j)*GV%m_to_H
+      local_depth = G%bathyT(i,j)*G%Zd_to_m*GV%m_to_H
 
       ! Determine water column height
       total_height = 0.0

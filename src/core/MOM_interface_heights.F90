@@ -70,7 +70,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
 !$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
 !$OMP                       private(dilate,htot)
 !$OMP do
-  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
+  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j) ; enddo ; enddo
 
   if (GV%Boussinesq) then
 !$OMP do
@@ -83,11 +83,11 @@ subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
 !$OMP do
       do j=jsv,jev
         do i=isv,iev
-          dilate(i) = (eta_bt(i,j)*GV%H_to_m + G%bathyT(i,j)) / &
-                      (eta(i,j,1) + G%bathyT(i,j))
+          dilate(i) = (eta_bt(i,j)*GV%H_to_m + G%Zd_to_m*G%bathyT(i,j)) / &
+                      (eta(i,j,1) + G%Zd_to_m*G%bathyT(i,j))
         enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%Zd_to_m*G%bathyT(i,j)) - G%Zd_to_m*G%bathyT(i,j)
         enddo ; enddo
       enddo
     endif
@@ -127,7 +127,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
         do k=1,nz ; do i=isv,iev ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=isv,iev ; dilate(i) = eta_bt(i,j) / htot(i) ; enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + G%Zd_to_m*G%bathyT(i,j)) - G%Zd_to_m*G%bathyT(i,j)
         enddo ; enddo
       enddo
     endif
@@ -178,7 +178,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
 !$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
 !$OMP                       private(htot)
 !$OMP do
-  do j=js,je ; do i=is,ie ; eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; eta(i,j) = -G%Zd_to_m*G%bathyT(i,j) ; enddo ; enddo
 
   if (GV%Boussinesq) then
     if (present(eta_bt)) then
@@ -225,8 +225,8 @@ subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
         do i=is,ie ; htot(i) = GV%H_subroundoff ; enddo
         do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=is,ie
-          eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + G%bathyT(i,j)) - &
-                     G%bathyT(i,j)
+          eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + G%Zd_to_m*G%bathyT(i,j)) - &
+                     G%Zd_to_m*G%bathyT(i,j)
         enddo
       enddo
     endif

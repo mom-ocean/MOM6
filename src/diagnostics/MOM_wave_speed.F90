@@ -318,7 +318,8 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
               hw = 0.5*(Hc(k-1)+Hc(k))
               gp = gprime(K)
               if (l_mono_N2_column_fraction>0. .or. l_mono_N2_depth>=0.) then
-                if (G%bathyT(i,j)-sum_hc<l_mono_N2_column_fraction*G%bathyT(i,j) .and. gp>N2min*hw) then
+                if (G%Zd_to_m*G%bathyT(i,j)-sum_hc < l_mono_N2_column_fraction*G%Zd_to_m*G%bathyT(i,j) .and. &
+                    gp>N2min*hw) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction of water column
                   gp = N2min/hw
                 elseif (l_mono_N2_depth>=0. .and. sum_hc>l_mono_N2_depth .and. gp>N2min*hw) then
