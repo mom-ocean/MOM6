@@ -669,7 +669,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
       enddo ; enddo ; enddo
 
       do j=js,je ; do i=is,ie
-        if (abs(eta(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
+        if (abs(eta(i,j,nz+1) + G%Zd_to_m*G%bathyT(i,j)) > 1.0) &
           inconsistent = inconsistent + 1
       enddo ; enddo
       call sum_across_PEs(inconsistent)
@@ -708,8 +708,8 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
 
   contractions = 0
   do j=js,je ; do i=is,ie
-    if (-eta(i,j,nz+1) > G%bathyT(i,j) + hTolerance) then
-      eta(i,j,nz+1) = -G%bathyT(i,j)
+    if (-eta(i,j,nz+1) > G%Zd_to_m*G%bathyT(i,j) + hTolerance) then
+      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
       contractions = contractions + 1
     endif
   enddo ; enddo
@@ -738,12 +738,12 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
     ! This should be...  if ((G%mask2dt(i,j)*(eta(i,j,1)-eta(i,j,nz+1)) > 0.0) .and. &
-    if (-eta(i,j,nz+1) < G%bathyT(i,j) - hTolerance) then
+    if (-eta(i,j,nz+1) < G%Zd_to_m*G%bathyT(i,j) - hTolerance) then
       dilations = dilations + 1
       if (eta(i,j,1) <= eta(i,j,nz+1)) then
-        do k=1,nz ; h(i,j,k) = (eta(i,j,1)+G%bathyT(i,j)) / real(nz) ; enddo
+        do k=1,nz ; h(i,j,k) = (eta(i,j,1) + G%Zd_to_m*G%bathyT(i,j)) / real(nz) ; enddo
       else
-        dilate = (eta(i,j,1)+G%bathyT(i,j)) / (eta(i,j,1)-eta(i,j,nz+1))
+        dilate = (eta(i,j,1) + G%Zd_to_m*G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
         do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
       endif
       do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + h(i,j,k) ; enddo
@@ -804,7 +804,7 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
     ! Angstrom thick, and 2.  the interfaces are where they should be
     ! based on the resting depths and interface height perturbations,
     ! as long at this doesn't interfere with 1.
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
@@ -882,7 +882,7 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
     ! Angstrom thick, and 2.  the interfaces are where they should be
     ! based on the resting depths and interface height perturbations,
     ! as long at this doesn't interfere with 1.
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
@@ -1134,9 +1134,9 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV%Rho0, GV%g_Earth, G%bathyT(i,j), min_thickness, &
-               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
-               p_surf(i,j), h(i,j,:), remap_CS)
+    call cut_off_column_top(GV%ke, tv, GV%Rho0, GV%g_Earth, G%Zd_to_m*G%bathyT(i,j), &
+               min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
+               tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS)
   enddo ; enddo
 
 end subroutine trim_for_ice
@@ -1754,7 +1754,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
     do j=js,je ; do i=is,ie
-      eta(i,j,nz+1) = -G%bathyT(i,j)
+      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) &
@@ -1779,7 +1779,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
     do j=js,je ; do i=is,ie
-      eta(i,j,nz+1) = -G%bathyT(i,j)
+      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
 
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
@@ -2152,11 +2152,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
         tmp_mask_in(i,j,1:kd) = mask_z(i,j,:)
         do k = 1, nkd
           if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
-            zBottomOfCell = max( -z_edges_in(k+1), -G%bathyT(i,j) )
+            zBottomOfCell = max( -z_edges_in(k+1), -G%Zd_to_m*G%bathyT(i,j) )
             tmpT1dIn(i,j,k) = temp_z(i,j,k)
             tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
-            zBottomOfCell = -G%bathyT(i,j)
+            zBottomOfCell = -G%Zd_to_m*G%bathyT(i,j)
             tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
             tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land
@@ -2166,7 +2166,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
           h1(i,j,k) = GV%m_to_H * (zTopOfCell - zBottomOfCell)
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        h1(i,j,kd) = h1(i,j,kd) + GV%m_to_H * max(0., zTopOfCell + G%bathyT(i,j) )
+        h1(i,j,kd) = h1(i,j,kd) + GV%m_to_H * max(0., zTopOfCell + G%Zd_to_m*G%bathyT(i,j) )
         ! The max here is in case the data data is shallower than model
       endif ! mask2dT
     enddo ; enddo
@@ -2189,7 +2189,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
           ! Build the target grid combining hTarget and topography
           zTopOfCell = 0. ; zBottomOfCell = 0.
           do k = 1, nz
-            zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
+            zBottomOfCell = max( zTopOfCell - hTarget(k), -G%Zd_to_m*G%bathyT(i,j) )
             h(i,j,k) = GV%m_to_H * (zTopOfCell - zBottomOfCell)
             zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
           enddo
@@ -2239,7 +2239,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
     do k=2,nz ; Rb(k)=0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
     Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
-    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
+    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%Zd_to_m*G%bathyT(is:ie,js:je), &
                          nlevs(is:ie,js:je), nkml, nkbl, min_depth)
 
     if (correct_thickness) then
@@ -2255,7 +2255,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
       enddo ; enddo ; enddo
       inconsistent=0
       do j=js,je ; do i=is,ie
-        if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0) &
+        if (abs(zi(i,j,nz+1) + G%Zd_to_m*G%bathyT(i,j)) > 1.0) &
           inconsistent = inconsistent + 1
       enddo ; enddo
       call sum_across_PEs(inconsistent)

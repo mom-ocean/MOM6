@@ -95,7 +95,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    eta1D(nz+1) = -G%Zd_to_m * G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then

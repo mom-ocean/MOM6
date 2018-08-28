@@ -146,7 +146,7 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
     ! endif
     eta(i,j,nz+1) = -G%max_depth
 
-    if (G%bathyT(i,j) > min_depth) then
+    if (G%Zd_to_m*G%bathyT(i,j) > min_depth) then
       Idamp(i,j) = damp/86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo

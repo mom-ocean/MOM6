@@ -255,8 +255,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
                              ! tidal amplitude file is not present.
   real :: kappa_h2_factor    ! factor for the product of wavenumber * rms sgs height.
   real :: kappa_itides       ! topographic wavenumber and non-dimensional scaling
-  real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion,
-                             ! in m.
+  real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion, in m.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
   if (associated(CS)) then
@@ -334,12 +333,12 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
 
   do j=js,je ; do i=is,ie
     mask_itidal = 1.0
-    if (G%bathyT(i,j) < min_zbot_itides) mask_itidal = 0.0
+    if (G%bathyT(i,j) < min_zbot_itides*GV%m_to_Z) mask_itidal = 0.0
 
     itide%tideamp(i,j) = itide%tideamp(i,j) * mask_itidal * G%mask2dT(i,j)
 
     ! Restrict rms topo to 10 percent of column depth.
-    itide%h2(i,j) = min(0.01*G%bathyT(i,j)**2, itide%h2(i,j))
+    itide%h2(i,j) = min(0.01*(G%bathyT(i,j)*G%Zd_to_m)**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [J m-2] here.
     CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&

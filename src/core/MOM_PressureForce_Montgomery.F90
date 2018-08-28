@@ -186,7 +186,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 !$OMP                               I_gEarth,h,alpha_Lay)
 !$OMP do
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = -G%bathyT(i,j)
+      SSH(i,j) = -G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
     if (use_EOS) then
 !$OMP do
@@ -209,12 +209,12 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV,e_tidal)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
+      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%Zd_to_m*G%bathyT(i,j))
     enddo ; enddo
   else
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*G%bathyT(i,j)
+      geopot_bot(i,j) = -GV%g_Earth*G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -453,7 +453,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     ! barotropic tides.
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,h,G,GV)
     do j=Jsq,Jeq+1
-      do i=Isq,Ieq+1 ; e(i,j,1) = -1.0*G%bathyT(i,j) ; enddo
+      do i=Isq,Ieq+1 ; e(i,j,1) = -G%Zd_to_m*G%bathyT(i,j) ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
         e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_m
       enddo ; enddo
@@ -466,12 +466,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
   if (CS%tides) then
 !$OMP do
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%bathyT(i,j) - e_tidal(i,j)
+      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j) - e_tidal(i,j)
     enddo ; enddo
   else
 !$OMP do
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%bathyT(i,j)
+      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
   endif
 !$OMP do

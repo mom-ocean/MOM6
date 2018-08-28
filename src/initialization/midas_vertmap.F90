@@ -111,7 +111,7 @@ end function alpha_wright_eos_2d
 function beta_wright_eos_2d(T,S,p) result(drho_dS)
   real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and salinity (psu)
   real, intent(in) :: p !< pressure (Pa)
-  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with 
+  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with
                                                           !! respect to salinity (kg m-3 PSU-1)
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5

@@ -130,7 +130,8 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
     ua_polarity, &  !< Test vector components for checking grid polarity.
     va_polarity, &  !< Test vector components for checking grid polarity.
-    bathyT          !<   A copy of bathyT (ocean bottom depth) with wide halos.
+    bathyT          !< A copy of bathyT (ocean bottom depth) with wide halos, in depth units
+  real :: Zd_to_m  = 1.0 !< The conversion factor between the units of bathyT and m.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: IareaT
                     !<   This is a copy of G%IareaT with wide halos, but will
                     !! still utilize the macro IareaT when referenced, m-2.
@@ -804,18 +805,18 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     !  ### bathyT here should be replaced with bathyT+eta(Bous) or eta(non-Bous).
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
-      DCor_u(I,j) = 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))
+      DCor_u(I,j) = 0.5 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-1,je ; do i=is,ie
-      DCor_v(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
+      DCor_v(i,J) = 0.5 * G%Zd_to_m*(G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-1,je ; do I=is-1,ie
       q(I,J) = 0.25 * G%CoriolisBu(I,J) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
-           ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
-            (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)))
+           (G%Zd_to_m*((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
+                       (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1))))
     enddo ; enddo
 
     ! With very wide halos, q and D need to be calculated on the available data
@@ -1291,7 +1292,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     do j=js,je ; do I=is-1,ie ; if (CS%lin_drag_u(I,j) > 0.0) then
       Htot = 0.5 * (eta(i,j) + eta(i+1,j))
       if (GV%Boussinesq) &
-        Htot = Htot + 0.5*GV%m_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j))
+        Htot = Htot + 0.5*CS%Zd_to_m*GV%m_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j))
       bt_rem_u(I,j) = bt_rem_u(I,j) * (Htot / (Htot + CS%lin_drag_u(I,j) * dtbt))
 
       Rayleigh_u(I,j) = CS%lin_drag_u(I,j) / Htot
@@ -1300,7 +1301,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     do J=js-1,je ; do i=is,ie ; if (CS%lin_drag_v(i,J) > 0.0) then
       Htot = 0.5 * (eta(i,j) + eta(i,j+1))
       if (GV%Boussinesq) &
-        Htot = Htot + 0.5*GV%m_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j+1))
+        Htot = Htot + 0.5*CS%Zd_to_m*GV%m_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j+1))
       bt_rem_v(i,J) = bt_rem_v(i,J) * (Htot / (Htot + CS%lin_drag_v(i,J) * dtbt))
 
       Rayleigh_v(i,J) = CS%lin_drag_v(i,J) / Htot
@@ -1353,7 +1354,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ! Limit the sink (inward) correction to the amount of mass that is already
         ! inside the cell.
         Htot = eta(i,j)
-        if (GV%Boussinesq) Htot = CS%bathyT(i,j)*GV%m_to_H + eta(i,j)
+        if (GV%Boussinesq) Htot = CS%bathyT(i,j)*CS%Zd_to_m*GV%m_to_H + eta(i,j)
 
         CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot))
       endif
@@ -2633,17 +2634,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
       else            ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+            BT_OBC%H_u(I,j) = G%bathyT(i,j)*G%Zd_to_m*GV%m_to_H + eta(i,j)
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            BT_OBC%H_u(I,j) = G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)
+            BT_OBC%H_u(I,j) = G%bathyT(i+1,j)*G%Zd_to_m*GV%m_to_H + eta(i+1,j)
           endif
         else
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(i,j) = eta(i,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + eta(i,j)))
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%Zd_to_m*G%bathyT(i,j) + eta(i,j)))
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
             BT_OBC%H_u(i,j) = eta(i+1,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i+1,j) + eta(i+1,j)))
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%Zd_to_m*G%bathyT(i+1,j) + eta(i+1,j)))
           endif
         endif
         if (GV%Boussinesq) then
@@ -2689,17 +2690,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
       else              ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+            BT_OBC%H_v(i,J) = G%bathyT(i,j)*G%Zd_to_m*GV%m_to_H + eta(i,j)
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            BT_OBC%H_v(i,J) = G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)
+            BT_OBC%H_v(i,J) = G%bathyT(i,j+1)*G%Zd_to_m*GV%m_to_H + eta(i,j+1)
           endif
         else
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = eta(i,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + eta(i,j)))
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%Zd_to_m*G%bathyT(i,j) + eta(i,j)))
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             BT_OBC%H_v(i,J) = eta(i,j+1)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j+1) + eta(i,j+1)))
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%Zd_to_m*G%bathyT(i,j+1) + eta(i,j+1)))
           endif
         endif
         if (GV%Boussinesq) then
@@ -2857,8 +2858,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do I=is-1,ie
-          e_u(I,nz+1) = -0.5 * GV%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
-          D_shallow_u(I) = -GV%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
+          e_u(I,nz+1) = -0.5 * G%Zd_to_m*GV%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
+          D_shallow_u(I) = -G%Zd_to_m*GV%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
           hatutot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do I=is-1,ie
@@ -2920,8 +2921,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do i=is,ie
-          e_v(i,nz+1) = -0.5 * GV%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
-          D_shallow_v(I) = -GV%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
+          e_v(i,nz+1) = -0.5 * G%Zd_to_m*GV%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
+          D_shallow_v(I) = -G%Zd_to_m*GV%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
           hatvtot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do i=is,ie
@@ -3557,14 +3558,14 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
     if (GV%Boussinesq) then
 !$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-        H1 = CS%bathyT(i,j)*GV%m_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)
+        H1 = CS%bathyT(i,j)*CS%Zd_to_m*GV%m_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*CS%Zd_to_m*GV%m_to_H + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
       enddo ; enddo
 !$OMP do
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-        H1 = CS%bathyT(i,j)*GV%m_to_H + eta(i,j) ; H2 = CS%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)
+        H1 = CS%bathyT(i,j)*CS%Zd_to_m*GV%m_to_H + eta(i,j) ; H2 = CS%bathyT(i,j+1)*CS%Zd_to_m*GV%m_to_H + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
@@ -3589,12 +3590,12 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
       Datu(I,j) = CS%dy_Cu(I,j) * GV%m_to_H * &
-                  (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
+                  (CS%Zd_to_m*max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
       Datv(i,J) = CS%dx_Cv(i,J) * GV%m_to_H * &
-                  (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
+                  (CS%Zd_to_m*max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
 !$OMP do
@@ -3602,7 +3603,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
       Datu(I, j) = 0.0
       !Would be "if (G%mask2dCu(I,j)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i+1,j)+CS%bathyT(i,j)>0.) &
-        Datu(I,j) = 2.0*CS%dy_Cu(I,j) * GV%m_to_H * &
+        Datu(I,j) = 2.0*CS%dy_Cu(I,j) * CS%Zd_to_m*GV%m_to_H * &
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3611,7 +3612,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
       Datv(i, J) = 0.0
       !Would be "if (G%mask2dCv(i,J)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i,j+1)+CS%bathyT(i,j)>0.) &
-        Datv(i,J) = 2.0*CS%dx_Cv(i,J) * GV%m_to_H * &
+        Datv(i,J) = 2.0*CS%dx_Cv(i,J) * CS%Zd_to_m*GV%m_to_H * &
                   (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3658,7 +3659,7 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (GV%Boussinesq) then
-      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*GV%m_to_H ; enddo
+      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*G%Zd_to_m*GV%m_to_H ; enddo
     else
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
     endif
@@ -4065,6 +4066,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
     CS%IareaT(i,j) = G%IareaT(i,j)
     CS%bathyT(i,j) = G%bathyT(i,j)
   enddo ; enddo
+  CS%Zd_to_m = G%Zd_to_m
   ! Note: G%IdxCu & G%IdyCv may be smaller than CS%IdxCu & CS%IdyCv, even without
   !   wide halos.
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
@@ -4087,17 +4089,17 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
     ALLOC_(CS%D_v_Cor(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw))
     CS%q_D(:,:) = 0.0 ; CS%D_u_Cor(:,:) = 0.0 ; CS%D_v_Cor(:,:) = 0.0
     do j=js,je ; do I=is-1,ie
-      CS%D_u_Cor(I,j) = 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))
+      CS%D_u_Cor(I,j) = 0.5 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%D_v_Cor(i,J) = 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))
+      CS%D_v_Cor(i,J) = 0.5 * G%Zd_to_m*(G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do I=is-1,ie
       if (G%mask2dT(i,j)+G%mask2dT(i,j+1)+G%mask2dT(i+1,j)+G%mask2dT(i+1,j+1)>0.) then
         CS%q_D(I,J) = 0.25 * G%CoriolisBu(I,J) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
-           ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
-            (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)))
+           (G%Zd_to_m*((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
+                       (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1))))
       else ! All four h points are masked out so q_D(I,J) will is meaningless
         CS%q_D(I,J) = 0.
       endif
@@ -4294,24 +4296,24 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 ! if (GV%Boussinesq) then
     do j=js,je ; do I=is-1,ie
       if (G%mask2dCu(I,j)>0.) then
-        CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+        CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j)))
       else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
         CS%IDatu(I,j) = 0.
       endif
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       if (G%mask2dCv(i,J)>0.) then
-        CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+        CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%Zd_to_m*(G%bathyT(i,j+1) + G%bathyT(i,j)))
       else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
         CS%IDatv(i,J) = 0.
       endif
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%Zd_to_m*GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%Zd_to_m*GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 

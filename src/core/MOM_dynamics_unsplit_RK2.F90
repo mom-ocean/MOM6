@@ -431,7 +431,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   endif
 
   if (GV%Boussinesq) then
-    do j=js,je ; do i=is,ie ; eta_av(i,j) = -G%bathyT(i,j) ; enddo ; enddo
+    do j=js,je ; do i=is,ie ; eta_av(i,j) = -G%Zd_to_m*G%bathyT(i,j) ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie ; eta_av(i,j) = 0.0 ; enddo ; enddo
   endif

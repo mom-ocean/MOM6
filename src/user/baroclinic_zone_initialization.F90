@@ -97,7 +97,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
   PI = 4.*atan(1.)
 
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    zi = -G%bathyT(i,j)
+    zi = -G%Zd_to_m*G%bathyT(i,j)
     x = G%geoLonT(i,j) - (G%west_lon + 0.5*G%len_lon) ! Relative to center of domain
     xd = x / G%len_lon ! -1/2 < xd 1/2
     y = G%geoLatT(i,j) - (G%south_lat + 0.5*G%len_lat) ! Relative to center of domain

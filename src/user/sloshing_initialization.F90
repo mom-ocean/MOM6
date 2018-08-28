@@ -39,13 +39,9 @@ subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
   ! Local variables
   integer   :: i, j
 
-  do i=G%isc,G%iec
-    do j=G%jsc,G%jec
-
-      D(i,j) = max_depth
-
-    enddo
-  enddo
+  do i=G%isc,G%iec ; do j=G%jsc,G%jec
+    D(i,j) = max_depth
+  enddo ; enddo
 
 end subroutine sloshing_initialize_topography
 
@@ -69,11 +65,11 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
                                                       !! only read parameters without changing h.
 
   real    :: displ(SZK_(G)+1)
-  real    :: z_unif(SZK_(G)+1)
-  real    :: z_inter(SZK_(G)+1)
+  real    :: z_unif(SZK_(G)+1)   ! Fractional uniform interface heights, nondim.
+  real    :: z_inter(SZK_(G)+1)  ! Interface heights, in depth units.
   real    :: x
   real    :: a0
-  real    :: deltah
+  real    :: m_to_Z              ! A conversion factor from m to depth units.
   real    :: total_height
   real    :: weight_z
   real    :: x1, y1, x2, y2
@@ -86,10 +82,9 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
-
   if (just_read) return ! This subroutine has no run-time parameters.
 
-  deltah = G%max_depth / nz
+  m_to_Z = 1.0 / G%Zd_to_m
 
   ! Define thicknesses
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -121,18 +116,19 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
 
       t = - z_unif(k)
 
-      z_inter(k) = -t * G%max_depth
+      z_inter(k) = -t * (G%max_depth * GV%m_to_Z)
 
     enddo
 
     ! 2. Define displacement
-    a0 = 75.0;      ! Displacement amplitude (meters)
+    a0 = 75.0 * m_to_Z ! 75m Displacement amplitude in depth units.
     do k = 1,nz+1
 
-      weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1
+      weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1.0
 
       x = G%geoLonT(i,j) / G%len_lon
-      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z
+      !### Perhaps the '+ weight_z' here should be '* weight_z' - RWH
+      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * m_to_Z
 
       if ( k == 1 ) then
         displ(k) = 0.0
@@ -149,12 +145,11 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     ! 3. The last interface must coincide with the seabed
     z_inter(nz+1) = -G%bathyT(i,j)
 
-    ! Modify interface heights to make sure all thicknesses
-    ! are strictly positive
+    ! Modify interface heights to make sure all thicknesses are strictly positive
     do k = nz,1,-1
 
-      if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_m) ) then
-        z_inter(k) = z_inter(k+1) + GV%Angstrom_m
+      if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_Z) ) then
+        z_inter(k) = z_inter(k+1) + GV%Angstrom_Z
       endif
 
     enddo
@@ -162,7 +157,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     ! 4. Define layers
     total_height = 0.0
     do k = 1,nz
-      h(i,j,k) = GV%m_to_H * (z_inter(k) - z_inter(k+1))
+      h(i,j,k) = G%Zd_to_m*GV%m_to_H * (z_inter(k) - z_inter(k+1))
 
       total_height = total_height + h(i,j,k)
     enddo
@@ -255,6 +250,5 @@ end subroutine sloshing_initialize_temperature_salinity
 
 !> \namespace sloshing_initialization
 !!
-!! The module configures the model for the non-rotating sloshing
-!! test case.
+!! The module configures the model for the non-rotating sloshing test case.
 end module sloshing_initialization
