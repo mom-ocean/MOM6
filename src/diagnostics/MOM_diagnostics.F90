@@ -291,12 +291,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (associated(CS%e_D)) then
     if (associated(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
       call find_eta(h, tv, GV%g_Earth, G, GV, CS%e_D, eta_bt)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     endif
 
@@ -810,7 +810,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
   if (CS%id_col_ht > 0) then
     call find_eta(h, tv, GV%g_Earth, G, GV, z_top)
     do j=js,je ; do i=is,ie
-      z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
+      z_bot(i,j) = z_top(i,j) + G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif
@@ -1209,7 +1209,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   ! post total volume of the liquid ocean
   if (IDs%id_volo > 0) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%bathyT(i,j))
+      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%Zd_to_m*G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(work_2d, G)
     call post_data(IDs%id_volo, volo, diag)
@@ -1898,7 +1898,15 @@ subroutine write_static_fields(G, GV, tv, diag)
         cmor_standard_name='sea_floor_depth_below_geoid',&
         area=diag%axesT1%id_area, &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
-  if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
+  if (id > 0) then
+    if (G%Zd_to_m == 1.0) then
+      call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
+    else
+      tmp_h(:,:) = 0.
+      tmp_h(G%isc:G%iec,G%jsc:G%jec) = G%bathyT(G%isc:G%iec,G%jsc:G%jec) / G%Zd_to_m
+      call post_data(id, tmp_h, diag, .true., mask=G%mask2dT)
+    endif
+  endif
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)

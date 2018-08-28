@@ -302,7 +302,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
   !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1
     do i=Isq,Ieq+1
-      za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*G%bathyT(i,j)
+      za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*G%Zd_to_m*G%bathyT(i,j)
     enddo
     do k=nz,1,-1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) + dza(i,j,k)
@@ -533,7 +533,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        e(i,j,1) = -1.0*G%bathyT(i,j)
+        e(i,j,1) = -G%Zd_to_m*G%bathyT(i,j)
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
         e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_m
@@ -546,12 +546,12 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   if (CS%tides) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%bathyT(i,j) - e_tidal(i,j)
+      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j) - e_tidal(i,j)
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -1.0*G%bathyT(i,j)
+      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
   endif
   !$OMP parallel do default(shared)
@@ -668,7 +668,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
           call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), &
                     S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                     rho_ref, CS%Rho0, GV%g_Earth,    &
-                    dz_neglect, G%bathyT, G%HI, G%HI, &
+                    dz_neglect, G%Zd_to_m*G%bathyT(:,:), G%HI, G%HI, &
                     tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp = CS%useMassWghtInterp)
         elseif ( CS%Recon_Scheme == 2 ) then
@@ -683,7 +683,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
                   e(:,:,K), e(:,:,K+1),             &
                   rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%HI, tv%eqn_of_state, &
                   dpa, intz_dpa, intx_dpa, inty_dpa, &
-                  G%bathyT, dz_neglect, CS%useMassWghtInterp)
+                  G%Zd_to_m*G%bathyT(:,:), dz_neglect, CS%useMassWghtInterp)
       endif
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

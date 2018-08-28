@@ -82,7 +82,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d
   real, dimension(:), allocatable :: tmpT1dIn
-  real :: zTopOfCell, zBottomOfCell
+  real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights in m.
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   real, dimension(:,:,:), allocatable :: hSrc
@@ -154,12 +154,13 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
       if (G%mask2dT(i,j)>0.) then
         ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
+        z_bathy = G%Zd_to_m*G%bathyT(i,j)
         do k = 1, kd
           if (mask_z(i,j,k) > 0.) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = -min( z_edges_in(k+1), z_bathy )
             tmpT1dIn(k) = tr_z(i,j,k)
           elseif (k>1) then
-            zBottomOfCell = -G%bathyT(i,j)
+            zBottomOfCell = -z_bathy
             tmpT1dIn(k) = tmpT1dIn(k-1)
           else ! This next block should only ever be reached over land
             tmpT1dIn(k) = -99.9
@@ -168,7 +169,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
           if (h1(k)>0.) nPoints = nPoints + 1
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
+        h1(kd) = h1(kd) + ( zTopOfCell + z_bathy ) ! In case data is deeper than model
       else
         tr(i,j,:) = 0.
       endif ! mask2dT

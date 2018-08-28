@@ -213,7 +213,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
       if (NTR > 7) then
         do j=js,je ; do i=is,ie
-          e(nz+1) = -G%bathyT(i,j)
+          e(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
           do k=nz,1,-1
             e(K) = e(K+1) + h(i,j,k)*GV%H_to_m
             do m=7,NTR

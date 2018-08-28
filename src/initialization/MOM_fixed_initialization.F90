@@ -165,7 +165,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 
 end subroutine MOM_initialize_fixed
 
-!> MOM_initialize_topography makes the appropriate call to set up the bathymetry.
+!> MOM_initialize_topography makes the appropriate call to set up the bathymetry.  At this
+!! point the topography is in units of m, but this can be changed later.
 subroutine MOM_initialize_topography(D, max_depth, G, PF)
   type(dyn_horgrid_type),           intent(in)  :: G  !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
@@ -176,7 +177,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
 !  This subroutine makes the appropriate call to set up the bottom depth.
 !  This is a separate subroutine so that it can be made public and shared with
 !  the ice-sheet code or other components.
-! Set up the bottom depth, G%bathyT either analytically or from file
   character(len=40)  :: mdl = "MOM_initialize_topography" ! This subroutine's name.
   character(len=200) :: config
 
