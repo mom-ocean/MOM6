@@ -19,7 +19,7 @@ use diag_manager_mod, only : register_diag_field, diag_axis_init, send_data
 use ensemble_manager_mod, only : get_ensemble_id, get_ensemble_size
 use ensemble_manager_mod, only : get_ensemble_pelist, get_ensemble_filter_pelist
 use time_manager_mod, only : time_type, decrement_time, increment_time
-use time_manager_mod, only : get_date, get_time, operator(>=),operator(/=),operator(==),operator(<)
+use time_manager_mod, only : get_date, operator(>=),operator(/=),operator(==),operator(<)
 use constants_mod, only : radius, epsln
 ! ODA Modules
 use ocean_da_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
