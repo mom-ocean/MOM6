@@ -17,7 +17,7 @@ use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_io, only : file_exists, slasher, MOM_read_data
 use MOM_restart, only : register_restart_field, query_initialized
 use MOM_restart, only : MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real
+use MOM_time_manager, only : time_type, set_time
 !MJH use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary
 use MOM_ice_shelf_state, only : ice_shelf_state
 use MOM_coms, only : reproducing_sum, sum_across_PEs, max_across_PEs, min_across_PEs
@@ -523,13 +523,13 @@ subroutine initialize_diagnostic_fields(CS, ISS, G, Time)
   type(ocean_grid_type),  intent(inout) :: G   !< The grid structure used by the ice shelf.
   type(time_type),        intent(in)    :: Time !< The current model time
 
-  integer             :: i, j, iters, isd, ied, jsd, jed
-  real                 :: rhoi, rhow, OD
-  type(time_type)          :: dummy_time
+  integer         :: i, j, iters, isd, ied, jsd, jed
+  real            :: rhoi, rhow, OD
+  type(time_type) :: dummy_time
 
   rhoi = CS%density_ice
   rhow = CS%density_ocean_avg
-  dummy_time = set_time (0,0)
+  dummy_time = set_time(0,0)
   isd=G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   do j=jsd,jed
