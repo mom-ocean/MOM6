@@ -219,9 +219,9 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
   if (use_ALE) then
     ! construct a uniform grid for the sponge
     do k = 1,nz
-      e0(k) = -GV%max_depth * (real(k - 1) / real(nz))
+      e0(k) = -G%max_depth * (real(k - 1) / real(nz))
     enddo
-    e0(nz+1) = -GV%max_depth
+    e0(nz+1) = -G%max_depth
 
     do j = G%jsc,G%jec
       do i = G%isc,G%iec
@@ -253,7 +253,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
         x = (G%geoLonT(i,j) - G%west_lon) / G%len_lon
         do k = 1,nz
           ! nondimensional middle of layer
-          zmid = zi + 0.5 * h(i,j,k) / GV%max_depth
+          zmid = zi + 0.5 * h(i,j,k) / G%max_depth
 
           if (x > (1. - east_sponge_width)) then
             !if (zmid >= 0.9 * sill_height) &
@@ -264,7 +264,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
                  S(i,j,k) = S_ref + S_range * (zmid - mld) / (1.0 - mld)
           endif
 
-          zi = zi + h(i,j,k) / GV%max_depth
+          zi = zi + h(i,j,k) / G%max_depth
         enddo
       enddo
     enddo

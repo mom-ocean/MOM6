@@ -87,12 +87,10 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  integer :: i, j, k, is, ie, js, je, nz
-  real    :: x
-  real    :: delta_h
   real    :: min_thickness, S_surf, S_range, S_ref, S_light, S_dense
   character(len=20) :: verticalCoordinate
   logical :: just_read    ! If true, just read parameters but set nothing.
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -172,7 +170,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = G%Zd_to_m * GV%m_to_H * (G%bathyT(i,j) / dfloat(nz))
+      h(i,j,:) = GV%Z_to_H * G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
 end select
