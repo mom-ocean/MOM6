@@ -22,7 +22,7 @@ use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
-use MOM_time_manager, only : time_type, set_time, operator(+), operator(-)
+use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(-)
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -723,7 +723,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       (CS%id_uhbt_hifreq > 0) .or. (CS%id_vhbt_hifreq > 0)) then
     do_hifreq_output = query_averaging_enabled(CS%diag, time_int_in, time_end_in)
     if (do_hifreq_output) &
-      time_bt_start = time_end_in - set_time(int(floor(dt+0.5)))
+      time_bt_start = time_end_in - real_to_time(dt)
   endif
 
 !--- begin setup for group halo update
@@ -2008,7 +2008,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     enddo ; enddo
 
     if (do_hifreq_output) then
-      time_step_end = time_bt_start + set_time(int(floor(n*dtbt+0.5)))
+      time_step_end = time_bt_start + real_to_time(n*dtbt)
       call enable_averaging(dtbt, time_step_end, CS%diag)
       if (CS%id_ubt_hifreq > 0) call post_data(CS%id_ubt_hifreq, ubt(IsdB:IedB,jsd:jed), CS%diag)
       if (CS%id_vbt_hifreq > 0) call post_data(CS%id_vbt_hifreq, vbt(isd:ied,JsdB:JedB), CS%diag)

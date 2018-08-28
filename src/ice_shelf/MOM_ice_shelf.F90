@@ -25,7 +25,7 @@ use MOM_io, only : slasher, fieldtype
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real
+use MOM_time_manager, only : time_type, time_type_to_real, time_type_to_real, real_to_time
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_variables, only : surface
 use MOM_forcing_type, only : forcing, allocate_forcing_type, MOM_forcing_chksum
@@ -47,7 +47,7 @@ use MOM_coms, only : reproducing_sum, sum_across_PEs
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
-use time_manager_mod, only : print_time, time_type_to_real, real_to_time_type
+use time_manager_mod, only : print_time
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -979,7 +979,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
       ! just compute changes in mass after first time step
       if (t0>0.0) then
-        Time0 = real_to_time_type(t0)
+        Time0 = real_to_time(t0)
         last_hmask(:,:) = ISS%hmask(:,:) ; last_area_shelf_h(:,:) = ISS%area_shelf_h(:,:)
         call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
         last_h_shelf = last_mass_shelf/CS%density_ice
