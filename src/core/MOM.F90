@@ -3499,7 +3499,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 
   if (present(gas_fields_ocn)) &
     call coupler_type_spawn(gas_fields_ocn, sfc_state%tr_fields, &
-                            (/isd,is,ie,ied/), (/jsd,js,je,jed/), as_needed=.true.)
+                            (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   sfc_state%arrays_allocated = .true.
 
