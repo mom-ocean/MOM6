@@ -169,10 +169,10 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
     if (just_read) return ! All run-time parameters have been read, so return.
 
     ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
-    call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
+    call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state)
     ! write(mesg,*) 'Surface density is:', rho_sur
     ! call MOM_mesg(mesg,5)
-    call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
+    call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state)
     ! write(mesg,*) 'Bottom density is:', rho_bot
     ! call MOM_mesg(mesg,5)
     rho_range = rho_bot - rho_sur
@@ -222,7 +222,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%m_to_H * G%Zd_to_m*G%bathyT(i,j) / dfloat(nz)
+      h(i,j,:) = GV%Z_to_H * G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
   case default
