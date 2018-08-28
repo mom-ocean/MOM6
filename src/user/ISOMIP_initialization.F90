@@ -136,7 +136,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
                           ! positive upward, in m.                       !
   integer :: i, j, k, is, ie, js, je, nz, tmp1
   real    :: x
-  real    :: delta_h, rho_range
+  real    :: rho_range
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot, rho_sur, rho_bot
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=256) :: mesg  ! The text of an error message
@@ -192,7 +192,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
 
     ! Calculate thicknesses
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
@@ -207,7 +207,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -222,8 +222,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = GV%m_to_H * delta_h
+      h(i,j,:) = GV%m_to_H * G%Zd_to_m*G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
   case default
@@ -249,7 +248,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
   real      :: x, ds, dt, rho_sur, rho_bot
-  real      :: xi0, xi1, dxi, r, S_sur, T_sur, S_bot, T_bot, S_range, T_range
+  real      :: xi0, xi1, dxi ! Heights in m., r
+  real      :: S_sur, T_sur, S_bot, T_bot, S_range, T_range
   real      :: z          ! vertical position in z space
   character(len=256) :: mesg  ! The text of an error message
   character(len=40) :: verticalCoordinate, density_profile
@@ -298,7 +298,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
       S_range = S_range / G%max_depth ! Convert S_range into dS/dz
       T_range = T_range / G%max_depth ! Convert T_range into dT/dz
       do j=js,je ; do i=is,ie
-        xi0 = -G%bathyT(i,j)
+        xi0 = -G%Zd_to_m * G%bathyT(i,j)
         do k = nz,1,-1
           xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m ! Depth in middle of layer
           S(i,j,k) = S_sur + S_range * xi0
@@ -339,13 +339,13 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
      do j=js,je ; do i=is,ie
        xi0 = 0.0
        do k = 1,nz
-          !T0(k) = T_Ref; S0(k) = S_Ref
-          xi1 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m
-          S0(k) = S_sur +  S_range * xi1
-          T0(k) = T_sur +  T_range * xi1
-          xi0 = xi0 + h(i,j,k) * GV%H_to_m
-          ! write(mesg,*) 'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
-          ! call MOM_mesg(mesg,5)
+         !T0(k) = T_Ref; S0(k) = S_Ref
+         xi1 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m
+         S0(k) = S_sur +  S_range * xi1
+         T0(k) = T_sur +  T_range * xi1
+         xi0 = xi0 + h(i,j,k) * GV%H_to_m
+         ! write(mesg,*) 'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
+         ! call MOM_mesg(mesg,5)
        enddo
 
        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
@@ -439,7 +439,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
 
                                     ! positive upward, in m.
-  real :: min_depth, dummy1, z, delta_h
+  real :: min_depth, dummy1, z
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
   character(len=40) :: verticalCoordinate, filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir
@@ -500,8 +500,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
       endif
 
   ! convert to 1 / seconds
-      if (G%bathyT(i,j) > min_depth) then
-          Idamp(i,j) = damp/86400.0
+      if (G%Zd_to_m * G%bathyT(i,j) > min_depth) then
+        Idamp(i,j) = damp/86400.0
       else ; Idamp(i,j) = 0.0 ; endif
 
 
@@ -536,7 +536,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
        ! Calculate thicknesses
        do j=js,je ; do i=is,ie
-         eta1D(nz+1) = -1.0*G%bathyT(i,j)
+         eta1D(nz+1) = -G%Zd_to_m * G%bathyT(i,j)
          do k=nz,1,-1
            eta1D(k) = e0(k)
            if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
@@ -550,7 +550,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
      case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
        do j=js,je ; do i=is,ie
-         eta1D(nz+1) = -1.0*G%bathyT(i,j)
+         eta1D(nz+1) = -G%Zd_to_m * G%bathyT(i,j)
          do k=nz,1,-1
            eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
            if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -564,8 +564,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
       case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
        do j=js,je ; do i=is,ie
-         delta_h = G%bathyT(i,j) / dfloat(nz)
-         h(i,j,:) = delta_h
+         h(i,j,:) = G%Zd_to_m * (G%bathyT(i,j) / dfloat(nz))
        enddo ; enddo
 
       case default
@@ -580,7 +579,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     S_range = S_range / G%max_depth ! Convert S_range into dS/dz
     T_range = T_range / G%max_depth ! Convert T_range into dT/dz
     do j=js,je ; do i=is,ie
-      xi0 = -G%bathyT(i,j)
+      xi0 = -G%Zd_to_m * G%bathyT(i,j)
       do k = nz,1,-1
         xi0 = xi0 + 0.5 * h(i,j,k) ! Depth in middle of layer
         S(i,j,k) = S_sur + S_range * xi0

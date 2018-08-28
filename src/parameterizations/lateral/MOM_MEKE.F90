@@ -612,7 +612,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
       do while (resid>0.)
         n1 = n1 + 1
         EKE = EKEmax
-        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
+        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j), &
                                   MEKE%Rd_dx_h(i,j), SN, EKE,            &
                                   bottomFac2, barotrFac2, LmixScale,     &
                                   Lrhines, Leady)
@@ -717,7 +717,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
       beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),            &
+    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j),  &
                               MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j),            &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
                               Lrhines(i,j), Leady(i,j))

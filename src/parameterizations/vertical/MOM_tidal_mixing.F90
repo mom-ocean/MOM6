@@ -205,7 +205,6 @@ contains
 
 !> Initializes internal tidal dissipation scheme for diapycnal mixing
 logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp, CS)
-
   type(time_type),          intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),    intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type),  intent(in)    :: GV         !< Vertical grid structure.
@@ -452,11 +451,11 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1)
 
     do j=js,je ; do i=is,ie
-      if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
+      if (G%bathyT(i,j)*G%Zd_to_m < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
       CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
       ! Restrict rms topo to 10 percent of column depth.
-      zbot = G%bathyT(i,j)
+      zbot = G%bathyT(i,j)*G%Zd_to_m
       hamp = sqrt(CS%h2(i,j))
       hamp = min(0.1*zbot,hamp)
       CS%h2(i,j) = hamp*hamp
@@ -1500,10 +1499,10 @@ end subroutine post_tidal_diagnostics
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
 !> This subroutine read tidal energy inputs from a file.
 subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  character(len=20),     intent(in) :: tidal_energy_type !< The type of tidal energy inputs to read
-  character(len=200),    intent(in) :: tidal_energy_file !< The file from which to read tidalinputs
-  type(tidal_mixing_cs), pointer    :: CS   !< The control structure for this module
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  character(len=20),       intent(in) :: tidal_energy_type !< The type of tidal energy inputs to read
+  character(len=200),      intent(in) :: tidal_energy_file !< The file from which to read tidalinputs
+  type(tidal_mixing_cs),   pointer    :: CS   !< The control structure for this module
   ! local
   integer :: isd, ied, jsd, jed, nz
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
@@ -1571,6 +1570,7 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
   call MOM_read_data(tidal_energy_file, 'z_t', z_t)
   call MOM_read_data(tidal_energy_file, 'z_w', z_w)
 
+  !### THE USE OF WHERE STTAEMENTS IS STRONGLY DISCOURAGED IN MOM6!
   where (abs(G%geoLatT(:,:)) < 30.0)
     tidal_qk1(:,:) = p33
     tidal_qo1(:,:) = p33
@@ -1584,7 +1584,8 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
     ! input cell thickness
     CS%h_src(k) = (z_t(k)-z_w(k))*2.0 *1e-2
     ! form tidal_qe_3d_in from weighted tidal constituents
-    where ( (z_t(k)*1e-2) <= G%bathyT(:,:) .and. (z_w(k)*1e-2) > CS%tidal_diss_lim_tc)
+    !### THE USE OF WHERE STATEMENTS IS STRONGLY DISCOURAGED IN MOM6!
+    where (((z_t(k)*1e-2) <= G%bathyT(:,:)*G%Zd_to_m) .and. (z_w(k)*1e-2 > CS%tidal_diss_lim_tc))
       CS%tidal_qe_3d_in(:,:,k) = p33*tc_m2(:,:,k) + p33*tc_s2(:,:,k) + &
                            tidal_qk1*tc_k1(:,:,k) + tidal_qo1*tc_o1(:,:,k)
     endwhere
@@ -1598,7 +1599,7 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
   !      do k=50,nz_in(1)
   !          write(1905,*) i,j,k
   !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)
-  !          write(1905,*) z_t(k), G%bathyT(i,j), z_w(k),CS%tidal_diss_lim_tc
+  !          write(1905,*) z_t(k), G%bathyT(i,j)*G%Zd_to_m, z_w(k),CS%tidal_diss_lim_tc
   !      end do
   !    endif
   !  enddo
@@ -1607,13 +1608,13 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
 
   ! test if qE is positive
   if (any(CS%tidal_qe_3d_in<0.0)) then
-        call MOM_error(FATAL, "read_tidal_constituents: Negative tidal_qe_3d_in terms.")
+    call MOM_error(FATAL, "read_tidal_constituents: Negative tidal_qe_3d_in terms.")
   endif
 
   !! collapse 3D q*E to 2D q*E
   !CS%tidal_qe_2d = 0.0
   !do k=1,nz_in(1)
-  !  where (z_t(k) <= G%bathyT(:,:))
+  !  where (z_t(k) <= G%bathyT(:,:)*G%Zd_to_m)
   !    CS%tidal_qe_2d(:,:) = CS%tidal_qe_2d(:,:) + CS%tidal_qe_3d_in(:,:,k)
   !  endwhere
   !enddo

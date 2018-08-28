@@ -143,7 +143,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
 
       do j=js,je ; do i=is,ie
-        eta1D(nz+1) = -1.0*G%bathyT(i,j)
+        eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
@@ -165,7 +165,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
  !  case ( IC_RHO_C )
  !
  !    do j=js,je ; do i=is,ie
- !       eta1D(nz+1) = -1.0*G%bathyT(i,j)
+ !       eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
  !       do k=nz,1,-1
  !         eta1D(k) = e0(k)
  !         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -187,7 +187,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
     case ( REGRIDDING_ZSTAR )
 
       do j=js,je ; do i=is,ie
-        eta1D(nz+1) = -1.0*G%bathyT(i,j)
+        eta1D(nz+1) = -GV%Z_to_H*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
           if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -201,8 +201,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
 
     case ( REGRIDDING_SIGMA )
       do j=js,je ; do i=is,ie
-        delta_h = G%bathyT(i,j) / nz
-        h(i,j,:) = GV%m_to_H * delta_h
+        h(i,j,:) = GV%Z_to_H*G%bathyT(i,j) / nz
       enddo ; enddo
 
     case default
@@ -359,7 +358,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp
   real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt
   real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO
-  real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness
+  real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness, in m.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness
   real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate, in s-1.
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
@@ -444,7 +443,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
     enddo
     e0(nz+1) = -G%max_depth
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
@@ -461,7 +460,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
     ! Construct temperature and salinity on the arbitrary grid
     T(:,:,:) = 0.0 ; S(:,:,:) = 0.0
     do j=js,je ; do i=is,ie
-      z = -G%bathyT(i,j)
+      z = -G%Zd_to_m*G%bathyT(i,j)
       do k = nz,1,-1
         z = z + 0.5 * h(i,j,k) ! Position of the center of layer k
         S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
@@ -482,7 +481,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
 
     ! Construct thicknesses to restore to
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
@@ -495,11 +494,11 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
 
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
-        h(i,j,1:nz-1) = GV%Angstrom_H
-        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_H
+        h(i,j,1:nz-1) = GV%Angstrom_m
+        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_m
       endif
 
-      eta(i,j,nz+1) = -G%bathyT(i,j)
+      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
       do K=nz,1,-1
         eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)
       enddo

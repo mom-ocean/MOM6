@@ -640,8 +640,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
         hbelow = 0.0
         do k=nz,1,-1
           hbelow = hbelow + h(i,j,k) * H_to_m
-          hint = H_0APE(K) + (hbelow - G%bathyT(i,j))
-          hbot = H_0APE(K) - G%bathyT(i,j)
+          hint = H_0APE(K) + (hbelow - G%Zd_to_m*G%bathyT(i,j))
+          hbot = H_0APE(K) - G%Zd_to_m*G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
           PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
@@ -652,7 +652,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
         hbelow = 0.0
         do k=nz,1,-1
           hint = H_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
-          hbot = max(H_0APE(K) - G%bathyT(i,j), 0.0)
+          hbot = max(H_0APE(K) - G%Zd_to_m*G%bathyT(i,j), 0.0)
           PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (GV%Rho0*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
@@ -1088,7 +1088,7 @@ subroutine create_depth_list(G, CS)
     i_global = i + G%idg_offset - (G%isg-1)
 
     list_pos = (j_global-1)*G%Domain%niglobal + i_global
-    Dlist(list_pos) = G%bathyT(i,j)
+    Dlist(list_pos) = G%Zd_to_m*G%bathyT(i,j)
     Arealist(list_pos) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 

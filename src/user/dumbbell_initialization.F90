@@ -139,7 +139,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
     enddo
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%Zd_to_m * G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
@@ -154,7 +154,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -169,8 +169,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = delta_h
+      h(i,j,:) = G%Zd_to_m * G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
 end select
@@ -305,7 +304,7 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
   if (use_ALE) then
     ! construct a uniform grid for the sponge
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%Zd_to_m * G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then

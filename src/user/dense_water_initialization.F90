@@ -225,7 +225,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
 
     do j = G%jsc,G%jec
       do i = G%isc,G%iec
-        eta1D(nz+1) = -G%bathyT(i,j)
+        eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
         do k = nz,1,-1
           eta1D(k) = e0(k)
 

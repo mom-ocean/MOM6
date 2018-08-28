@@ -70,7 +70,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
 
   ! Uniform thicknesses for base state
   do j=js,je ; do i=is,ie                        !
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then

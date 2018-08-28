@@ -222,7 +222,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           CS%dye_source_minlat(m)<G%geoLatT(i,j) .and. &
           CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
-        z_bot = -G%bathyT(i,j)
+        z_bot = -G%Zd_to_m*G%bathyT(i,j)
         do k = GV%ke, 1, -1
           z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_m
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
@@ -305,7 +305,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           CS%dye_source_minlat(m)<G%geoLatT(i,j) .and. &
           CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
-        z_bot = -G%bathyT(i,j)
+        z_bot = -G%Zd_to_m*G%bathyT(i,j)
         do k=nz,1,-1
           z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_m
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &

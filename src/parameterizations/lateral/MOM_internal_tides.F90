@@ -348,7 +348,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Extract the energy for mixing due to bottom drag-------------------------------
   if (CS%apply_bottom_drag) then
     do j=jsd,jed ; do i=isd,ied
-      I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
+      ! Note the 1 m dimensional scale here.  Should this be a parameter?
+      I_D_here = 1.0 / (GV%Z_to_m*max(G%bathyT(i,j), 1.0*GV%m_to_Z))
       drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, vel_btTide(i,j)**2 + &
                         tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
     enddo ; enddo
@@ -2312,7 +2313,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
-    h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
+    h2(i,j) = min(0.01*(G%Zd_to_m*G%bathyT(i,j))**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here
     ! will be multiplied by N and En to get into [W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
