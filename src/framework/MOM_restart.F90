@@ -17,7 +17,7 @@ use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod,         only:  mpp_chksum
+use mpp_mod,         only:  mpp_chksum,mpp_pe
 use mpp_io_mod,      only:  mpp_attribute_exist, mpp_get_atts
 
 implicit none ; private
@@ -917,7 +917,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       elseif (associated(CS%var_ptr1d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p)
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
       endif
     enddo
 
@@ -1103,7 +1103,7 @@ subroutine restore_state(filename, directory, day, G, CS)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
                            G%Domain%mpp_domain, timelevel=1)
-            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p)
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
           elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
