@@ -95,10 +95,10 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
                                                       !! only read parameters without changing h.
 
   ! Local variables
-  real :: e0(SZK_(GV))     ! The resting interface heights, in m, usually !
-                           ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface !
-                           ! positive upward, in m.                       !
+  real :: e0(SZK_(GV))     ! The resting interface heights, in depth units (Z), usually
+                           ! negative because it is positive upward.
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
+                           ! positive upward, in depth units (Z).
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
   real    :: delta_h
@@ -115,7 +115,8 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
     call MOM_mesg("MOM_initialization.F90, DOME2d_initialize_thickness: setting thickness")
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
-                 default=1.e-3, do_not_log=.true.)
+                 default=1.e-3, units="m", do_not_log=.true.)
+  min_thickness = GV%m_to_Z*min_thickness
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
@@ -143,21 +144,21 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
 
       do j=js,je ; do i=is,ie
-        eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+        eta1D(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
-            eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
             h(i,j,k) = GV%Angstrom_H
           else
-            h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
           endif
         enddo
 
         x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
         if ( x <= dome2d_width_bay ) then
           h(i,j,1:nz-1) = GV%Angstrom_H
-          h(i,j,nz) = GV%m_to_H * dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_H
+          h(i,j,nz) = GV%Z_to_H * dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_H
         endif
 
       enddo ; enddo
@@ -165,21 +166,21 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
  !  case ( IC_RHO_C )
  !
  !    do j=js,je ; do i=is,ie
- !       eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+ !       eta1D(nz+1) = -G%bathyT(i,j)
  !       do k=nz,1,-1
  !         eta1D(k) = e0(k)
  !         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
  !           eta1D(k) = eta1D(k+1) + min_thickness
- !           h(i,j,k) = GV%m_to_H * min_thickness
+ !           h(i,j,k) = GV%Z_to_H * min_thickness
  !         else
- !           h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+ !           h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
  !         endif
  !       enddo
  !
  !       x = G%geoLonT(i,j) / G%len_lon
  !       if ( x <= dome2d_width_bay ) then
- !         h(i,j,1:nz-1) = GV%m_to_H * min_thickness
- !         h(i,j,nz) = GV%m_to_H * (dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness)
+ !         h(i,j,1:nz-1) = GV%Z_to_H * min_thickness
+ !         h(i,j,nz) = GV%Z_to_H * (dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness)
  !       endif
  !
  !    enddo ; enddo
@@ -187,14 +188,14 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
     case ( REGRIDDING_ZSTAR )
 
       do j=js,je ; do i=is,ie
-        eta1D(nz+1) = -GV%Z_to_H*G%bathyT(i,j)
+        eta1D(nz+1) = -G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
           if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
             eta1D(k) = eta1D(k+1) + min_thickness
-            h(i,j,k) = GV%m_to_H * min_thickness
+            h(i,j,k) = GV%Z_to_H * min_thickness
           else
-            h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
           endif
         enddo
       enddo ; enddo
@@ -273,7 +274,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + (GV%H_to_m * h(i,j,k)) / G%max_depth
+          xi1 = xi0 + (GV%H_to_Z * h(i,j,k)) / G%max_depth
           S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
           xi0 = xi1
         enddo
@@ -284,7 +285,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + (GV%H_to_m * h(i,j,k)) / G%max_depth
+          xi1 = xi0 + (GV%H_to_Z * h(i,j,k)) / G%max_depth
           S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
           xi0 = xi1
         enddo
@@ -443,14 +444,14 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
     enddo
     e0(nz+1) = -G%max_depth
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
           h(i,j,k) = GV%Angstrom_m
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%Z_to_m * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -460,13 +461,13 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
     ! Construct temperature and salinity on the arbitrary grid
     T(:,:,:) = 0.0 ; S(:,:,:) = 0.0
     do j=js,je ; do i=is,ie
-      z = -G%Zd_to_m*G%bathyT(i,j)
+      z = -G%bathyT(i,j)
       do k = nz,1,-1
-        z = z + 0.5 * h(i,j,k) ! Position of the center of layer k
+        z = z + 0.5 * GV%m_to_Z * h(i,j,k) ! Position of the center of layer k
         S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
         if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) &
           S(i,j,k) = S_ref + S_range
-        z = z + 0.5 * h(i,j,k) ! Position of the interface k
+        z = z + 0.5 *  GV%m_to_Z *h(i,j,k) ! Position of the interface k
       enddo
     enddo ; enddo
 
@@ -481,21 +482,21 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
 
     ! Construct thicknesses to restore to
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_m)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_m
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
           h(i,j,k) = GV%Angstrom_m
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%Z_to_m * (eta1D(k) - eta1D(k+1))
         endif
       enddo
 
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
         h(i,j,1:nz-1) = GV%Angstrom_m
-        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_m
+        h(i,j,nz) = dome2d_depth_bay * GV%Z_to_m*G%max_depth - (nz-1) * GV%Angstrom_m
       endif
 
       eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
