@@ -776,10 +776,10 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_uniform" ! This subroutine's name.
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units, usually
                           ! negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in m.
+                          ! positive upward, in depth units.
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -804,14 +804,14 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
     ! Angstrom thick, and 2.  the interfaces are where they should be
     ! based on the resting depths and interface height perturbations,
     ! as long at this doesn't interfere with 1.
-    eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+    eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
         h(i,j,k) = GV%Angstrom_H
       else
-        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo
@@ -2177,7 +2177,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 
     ! Build the target grid (and set the model thickness to it)
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( GV, G%max_depth, PF, mdl, regridCS ) ! sets regridCS
+    call ALE_initRegridding( GV, GV%Z_to_m*G%max_depth, PF, mdl, regridCS ) ! sets regridCS
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only

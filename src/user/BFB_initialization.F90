@@ -115,10 +115,10 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
   call get_param(param_file, mdl, "LENLON", lenlon, &
                  "The longitudinal length of the domain.", units="degrees")
   nlat = slat + lenlat
-  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz) ; enddo
+  do k=1,nz ; H0(k) = -G%Zd_to_m*G%max_depth * real(k-1) / real(nz) ; enddo
 
   ! Use for meridional thickness profile initialization
-!  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz-1) ; enddo
+!  do k=1,nz ; H0(k) = -G%Zd_to_m*G%max_depth * real(k-1) / real(nz-1) ; enddo
 
   do i=is,ie; do j=js,je
     if (G%geoLatT(i,j) < slat+2.0) then ; damp = 1.0
@@ -141,10 +141,11 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
     !   enddo
     ! elseif (G%geoLatT(i,j) > 20.0) then
     !   do k = 1,nz
-    !     eta(i,j,k) = min(H0(k) + (G%geoLatT(i,j) - 20.0)*(G%max_depth - nz*G%Angstrom_m)/20.0, -(k-1)*G%Angstrom_m)
+    !     eta(i,j,k) = min(H0(k) + (G%geoLatT(i,j) - 20.0)*(GV%Z_to_m*G%max_depth - nz*G%Angstrom_m)/20.0, &
+    !                      -(k-1)*G%Angstrom_m)
     !   enddo
     ! endif
-    eta(i,j,nz+1) = -G%max_depth
+    eta(i,j,nz+1) = -G%Zd_to_m*G%max_depth
 
     if (G%Zd_to_m*G%bathyT(i,j) > min_depth) then
       Idamp(i,j) = damp/86400.0

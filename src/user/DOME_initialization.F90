@@ -86,10 +86,10 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(GV)+1)    ! The resting interface heights, in m, usually !
-                            ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface !
-                            ! positive upward, in m.                       !
+  real :: e0(SZK_(GV)+1)    ! The resting interface heights, in m, usually
+                            ! negative because it is positive upward, in depth units (Z).
+  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
+                            ! positive upward, in depth units (Z).
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
@@ -113,14 +113,14 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+    eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
         h(i,j,k) = GV%Angstrom_H
       else
-        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo
@@ -170,7 +170,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
   H0(1) = 0.0
-  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth/real(nz-1) ; enddo
+  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*(GV%Z_to_m*G%max_depth) / real(nz-1) ; enddo
   do i=is,ie; do j=js,je
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then

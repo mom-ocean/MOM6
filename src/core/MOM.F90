@@ -2120,11 +2120,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Initialize dynamically evolving fields, perhaps from restart files.
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize_coord(GV, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv, dG%max_depth)
+                            dirs%output_directory, CS%tv, dG%max_depth*dG%Zd_to_m)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call ALE_init(param_file, GV, dG%max_depth, CS%ALE_CSp)
+    call ALE_init(param_file, GV, dG%max_depth*dG%Zd_to_m, CS%ALE_CSp)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 

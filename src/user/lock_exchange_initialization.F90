@@ -66,26 +66,29 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
+  thermocline_thickness = GV%m_to_Z*thermocline_thickness
+  front_displacement = GV%m_to_Z*front_displacement
+
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     do k=2,nz
       eta1D(K) = -0.5 * G%max_depth & ! Middle of column
               - thermocline_thickness * ( (real(k-1))/real(nz) -0.5 ) ! Stratification
       if (G%geoLonT(i,j)-G%west_lon < 0.5 * G%len_lon) then
-        eta1D(K)=eta1D(K) + 0.5 * front_displacement
+        eta1D(K) = eta1D(K) + 0.5 * front_displacement
       elseif (G%geoLonT(i,j)-G%west_lon > 0.5 * G%len_lon) then
-        eta1D(K)=eta1D(K) - 0.5 * front_displacement
+        eta1D(K) = eta1D(K) - 0.5 * front_displacement
       endif
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=nz,2,-1 ! Make sure interfaces increase upwards
-      eta1D(K) = max( eta1D(K), eta1D(K+1) + GV%Angstrom_m )
+      eta1D(K) = max( eta1D(K), eta1D(K+1) + GV%Angstrom_Z )
     enddo
     eta1D(1) = 0. ! Force bottom interface to bottom
     do k=2,nz ! Make sure interfaces decrease downwards
-      eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_m )
+      eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_Z )
     enddo
     do k=nz,1,-1
-      h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+      h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
     enddo
   enddo ; enddo
 
