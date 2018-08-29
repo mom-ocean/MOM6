@@ -81,7 +81,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0 * GV%m_to_H
+          h(i,j,k) = h0 * GV%Z_to_H
         enddo
       enddo ; enddo
 
@@ -92,7 +92,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0 * GV%m_to_H
+          h(i,j,k) = h0 * GV%Z_to_H
         enddo
       enddo ; enddo
 
@@ -149,7 +149,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
     zi = 0.
     do k = 1, nz
       zi = zi - h(i,j,k)              ! Bottom interface position
-      zc = GV%H_to_m * (zi - 0.5*h(i,j,k))    ! Position of middle of cell
+      zc = GV%H_to_Z * (zi - 0.5*h(i,j,k))    ! Position of middle of cell
       zc = min( zc, -Hml(G, G%geoLatT(i,j)) ) ! Bound by depth of mixed layer
       T(i,j,k) = T_ref + dTdz * zc ! Linear temperature profile
     enddo
@@ -203,7 +203,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
       dUdT = ( GV%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
-    Dml = Hml( G, G%geoLatT(i,j) )
+    Dml = GV%Z_to_m*Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.
     do k = 1, nz

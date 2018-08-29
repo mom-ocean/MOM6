@@ -109,7 +109,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
 
       t = - z_unif(k)
 
-      z_inter(k) = -t * (G%max_depth * GV%m_to_Z)
+      z_inter(k) = -t * G%max_depth
 
     enddo
 
@@ -217,7 +217,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   do j=js,je ; do i=is,ie
     xi0 = 0.0
     do k = 1,nz
-      xi1 = xi0 + deltah / G%max_depth
+      xi1 = xi0 + deltah / G%max_depth ! =  xi0 + 1.0 / real(nz)
       S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
       xi0 = xi1
     enddo
