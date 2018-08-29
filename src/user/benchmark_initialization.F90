@@ -147,7 +147,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, &
 
   pi = 4.0*atan(1.0)
   I_ts = 1.0 / thermocline_scale
-  I_md = 1.0 / G%max_depth
+  I_md = 1.0 / (G%max_depth * GV%Z_to_m)
   do j=js,je ; do i=is,ie
     SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
                                cos(pi*(G%geoLatT(i,j)-G%south_lat)/(G%len_lat))

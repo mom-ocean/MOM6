@@ -39,10 +39,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, m.
+  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces, in depth units (Z).
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in depth units (Z).
   real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface
-                            ! positive upward, in m.
+                            ! positive upward, in in depth units (Z).
   real :: damp_rate, jet_width, jet_height, y_2
   real :: half_strat, half_depth
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -70,6 +70,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
+  jet_height = jet_height*GV%m_to_Z
   half_depth = G%max_depth*half_strat
   eta0(1) = 0.0 ; eta0(nz+1) = -G%max_depth
   do k=2,1+nz/2 ; eta0(k) = -half_depth*(2.0*(k-1)/real(nz)) ; enddo
@@ -82,27 +83,26 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
   enddo
   do K=2,nz ; do j=js,je
     y_2 = G%geoLatT(is,j) - G%south_lat - 0.5*G%len_lat
-    eta_im(j,K) = eta0(k) + &
-         jet_height * tanh(y_2 / jet_width)
-!         jet_height * atan(y_2 / jet_width)
+    eta_im(j,K) = eta0(k) + jet_height * tanh(y_2 / jet_width)
+                ! or  ... + jet_height * atan(y_2 / jet_width)
     if (eta_im(j,K) > 0.0) eta_im(j,K) = 0.0
     if (eta_im(j,K) < -G%max_depth) eta_im(j,K) = -G%max_depth
   enddo ; enddo
 
   do j=js,je ; do i=is,ie
-!    This sets the initial thickness (in m) of the layers.  The      !
+!    This sets the initial thickness (in H) of the layers.  The      !
 !  thicknesses are set to insure that: 1.  each layer is at least an !
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -G%Zd_to_m * G%bathyT(i,j)
+    eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
         h(i,j,k) = GV%Angstrom_H
       else
-        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo
@@ -200,16 +200,20 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
                                             !! the control structure for the
                                             !! sponge module.
-  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< Thickness field.
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< Thickness field, in units of H. 
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, m.
-  real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
+  real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
   real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, m.
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
-  real :: damp_rate, jet_width, jet_height, y_2
-  real :: half_strat, half_depth
+  real :: damp_rate    ! The inverse zonal-mean damping rate, in s-1.
+  real :: jet_width    ! The width of the zonal mean jet, in km.
+  real :: jet_height   ! The interface height scale associated with the zonal-mean jet, in depth units.
+  real :: y_2          ! The y-position relative to the channel center, in km.
+  real :: half_strat   ! The fractional depth where the straficiation is centered, ND.
+  real :: half_depth   ! The depth where the stratification is centered, in depth units.
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -224,8 +228,8 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   if (first_call) call log_version(param_file, mdl, version)
   first_call = .false.
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
-                 "The maximum depth of the ocean.", units="nondim", &
-                 default = 0.5)
+                 "The fractional depth where the stratificaiton is centered.", &
+                 units="nondim", default = 0.5)
   call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
                  "The rate at which the zonal-mean sponges damp.", units="s-1", &
                  default = 1.0/(10.0*86400.0))
@@ -238,6 +242,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
                  "zonal-mean jet.", units="m", &
                  fail_if_missing=.true.)
 
+  jet_height = jet_height / G%Zd_to_m
   half_depth = G%max_depth*half_strat
   eta0(1) = 0.0 ; eta0(nz+1) = -G%max_depth
   do k=2,1+nz/2 ; eta0(k) = -half_depth*(2.0*(k-1)/real(nz)) ; enddo
@@ -247,15 +252,15 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
 
   do j=js,je
     Idamp_im(j) = damp_rate
-    eta_im(j,1) = 0.0 ; eta_im(j,nz+1) = -G%max_depth
+    eta_im(j,1) = 0.0 ; eta_im(j,nz+1) = -G%Zd_to_m*G%max_depth
   enddo
   do K=2,nz ; do j=js,je
     y_2 = G%geoLatT(is,j) - G%south_lat - 0.5*G%len_lat
-    eta_im(j,K) = eta0(k) + &
-         jet_height * tanh(y_2 / jet_width)
+    eta_im(j,K) = eta0(k) + jet_height * tanh(y_2 / jet_width)
 !         jet_height * atan(y_2 / jet_width)
     if (eta_im(j,K) > 0.0) eta_im(j,K) = 0.0
     if (eta_im(j,K) < -G%max_depth) eta_im(j,K) = -G%max_depth
+    eta_im(j,K) = eta_im(j,K) * G%Zd_to_m
   enddo ; enddo
 
   call initialize_sponge(Idamp, eta, G, param_file, CSp, Idamp_im, eta_im)
@@ -295,7 +300,7 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
   call get_param(param_file, mdl, "PHILLIPS_HTOP", Htop,             &
                  "The maximum height of the topography.", units="m", &
                  fail_if_missing=.true.)
-! Htop=0.375*G%max_depth     ! max height of topog. above max_depth
+! Htop=0.375*max_depth     ! max height of topog. above max_depth
   Wtop=0.5*G%len_lat       ! meridional width of drake and mount
   Ltop=0.25*G%len_lon      ! zonal width of topographic features
   offset=0.1*G%len_lat ! meridional offset from center

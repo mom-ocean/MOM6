@@ -1677,7 +1677,7 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
   ! Arguments
   type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)),   intent(in)    :: h  !< Original ayer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)),   intent(in)    :: h  !< Original layer thicknesses, in H
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth in H
   real,                                         intent(inout) :: h_new !< New layer thicknesses, in H
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
@@ -1697,8 +1697,8 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
 
   nz = GV%ke
 
-  max_depth = G%max_depth
-  min_thickness = CS%min_thickness
+  max_depth = G%max_depth*GV%Z_to_H
+  min_thickness = CS%min_thickness !### May need *GV%m_to_H ?
 
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
@@ -1998,7 +1998,7 @@ subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
 
   if (.not.allocated(CS%max_interface_depths)) allocate(CS%max_interface_depths(1:CS%nk+1))
 
-  val_to_H = 1.0 ; if (present( units_to_H)) val_to_H = units_to_H
+  val_to_H = 1.0 ; if (present(units_to_H)) val_to_H = units_to_H
   if (max_depths(CS%nk+1) < max_depths(1)) val_to_H = -1.0*val_to_H
 
   ! Check for sign reversals in the depths.
