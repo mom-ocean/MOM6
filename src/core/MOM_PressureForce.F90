@@ -16,7 +16,7 @@ use MOM_PressureForce_blk_AFV, only : PressureForce_blk_AFV_CS
 use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_nonBouss
 use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_end
 use MOM_PressureForce_Mont, only : PressureForce_Mont_CS
-use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
+use MOM_tidal_forcing, only : tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ALE, only: ALE_CS
