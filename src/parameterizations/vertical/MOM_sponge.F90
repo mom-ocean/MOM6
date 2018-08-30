@@ -53,7 +53,8 @@ type, public :: sponge_CS ; private
   real, pointer :: Rcv_ml_ref(:) => NULL() !< The value toward which the mixed layer
                              !! coordinate-density is being damped, in kg m-3.
   real, pointer :: Ref_eta(:,:) => NULL() !< The value toward which the interface
-                             !! heights are being damped, in m.
+                             !! heights are being damped, in depth units (Z).
+  real   :: eta_Z_to_m       !< The conversion factor between the units for depths (Z) and m.
   type(p3d) :: var(MAX_FIELDS_) !< Pointers to the fields that are being damped.
   type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
 
@@ -63,7 +64,7 @@ type, public :: sponge_CS ; private
   real, pointer :: Rcv_ml_ref_im(:) => NULL() !! The value toward which the i-mean
                              !< mixed layer coordinate-density is being damped, in kg m-3.
   real, pointer :: Ref_eta_im(:,:) => NULL() !< The value toward which the i-mean
-                             !! interface heights are being damped, in m.
+                             !! interface heights are being damped, in depth units (Z).
   type(p2d) :: Ref_val_im(MAX_FIELDS_) !< The values toward which the i-means of
                              !! fields are damped.
 
@@ -79,22 +80,24 @@ contains
 !! positive values of Iresttime and which mask2dT indicates are ocean
 !! points are included in the sponges.  It also stores the target interface
 !! heights.
-subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
+subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
                              Iresttime_i_mean, int_height_i_mean)
-  type(ocean_grid_type), intent(in) :: G          !< The ocean's grid structure
+  type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(in) :: Iresttime  !< The inverse of the restoring time, in s-1.
+                           intent(in) :: Iresttime  !< The inverse of the restoring time, in s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                         intent(in) :: int_height !< The interface heights to damp back toward, in m.
-  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(sponge_CS),       pointer    :: CS         !< A pointer that is set to point to the control
-                                                  !! structure for this module
+                           intent(in) :: int_height !< The interface heights to damp back toward, in depth units (Z).
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(sponge_CS),         pointer    :: CS         !< A pointer that is set to point to the control
+                                                    !! structure for this module
+  type(verticalGrid_type), &
+                 optional, intent(in) :: GV         !< The ocean's vertical grid structure
   real, dimension(SZJ_(G)), &
-               optional, intent(in) :: Iresttime_i_mean !< The inverse of the restoring time for
-                                                             !! the zonal mean properties, in s-1.
+                 optional, intent(in) :: Iresttime_i_mean !< The inverse of the restoring time for
+                                                          !! the zonal mean properties, in s-1.
   real, dimension(SZJ_(G),SZK_(G)+1), &
-               optional, intent(in) :: int_height_i_mean !< The interface heights toward which to
-                                                             !! damp the zonal mean heights, in m.
+                 optional, intent(in) :: int_height_i_mean !< The interface heights toward which to
+                                                           !! damp the zonal mean heights, in depth units (Z).
 
 
 ! This include declares and sets the variable "version".
@@ -131,6 +134,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
 !  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   ! CS%bulkmixedlayer may be set later via a call to set_up_sponge_ML_density.
   CS%bulkmixedlayer = .false.
+
+  CS%eta_Z_to_m = 1.0 ; if (present(GV)) CS%eta_Z_to_m = GV%Z_to_m
 
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -342,11 +347,11 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
                    ! at the surface, in the same units as G%bathyT (m or Z).
   real, dimension(SZI_(G), SZJ_(G)) :: &
     eta_anom, &    ! Anomalies in the interface height, relative to the i-mean
-                   ! target value, in m.
+                   ! target value, in depth units (Z).
     fld_anom       ! Anomalies in a tracer concentration, relative to the
                    ! i-mean target value.
   real, dimension(SZJ_(G), SZK_(G)+1) :: &
-    eta_mean_anom  ! The i-mean interface height anomalies, in m.
+    eta_mean_anom  ! The i-mean interface height anomalies, in Z.
   real, allocatable, dimension(:,:,:) :: &
     fld_mean_anom  ! THe i-mean tracer concentration anomalies.
   real, dimension(SZI_(G), SZK_(G)+1) :: &
@@ -356,8 +361,8 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
     dilate         ! A nondimensional factor by which to dilate layers to
                    ! give 0 at the surface.
 
-  real :: e(SZK_(G)+1)  ! The interface heights, in m, usually negative.
-  real :: e0       ! The height of the free surface in m.
+  real :: e(SZK_(G)+1)  ! The interface heights, in Z, usually negative.
+  real :: e0       ! The height of the free surface in Z.
   real :: e_str    ! A nondimensional amount by which the reference
                    ! profile must be stretched for the free surfaces
                    ! heights in the two profiles to agree.
@@ -379,6 +384,9 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   if (CS%bulkmixedlayer .and. (.not.present(Rcv_ml))) &
     call MOM_error(FATAL, "Rml must be provided to apply_sponge when using "//&
                            "a bulk mixed layer.")
+
+  if (CS%eta_Z_to_m /= GV%Z_to_m) call MOM_error(FATAL, &
+    "There are inconsistent depth units between calls to set_up_sponge and apply_sponge.")
 
   if ((CS%id_w_sponge > 0) .or. CS%do_i_mean_sponge) then
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
@@ -407,8 +415,8 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
     do k=2,nz
       do j=js,je ; do i=is,ie
-        eta_anom(i,j) = e_D(i,j,k)*G%Zd_to_m - CS%Ref_eta_im(j,k)
-        if (CS%Ref_eta_im(j,K) < -G%bathyT(i,j)*G%Zd_to_m) eta_anom(i,j) = 0.0
+        eta_anom(i,j) = e_D(i,j,k) - CS%Ref_eta_im(j,k)
+        if (CS%Ref_eta_im(j,K) < -G%bathyT(i,j)) eta_anom(i,j) = 0.0
       enddo ; enddo
       call global_i_mean(eta_anom(:,:), eta_mean_anom(:,K), G)
     enddo
@@ -436,7 +444,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
       do K=2,nz
         ! w is positive for an upward (lightward) flux of mass, resulting
         ! in the downward movement of an interface.
-        w = damp_1pdamp * eta_mean_anom(j,K) * GV%m_to_H
+        w = damp_1pdamp * eta_mean_anom(j,K) * GV%Z_to_H
         do i=is,ie
           if (w > 0.0) then
             w_int(i,j,K) = min(w, h_below(i,K))
@@ -474,7 +482,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
     e(1) = 0.0 ; e0 = 0.0
     do K=1,nz
-      e(K+1) = e(K) - h(i,j,k)*GV%H_to_m
+      e(K+1) = e(K) - h(i,j,k)*GV%H_to_Z
     enddo
     e_str = e(nz+1) / CS%Ref_eta(nz+1,c)
 
@@ -492,7 +500,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
       wpb = 0.0; wb = 0.0
       do k=nz,nkmb+1,-1
         if (GV%Rlay(k) > Rcv_ml(i,j)) then
-          w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*GV%m_to_H, &
+          w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*GV%Z_to_H, &
                     ((wb + h(i,j,k)) - GV%Angstrom_H))
           wm = 0.5*(w-ABS(w))
           do m=1,CS%fldno
@@ -548,7 +556,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
       wpb = 0.0
       wb = 0.0
       do k=nz,1,-1
-        w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*GV%m_to_H, &
+        w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*GV%Z_to_H, &
                   ((wb + h(i,j,k)) - GV%Angstrom_H))
         wm = 0.5*(w - ABS(w))
         do m=1,CS%fldno
@@ -568,9 +576,9 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
   if (associated(CS%diag)) then ; if (query_averaging_enabled(CS%diag)) then
     if (CS%id_w_sponge > 0) then
-      Idt = 1.0 / dt
+      Idt = GV%H_to_m / dt
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        w_int(i,j,K) = w_int(i,j,K) * Idt * GV%H_to_m ! Scale values by clobbering array since it is local
+        w_int(i,j,K) = w_int(i,j,K) * Idt ! Scale values by clobbering array since it is local
       enddo ; enddo ; enddo
       call post_data(CS%id_w_sponge, w_int(:,:,:), CS%diag)
     endif

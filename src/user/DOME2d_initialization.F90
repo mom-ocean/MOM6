@@ -364,10 +364,11 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate, in s-1.
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
   real :: S_range, T_range             ! Range of salinities and temperatures over the vertical
-  real :: e0(SZK_(G)+1)             ! The resting interface heights, in m, usually !
-                                    ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface !
-                                    ! positive upward, in m.
+  real :: e0(SZK_(G)+1)             ! The resting interface heights, in depth units (Z),
+                                    ! usually negative because it is positive upward.
+  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface
+                                    ! positive upward, in Z.
+  real :: d_eta(SZK_(G))            ! The layer thickness in a column, in Z.
   real :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
   real :: dome2d_west_sponge_time_scale, dome2d_east_sponge_time_scale
   real :: dome2d_west_sponge_width, dome2d_east_sponge_width
@@ -467,44 +468,44 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
         S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
         if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) &
           S(i,j,k) = S_ref + S_range
-        z = z + 0.5 *  GV%m_to_Z *h(i,j,k) ! Position of the interface k
+        z = z + 0.5 *  GV%m_to_Z * h(i,j,k) ! Position of the interface k
       enddo
     enddo ; enddo
 
     if ( associated(tv%T) ) then
-      call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
+      call set_up_ALE_sponge_field(T, G, tv%T, ACSp)
     endif
     if ( associated(tv%S) ) then
-      call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
+      call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
     endif
 
   else
 
-    ! Construct thicknesses to restore to
+    ! Construct interface heights to restore toward
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
-        eta1D(k) = -G%max_depth * real(k-1) / real(nz)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-          h(i,j,k) = GV%Angstrom_m
+        eta1D(K) = -G%max_depth * real(k-1) / real(nz)
+        if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+          eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
+          d_eta(k) = GV%Angstrom_Z
         else
-          h(i,j,k) = GV%Z_to_m * (eta1D(k) - eta1D(k+1))
+          d_eta(k) = (eta1D(K) - eta1D(K+1))
         endif
       enddo
 
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
-        h(i,j,1:nz-1) = GV%Angstrom_m
-        h(i,j,nz) = dome2d_depth_bay * GV%Z_to_m*G%max_depth - (nz-1) * GV%Angstrom_m
+        do k=1,nz-1 ; d_eta(k) = GV%Angstrom_Z ; enddo
+        d_eta(nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_Z
       endif
 
-      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+      eta(i,j,nz+1) = -G%bathyT(i,j)
       do K=nz,1,-1
-        eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)
+        eta(i,j,K) = eta(i,j,K+1) + d_eta(k)
       enddo
     enddo ; enddo
-    call initialize_sponge(Idamp, eta, G, param_file, CSp)
+    call initialize_sponge(Idamp, eta, G, param_file, CSp, GV)
 
   endif
 
