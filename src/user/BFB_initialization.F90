@@ -70,19 +70,18 @@ end subroutine BFB_set_coord
 
 !> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
 !! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
-subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  logical,               intent(in) :: use_temperature !< If true, temperature and salinity are used as
+subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_file, CSp, h)
+  type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  logical,                 intent(in) :: use_temperature !< If true, temperature and salinity are used as
                                             !! state variables.
-  type(thermo_var_ptrs), intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(sponge_CS),       pointer    :: CSp  !< A pointer to the sponge control structure
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(sponge_CS),         pointer    :: CSp  !< A pointer to the sponge control structure
   real, dimension(NIMEM_, NJMEM_, NKMEM_), &
-                         intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  !call MOM_error(FATAL, &
-  ! "BFB_initialization.F90, BFB_initialize_sponges: " // &
-  ! "Unmodified user routine called - you must edit the routine to use it")
+                           intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
 
+  ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
 
@@ -105,6 +104,7 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
 !   Set up sponges for DOME configuration
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
+  min_depth = GV%m_to_Z*min_depth
 
   call get_param(param_file, mdl, "SOUTHLAT", slat, &
                  "The southern latitude of the domain.", units="degrees")
@@ -115,7 +115,7 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
   call get_param(param_file, mdl, "LENLON", lenlon, &
                  "The longitudinal length of the domain.", units="degrees")
   nlat = slat + lenlat
-  do k=1,nz ; H0(k) = -G%Zd_to_m*G%max_depth * real(k-1) / real(nz) ; enddo
+  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz) ; enddo
 
   ! Use for meridional thickness profile initialization
 !  do k=1,nz ; H0(k) = -G%Zd_to_m*G%max_depth * real(k-1) / real(nz-1) ; enddo
@@ -137,24 +137,24 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
     ! do k = 1,nz; eta(i,j,k) = H0(k); enddo
     ! if (G%geoLatT(i,j) > 40.0) then
     !   do k = 1,nz
-    !     eta(i,j,k) = -G%Angstrom_m*(k-1)
+    !     eta(i,j,k) = -G%Angstrom_Z*(k-1)
     !   enddo
     ! elseif (G%geoLatT(i,j) > 20.0) then
     !   do k = 1,nz
-    !     eta(i,j,k) = min(H0(k) + (G%geoLatT(i,j) - 20.0)*(GV%Z_to_m*G%max_depth - nz*G%Angstrom_m)/20.0, &
-    !                      -(k-1)*G%Angstrom_m)
+    !     eta(i,j,k) = min(H0(k) + (G%geoLatT(i,j) - 20.0)*(G%max_depth - nz*G%Angstrom_Z)/20.0, &
+    !                      -(k-1)*G%Angstrom_Z)
     !   enddo
     ! endif
-    eta(i,j,nz+1) = -G%Zd_to_m*G%max_depth
+    eta(i,j,nz+1) = -G%max_depth
 
-    if (G%Zd_to_m*G%bathyT(i,j) > min_depth) then
+    if (G%bathyT(i,j) > min_depth) then
       Idamp(i,j) = damp/86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
 
 !  This call sets up the damping rates and interface heights.
 !  This sets the inverse damping timescale fields in the sponges.    !
-  call initialize_sponge(Idamp, eta, G, param_file, CSp)
+  call initialize_sponge(Idamp, eta, G, param_file, CSp, GV)
 
 !   Now register all of the fields which are damped in the sponge.   !
 ! By default, momentum is advected vertically within the sponge, but !

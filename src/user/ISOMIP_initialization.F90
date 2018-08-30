@@ -472,32 +472,32 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
-   if (associated(CSp)) call MOM_error(FATAL, &
-          "ISOMIP_initialize_sponges called with an associated control structure.")
-   if (associated(ACSp)) call MOM_error(FATAL, &
-          "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
+  if (associated(CSp)) call MOM_error(FATAL, &
+        "ISOMIP_initialize_sponges called with an associated control structure.")
+  if (associated(ACSp)) call MOM_error(FATAL, &
+        "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
 
   !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
   !  wherever there is no sponge, and the subroutines that are called  !
   !  will automatically set up the sponges only where Idamp is positive!
   !  and mask2dT is 1.
 
-   do i=is,ie; do j=js,je
-      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+  do i=is,ie; do j=js,je
+    if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
 
   ! 1 / day
-        dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
-        damp = 1.0/TNUDG * max(0.0,dummy1)
+      dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
+      damp = 1.0/TNUDG * max(0.0,dummy1)
 
-      else ; damp=0.0
-      endif
+    else ; damp=0.0
+    endif
 
   ! convert to 1 / seconds
-      if (G%Zd_to_m * G%bathyT(i,j) > min_depth) then
-        Idamp(i,j) = damp/86400.0
-      else ; Idamp(i,j) = 0.0 ; endif
+    if (G%Zd_to_m * G%bathyT(i,j) > min_depth) then
+      Idamp(i,j) = damp/86400.0
+    else ; Idamp(i,j) = 0.0 ; endif
 
-   enddo ; enddo
+  enddo ; enddo
 
   ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
   call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
@@ -601,50 +601,53 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     endif
 
   else ! layer mode
-     ! 1) Read eta, salt and temp from IC file
-     call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
-     inputdir = slasher(inputdir)
-     ! GM: get two different files, one with temp and one with salt values
-     ! this is work around to avoid having wrong values near the surface
-     ! because of the FIT_SALINITY option. To get salt values right in the
-     ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
-     ! combined the *correct* temp and salt values in one file instead.
-     call get_param(PF, mdl, "ISOMIP_SPONGE_FILE", state_file, &
-               "The name of the file with temps., salts. and interfaces to \n"// &
-               " damp toward.", fail_if_missing=.true.)
-     call get_param(PF, mdl, "SPONGE_PTEMP_VAR", temp_var, &
-               "The name of the potential temperature variable in \n"//&
-               "SPONGE_STATE_FILE.", default="Temp")
-     call get_param(PF, mdl, "SPONGE_SALT_VAR", salt_var, &
-               "The name of the salinity variable in \n"//&
-               "SPONGE_STATE_FILE.", default="Salt")
-     call get_param(PF, mdl, "SPONGE_ETA_VAR", eta_var, &
-               "The name of the interface height variable in \n"//&
-               "SPONGE_STATE_FILE.", default="eta")
+    ! 1) Read eta, salt and temp from IC file
+    call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    ! GM: get two different files, one with temp and one with salt values
+    ! this is work around to avoid having wrong values near the surface
+    ! because of the FIT_SALINITY option. To get salt values right in the
+    ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
+    ! combined the *correct* temp and salt values in one file instead.
+    call get_param(PF, mdl, "ISOMIP_SPONGE_FILE", state_file, &
+              "The name of the file with temps., salts. and interfaces to \n"// &
+              "damp toward.", fail_if_missing=.true.)
+    call get_param(PF, mdl, "SPONGE_PTEMP_VAR", temp_var, &
+              "The name of the potential temperature variable in \n"//&
+              "SPONGE_STATE_FILE.", default="Temp")
+    call get_param(PF, mdl, "SPONGE_SALT_VAR", salt_var, &
+              "The name of the salinity variable in \n"//&
+              "SPONGE_STATE_FILE.", default="Salt")
+    call get_param(PF, mdl, "SPONGE_ETA_VAR", eta_var, &
+              "The name of the interface height variable in \n"//&
+              "SPONGE_STATE_FILE.", default="eta")
 
-     !read temp and eta
-     filename = trim(inputdir)//trim(state_file)
-     if (.not.file_exists(filename, G%Domain)) &
-        call MOM_error(FATAL, " ISOMIP_initialize_sponges: Unable to open "//trim(filename))
-     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
-     call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
-     call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
+    !read temp and eta
+    filename = trim(inputdir)//trim(state_file)
+    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+          "ISOMIP_initialize_sponges: Unable to open "//trim(filename))
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
+    if (GV%m_to_Z /= 1.0) then ; do k=1,nz+1 ; do j=js,je ; do i=is,ie
+      eta(i,j,k) = GV%m_to_Z*eta(i,j,k)
+    enddo ; enddo ; enddo ; endif
+    call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+    call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 
-     ! for debugging
-     !i=G%iec; j=G%jec
-     !do k = 1,nz
-     !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
-     !  write(mesg,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
-     !              S(i,j,k),rho_tmp,GV%Rlay(k)
-     !  call MOM_mesg(mesg,5)
-     !enddo
+    ! for debugging
+    !i=G%iec; j=G%jec
+    !do k = 1,nz
+    !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
+    !  write(mesg,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
+    !              S(i,j,k),rho_tmp,GV%Rlay(k)
+    !  call MOM_mesg(mesg,5)
+    !enddo
 
-     ! Set the inverse damping rates so that the model will know where to
-     ! apply the sponges, along with the interface heights.
-     call initialize_sponge(Idamp, eta, G, PF, CSp)
-     ! Apply sponge in tracer fields
-     call set_up_sponge_field(T, tv%T, G, nz, CSp)
-     call set_up_sponge_field(S, tv%S, G, nz, CSp)
+    ! Set the inverse damping rates so that the model will know where to
+    ! apply the sponges, along with the interface heights.
+    call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
+    ! Apply sponge in tracer fields
+    call set_up_sponge_field(T, tv%T, G, nz, CSp)
+    call set_up_sponge_field(S, tv%S, G, nz, CSp)
 
   endif
 
