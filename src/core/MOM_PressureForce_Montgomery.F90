@@ -143,36 +143,30 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 
   I_gEarth = 1.0 / GV%g_Earth
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
-!$OMP parallel default(none) shared(nz,alpha_Lay,GV,dalpha_int)
-!$OMP do
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
-!$OMP do
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
-!$OMP end parallel
 
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,p,p_atm,GV,h,use_p_atm)
   if (use_p_atm) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; p(i,j,1) = p_atm(i,j) ; enddo ; enddo
   else
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; p(i,j,1) = 0.0 ; enddo ; enddo
   endif
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1 ; do k=1,nz ; do i=Isq,Ieq+1
     p(i,j,K+1) = p(i,j,K) + GV%H_to_Pa * h(i,j,k)
   enddo ; enddo ; enddo
-!$OMP end parallel
 
   if (present(eta)) then
     Pa_to_H = 1.0 / GV%H_to_Pa
     if (use_p_atm) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,p_atm,Pa_to_H)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = (p(i,j,nz+1) - p_atm(i,j))*Pa_to_H ! eta has the same units as h.
       enddo ; enddo
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,Pa_to_H)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = p(i,j,nz+1)*Pa_to_H ! eta has the same units as h.
       enddo ; enddo
@@ -182,39 +176,36 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
   if (CS%tides) then
     !   Determine the sea surface height anomalies, to enable the calculation
     ! of self-attraction and loading.
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,SSH,G,GV,use_EOS,tv,p,dz_geo, &
-!$OMP                               I_gEarth,h,alpha_Lay)
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = -G%Zd_to_m*G%bathyT(i,j)
+      SSH(i,j) = -GV%Z_to_m*G%bathyT(i,j)
     enddo ; enddo
     if (use_EOS) then
-!$OMP do
+      !$OMP parallel do default(shared)
       do k=1,nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,k), p(:,:,k+1), &
                                  0.0, G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=1)
       enddo
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do k=1,nz; do i=Isq,Ieq+1
         SSH(i,j) = SSH(i,j) + I_gEarth * dz_geo(i,j,k)
       enddo ; enddo ; enddo
     else
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do k=1,nz ; do i=Isq,Ieq+1
         SSH(i,j) = SSH(i,j) + GV%H_to_kg_m2*h(i,j,k)*alpha_Lay(k)
       enddo ; enddo ; enddo
     endif
-!$OMP end parallel
 
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV,e_tidal)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=1.0)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%Zd_to_m*G%bathyT(i,j))
+      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + GV%Z_to_m*G%bathyT(i,j))
     enddo ; enddo
   else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*G%Zd_to_m*G%bathyT(i,j)
+      geopot_bot(i,j) = -GV%g_Earth*GV%Z_to_m*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -229,8 +220,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       tv_tmp%T => T_tmp ; tv_tmp%S => S_tmp
       tv_tmp%eqn_of_state => tv%eqn_of_state
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,nkmb,tv_tmp,tv,p_ref,GV) &
-!$OMP                          private(Rho_cv_BL)
+      !$OMP parallel do default(shared) private(Rho_cv_BL)
       do j=Jsq,Jeq+1
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -250,8 +240,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       tv_tmp%eqn_of_state => tv%eqn_of_state
       do i=Isq,Ieq+1 ; p_ref(i) = 0 ; enddo
     endif
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,tv_tmp,p_ref,tv,alpha_star) &
-!$OMP                          private(rho_in_situ)
+    !$OMP parallel do default(shared) private(rho_in_situ)
     do k=1,nz ; do j=Jsq,Jeq+1
       call calculate_density(tv_tmp%T(:,j,k),tv_tmp%S(:,j,k),p_ref, &
                              rho_in_situ,Isq,Ieq-Isq+2,tv%eqn_of_state)
@@ -260,7 +249,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
   endif                                               ! use_EOS
 
   if (use_EOS) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,geopot_bot,p,alpha_star)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,nz) = geopot_bot(i,j) + p(i,j,nz+1) * alpha_star(i,j,nz)
@@ -270,8 +259,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       enddo ; enddo
     enddo
   else ! not use_EOS
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,geopot_bot,p,&
-!$OMP                                  alpha_Lay,dalpha_int)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,nz) = geopot_bot(i,j) + p(i,j,nz+1) * alpha_Lay(nz)
@@ -284,11 +272,11 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,dM,CS,M)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       dM(i,j) = (CS%GFS_scale - 1.0) * M(i,j,1)
     enddo ; enddo
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,dM,M)
+    !$OMP parallel do default(shared)
     do k=1,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       M(i,j,k) = M(i,j,k) + dM(i,j)
     enddo ; enddo ; enddo
@@ -319,9 +307,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 !    Calculate the pressure force. On a Cartesian grid,
 !      PFu = - dM/dx   and  PFv = - dM/dy.
   if (use_EOS) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,p,dp_neglect, &
-!$OMP                                  alpha_star,G,PFu,PFv,M,CS)                   &
-!$OMP                          private(dp_star,PFu_bc,PFv_bc)
+    !$OMP parallel do default(shared) private(dp_star,PFu_bc,PFv_bc)
     do k=1,nz
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dp_star(i,j) = (p(i,j,K+1) - p(i,j,K)) + dp_neglect
@@ -343,7 +329,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,PFu,PFv,M,G)
+    !$OMP parallel do default(shared)
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j)
@@ -405,7 +391,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
                              ! for compressibility, in m.
   real :: e_tidal(SZI_(G),SZJ_(G)) ! Bottom geopotential anomaly due to tidal
                              ! forces from astronomical sources and self-
-                             ! attraction and loading, in m.
+                             ! attraction and loading, in depth units (Z).
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, in Pa (usually 2e7 Pa = 2000 dbar).
   real :: I_Rho0             ! 1/Rho0.
@@ -451,36 +437,34 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     ! and loading.  This should really be based on bottom pressure anomalies,
     ! but that is not yet implemented, and the current form is correct for
     ! barotropic tides.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,h,G,GV)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
-      do i=Isq,Ieq+1 ; e(i,j,1) = -G%Zd_to_m*G%bathyT(i,j) ; enddo
+      do i=Isq,Ieq+1 ; e(i,j,1) = -G%bathyT(i,j) ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_m
+        e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
+    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
   endif
 
 !    Here layer interface heights, e, are calculated.
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,h,G,GV,e_tidal,CS)
   if (CS%tides) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j) - e_tidal(i,j)
+      e(i,j,nz+1) = -GV%Z_to_m*(G%bathyT(i,j) + e_tidal(i,j))
     enddo ; enddo
   else
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+      e(i,j,nz+1) = -GV%Z_to_m*G%bathyT(i,j)
     enddo ; enddo
   endif
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1 ; do k=nz,1,-1 ; do i=Isq,Ieq+1
     e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_m
   enddo ; enddo ; enddo
-!$OMP end parallel
-  if (use_EOS) then
 
+  if (use_EOS) then
 !   Calculate in-situ densities (rho_star).
 
 ! With a bulk mixed layer, replace the T & S of any layers that are
@@ -493,8 +477,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
       tv_tmp%eqn_of_state => tv%eqn_of_state
 
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,nkmb,tv_tmp,tv,p_ref,GV) &
-!$OMP                          private(Rho_cv_BL)
+      !$OMP parallel do default(shared) private(Rho_cv_BL)
       do j=Jsq,Jeq+1
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -518,7 +501,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
     ! This no longer includes any pressure dependency, since this routine
     ! will come down with a fatal error if there is any compressibility.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,tv_tmp,p_ref,rho_star,tv,G_Rho0)
+    !$OMP parallel do default(shared)
     do k=1,nz+1 ; do j=Jsq,Jeq+1
       call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), &
                              Isq,Ieq-Isq+2,tv%eqn_of_state)
@@ -528,8 +511,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
 !    Here the layer Montgomery potentials, M, are calculated.
   if (use_EOS) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,CS,rho_star,e,use_p_atm, &
-!$OMP                                  p_atm,I_Rho0)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = CS%GFS_scale * (rho_star(i,j,1) * e(i,j,1))
@@ -540,7 +522,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
       enddo ; enddo
     enddo
   else ! not use_EOS
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,GV,e,use_p_atm,p_atm,I_Rho0)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = GV%g_prime(1) * e(i,j,1)
@@ -560,9 +542,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 !    Calculate the pressure force. On a Cartesian grid,
 !      PFu = - dM/dx   and  PFv = - dM/dy.
   if (use_EOS) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,js,je,is,ie,nz,e,h_neglect, &
-!$OMP                                  rho_star,G,PFu,CS,PFv,M) &
-!$OMP                          private(h_star,PFu_bc,PFv_bc)
+    !$OMP parallel do default(shared) private(h_star,PFu_bc,PFv_bc)
     do k=1,nz
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         h_star(i,j) = (e(i,j,K) - e(i,j,K+1)) + h_neglect
@@ -583,7 +563,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,is,ie,js,je,nz,PFu,PFv,M,G)
+    !$OMP parallel do default(shared)
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j)
@@ -599,12 +579,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     ! eta is the sea surface height relative to a time-invariant geoid, for
     ! comparison with what is used for eta in btstep.  See how e was calculated
     ! about 200 lines above.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,e_tidal,GV)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%m_to_H + e_tidal(i,j)*GV%m_to_H
+        eta(i,j) = e(i,j,1)*GV%m_to_H + e_tidal(i,j)*GV%Z_to_H
       enddo ; enddo
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,GV)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = e(i,j,1)*GV%m_to_H
       enddo ; enddo
@@ -613,7 +593,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
   if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%PFu_bc, CS%diag)
   if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%PFv_bc, CS%diag)
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
+  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, GV%Z_to_m*e_tidal(:,:), CS%diag)
 
 end subroutine PressureForce_Mont_Bouss
 
