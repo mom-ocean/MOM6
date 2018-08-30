@@ -611,7 +611,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
                                                       !! only read parameters without changing h.
 
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1)
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1)  ! Interface heights, in depth units.
   integer :: inconsistent = 0
   logical :: correct_thickness
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -653,6 +653,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
     if (just_read) return ! All run-time parameters have been read, so return.
 
     call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain)
+    ! if (GV%m_to_Z /= 1.0) eta(:,:,:) = GV%m_to_Z*eta(:,:,:)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, eta, h)
@@ -829,10 +830,10 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_list" ! This subroutine's name.
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually
-                          ! negative because it is positive upward.
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z),
+                          ! usually negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in m.
+                          ! positive upward, in depth units (Z).
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, eta_file, inputdir ! Strings for file/path
   character(len=72)  :: eta_var
@@ -860,6 +861,7 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
 
   e0(:) = 0.0
   call MOM_read_data(filename, eta_var, e0(:))
+  do k=1,nz+1 ; e0(k) = GV%m_to_Z*e0(k) ; enddo
 
   if ((abs(e0(1)) - 0.0) > 0.001) then
     ! This list probably starts with the interior interface, so shift it up.
@@ -867,11 +869,8 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
     e0(1) = 0.0
   endif
 
-  if (e0(2) > e0(1)) then
-    ! Switch to the convention for interface heights increasing upward.
-    do k=1,nz
-      e0(K) = -e0(K)
-    enddo
+  if (e0(2) > e0(1)) then ! Switch to the convention for interface heights increasing upward.
+    do k=1,nz ; e0(K) = -e0(K) ; enddo
   endif
 
   do j=js,je ; do i=is,ie
@@ -880,14 +879,14 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
     ! Angstrom thick, and 2.  the interfaces are where they should be
     ! based on the resting depths and interface height perturbations,
     ! as long at this doesn't interfere with 1.
-    eta1D(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+    eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_m)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_m
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
         h(i,j,k) = GV%Angstrom_H
       else
-        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo
@@ -1897,6 +1896,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
                                                  !! to parse for model parameter values.
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
+
   ! Local variables
   character(len=200) :: filename   !< The name of an input file containing temperature
                                    !! and salinity in z-space; also used for  ice shelf area.
@@ -1911,8 +1911,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   type(EOS_type), pointer :: eos => NULL()
   type(thermo_var_ptrs) :: tv_loc   ! A temporary thermo_var container
   type(verticalGrid_type) :: GV_loc ! A temporary vertical grid structure
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_initialize_layers_from_Z" ! This module's name.
 
   integer :: is, ie, js, je, nz ! compute domain indices
@@ -2085,10 +2085,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   ! to the North/South Pole past the limits of the input data, they are extrapolated using the average
   ! value at the northernmost/southernmost latitude.
 
-  call horiz_interp_and_extrap_tracer(tfilename, potemp_var,1.0,1, &
+  call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1.0, 1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
 
-  call horiz_interp_and_extrap_tracer(sfilename, salin_var,1.0,1, &
+  call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1.0, 1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
 
   kd = size(z_in,1)
@@ -2100,13 +2100,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   press(:) = tv%p_ref
 
   ! Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
-  call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
+  call convert_temp_salt_for_TEOS10(temp_z, salt_z, press, G, kd, mask_z, eos)
 
-  do k=1,kd
-    do j=js,je
-      call calculate_density(temp_z(:,j,k),salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
-    enddo
-  enddo ! kd
+  do k=1,kd ; do j=js,je
+    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
+  enddo ; enddo
 
   call pass_var(temp_z,G%Domain)
   call pass_var(salt_z,G%Domain)
@@ -2316,7 +2314,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 
   endif
 
-  deallocate(z_in,z_edges_in,temp_z,salt_z,mask_z)
+  deallocate(z_in, z_edges_in, temp_z, salt_z, mask_z)
   deallocate(rho_z) ; deallocate(area_shelf_h, frac_shelf_h)
 
   call pass_var(h, G%Domain)
