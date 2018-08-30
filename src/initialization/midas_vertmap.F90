@@ -361,10 +361,9 @@ end function bisect_fast
 #ifdef PY_SOLO
 !  Only for stand-alone python
 
-!> This subroutine determines the potential temperature and
-!! salinity that is consistent with the target density
-!! using provided initial guess
-subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start)
+!> This subroutine determines the potential temperature and salinity that
+!! is consistent with the target density using provided initial guess
+subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start)
   real(kind=8), dimension(:,:,:), intent(inout) :: temp !< potential temperature (degC)
   real(kind=8), dimension(:,:,:), intent(inout) :: salt !< salinity (PSU)
   real(kind=8), dimension(size(temp,3)), intent(in) :: R !< desired potential density, in kg m-3.
@@ -373,49 +372,40 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start)
   integer, intent(in) :: k_start !< starting index (i.e. below the buffer layer)
   real, intent(in) :: land_fill !< land fill value
   real(kind=8), dimension(:,:,:), intent(in) :: h !< layer thickness . Do not iterate for massless layers
+
   ! Local variables
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
-  real(kind=8), dimension(size(temp,1)) :: press
-  integer :: nx,ny,nz,nt,i,j,k,n,itt
-  logical :: adjust_salt , old_fit
-  real    :: dT_dS
   real, parameter :: T_max = 35.0, T_min = -2.0
-  real, parameter :: S_min = 0.5, S_max=65.0
-  real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
 #else
-!> This subroutine determines the potential temperature and
-!! salinity that is consistent with the target density
-!! using provided initial guess
-subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start,eos)
-  real, dimension(:,:,:), intent(inout) :: temp !< potential temperature (degC)
-  real, dimension(:,:,:), intent(inout) :: salt !< salinity (PSU)
-  real, dimension(size(temp,3)), intent(in) :: R !< desired potential density, in kg m-3.
-  real, intent(in) :: p_ref !< reference pressure, in Pa.
-  integer, intent(in) :: niter !< maximum number of iterations
-  integer, intent(in) :: k_start !< starting index (i.e. below the buffer layer)
-  real, intent(in) :: land_fill !< land fill value
-  real, dimension(:,:,:), intent(in) :: h !< layer thickness . Do not iterate for massless layers
-  type(eos_type), pointer :: eos !< seawater equation of state control structure
-  ! Local variables
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
-  real(kind=8), dimension(size(temp,1)) :: press
-  integer :: nx,ny,nz,nt,i,j,k,n,itt
-  real    :: dT_dS
-  logical :: adjust_salt , old_fit
+!> This subroutine determines the potential temperature and salinity that
+!! is consistent with the target density using provided initial guess
+subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start, eos)
+  real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature (degC)
+  real, dimension(:,:,:),        intent(inout) :: salt !< salinity (PSU)
+  real, dimension(size(temp,3)), intent(in)    :: R !< desired potential density, in kg m-3.
+  real,                          intent(in)    :: p_ref !< reference pressure, in Pa.
+  integer,                       intent(in)    :: niter !< maximum number of iterations
+  integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
+  real,                          intent(in)    :: land_fill !< land fill value
+  real, dimension(:,:,:),        intent(in)    :: h   !< layer thickness, used only to avoid working on massless layers
+  type(eos_type),                pointer       :: eos !< seawater equation of state control structure
+
   real, parameter :: T_max = 31.0, T_min = -2.0
+#endif
+  ! Local variables (All of which need documentation!)
+  real(kind=8), dimension(size(temp,1),size(temp,3)) :: T, S, dT, dS, rho, hin
+  real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT, drho_dS
+  real(kind=8), dimension(size(temp,1)) :: press
+  integer :: nx, ny, nz, nt, i, j, k, n, itt
+  real    :: dT_dS
+  logical :: adjust_salt, old_fit
   real, parameter :: S_min = 0.5, S_max=65.0
   real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
-#endif
 
   old_fit = .true.   ! reproduces siena behavior
-  ! will switch to the newer
-  ! method which simultaneously adjusts
-  ! temp and salt based on the ratio
-  ! of the thermal and haline coefficients.
+  ! will switch to the newer method which simultaneously adjusts
+  ! temp and salt based on the ratio of the thermal and haline coefficients.
 
-  nx=size(temp,1);ny=size(temp,2); nz=size(temp,3)
+  nx=size(temp,1) ; ny=size(temp,2) ; nz=size(temp,3)
 
   press(:) = p_ref
 
@@ -432,71 +422,58 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start,eos
       drho_dT=alpha_wright_eos_2d(T,S,p_ref)
 #else
       do k=1, nz
-        call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
-        call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos)
+        call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, eos)
       enddo
 #endif
-      do k=k_start,nz
-        do i=1,nx
+      do k=k_start,nz ; do i=1,nx
 
-!         if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
-          if (abs(rho(i,k)-R(k))>tol) then
-             if (old_fit) then
-                dT(i,k)=(R(k)-rho(i,k))/drho_dT(i,k)
-                if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
-                if (dT(i,k)<-1.0*max_t_adj) dT(i,k)=-1.0*max_t_adj
-                T(i,k)=max(min(T(i,k)+dT(i,k),T_max),T_min)
-             else
-                dT_dS = 10.0 - min(-drho_dT(i,k)/drho_dS(i,k),10.)
-                dS(i,k) = (R(k)-rho(i,k))/(drho_dS(i,k) - drho_dT(i,k)*dT_dS )
-                dT(i,k)= -dT_dS*dS(i,k)
-!               if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
-!               if (dT(i,k)<-1.0*max_t_adj) dT(i,k)=-1.0*max_t_adj
-              T(i,k)=max(min(T(i,k)+dT(i,k),T_max),T_min)
-                S(i,k)=max(min(S(i,k)+dS(i,k),S_max),S_min)
-             endif
+!       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
+        if (abs(rho(i,k)-R(k))>tol) then
+          if (old_fit) then
+             dT(i,k) = max(min((R(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
+             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+          else
+             dT_dS = 10.0 - min(-drho_dT(i,k)/drho_dS(i,k),10.)
+             !### RWH: Based on the dimensions alone, the expression above should be:
+             ! dT_dS = 10.0 - min(-drho_dS(i,k)/drho_dT(i,k),10.)
+             dS(i,k) = (R(k)-rho(i,k)) / (drho_dS(i,k) - drho_dT(i,k)*dT_dS )
+             dT(i,k) = -dT_dS*dS(i,k)
+           ! dT(i,k) = max(min(dT(i,k), max_t_adj), -max_t_adj)
+             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+             S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
           endif
-        enddo
-      enddo
+        endif
+      enddo ; enddo
       if (maxval(abs(dT)) < tol) then
          adjust_salt = .false.
          exit iter_loop
       endif
     enddo iter_loop
 
-    if (adjust_salt .and. old_fit) then
-       iter_loop2: do itt = 1,niter
+    if (adjust_salt .and. old_fit) then ; do itt = 1,niter
 #ifdef PY_SOLO
-         rho=wright_eos_2d(T,S,p_ref)
-         drho_dS=beta_wright_eos_2d(T,S,p_ref)
+      rho = wright_eos_2d(T,S,p_ref)
+      drho_dS = beta_wright_eos_2d(T,S,p_ref)
 #else
-         do k=1, nz
-           call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
-           call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
-         enddo
+      do k=1, nz
+        call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
+        call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
+      enddo
 #endif
-         do k=k_start,nz
-           do i=1,nx
-!              if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln ) then
-             if (abs(rho(i,k)-R(k))>tol ) then
-                dS(i,k)=(R(k)-rho(i,k))/drho_dS(i,k)
-                if (dS(i,k)>max_s_adj) dS(i,k)=max_s_adj
-                if (dS(i,k)<-1.0*max_s_adj) dS(i,k)=-1.0*max_s_adj
-                S(i,k)=max(min(S(i,k)+dS(i,k),S_max),S_min)
-             endif
-           enddo
-         enddo
-         if (maxval(abs(dS)) < tol) then
-            exit iter_loop2
-         endif
-       enddo iter_loop2
-    endif
+      do k=k_start,nz ; do i=1,nx
+!       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln ) then
+        if (abs(rho(i,k)-R(k)) > tol) then
+          dS(i,k) = max(min((R(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
+          S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+        endif
+      enddo ; enddo
+      if (maxval(abs(dS)) < tol) exit
+    enddo ; endif
 
     temp(:,j,:)=T(:,:)
     salt(:,j,:)=S(:,:)
   enddo
-
-  return
 
 end subroutine determine_temperature
 
@@ -520,43 +497,42 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real :: Ih, e_c, tot_wt, I_totwt
   integer :: k
 
-  wt(:)=0.0; z1(:)=0.0; z2(:)=0.0
-  k_top = k_start; k_bot= k_start; wt(1) = 1.0; z1(1)=-0.5; z2(1) = 0.5
+  wt(:)=0.0 ; z1(:)=0.0 ; z2(:)=0.0
+  k_top = k_start ; k_bot = k_start ; wt(1) = 1.0 ; z1(1) = -0.5 ; z2(1) = 0.5
 
-  do k=k_start,k_max ;if (e(k+1)<Z_top) exit ; enddo
-    k_top = k
-    if (k>k_max) return
+  do k=k_start,k_max ; if (e(k+1) < Z_top) exit ; enddo
+  k_top = k
 
-    ! Determine the fractional weights of each layer.
-    ! Note that by convention, e and Z_int decrease with increasing k.
-    if (e(k+1)<=Z_bot) then
-       wt(k) = 1.0 ; k_bot = k
-       Ih = 1.0 / (e(k)-e(k+1))
-       e_c = 0.5*(e(k)+e(k+1))
-       z1(k) = (e_c - MIN(e(k),Z_top)) * Ih
-       z2(k) = (e_c - Z_bot) * Ih
-    else
-       wt(k) = MIN(e(k),Z_top) - e(k+1) ; tot_wt = wt(k) ! These are always > 0.
-       z1(k) = (0.5*(e(k)+e(k+1)) - MIN(e(k),Z_top)) / (e(k)-e(k+1))
-       z2(k) = 0.5
-       k_bot = k_max
-       do k=k_top+1,k_max
-         if (e(k+1)<=Z_bot) then
-            k_bot = k
-            wt(k) = e(k) - Z_bot ; z1(k) = -0.5
-            z2(k) = (0.5*(e(k)+e(k+1)) - Z_bot) / (e(k)-e(k+1))
-         else
-            wt(k) = e(k) - e(k+1) ; z1(k) = -0.5 ; z2(k) = 0.5
-         endif
-         tot_wt = tot_wt + wt(k) ! wt(k) is always > 0.
-         if (k>=k_bot) exit
-       enddo
+  if (k>k_max) return
 
-       I_totwt = 1.0 / tot_wt
-       do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
+  ! Determine the fractional weights of each layer.
+  ! Note that by convention, e and Z_int decrease with increasing k.
+  if (e(k+1) <= Z_bot) then
+    wt(k) = 1.0 ; k_bot = k
+    Ih = 1.0 / (e(k)-e(k+1))
+    e_c = 0.5*(e(k)+e(k+1))
+    z1(k) = (e_c - MIN(e(k),Z_top)) * Ih
+    z2(k) = (e_c - Z_bot) * Ih
+  else
+    wt(k) = MIN(e(k),Z_top) - e(k+1) ; tot_wt = wt(k) ! These are always > 0.
+    z1(k) = (0.5*(e(k)+e(k+1)) - MIN(e(k),Z_top)) / (e(k)-e(k+1))
+    z2(k) = 0.5
+    k_bot = k_max
+    do k=k_top+1,k_max
+      if (e(k+1) <= Z_bot) then
+        k_bot = k
+        wt(k) = e(k) - Z_bot ; z1(k) = -0.5
+        z2(k) = (0.5*(e(k)+e(k+1)) - Z_bot) / (e(k)-e(k+1))
+      else
+        wt(k) = e(k) - e(k+1) ; z1(k) = -0.5 ; z2(k) = 0.5
       endif
+      tot_wt = tot_wt + wt(k) ! wt(k) is always > 0.
+      if (k>=k_bot) exit
+    enddo
 
-      return
+    I_totwt = 0.0 ; if (tot_wt > 0.0) I_totwt = 1.0 / tot_wt
+    do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
+  endif
 
 end subroutine find_overlap
 
@@ -564,33 +540,28 @@ end subroutine find_overlap
 !! a piecewise limited scheme.
 function find_limited_slope(val, e, k) result(slope)
   real, dimension(:), intent(in) :: val !< An column the values that are being interpolated.
-  real, dimension(:), intent(in) :: e !< A column's interface heights, in m.
-  integer, intent(in) :: k !< The layer whose slope is being determined.
+  real, dimension(:), intent(in) :: e   !< A column's interface heights, in m.
+  integer,            intent(in) :: k   !< The layer whose slope is being determined.
   real :: slope !< The normalized slope in the intracell distribution of val.
   ! Local variables
-  real :: amx,bmx,amn,bmn,cmn,dmn
+  real :: amn, cmn
   real :: d1, d2
 
   if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
-     slope = 0.0 ! ; curvature = 0.0
+    slope = 0.0 ! ; curvature = 0.0
   else
-     d1 = 0.5*(e(k-1)-e(k+1)) ; d2 = 0.5*(e(k)-e(k+2))
-     slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
-          (e(k) - e(k+1)) / (d1*d2*(d1+d2))
-     ! slope = 0.5*(val(k+1) - val(k-1))
-     ! This is S.J. Lin's form of the PLM limiter.
-     amx=max(val(k-1),val(k))
-     bmx = max(amx,val(k+1))
-     amn = min(abs(slope),2.0*(bmx-val(k)))
-     bmn = min(val(k-1),val(k))
-     cmn = 2.0*(val(k)-min(bmn,val(k+1)))
-     dmn = min(amn,cmn)
-     slope = sign(1.0,slope) * dmn
+    d1 = 0.5*(e(k-1)-e(k+1)) ; d2 = 0.5*(e(k)-e(k+2))
+    slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
+         (e(k) - e(k+1)) / (d1*d2*(d1+d2))
+    ! slope = 0.5*(val(k+1) - val(k-1))
+    ! This is S.J. Lin's form of the PLM limiter.
+    amn = min(abs(slope), 2.0*(max(val(k-1), val(k), val(k+1)) - val(k)))
+    cmn = 2.0*(val(k) - min(val(k-1), val(k), val(k+1)))
+    slope = sign(1.0, slope) * min(amn, cmn)
 
-     ! min(abs(slope), &
-     !             2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
-     !             2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
-     ! curvature = 0.0
+    ! min(abs(slope), 2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
+    !                 2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
+    ! curvature = 0.0
   endif
 
   return
