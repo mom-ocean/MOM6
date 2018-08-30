@@ -302,7 +302,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
   !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1
     do i=Isq,Ieq+1
-      za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*G%Zd_to_m*G%bathyT(i,j)
+      za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*GV%Z_to_m*G%bathyT(i,j)
     enddo
     do k=nz,1,-1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) + dza(i,j,k)
@@ -315,7 +315,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth
     enddo ; enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=1.0)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) - GV%g_Earth*e_tidal(i,j)
@@ -455,7 +455,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   real, dimension(SZI_(G),SZJ_(G))  :: &
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
                 ! astronomical sources and self-attraction and loading, in m.
-    z_bathy, &  ! The height of the bathymetry, in m.
+    z_bathy, &  ! The height of the bathymetry, in depth units (Z).
     dM          ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model, in m2 s-2.
   real, dimension(SZI_(G)) :: &
@@ -527,7 +527,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   rho_ref = CS%Rho0
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    z_bathy(i,j) = G%Zd_to_m*G%bathyT(i,j)
+    z_bathy(i,j) = GV%Z_to_m*G%bathyT(i,j)
   enddo ; enddo
 
   if (CS%tides) then
@@ -538,25 +538,25 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        e(i,j,1) = -G%Zd_to_m*G%bathyT(i,j)
+        e(i,j,1) = -G%bathyT(i,j)
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_m
+        e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
+    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
   endif
 
 !    Here layer interface heights, e, are calculated.
   if (CS%tides) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j) - e_tidal(i,j)
+      e(i,j,nz+1) = -GV%Z_to_m*(G%bathyT(i,j) + e_tidal(i,j))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+      e(i,j,nz+1) = -GV%Z_to_m*G%bathyT(i,j)
     enddo ; enddo
   endif
   !$OMP parallel do default(shared)
@@ -762,7 +762,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     ! about 200 lines above.
     !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%m_to_H + e_tidal(i,j)*GV%m_to_H
+        eta(i,j) = e(i,j,1)*GV%m_to_H + e_tidal(i,j)*GV%Z_to_H
       enddo ; enddo
     else
     !$OMP parallel do default(shared)
@@ -772,7 +772,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     endif
   endif
 
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
+  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, GV%Z_to_m*e_tidal(:,:), CS%diag)
 
 end subroutine PressureForce_AFV_Bouss
 
