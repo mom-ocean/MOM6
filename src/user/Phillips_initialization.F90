@@ -28,7 +28,7 @@ public Phillips_initialize_topography
 
 contains
 
-!> Initialize thickness field.
+!> Initialize the thickness field for the Phillips model test case.
 subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
@@ -109,7 +109,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
 
 end subroutine Phillips_initialize_thickness
 
-!> Initialize velocity fields.
+!> Initialize the velocity fields for the Phillips model test case
 subroutine Phillips_initialize_velocity(u, v, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
@@ -183,12 +183,12 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, param_file, just_read_param
 
 end subroutine Phillips_initialize_velocity
 
-!> Sets up the the inverse restoration time (Idamp), and
-! the values towards which the interface heights and an arbitrary
-! number of tracers should be restored within each sponge.
-subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
+!> Sets up the the inverse restoration time (Idamp), and the values towards which the interface
+!! heights and an arbitrary number of tracers should be restored within each sponge for the Phillips
+!! model test case
+subroutine Phillips_initialize_sponges(G, GV, tv, param_file, CSp, h)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
-  logical, intent(in) :: use_temperature    !< Switch for temperature.
+  type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
                                             !! to any available thermodynamic
                                             !! fields, potential temperature and
@@ -200,20 +200,21 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
                                             !! the control structure for the
                                             !! sponge module.
-  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< Thickness field, in units of H. 
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field, in units of H. 
 
+  ! Local variables
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, m.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units (Z).
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, m.
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in Z.
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
   real :: damp_rate    ! The inverse zonal-mean damping rate, in s-1.
   real :: jet_width    ! The width of the zonal mean jet, in km.
-  real :: jet_height   ! The interface height scale associated with the zonal-mean jet, in depth units.
+  real :: jet_height   ! The interface height scale associated with the zonal-mean jet, in Z.
   real :: y_2          ! The y-position relative to the channel center, in km.
   real :: half_strat   ! The fractional depth where the straficiation is centered, ND.
-  real :: half_depth   ! The depth where the stratification is centered, in depth units.
+  real :: half_depth   ! The depth where the stratification is centered, in Z.
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -241,8 +242,8 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
                  "The interface height scale associated with the \n"//&
                  "zonal-mean jet.", units="m", &
                  fail_if_missing=.true.)
+  jet_height = jet_height * GV%m_to_Z
 
-  jet_height = jet_height / G%Zd_to_m
   half_depth = G%max_depth*half_strat
   eta0(1) = 0.0 ; eta0(nz+1) = -G%max_depth
   do k=2,1+nz/2 ; eta0(k) = -half_depth*(2.0*(k-1)/real(nz)) ; enddo
@@ -252,7 +253,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
 
   do j=js,je
     Idamp_im(j) = damp_rate
-    eta_im(j,1) = 0.0 ; eta_im(j,nz+1) = -G%Zd_to_m*G%max_depth
+    eta_im(j,1) = 0.0 ; eta_im(j,nz+1) = -G%max_depth
   enddo
   do K=2,nz ; do j=js,je
     y_2 = G%geoLatT(is,j) - G%south_lat - 0.5*G%len_lat
@@ -260,10 +261,9 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
 !         jet_height * atan(y_2 / jet_width)
     if (eta_im(j,K) > 0.0) eta_im(j,K) = 0.0
     if (eta_im(j,K) < -G%max_depth) eta_im(j,K) = -G%max_depth
-    eta_im(j,K) = eta_im(j,K) * G%Zd_to_m
   enddo ; enddo
 
-  call initialize_sponge(Idamp, eta, G, param_file, CSp, Idamp_im, eta_im)
+  call initialize_sponge(Idamp, eta, G, param_file, CSp, GV, Idamp_im, eta_im)
 
 end subroutine Phillips_initialize_sponges
 

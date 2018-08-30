@@ -523,19 +523,17 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, tv, PF, useALE, &
-                                                     sponge_CSp, ALE_sponge_CSp)
-      case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
-                                               PF, sponge_CSp, h)
-      case ("BFB"); call BFB_initialize_sponges_southonly(G, use_temperature, tv, &
-                                               PF, sponge_CSp, h)
-      case ("DUMBBELL"); call dumbbell_initialize_sponges(G, GV, tv, &
-                                               PF, useALE, sponge_CSp, ALE_sponge_CSp)
-      case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
-                                               PF, sponge_CSp, h)
+                                                      sponge_CSp, ALE_sponge_CSp)
+      case ("USER"); call user_initialize_sponges(G, GV, use_temperature, tv, PF, sponge_CSp, h)
+      case ("BFB"); call BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, PF, &
+                                                          sponge_CSp, h)
+      case ("DUMBBELL"); call dumbbell_initialize_sponges(G, GV, tv, PF, useALE, &
+                                                          sponge_CSp, ALE_sponge_CSp)
+      case ("phillips"); call Phillips_initialize_sponges(G, GV, tv, PF, sponge_CSp, h)
       case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &
-           sponge_CSp, ALE_sponge_CSp)
-      case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
-                                               PF, sponge_CSp, ALE_sponge_CSp, Time)
+                                                          sponge_CSp, ALE_sponge_CSp)
+      case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, PF, &
+                                                  sponge_CSp, ALE_sponge_CSp, Time)
       case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
              "Unrecognized sponge configuration "//trim(config))
     end select
@@ -1752,17 +1750,20 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
   if (.not. use_ALE) then
     allocate(eta(isd:ied,jsd:jed,nz+1))
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
+    if (GV%m_to_Z /= 1.0) then ; do k=1,nz+1 ; do j=js,je ; do i=is,ie
+      eta(i,j,k) = GV%m_to_Z*eta(i,j,k)
+    enddo ; enddo ; enddo ; endif
 
     do j=js,je ; do i=is,ie
-      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+      eta(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) &
-        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
+      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
+        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
     enddo ; enddo ; enddo
     ! Set the inverse damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
-    call initialize_sponge(Idamp, eta, G, param_file, CSp)
+    call initialize_sponge(Idamp, eta, G, param_file, CSp, GV)
     deallocate(eta)
   elseif (.not. new_sponges) then ! ALE mode
 

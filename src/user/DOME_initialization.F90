@@ -138,8 +138,8 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers to any available
-               !!                 thermodynamic fields, including potential temperature and
-               !!                 salinity or mixed layer density. Absent fields have NULL ptrs.
+                               !! thermodynamic fields, including potential temperature and
+                               !! salinity or mixed layer density. Absent fields have NULL ptrs.
   type(param_file_type), intent(in) :: PF   !< A structure indicating the open file to
                                             !! parse for model parameter values.
   type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
@@ -149,7 +149,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
 
-  real :: H0(SZK_(G))
+  real :: H0(SZK_(G))  ! Interface heights in depth units (Z)
   real :: min_depth
   real :: damp, e_dense, damp_new
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
@@ -168,9 +168,10 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 !   Set up sponges for DOME configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
+  min_depth = GV%m_to_Z * min_depth
 
   H0(1) = 0.0
-  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*(GV%Z_to_m*G%max_depth) / real(nz-1) ; enddo
+  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
   do i=is,ie; do j=js,je
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then
@@ -190,23 +191,23 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%Zd_to_m*G%bathyT(i,j), GV%Angstrom_m*(nz-k+1)-G%bathyT(i,j))
-      e_dense = -G%Zd_to_m*G%bathyT(i,j)
+!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j))
+      e_dense = -G%bathyT(i,j)
       if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
       else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < GV%Angstrom_m*(nz-k+1) - G%Zd_to_m*G%bathyT(i,j)) &
-          eta(i,j,K) = GV%Angstrom_m*(nz-k+1) - G%Zd_to_m*G%bathyT(i,j)
+      if (eta(i,j,K) < GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)) &
+          eta(i,j,K) = GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)
     enddo
-    eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+    eta(i,j,nz+1) = -G%bathyT(i,j)
 
-    if (G%Zd_to_m*G%bathyT(i,j) > min_depth) then
+    if (G%bathyT(i,j) > min_depth) then
       Idamp(i,j) = damp/86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
 
 !  This call sets up the damping rates and interface heights.
 !  This sets the inverse damping timescale fields in the sponges.    !
-  call initialize_sponge(Idamp, eta, G, PF, CSp)
+  call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
 
 !   Now register all of the fields which are damped in the sponge.   !
 ! By default, momentum is advected vertically within the sponge, but !
