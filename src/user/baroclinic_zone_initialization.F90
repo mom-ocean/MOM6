@@ -81,7 +81,8 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution
   real      :: S_ref, dSdz, dSdx, delta_S ! Parameters describing salinity distribution
   real      :: L_zone ! Width of baroclinic zone
-  real      :: zc, zi, x, xd, xs, y, yd, fn
+  real      :: zc, zi ! Depths in depth units (Z).
+  real      :: x, xd, xs, y, yd, fn
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
   logical :: just_read    ! If true, just read parameters but set nothing.
 
@@ -89,6 +90,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone, just_read_params)
+  dTdz = GV%Z_to_m*dTdz ; dSdz = GV%Z_to_m*dSdz
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -97,7 +99,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
   PI = 4.*atan(1.)
 
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    zi = -G%Zd_to_m*G%bathyT(i,j)
+    zi = -G%bathyT(i,j)
     x = G%geoLonT(i,j) - (G%west_lon + 0.5*G%len_lon) ! Relative to center of domain
     xd = x / G%len_lon ! -1/2 < xd 1/2
     y = G%geoLatT(i,j) - (G%south_lat + 0.5*G%len_lat) ! Relative to center of domain
@@ -110,8 +112,8 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
       fn = xs
     endif
     do k = nz, 1, -1
-      zc = zi + 0.5*h(i,j,k)*GV%H_to_m ! Position of middle of cell
-      zi = zi + h(i,j,k)*GV%H_to_m    ! Top interface position
+      zc = zi + 0.5*h(i,j,k)*GV%H_to_Z ! Position of middle of cell
+      zi = zi + h(i,j,k)*GV%H_to_Z    ! Top interface position
       T(i,j,k) = T_ref + dTdz * zc  & ! Linear temperature stratification
                  + dTdx * x         & ! Linear gradient
                  + delta_T * fn       ! Smooth fn of width L_zone

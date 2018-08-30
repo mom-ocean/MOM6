@@ -255,12 +255,14 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
+          !### Problem: val2 & cff could be a functions of space, but are not set in this loop.
+          !### Problem: Is val2 in the numerator or denominator below?
           if (CS%mode == 0) then
             do k=1,nz
               segment%tangential_vel(I,J,k) = val1 * cff * sina / &
                  (0.25 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j) + &
                                     G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
-!### This should be:
+!### For rotational symmetry, this should be:
 !              segment%tangential_vel(I,J,k) = val1 * cff * sina / &
 !                 ( 0.25*G%Zd_to_m*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +&
 !                                   (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ) * val2
@@ -307,6 +309,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
+          !### Problem: val2 & cff could be a functions of space, but are not set in this loop.
+          !### Problem: Is val2 in the numerator or denominator below?
           if (CS%mode == 0) then
             do k=1,nz
               segment%tangential_vel(I,J,k) = val1 * cff * sina / &

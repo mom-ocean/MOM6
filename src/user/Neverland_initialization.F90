@@ -78,7 +78,7 @@ end subroutine Neverland_initialize_topography
 ! -----------------------------------------------------------------------------
 
 !> Returns the value of a cosine-bell function evaluated at x/L
-real function cosbell(x,L)
+real function cosbell(x, L)
   real , intent(in) :: x       !< non-dimensional position
   real , intent(in) :: L       !< non-dimensional width
   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
@@ -88,7 +88,7 @@ real function cosbell(x,L)
 end function cosbell
 
 !> Returns the value of a sin-spike function evaluated at x/L
-real function spike(x,L)
+real function spike(x, L)
 
   real , intent(in) :: x       !< non-dimensional position
   real , intent(in) :: L       !< non-dimensional width
@@ -115,8 +115,8 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure in Pa.
   ! Local variables
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
-                            ! negative because it is positive upward.      !
+  real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units (Z),
+                            ! usually negative because it is positive upward.
   real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile (m)
   real :: e_interface ! Current interface positoin (m)
   character(len=40)  :: mod = "Neverland_initialize_thickness" ! This subroutine's name.
@@ -128,19 +128,18 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   call get_param(param_file, mod, "INIT_THICKNESS_PROFILE", h_profile, &
                  "Profile of initial layer thicknesses.", units="m", fail_if_missing=.true.)
 
-! e0 is the notional position of interfaces
+  ! e0 is the notional position of interfaces
   e0(1) = 0. ! The surface
   do k=1,nz
-    e0(k+1) = e0(k) - h_profile(k)
+    e0(k+1) = e0(k) - GV%m_to_Z*h_profile(k)
   enddo
 
   do j=js,je ; do i=is,ie
-    e_interface = -G%Zd_to_m * G%bathyT(i,j)
+    e_interface = -G%bathyT(i,j)
     do k=nz,1,-1
-      h(i,j,k) = max( GV%Angstrom_H, GV%m_to_H * (e0(k) - e_interface) )
-      e_interface = max( e0(k), e_interface - GV%H_to_m * h(i,j,k) )
+      h(i,j,k) = max( GV%Angstrom_H, GV%Z_to_H * (e0(k) - e_interface) )
+      e_interface = max( e0(k), e_interface - GV%H_to_Z * h(i,j,k) )
     enddo
-
   enddo ; enddo
 
 end subroutine Neverland_initialize_thickness
