@@ -82,11 +82,10 @@ subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_fi
                            intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
 
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units (Z).
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-
-  real :: H0(SZK_(G))
-  real :: min_depth
+  real :: H0(SZK_(G))               ! Resting layer thickesses in depth units (Z).
+  real :: min_depth                 ! The minimum ocean depth in depth units (Z).
   real :: damp, e_dense, damp_new, slat, wlon, lenlat, lenlon, nlat
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -118,7 +117,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_fi
   do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz) ; enddo
 
   ! Use for meridional thickness profile initialization
-!  do k=1,nz ; H0(k) = -G%Zd_to_m*G%max_depth * real(k-1) / real(nz-1) ; enddo
+!  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz-1) ; enddo
 
   do i=is,ie; do j=js,je
     if (G%geoLatT(i,j) < slat+2.0) then ; damp = 1.0

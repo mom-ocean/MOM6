@@ -200,7 +200,7 @@ subroutine Phillips_initialize_sponges(G, GV, tv, param_file, CSp, h)
   type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
                                             !! the control structure for the
                                             !! sponge module.
-  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field, in units of H. 
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field, in units of H.
 
   ! Local variables
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
