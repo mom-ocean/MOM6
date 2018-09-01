@@ -438,7 +438,6 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
   real, dimension(SZI_(G),SZJ_(G))  :: &
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
                 ! astronomical sources and self-attraction and loading, in depth units (Z).
-    z_bathy, &  ! The height of the bathymetry, in m.
     dM          ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model, in m2 s-2.
   real, dimension(SZI_(G)) :: &
@@ -510,10 +509,6 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
   I_Rho0 = 1.0/GV%Rho0
   G_Rho0 = GV%Z_to_m*GV%g_Earth/GV%Rho0
   rho_ref = CS%Rho0
-
-  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    z_bathy(i,j) = G%bathyT(i,j)
-  enddo ; enddo
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction
@@ -670,7 +665,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
             call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                       rho_ref, CS%Rho0, GV%g_Earth*GV%Z_to_m,    &
-                      dz_neglect, z_bathy, G%HI, G%Block(n), &
+                      dz_neglect, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( CS%Recon_Scheme == 2 ) then
@@ -684,7 +679,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
           call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                     rho_ref, CS%Rho0, GV%g_Earth*GV%Z_to_m, G%HI, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
-                    z_bathy, dz_neglect, CS%useMassWghtInterp)
+                    G%bathyT, dz_neglect, CS%useMassWghtInterp)
         endif
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           intz_dpa_bk(ib,jb) = intz_dpa_bk(ib,jb)*GV%Z_to_H
@@ -744,7 +739,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
   enddo
 
   if (present(pbce)) then
-    call set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce, m_to_Z=GV%m_to_Z)
+    call set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
