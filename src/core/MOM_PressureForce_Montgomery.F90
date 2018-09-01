@@ -535,8 +535,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
   endif ! use_EOS
 
   if (present(pbce)) then
-    call Set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce, &
-                        rho_star, GV%m_to_Z)
+    call Set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce, rho_star)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -599,7 +598,7 @@ end subroutine PressureForce_Mont_Bouss
 
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the free surface height.
-subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star, m_to_Z)
+subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in Z.
@@ -615,7 +614,6 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               optional, intent(in)  :: rho_star !< The layer densities (maybe compressibility
                                                             !! compensated), times g/rho_0, in m2 Z-1 s-2.
-  real,                       optional, intent(in)  :: m_to_Z !< The conversion factor from m to the units of e.
 
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer
@@ -627,33 +625,29 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
   real :: dR_dS(SZI_(G))     ! and salinity in kg m-3 K-1 and kg m-3 PSU-1.
   real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer.
   real :: G_Rho0             ! g_Earth / Rho0 in m4 s-2 kg-1.
-  real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-2.
+  real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-1 Z-1.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
-  real :: m_Z                ! The conversion factor from m to depth units
-  real :: Z_to_m             ! The conversion factor from depth units to m
-  real :: h_neglect          ! A thickness that is so small it is usually lost
+  real :: z_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected, in Z.
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
-  m_Z = 1.0 ; if (present(m_to_Z)) m_Z = m_to_Z
-  Z_to_m = 1.0 ; if (present(m_to_Z)) Z_to_m = 1.0 / m_to_Z
-  Rho0xG = Rho0*g_Earth*Z_to_m
+  Rho0xG = Rho0*g_Earth*GV%Z_to_m
   G_Rho0 = g_Earth/Rho0
   use_EOS = associated(tv%eqn_of_state)
-  h_neglect = GV%H_subroundoff*GV%H_to_m*m_Z
+  z_neglect = GV%H_subroundoff*GV%H_to_Z
 
   if (use_EOS) then
     if (present(rho_star)) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,h_neglect,pbce,rho_star,&
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,z_neglect,pbce,rho_star,&
 !$OMP                                  GFS_scale,GV) &
 !$OMP                          private(Ihtot)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = (GV%H_to_m * m_Z) / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)
-          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * (GV%H_to_m * m_Z)
+          Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
+          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_Z
         enddo
         do k=2,nz ; do i=Isq,Ieq+1
           pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k)-rho_star(i,j,k-1)) * &
@@ -661,12 +655,12 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
         enddo ; enddo
       enddo ! end of j loop
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,tv,h_neglect,G_Rho0,Rho0xG,&
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,tv,z_neglect,G_Rho0,Rho0xG,&
 !$OMP                                  pbce,GFS_scale,GV) &
 !$OMP                          private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * GV%m_to_H)
+          Ihtot(i) = GV%H_to_m / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
           press(i) = -Rho0xG*e(i,j,1)
         enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
@@ -692,10 +686,10 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
       enddo ! end of j loop
     endif
   else ! not use_EOS
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,GV,h_neglect,pbce) private(Ihtot)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,GV,z_neglect,pbce) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * GV%m_to_H)
+        Ihtot(i) = GV%H_to_m / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
         pbce(i,j,1) = GV%g_prime(1) * GV%H_to_m
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
