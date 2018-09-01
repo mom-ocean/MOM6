@@ -475,6 +475,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected, in H.
   real :: I_Rho0             ! 1/Rho0.
+  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2.
   real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1.
   real :: Rho_ref            ! The reference density in kg m-3.
   real :: dz_neglect         ! A minimal thickness in Z, like e.
@@ -507,7 +508,8 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/GV%Rho0
-  G_Rho0 = GV%Z_to_m*GV%g_Earth/GV%Rho0
+  g_Earth_z = GV%g_Earth*GV%Z_to_m
+  G_Rho0 = g_Earth_z / GV%Rho0
   rho_ref = CS%Rho0
 
   if (CS%tides) then
@@ -635,12 +637,12 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
     if (use_p_atm) then
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
         i = ib+ioff_bk ; j = jb+joff_bk
-        pa_bk(ib,jb) = (rho_ref*GV%g_Earth*GV%Z_to_m)*e(i,j,1) + p_atm(i,j)
+        pa_bk(ib,jb) = (rho_ref*g_Earth_z)*e(i,j,1) + p_atm(i,j)
       enddo ; enddo
     else
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
         i = ib+ioff_bk ; j = jb+joff_bk
-        pa_bk(ib,jb) = (rho_ref*GV%g_Earth*GV%Z_to_m)*e(i,j,1)
+        pa_bk(ib,jb) = (rho_ref*g_Earth_z)*e(i,j,1)
       enddo ; enddo
     endif
     do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
@@ -664,20 +666,20 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
           if ( CS%Recon_Scheme == 1 ) then
             call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                      rho_ref, CS%Rho0, GV%g_Earth*GV%Z_to_m,    &
+                      rho_ref, CS%Rho0, g_Earth_z,    &
                       dz_neglect, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( CS%Recon_Scheme == 2 ) then
             call int_density_dz_generic_ppm( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                       tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                      rho_ref, CS%Rho0, GV%g_Earth*GV%Z_to_m, &
+                      rho_ref, CS%Rho0, g_Earth_z, &
                       G%HI, G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk,    &
                       intx_dpa_bk, inty_dpa_bk)
           endif
         else
           call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
-                    rho_ref, CS%Rho0, GV%g_Earth*GV%Z_to_m, G%HI, G%Block(n), tv%eqn_of_state, &
+                    rho_ref, CS%Rho0, g_Earth_z, G%HI, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                     G%bathyT, dz_neglect, CS%useMassWghtInterp)
         endif
@@ -687,7 +689,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
       else
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           i = ib+ioff_bk ; j = jb+joff_bk
-          dz_bk(ib,jb) = GV%g_Earth*GV%H_to_m*h(i,j,k)
+          dz_bk(ib,jb) = g_Earth_z*GV%H_to_Z*h(i,j,k)
           dpa_bk(ib,jb) = (GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)
           intz_dpa_bk(ib,jb) = 0.5*(GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
         enddo ; enddo
