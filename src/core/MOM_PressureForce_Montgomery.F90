@@ -428,7 +428,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  h_neglect = GV%H_subroundoff * GV%H_to_m
+  h_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/CS%Rho0
   G_Rho0 = GV%g_Earth/GV%Rho0
 
@@ -451,17 +451,17 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
   if (CS%tides) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -GV%Z_to_m*(G%bathyT(i,j) + e_tidal(i,j))
+      e(i,j,nz+1) = -(G%bathyT(i,j) + e_tidal(i,j))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -GV%Z_to_m*G%bathyT(i,j)
+      e(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
   endif
   !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1 ; do k=nz,1,-1 ; do i=Isq,Ieq+1
-    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_m
+    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_Z
   enddo ; enddo ; enddo
 
   if (use_EOS) then
@@ -505,7 +505,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     do k=1,nz+1 ; do j=Jsq,Jeq+1
       call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), &
                              Isq,Ieq-Isq+2,tv%eqn_of_state)
-      do i=Isq,Ieq+1 ; rho_star(i,j,k) = G_Rho0*rho_star(i,j,k) ; enddo
+      do i=Isq,Ieq+1 ; rho_star(i,j,k) = GV%Z_to_m*G_Rho0*rho_star(i,j,k) ; enddo
     enddo ; enddo
   endif                                               ! use_EOS
 
@@ -525,18 +525,18 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        M(i,j,1) = GV%g_prime(1) * e(i,j,1)
+        M(i,j,1) = GV%g_prime(1) * GV%Z_to_m*e(i,j,1)
         if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
-        M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * e(i,j,K)
+        M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * GV%Z_to_m*e(i,j,K)
       enddo ; enddo
     enddo
   endif ! use_EOS
 
   if (present(pbce)) then
     call Set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce, &
-                        rho_star)
+                        rho_star, GV%m_to_Z)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -581,12 +581,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     ! about 200 lines above.
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%m_to_H + e_tidal(i,j)*GV%Z_to_H
+        eta(i,j) = e(i,j,1)*GV%Z_to_H + e_tidal(i,j)*GV%Z_to_H
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%m_to_H
+        eta(i,j) = e(i,j,1)*GV%Z_to_H
       enddo ; enddo
     endif
   endif
@@ -599,10 +599,10 @@ end subroutine PressureForce_Mont_Bouss
 
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the free surface height.
-subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star)
+subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star, m_to_Z)
   type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in Z.
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
   real,                                 intent(in)  :: g_Earth !< The gravitational acceleration, in m s-2.
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density, in kg m-3.
@@ -613,8 +613,10 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
                                         intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
                                                             !! to free surface height anomalies, in m2 H-1 s-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              optional, intent(in) :: rho_star !< The layer densities (maybe compressibility
-                                                            !! compensated), times g/rho_0, in m s-2.
+                              optional, intent(in)  :: rho_star !< The layer densities (maybe compressibility
+                                                            !! compensated), times g/rho_0, in m2 Z-1 s-2.
+  real,                       optional, intent(in)  :: m_to_Z !< The conversion factor from m to the units of e.
+
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer
                              ! thicknesses, in m-1.
@@ -628,16 +630,20 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
   real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-2.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
+  real :: m_Z                ! The conversion factor from m to depth units
+  real :: Z_to_m             ! The conversion factor from depth units to m
   real :: h_neglect          ! A thickness that is so small it is usually lost
-                             ! in roundoff and can be neglected, in m.
+                             ! in roundoff and can be neglected, in Z.
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
-  Rho0xG = Rho0*g_Earth
+  m_Z = 1.0 ; if (present(m_to_Z)) m_Z = m_to_Z
+  Z_to_m = 1.0 ; if (present(m_to_Z)) Z_to_m = 1.0 / m_to_Z
+  Rho0xG = Rho0*g_Earth*Z_to_m
   G_Rho0 = g_Earth/Rho0
   use_EOS = associated(tv%eqn_of_state)
-  h_neglect = GV%H_subroundoff*GV%H_to_m
+  h_neglect = GV%H_subroundoff*GV%H_to_m*m_Z
 
   if (use_EOS) then
     if (present(rho_star)) then
@@ -646,8 +652,8 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
 !$OMP                          private(Ihtot)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * GV%m_to_H)
-          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_m
+          Ihtot(i) = (GV%H_to_m * m_Z) / ((e(i,j,1)-e(i,j,nz+1)) + h_neglect)
+          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * (GV%H_to_m * m_Z)
         enddo
         do k=2,nz ; do i=Isq,Ieq+1
           pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k)-rho_star(i,j,k-1)) * &
