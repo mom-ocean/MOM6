@@ -615,6 +615,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
       call pass_var(Hml, G%domain, halo=1)
+      ! If visc%MLD exists, copy KPP's BLD into it
+      if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
 
     call cpu_clock_end(id_clock_kpp)
@@ -1532,6 +1534,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
       call pass_var(Hml, G%domain, halo=1)
+      ! If visc%MLD exists, copy KPP's BLD into it
+      if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
 
     if (.not. CS%KPPisPassive) then

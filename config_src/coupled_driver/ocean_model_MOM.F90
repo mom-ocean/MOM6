@@ -240,6 +240,12 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   ! Local variables
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
+  real :: HFrz        !< If HFrz > 0 (m), melt potential will be computed.
+                      !! The actual depth over which melt potential is computed will
+                      !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
+                      !! If HFrz <= 0 (default), melt potential will not be computed.
+  logical :: use_melt_pot!< If true, allocate melt_potential array
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
@@ -342,8 +348,20 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
-  call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
-                              do_integrals=.true., gas_fields_ocn=gas_fields_ocn)
+  call get_param(param_file, mdl, "HFREEZE", HFrz, &
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&
+                 "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)
+
+  if (HFrz .gt. 0.0) then
+    use_melt_pot=.true.
+  else
+    use_melt_pot=.false.
+  endif
+
+  call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
+                              gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
