@@ -310,7 +310,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   glb%grid => glb%ocn_state%grid
 
   ! Allocate IOB data type (needs to be called after glb%grid is set)
-  write(6,*)'DEBUG: isc,iec,jsc,jec= ',glb%grid%isc, glb%grid%iec, glb%grid%jsc, glb%grid%jec
+  !write(6,*)'DEBUG: isc,iec,jsc,jec= ',glb%grid%isc, glb%grid%iec, glb%grid%jsc, glb%grid%jec
   call IOB_allocate(ice_ocean_boundary, glb%grid%isc, glb%grid%iec, glb%grid%jsc, glb%grid%jec)
 
   call t_stopf('MOM_init')
