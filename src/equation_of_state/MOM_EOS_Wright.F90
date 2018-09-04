@@ -402,23 +402,23 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S        !< Salinity in PSU.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t      !< Height at the top of the layer in m.
+                        intent(in)  :: z_t      !< Height at the top of the layer in depth units (Z).
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b      !< Height at the top of the layer in m.
+                        intent(in)  :: z_b      !< Height at the top of the layer in Z.
   real,                 intent(in)  :: rho_ref  !< A mean density, in kg m-3, that is subtracted out
                                                 !! to reduce the magnitude of each of the integrals.
                                                 !! (The pressure is calucated as p~=-z*rho_0*G_e.)
   real,                 intent(in)  :: rho_0    !< Density, in kg m-3, that is used to calculate the
                                                 !! pressure (as p~=-z*rho_0*G_e) used in the
                                                 !! equation of state.
-  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration, in m s-2.
+  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration, in m2 Z-1 s-2.
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa      !< The change in the pressure anomaly across the
                                                 !! layer, in Pa.
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa !< The integral through the thickness of the layer
                                                 !! of the pressure anomaly relative to the anomaly
-                                                !! at the top of the layer, in Pa m.
+                                                !! at the top of the layer, in Pa Z.
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intx_dpa !< The integral in x of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
@@ -428,11 +428,10 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
                                                 !! pressure anomaly at the top and bottom of the
                                                 !! layer divided by the y grid spacing, in Pa.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT !< The depth of the bathymetry in m
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change with the
-                                          !! same units as z_t
+              optional, intent(in)  :: bathyT   !< The depth of the bathymetry in units of Z.
+  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change in Z.
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
-                                          !! interpolate T/S for top and bottom integrals.
+                                                !! interpolate T/S for top and bottom integrals.
 
   ! Local variables
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed) :: al0_2d, p0_2d, lambda_2d
@@ -441,16 +440,16 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real :: eps, eps2, rem
   real :: GxRho, I_Rho
   real :: p_ave, I_al0, I_Lzz
-  real :: dz         ! The layer thickness, in m.
-  real :: hWght      ! A pressure-thickness below topography, in m.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in m.
-  real :: iDenom     ! The inverse of the denominator in the wieghts, in m-2.
+  real :: dz         ! The layer thickness, in Z.
+  real :: hWght      ! A pressure-thickness below topography, in Z.
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Z.
+  real :: iDenom     ! The inverse of the denominator in the weights, in m-Z.
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear wieghts of the left and right columns, nonDim.
+  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations, in m2 s-2.
+                     ! 5 sub-column locations, in Pa.
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
@@ -634,9 +633,9 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate
                                                  !! dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP !< The pressure at the bathymetry in Pa
+              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry in Pa
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                             !! the same units as p_t (Pa?)
+                                                 !! the same units as p_t (Pa?)
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
 
@@ -649,10 +648,10 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: dp         ! The pressure change through a layer, in Pa.
   real :: hWght      ! A pressure-thickness below topography, in Pa.
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
-  real :: iDenom     ! The inverse of the denominator in the wieghts, in Pa-2.
+  real :: iDenom     ! The inverse of the denominator in the weights, in Pa-2.
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear wieghts of the left and right columns, nonDim.
+  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
   real :: intp(5)    ! The integrals of specific volume with pressure at the
                      ! 5 sub-column locations, in m2 s-2.
