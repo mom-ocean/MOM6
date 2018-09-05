@@ -623,10 +623,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     filename = trim(inputdir)//trim(state_file)
     if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
           "ISOMIP_initialize_sponges: Unable to open "//trim(filename))
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
-    if (GV%m_to_Z /= 1.0) then ; do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      eta(i,j,k) = GV%m_to_Z*eta(i,j,k)
-    enddo ; enddo ; enddo ; endif
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=GV%m_to_Z)
     call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
     call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 

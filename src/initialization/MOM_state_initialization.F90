@@ -641,10 +641,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
   if (file_has_thickness) then
     !### Consider adding a parameter to use to rescale h.
     if (just_read) return ! All run-time parameters have been read, so return.
-    call MOM_read_data(filename, "h", h(:,:,:), G%Domain)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      h(i,j,k) = GV%m_to_H * h(i,j,k)
-    enddo ; enddo ; enddo
+    call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
   else
     call get_param(param_file, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the \n"//&
@@ -860,8 +857,7 @@ subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
   call log_param(param_file, mdl, "INPUTDIR/INTERFACE_IC_FILE", filename)
 
   e0(:) = 0.0
-  call MOM_read_data(filename, eta_var, e0(:))
-  do k=1,nz+1 ; e0(k) = GV%m_to_Z*e0(k) ; enddo
+  call MOM_read_data(filename, eta_var, e0(:), scale=GV%m_to_Z)
 
   if ((abs(e0(1)) - 0.0) > 0.001) then
     ! This list probably starts with the interior interface, so shift it up.
@@ -1024,11 +1020,7 @@ subroutine depress_surface(h, G, GV, param_file, tv, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain)
-
-  if (scale_factor /= 1.0) then ; do j=js,je ; do i=is,ie
-    eta_sfc(i,j) = eta_sfc(i,j) * scale_factor
-  enddo ; enddo ; endif
+  call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
 
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, GV%g_Earth, G, GV, eta)
@@ -1111,8 +1103,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain)
-  if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
+  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
 
   if (use_remapping) then
     allocate(remap_CS)
@@ -1748,10 +1739,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 
   if (.not. use_ALE) then
     allocate(eta(isd:ied,jsd:jed,nz+1))
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
-    if (GV%m_to_Z /= 1.0) then ; do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      eta(i,j,k) = GV%m_to_Z*eta(i,j,k)
-    enddo ; enddo ; enddo ; endif
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=GV%m_to_Z)
 
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
@@ -1776,18 +1764,18 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     allocate(eta(isd:ied,jsd:jed,nz_data+1))
     allocate(h(isd:ied,jsd:jed,nz_data))
 
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=GV%m_to_Z)
 
     do j=js,je ; do i=is,ie
-      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+      eta(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
 
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) &
-        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
+      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
+        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
     enddo ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
-      h(i,j,k) = eta(i,j,k)-eta(i,j,k+1)
+      h(i,j,k) = GV%m_to_H*(eta(i,j,k)-eta(i,j,k+1))
     enddo ; enddo ; enddo
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
     deallocate(eta)
