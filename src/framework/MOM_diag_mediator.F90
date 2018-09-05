@@ -25,7 +25,7 @@ use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_i
 use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
 use MOM_diag_remap,       only : diag_remap_get_axes_info, diag_remap_set_active
 use MOM_diag_remap,       only : diag_remap_diag_registration_closed
-use MOM_diag_remap,       only : horizontally_average_diag_field
+use MOM_diag_remap,       only : horizontally_average_diag_field, horizontally_decimate_diag_field
 
 use diag_axis_mod, only : get_diag_axis_name
 use diag_data_mod, only : null_axis_id
@@ -133,6 +133,7 @@ type, private :: diag_type
   logical :: in_use !< True if this entry is being used.
   integer :: fms_diag_id !< Underlying FMS diag_manager id.
   integer :: fms_xyave_diag_id = -1 !< For a horizontally area-averaged diagnostic.
+  integer :: decimate_diag_id = -1 !< For a horizontally area-decimated diagnostic.
   character(64) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null() !< The axis group for this diagnostic
   type(diag_type), pointer :: next => null() !< Pointer to the next diagnostic
@@ -1170,10 +1171,58 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   if (diag%fms_xyave_diag_id>0) then
     call post_xy_average(diag_cs, diag, locfield)
   endif
+
+  !Decimation test
+  if (diag%decimate_diag_id>0) then
+    call post_decimated_data(diag_cs, diag, locfield, decimation_factor=2)
+  endif
+
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
     deallocate( locfield )
 
 end subroutine post_data_3d_low
+
+!> Post the horizontally area-averaged diagnostic
+subroutine post_decimated_data(diag_cs, diag, field, decimation_factor)
+  type(diag_ctrl),   intent(in) :: diag_cs !< Diagnostics mediator control structure
+  type(diag_type),   intent(in) :: diag !< This diagnostic
+  real,    target,   intent(in) :: field(:,:,:) !< Diagnostic field
+  integer,           intent(in) :: decimation_factor !< The factor by which to decimate the diag output field
+  ! Local variable
+  real, dimension(size(field,3)) :: decimated_field
+  logical :: used
+  integer :: nz, remap_nz, coord
+
+!  if (.not. diag_cs%ave_enabled) then
+!    return
+!  endif
+
+  if (diag%axes%is_native) then
+    call horizontally_decimate_diag_field(diag_cs%G, diag_cs%h, &
+                                          diag%axes%is_layer, diag%v_extensive, &
+                                          diag_cs%missing_value, decimation_factor, field, decimated_field)
+  else
+    nz = size(field, 3)
+    coord = diag%axes%vertical_coordinate_number
+    remap_nz = diag_cs%diag_remap_cs(coord)%nz
+
+    call assert(diag_cs%diag_remap_cs(coord)%initialized, &
+                'post_xy_average: remap_cs not initialized.')
+
+    call assert(IMPLIES(diag%axes%is_layer, nz == remap_nz), &
+              'post_xy_average: layer field dimension mismatch.')
+    call assert(IMPLIES(.not. diag%axes%is_layer, nz == remap_nz+1), &
+              'post_xy_average: interface field dimension mismatch.')
+
+    call horizontally_decimate_diag_field(diag_cs%G, diag_cs%diag_remap_cs(coord)%h, &
+                                         diag%axes%is_layer, diag%v_extensive, &
+                                         diag_cs%missing_value, decimation_factor, field, decimated_field)
+  endif
+
+  used = send_data(diag%decimate_diag_id, decimated_field, diag_cs%time_end, &
+                   weight=diag_cs%time_int)
+
+end subroutine post_decimated_data
 
 !> Post the horizontally area-averaged diagnostic
 subroutine post_xy_average(diag_cs, diag, field)
