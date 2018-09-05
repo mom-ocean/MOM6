@@ -50,7 +50,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
                  "The vertical displacement of the SSH anomaly. ", units="m", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 fail_if_missing=.not.just_read, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
                  "The lateral width of the SSH anomaly. ", units="coordinate", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -58,7 +58,6 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
   if (just_read) return ! All run-time parameters have been read, so return.
 
   PI = 4.0*atan(1.0)
-  ssh_anomaly_height = GV%m_to_Z*ssh_anomaly_height
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     Xnondim = (G%geoLonT(i,j)-G%west_lon-0.5*G%len_lon) / ssh_anomaly_width
     Xnondim = min(1., abs(Xnondim))

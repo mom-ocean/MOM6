@@ -149,11 +149,10 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
-                 'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read)
+  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
+                 'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  min_thickness = GV%m_to_Z*min_thickness
 
   select case ( coordinateMode(verticalCoordinate) )
 
@@ -427,12 +426,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   real :: rho_sur, rho_bot, rho_range
   real :: dT_dz, dS_dz              ! Gradients of T and S in degC/Z and PPT/Z.
 
-  real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
-                                    ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface !
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
-
-                                    ! positive upward, in m.
+  real :: e0(SZK_(G)+1)             ! The resting interface heights, in Z, usually
+                                    ! negative because it is positive upward.
+  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface, positive upward, in Z.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in Z.
   real :: min_depth, dummy1, z
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
   character(len=40) :: verticalCoordinate, filename, state_file
@@ -470,7 +467,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
 !   Set up sponges for ISOMIP configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
 
   if (associated(CSp)) call MOM_error(FATAL, &
         "ISOMIP_initialize_sponges called with an associated control structure.")
@@ -493,7 +490,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     endif
 
   ! convert to 1 / seconds
-    if (G%Zd_to_m * G%bathyT(i,j) > min_depth) then
+    if (G%bathyT(i,j) > min_depth) then
       Idamp(i,j) = damp/86400.0
     else ; Idamp(i,j) = 0.0 ; endif
 
@@ -547,16 +544,16 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
            eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
            if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
              eta1D(k) = eta1D(k+1) + min_thickness
-             h(i,j,k) = min_thickness * GV%Z_to_m
+             h(i,j,k) = min_thickness * GV%Z_to_H
            else
-             h(i,j,k) = GV%Z_to_m*(eta1D(k) - eta1D(k+1))
+             h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
            endif
          enddo
       enddo ; enddo
 
       case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
         do j=js,je ; do i=is,ie
-          h(i,j,:) = G%Zd_to_m * (G%bathyT(i,j) / dfloat(nz))
+          h(i,j,:) = GV%Z_to_H * (G%bathyT(i,j) / dfloat(nz))
         enddo ; enddo
 
       case default
@@ -572,12 +569,12 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     dS_dz = (s_sur - s_bot) / G%max_depth
     dT_dz = (t_sur - t_bot) / G%max_depth
     do j=js,je ; do i=is,ie
-      xi0 = -G%Zd_to_m * G%bathyT(i,j)
+      xi0 = -G%bathyT(i,j)
       do k = nz,1,-1
-        xi0 = xi0 + 0.5 * h(i,j,k) * GV%m_to_Z ! Depth in middle of layer
+        xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth in middle of layer
         S(i,j,k) = S_sur + dS_dz * xi0
         T(i,j,k) = T_sur + dT_dz * xi0
-        xi0 = xi0 + 0.5 * h(i,j,k) * GV%m_to_Z ! Depth at top of layer
+        xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth at top of layer
       enddo
     enddo ; enddo
     ! for debugging
