@@ -136,10 +136,10 @@ subroutine cvmix_kappa_shear_column(GVke, nzc, dt, f2, use_temperature, &
   real, dimension(GVke), &
                      intent(in)    :: dz       !< The layer thickness, in m.
   real, dimension(nzc+1), &
-                     intent(in)    :: dbuoy_dT !<The partial derivatives of buoyancy 
+                     intent(in)    :: dbuoy_dT !<The partial derivatives of buoyancy
                                                !! with changes in temperature, in m s-2 K-1
   real, dimension(nzc+1), &
-                     intent(in)    :: dbuoy_dS !<The partial derivatives of buoyancy 
+                     intent(in)    :: dbuoy_dS !<The partial derivatives of buoyancy
                                                !! with changes in salinity, in m s-2 psu-1
 
   real, dimension(nzc), intent(inout) :: u    !< The zonal velocity after a timestep of mixing, in m s-1.
