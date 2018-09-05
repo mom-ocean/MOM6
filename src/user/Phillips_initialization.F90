@@ -65,12 +65,11 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
-                 "zonal-mean jet.", units="m", &
+                 "zonal-mean jet.", units="m", scale=GV%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  jet_height = jet_height*GV%m_to_Z
   half_depth = G%max_depth*half_strat
   eta0(1) = 0.0 ; eta0(nz+1) = -G%max_depth
   do k=2,1+nz/2 ; eta0(k) = -half_depth*(2.0*(k-1)/real(nz)) ; enddo
@@ -240,9 +239,8 @@ subroutine Phillips_initialize_sponges(G, GV, tv, param_file, CSp, h)
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
-                 "zonal-mean jet.", units="m", &
+                 "zonal-mean jet.", units="m", scale=GV%m_to_Z, &
                  fail_if_missing=.true.)
-  jet_height = jet_height * GV%m_to_Z
 
   half_depth = G%max_depth*half_strat
   eta0(1) = 0.0 ; eta0(nz+1) = -G%max_depth

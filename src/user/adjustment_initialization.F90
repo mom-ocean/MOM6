@@ -61,8 +61,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness,'Minimum layer thickness', &
-         units='m', default=1.0e-3, do_not_log=just_read)
-  min_thickness = min_thickness*GV%m_to_Z
+         units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
 
   ! Parameters specific to this experiment configuration
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
