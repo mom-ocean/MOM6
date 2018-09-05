@@ -402,9 +402,9 @@ module mom_cap_mod
   use shr_nuopc_scalars_mod,    only: flds_scalar_name, flds_scalar_num
   use shr_nuopc_scalars_mod,    only: flds_scalar_index_nx, flds_scalar_index_ny
   use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit
-  use shr_file_mod,             only: shr_file_getLogUnit, shr_file_getLogLevel
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
   use shr_nuopc_time_mod,       only: shr_nuopc_time_alarmInit
+  use, intrinsic :: iso_fortran_env, only: output_unit
 #endif
 
   use ESMF                      ! TODO: only: ...
@@ -656,6 +656,7 @@ contains
   !! @param clock an ESMF_Clock object
   !! @param rc return code
   subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
+    use shr_nuopc_utils_mod, only : shr_nuopc_get_component_instance, shr_nuopc_utils_ChkErr
     type(ESMF_GridComp)                    :: gcomp
     type(ESMF_State)                       :: importState, exportState
     type(ESMF_Clock)                       :: clock
@@ -686,8 +687,6 @@ contains
     character(len=512)                     :: diro
     character(len=512)                     :: logfile
     character(len=64)                      :: cvalue
-    integer                                :: shrlogunit           ! original log unit
-    integer                                :: shrloglev            ! original log level
     integer                                :: inst_index           ! number of current instance (ie. 1)
     character(len=16)                      :: inst_name            ! fullname of current instance (ie. "lnd_0001")
     character(len=16)                      :: inst_suffix = ""     ! char string associated with instance
@@ -698,6 +697,7 @@ contains
     character(len=384)                     :: restartname          ! The restart file name (no dir)
     integer                                :: nu                   ! i/o unit to read pointer file
 #endif
+
     character(len=*),parameter             :: subname='(mom_cap:InitializeAdvertise)'
     !--------------------------------
 
@@ -755,57 +755,19 @@ contains
 #ifdef CESMCOUPLED
 
     ! determine instance information
-    call NUOPC_CompAttributeGet(gcomp, name="inst_name", value=inst_name, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    call NUOPC_CompAttributeGet(gcomp, name="inst_index", value=cvalue, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    read(cvalue,*) inst_index
-
-    call ESMF_AttributeGet(gcomp, name="inst_suffix", isPresent=isPresent, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    if (isPresent) then
-      call NUOPC_CompAttributeGet(gcomp, name="inst_suffix", value=inst_suffix, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-    else
-       inst_suffix = ''
-    end if
+    call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
+    inst_name = "OCN"//trim(inst_suffix)
 
     ! reset shr logging to my log file
-    if (is_root_pe()) then
-      call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
-      call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-      logunit = shr_file_getUnit()
-      open(logunit,file=trim(diro)//"/"//trim(logfile))
+    if(is_root_pe()) then
+       call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
+       if (shr_nuopc_utils_ChkErr(rc,__LINE__,u_FILE_u)) return
+       call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
+       if (shr_nuopc_utils_ChkErr(rc,__LINE__,u_FILE_u)) return
+       open(newunit=logunit,file=trim(diro)//"/"//trim(logfile))
     else
-      logunit = 6
+       logunit = output_unit
     endif
-
-    call shr_file_getLogUnit (shrlogunit)
-    call shr_file_getLogLevel(shrloglev)
-    call shr_file_setLogLevel(max(shrloglev,1))
-    call shr_file_setLogUnit (logunit)
 
     call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1091,7 +1053,9 @@ contains
     ! call initialize_grid_rotation_angle(ocean_grid, PF)
 
     write(*,*) '----- MOM initialization phase Advertise completed'
-
+#ifdef CESMCOUPLED
+    call shr_file_setLogUnit (output_unit)
+#endif
   end subroutine InitializeAdvertise
 
   !===============================================================================
@@ -1148,8 +1112,6 @@ contains
     integer                                    :: mpicom
     integer                                    :: localPet
 #ifdef CESMCOUPLED
-    integer                                    :: shrlogunit       ! original log unit
-    integer                                    :: shrloglev        ! original log level
     integer                                    :: inst_index       ! number of current instance (ie. 1)
     character(len=16)                          :: inst_name        ! fullname of current instance (ie. "lnd_0001")
     character(len=16)                          :: inst_suffix = "" ! char string associated with instance
@@ -1161,7 +1123,9 @@ contains
     !--------------------------------
 
     rc = ESMF_SUCCESS
-
+#ifdef CESMCOUPLED
+    call shr_file_setLogUnit (logunit)
+#endif
     !----------------------------------------------------------------------------
     ! Get pointers to ocean internal state
     !----------------------------------------------------------------------------
@@ -1663,7 +1627,9 @@ contains
 !      return  ! bail out
 
     write(*,*) '----- MOM initialization phase Realize completed'
-
+#ifdef CESMCOUPLED
+    call shr_file_setLogUnit (output_unit)
+#endif
   end subroutine InitializeRealize
 
   !===============================================================================
@@ -1794,9 +1760,6 @@ contains
 #ifdef CESMCOUPLED
     type(ESMF_Time)                        :: MyTime
     integer                                :: seconds, day, year, month, hour, minute
-    integer                                :: shrlogunit       ! original log unit
-    integer                                :: shrloglev        ! original log level
-    integer                                :: logunit          ! i/o unit for stdout
     integer                                :: nu               ! i/o unit to write pointer file
     character(ESMF_MAXSTR)                 :: cvalue
     character(ESMF_MAXSTR)                 :: runid            ! Run ID
@@ -1821,7 +1784,9 @@ contains
 
     rc = ESMF_SUCCESS
     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
-
+#ifdef CESMCOUPLED
+    call shr_file_setLogUnit (logunit)
+#endif
     ! query the Component for its clock, importState and exportState
     call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, &
       exportState=exportState, rc=rc)
@@ -1906,9 +1871,6 @@ contains
 
 #ifdef CESMCOUPLED
     ! Reset shr logging to my log file
-    call shr_file_getLogUnit (shrlogunit)
-    call shr_file_getLogLevel(shrloglev)
-    call shr_file_setLogLevel(max(shrloglev,1))
     call shr_file_setLogUnit (logunit)
 
     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, logunit, runtype, clock, rc=rc)
@@ -2062,9 +2024,7 @@ contains
     endif
 
     ! reset shr logging to my original values
-    call shr_file_setLogUnit (shrlogunit)
-    call shr_file_setLogLevel(shrloglev)
-
+    call shr_file_setLogUnit (output_unit)
 #else
 
     allocate(ofld(isc:iec,jsc:jec))
@@ -2179,7 +2139,9 @@ contains
     !write(*,*) 'MOM: --- run phase called ---'
 
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
-
+#ifdef CESMCOUPLED
+    call shr_file_setLogUnit (output_unit)
+#endif
   end subroutine ModelAdvance
 
   !===============================================================================
