@@ -115,8 +115,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
     call MOM_mesg("MOM_initialization.F90, DOME2d_initialize_thickness: setting thickness")
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
-                 default=1.e-3, units="m", do_not_log=.true.)
-  min_thickness = GV%m_to_Z*min_thickness
+                 default=1.e-3, units="m", do_not_log=.true., scale=GV%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
@@ -450,9 +449,9 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
           eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-          h(i,j,k) = GV%Angstrom_m
+          h(i,j,k) = GV%Angstrom_H
         else
-          h(i,j,k) = GV%Z_to_m * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -464,11 +463,11 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
     do j=js,je ; do i=is,ie
       z = -G%bathyT(i,j)
       do k = nz,1,-1
-        z = z + 0.5 * GV%m_to_Z * h(i,j,k) ! Position of the center of layer k
+        z = z + 0.5 * GV%H_to_Z * h(i,j,k) ! Position of the center of layer k
         S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
         if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) &
           S(i,j,k) = S_ref + S_range
-        z = z + 0.5 *  GV%m_to_Z * h(i,j,k) ! Position of the interface k
+        z = z + 0.5 *  GV%H_to_Z * h(i,j,k) ! Position of the interface k
       enddo
     enddo ; enddo
 

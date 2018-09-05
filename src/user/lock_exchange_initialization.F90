@@ -57,17 +57,14 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
   call get_param(param_file, mdl, "FRONT_DISPLACEMENT", front_displacement, &
                  "The vertical displacement of interfaces across the front. \n"//&
                  "A value larger in magnitude that MAX_DEPTH is truncated,", &
-                 units="m", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="m", fail_if_missing=.not.just_read, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl, "THERMOCLINE_THICKNESS", thermocline_thickness, &
                  "The thickness of the thermocline in the lock exchange \n"//&
                  "experiment.  A value of zero creates a two layer system \n"//&
                  "with vanished layers in between the two inflated layers.", &
-                 default=0., units="m", do_not_log=just_read)
+                 default=0., units="m", do_not_log=just_read, scale=GV%m_to_Z)
 
   if (just_read) return ! All run-time parameters have been read, so return.
-
-  thermocline_thickness = GV%m_to_Z*thermocline_thickness
-  front_displacement = GV%m_to_Z*front_displacement
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     do k=2,nz
