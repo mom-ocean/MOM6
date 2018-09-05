@@ -140,7 +140,8 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                                                              !! to parse for model parameter values (in).
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
                                                      !! structure for this module (in/out).
-  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge input layers.
+  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge
+                                                     !! input layers, in thickness units (H).
 
 
 ! This include declares and sets the variable "version".
@@ -331,7 +332,7 @@ end function get_ALE_sponge_nz_data
 subroutine get_ALE_sponge_thicknesses(G, data_h, sponge_mask, CS)
   type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
   real, allocatable, dimension(:,:,:), &
-                         intent(inout) :: data_h !< The thicknesses of the sponge input layers.
+                         intent(inout) :: data_h !< The thicknesses of the sponge input layers, in H.
   logical, dimension(SZI_(G),SZJ_(G)), &
                          intent(out)   :: sponge_mask !< A logical mask that is true where
                                                  !! sponges are being applied.
@@ -837,7 +838,7 @@ end subroutine set_up_ALE_sponge_vel_field_varying
 subroutine apply_ALE_sponge(h, dt, G, CS, Time)
   type(ocean_grid_type),     intent(inout) :: G  !< The ocean's grid structure (in).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(inout) :: h  !< Layer thickness, in m (in)
+                             intent(inout) :: h  !< Layer thickness, in H (in)
   real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_sponge (in).
