@@ -117,8 +117,8 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   ! Local variables
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units (Z),
                             ! usually negative because it is positive upward.
-  real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile (m)
-  real :: e_interface ! Current interface positoin (m)
+  real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile (Z)
+  real :: e_interface ! Current interface position (m)
   character(len=40)  :: mod = "Neverland_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
@@ -126,12 +126,13 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
 
   call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_thickness: setting thickness", 5)
   call get_param(param_file, mod, "INIT_THICKNESS_PROFILE", h_profile, &
-                 "Profile of initial layer thicknesses.", units="m", fail_if_missing=.true.)
+                 "Profile of initial layer thicknesses.", units="m", scale=GV%m_to_Z, &
+                 fail_if_missing=.true.)
 
   ! e0 is the notional position of interfaces
   e0(1) = 0. ! The surface
   do k=1,nz
-    e0(k+1) = e0(k) - GV%m_to_Z*h_profile(k)
+    e0(k+1) = e0(k) - h_profile(k)
   enddo
 
   do j=js,je ; do i=is,ie

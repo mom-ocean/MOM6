@@ -167,8 +167,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 
 !   Set up sponges for DOME configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
-  min_depth = GV%m_to_Z * min_depth
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
 
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo

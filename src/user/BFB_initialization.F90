@@ -102,8 +102,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_fi
 
 !   Set up sponges for DOME configuration
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
-  min_depth = GV%m_to_Z*min_depth
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
 
   call get_param(param_file, mdl, "SOUTHLAT", slat, &
                  "The southern latitude of the domain.", units="degrees")

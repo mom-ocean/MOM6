@@ -101,7 +101,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read)
+                 units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
@@ -155,7 +155,6 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
-    min_thickness = min_thickness * GV%m_to_Z
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1

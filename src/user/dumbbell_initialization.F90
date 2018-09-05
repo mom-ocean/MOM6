@@ -100,7 +100,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read)
+                 units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
@@ -154,14 +154,13 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
-    min_thickness = GV%m_to_Z * min_thickness
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = min_thickness
+          h(i,j,k) = GV%Z_to_H * min_thickness
         else
           h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
@@ -171,7 +170,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%Z_to_m * G%bathyT(i,j) / dfloat(nz)
+      h(i,j,:) = GV%Z_to_H * G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
 end select
@@ -282,7 +281,7 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
   call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, do_not_log=.true.)
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=.true.)
+                 units='m', default=1.0e-3, do_not_log=.true., scale=GV%m_to_Z)
 
   ! no active sponges
   if (sponge_time_scale <= 0.) return
@@ -306,12 +305,12 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
   if (use_ALE) then
     ! construct a uniform grid for the sponge
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      eta1D(nz+1) = -GV%Z_to_m * G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
-        eta1D(k) = -GV%Z_to_m*G%max_depth * real(k-1) / real(nz)
+        eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = min_thickness
+          h(i,j,k) = GV%Z_to_H * min_thickness
         else
           h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
