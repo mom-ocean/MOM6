@@ -5,7 +5,7 @@ module MOM_diapyc_energy_req
 
 !! \author By Robert Hallberg, May 2015
 
-use MOM_diag_mediator, only : diag_ctrl, Time_type, post_data_1d_k, register_diag_field
+use MOM_diag_mediator, only : diag_ctrl, Time_type, post_data, register_diag_field
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -910,22 +910,22 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   K=nz
 
   if (do_print) then
-    if (CS%id_ERt>0) call post_data_1d_k(CS%id_ERt, PE_chg_k(:,1), CS%diag)
-    if (CS%id_ERb>0) call post_data_1d_k(CS%id_ERb, PE_chg_k(:,2), CS%diag)
-    if (CS%id_ERc>0) call post_data_1d_k(CS%id_ERc, PE_chg_k(:,3), CS%diag)
-    if (CS%id_ERh>0) call post_data_1d_k(CS%id_ERh, PE_chg_k(:,4), CS%diag)
-    if (CS%id_Kddt>0) call post_data_1d_k(CS%id_Kddt, GV%H_to_m*Kddt_h, CS%diag)
-    if (CS%id_Kd>0)   call post_data_1d_k(CS%id_Kd, Kd, CS%diag)
-    if (CS%id_h>0)    call post_data_1d_k(CS%id_h, GV%H_to_m*h_tr, CS%diag)
-    if (CS%id_zInt>0) call post_data_1d_k(CS%id_zInt, Z_int, CS%diag)
-    if (CS%id_CHCt>0) call post_data_1d_k(CS%id_CHCt, ColHt_cor_k(:,1), CS%diag)
-    if (CS%id_CHCb>0) call post_data_1d_k(CS%id_CHCb, ColHt_cor_k(:,2), CS%diag)
-    if (CS%id_CHCc>0) call post_data_1d_k(CS%id_CHCc, ColHt_cor_k(:,3), CS%diag)
-    if (CS%id_CHCh>0) call post_data_1d_k(CS%id_CHCh, ColHt_cor_k(:,4), CS%diag)
-    if (CS%id_T0>0) call post_data_1d_k(CS%id_T0, T0, CS%diag)
-    if (CS%id_Tf>0) call post_data_1d_k(CS%id_Tf, Tf, CS%diag)
-    if (CS%id_S0>0) call post_data_1d_k(CS%id_S0, S0, CS%diag)
-    if (CS%id_Sf>0) call post_data_1d_k(CS%id_Sf, Sf, CS%diag)
+    if (CS%id_ERt>0) call post_data(CS%id_ERt, PE_chg_k(:,1), CS%diag)
+    if (CS%id_ERb>0) call post_data(CS%id_ERb, PE_chg_k(:,2), CS%diag)
+    if (CS%id_ERc>0) call post_data(CS%id_ERc, PE_chg_k(:,3), CS%diag)
+    if (CS%id_ERh>0) call post_data(CS%id_ERh, PE_chg_k(:,4), CS%diag)
+    if (CS%id_Kddt>0) call post_data(CS%id_Kddt, GV%H_to_m*Kddt_h, CS%diag)
+    if (CS%id_Kd>0)   call post_data(CS%id_Kd, Kd, CS%diag)
+    if (CS%id_h>0)    call post_data(CS%id_h, GV%H_to_m*h_tr, CS%diag)
+    if (CS%id_zInt>0) call post_data(CS%id_zInt, Z_int, CS%diag)
+    if (CS%id_CHCt>0) call post_data(CS%id_CHCt, ColHt_cor_k(:,1), CS%diag)
+    if (CS%id_CHCb>0) call post_data(CS%id_CHCb, ColHt_cor_k(:,2), CS%diag)
+    if (CS%id_CHCc>0) call post_data(CS%id_CHCc, ColHt_cor_k(:,3), CS%diag)
+    if (CS%id_CHCh>0) call post_data(CS%id_CHCh, ColHt_cor_k(:,4), CS%diag)
+    if (CS%id_T0>0) call post_data(CS%id_T0, T0, CS%diag)
+    if (CS%id_Tf>0) call post_data(CS%id_Tf, Tf, CS%diag)
+    if (CS%id_S0>0) call post_data(CS%id_S0, S0, CS%diag)
+    if (CS%id_Sf>0) call post_data(CS%id_Sf, Sf, CS%diag)
     if (CS%id_N2_0>0) then
       N2(1) = 0.0 ; N2(nz+1) = 0.0
       do K=2,nz
@@ -935,7 +935,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
-      call post_data_1d_k(CS%id_N2_0, N2, CS%diag)
+      call post_data(CS%id_N2_0, N2, CS%diag)
     endif
     if (CS%id_N2_f>0) then
       N2(1) = 0.0 ; N2(nz+1) = 0.0
@@ -946,7 +946,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo
-      call post_data_1d_k(CS%id_N2_f, N2, CS%diag)
+      call post_data(CS%id_N2_f, N2, CS%diag)
     endif
   endif
 
