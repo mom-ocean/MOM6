@@ -6,7 +6,7 @@ module MOM_diagnostics
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,              only : reproducing_sum
-use MOM_diag_mediator,     only : post_data, post_data_1d_k, get_diag_time_end
+use MOM_diag_mediator,     only : post_data, get_diag_time_end
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
 use MOM_diag_mediator,     only : register_static_field, diag_register_area_ids
 use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
@@ -441,13 +441,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! layer mean potential temperature
   if (CS%id_temp_layer_ave>0) then
     temp_layer_ave = global_layer_mean(tv%T, h, G, GV)
-    call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
+    call post_data(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
   endif
 
   ! layer mean salinity
   if (CS%id_salt_layer_ave>0) then
     salt_layer_ave = global_layer_mean(tv%S, h, G, GV)
-    call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
+    call post_data(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
   call calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)

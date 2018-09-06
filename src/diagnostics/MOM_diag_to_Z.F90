@@ -8,7 +8,7 @@ module MOM_diag_to_Z
 
 use MOM_domains,       only : pass_var
 use MOM_coms,          only : reproducing_sum
-use MOM_diag_mediator, only : post_data, post_data_1d_k, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
 use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_diag_mediator, only : ocean_register_diag
@@ -479,7 +479,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
       if (CS%id_tr(m) > 0) call post_data(CS%id_tr(m), CS%tr_z(m)%p, CS%diag)
       if (CS%id_tr_xyave(m) > 0) then
         layer_ave = global_z_mean(CS%tr_z(m)%p,G,CS,m)
-        call post_data_1d_k(CS%id_tr_xyave(m), layer_ave, CS%diag)
+        call post_data(CS%id_tr_xyave(m), layer_ave, CS%diag)
       endif
     enddo
   endif
