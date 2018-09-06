@@ -324,7 +324,14 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! diagnose thickness/volumes of grid cells (meter)
   if (CS%id_thkcello>0 .or. CS%id_volcello>0) then
     if (GV%Boussinesq) then ! thkcello = h for Boussinesq
-      if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, GV%H_to_m*h, CS%diag)
+      if (CS%id_thkcello > 0) then ; if (GV%H_to_m == 1.0) then
+        call post_data(CS%id_thkcello, h, CS%diag)
+      else
+        do k=1,nz; do j=js,je ; do i=is,ie
+          work_3d(i,j,k) = GV%H_to_m*h(i,j,k)
+        enddo ; enddo ; enddo
+        call post_data(CS%id_thkcello, work_3d, CS%diag)
+      endif ; endif
       if (CS%id_volcello > 0) then ! volcello = h*area for Boussinesq
         do k=1,nz; do j=js,je ; do i=is,ie
           work_3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * G%areaT(i,j)
