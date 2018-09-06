@@ -96,11 +96,11 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
                   ! enable the use of a reduced gravity form of the equations,
                   ! in m2 s-2.
     dp_star, &    ! Layer thickness after compensation for compressibility, in Pa.
+    SSH, &        ! The sea surface height anomaly, in depth units (Z).
     e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from
-                  ! astronomical sources and self-attraction and loading, in m.
-    geopot_bot, & !   Bottom geopotential relative to time-mean sea level,
+                  ! astronomical sources and self-attraction and loading, in Z.
+    geopot_bot    !   Bottom geopotential relative to time-mean sea level,
                   ! including any tidal contributions, in units of m2 s-2.
-    SSH           !   Sea surface height anomalies, in m.
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, in Pa (usually 2e7 Pa = 2000 dbar).
   real :: rho_in_situ(SZI_(G)) !In-situ density of a layer, in kg m-3.
@@ -116,7 +116,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
                              ! barotropic and baroclinic pieces.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
 
-  real :: I_gEarth
+  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2.
+  real :: I_gEarth           ! The inverse of g_Earth_z, in s2 Z m-2
   real :: dalpha
   real :: Pa_to_H   ! A factor to convert from Pa to the thicknesss units (H).
   real :: alpha_Lay(SZK_(G)) ! The specific volume of each layer, in kg m-3.
@@ -141,7 +142,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  I_gEarth = 1.0 / GV%g_Earth
+  g_Earth_z = GV%g_Earth*GV%Z_to_m
+  I_gEarth = 1.0 / g_Earth_z
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
@@ -178,7 +180,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
     ! of self-attraction and loading.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = -GV%Z_to_m*G%bathyT(i,j)
+      SSH(i,j) = -G%bathyT(i,j)
     enddo ; enddo
     if (use_EOS) then
       !$OMP parallel do default(shared)
@@ -193,19 +195,19 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do k=1,nz ; do i=Isq,Ieq+1
-        SSH(i,j) = SSH(i,j) + GV%H_to_kg_m2*h(i,j,k)*alpha_Lay(k)
+        SSH(i,j) = SSH(i,j) + (GV%m_to_Z*GV%H_to_kg_m2)*h(i,j,k)*alpha_Lay(k)
       enddo ; enddo ; enddo
     endif
 
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=1.0)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + GV%Z_to_m*G%bathyT(i,j))
+      geopot_bot(i,j) = -g_Earth_z*(e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*GV%Z_to_m*G%bathyT(i,j)
+      geopot_bot(i,j) = -g_Earth_z*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -394,8 +396,8 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
                              ! attraction and loading, in depth units (Z).
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, in Pa (usually 2e7 Pa = 2000 dbar).
-  real :: I_Rho0             ! 1/Rho0.
-  real :: G_Rho0             ! G_Earth / Rho0 in m4 s-2 kg-1.
+  real :: I_Rho0             ! 1/Rho0, in m3 kg-1.
+  real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1.
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer
                              ! compensated density gradients, in m s-2.
   real :: dr                 ! Temporary variables.
@@ -430,7 +432,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
   h_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/CS%Rho0
-  G_Rho0 = GV%g_Earth/GV%Rho0
+  G_Rho0 = GV%Z_to_m*GV%g_Earth/GV%Rho0
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction
@@ -592,7 +594,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
   if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%PFu_bc, CS%diag)
   if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%PFv_bc, CS%diag)
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, GV%Z_to_m*e_tidal(:,:), CS%diag)
+  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
 
 end subroutine PressureForce_Mont_Bouss
 
@@ -616,15 +618,14 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
                                                             !! compensated), times g/rho_0, in m2 Z-1 s-2.
 
   ! Local variables
-  real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer
-                             ! thicknesses, in m-1.
+  real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses, in H-1.
   real :: press(SZI_(G))     ! Interface pressure, in Pa.
   real :: T_int(SZI_(G))     ! Interface temperature in C.
   real :: S_int(SZI_(G))     ! Interface salinity in PSU.
   real :: dR_dT(SZI_(G))     ! Partial derivatives of density with temperature
   real :: dR_dS(SZI_(G))     ! and salinity in kg m-3 K-1 and kg m-3 PSU-1.
   real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer.
-  real :: G_Rho0             ! g_Earth / Rho0 in m4 s-2 kg-1.
+  real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1.
   real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-1 Z-1.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
@@ -635,15 +636,13 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   Rho0xG = Rho0*g_Earth*GV%Z_to_m
-  G_Rho0 = g_Earth/Rho0
+  G_Rho0 = GV%Z_to_m*GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   z_neglect = GV%H_subroundoff*GV%H_to_Z
 
   if (use_EOS) then
     if (present(rho_star)) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,z_neglect,pbce,rho_star,&
-!$OMP                                  GFS_scale,GV) &
-!$OMP                          private(Ihtot)
+     !$OMP parallel do default(shared) private(Ihtot)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
@@ -655,18 +654,16 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
         enddo ; enddo
       enddo ! end of j loop
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,tv,z_neglect,G_Rho0,Rho0xG,&
-!$OMP                                  pbce,GFS_scale,GV) &
-!$OMP                          private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
+      !$OMP parallel do default(shared) private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = GV%H_to_m / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
+          Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
           press(i) = -Rho0xG*e(i,j,1)
         enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
                                Isq, Ieq-Isq+2, tv%eqn_of_state)
         do i=Isq,Ieq+1
-          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * GV%H_to_m
+          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * GV%H_to_Z
         enddo
         do k=2,nz
           do i=Isq,Ieq+1
@@ -686,7 +683,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
       enddo ! end of j loop
     endif
   else ! not use_EOS
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,GV,z_neglect,pbce) private(Ihtot)
+    !$OMP parallel do default(share) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         Ihtot(i) = GV%H_to_m / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
@@ -749,8 +746,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
 
   if (use_EOS) then
     if (present(alpha_star)) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,C_htot,dP_dH,p,dp_neglect, &
-!$OMP                                  pbce,alpha_star)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           C_htot(i,j) = dP_dH / ((p(i,j,nz+1)-p(i,j,1)) + dp_neglect)
@@ -762,9 +758,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
         enddo ; enddo
       enddo
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,tv,p,C_htot, &
-!$OMP                                  dP_dH,dp_neglect,pbce)                      &
-!$OMP                          private(T_int,S_int,dR_dT,dR_dS,rho_in_situ)
+      !$OMP parallel do default(shared) private(T_int,S_int,dR_dT,dR_dS,rho_in_situ)
       do j=Jsq,Jeq+1
         call calculate_density(tv%T(:,j,nz), tv%S(:,j,nz), p(:,j,nz+1), &
                                rho_in_situ, Isq, Ieq-Isq+2, tv%eqn_of_state)
@@ -790,8 +784,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
       enddo
     endif
   else ! not use_EOS
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,C_htot,dP_dH,p,dp_neglect, &
-!$OMP                                  pbce,alpha_Lay,dalpha_int)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         C_htot(i,j) = dP_dH / ((p(i,j,nz+1)-p(i,j,1)) + dp_neglect)
@@ -806,16 +799,14 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
 
   if (GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,dpbce,GFS_scale,pbce,nz)
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       dpbce(i,j) = (GFS_scale - 1.0) * pbce(i,j,1)
     enddo ; enddo
-!$OMP do
+    !$OMP parallel do default(shared)
     do k=1,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       pbce(i,j,k) = pbce(i,j,k) + dpbce(i,j)
     enddo ; enddo ; enddo
-!$OMP end parallel
   endif
 
 end subroutine Set_pbce_nonBouss
@@ -876,7 +867,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
-        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter')
+        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=GV%Z_to_m)
   endif
 
   CS%GFS_scale = 1.0
