@@ -64,7 +64,7 @@ public diag_save_grids, diag_restore_grids
 
 !> Make a diagnostic available for averaging or output.
 interface post_data
-  module procedure post_data_3d, post_data_2d, post_data_0d
+  module procedure post_data_3d, post_data_2d, post_data_1d_k, post_data_0d
 end interface post_data
 
 !> A group of 1D axes that comprise a 1D/2D/3D mesh
