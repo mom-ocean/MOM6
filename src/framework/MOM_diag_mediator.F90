@@ -752,14 +752,15 @@ end subroutine post_data_0d
 subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
                                                  !! previous call to register_diag_field.
-  real,              intent(in) :: field(:)      !< 1-d array being offered for output or averaging
+  real, target,      intent(in) :: field(:)      !< 1-d array being offered for output or averaging
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
   ! Local variables
   logical :: used  ! The return value of send_data is not used for anything.
+  real, dimension(:), pointer :: locfield => NULL()
   logical :: is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: k, ks, ke
   type(diag_type), pointer :: diag => null()
 
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
@@ -770,11 +771,29 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
               'post_data_1d_k: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-    if (is_stat) then
-      used = send_data(diag%fms_diag_id, field)
-    elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, weight=diag_cs%time_int)
+
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
+      ks = lbound(field,1) ; ke = ubound(field,1)
+      allocate( locfield( ks:ke ) )
+
+      do k=ks,ke
+        if (field(k) == diag_cs%missing_value) then
+          locfield(k) = diag_cs%missing_value
+        else
+          locfield(k) = field(k) * diag%conversion_factor
+        endif
+      enddo
+    else
+      locfield => field
     endif
+
+    if (is_stat) then
+      used = send_data(diag%fms_diag_id, locfield)
+    elseif (diag_cs%ave_enabled) then
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
+    endif
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
+
     diag => diag%next
   enddo
 
@@ -800,7 +819,7 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
               'post_data_2d: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-     call post_data_2d_low(diag, field, diag_cs, is_static, mask)
+    call post_data_2d_low(diag, field, diag_cs, is_static, mask)
     diag => diag%next
   enddo
 
