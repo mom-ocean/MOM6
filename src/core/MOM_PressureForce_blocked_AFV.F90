@@ -123,9 +123,9 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbc
                 ! the pressure anomaly at the top of the layer, in Pa m2 s-2.
   real, dimension(SZI_(G),SZJ_(G))  :: &
     dp, &       ! The (positive) change in pressure across a layer, in Pa.
-    SSH, &      ! The sea surface height anomaly, in m.
+    SSH, &      ! The sea surface height anomaly, in depth units (Z).
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
-                ! astronomical sources and self-attraction and loading, in m.
+                ! astronomical sources and self-attraction and loading, in Z.
     dM, &       ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model, in m2 s-2.
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
@@ -152,6 +152,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbc
 
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected, in Pa.
+  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2.
+  real :: I_gEarth           ! The inverse of g_Earth_z, in s2 Z m-2
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref, in m3 kg-1.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
@@ -164,7 +166,6 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbc
   real :: rho_in_situ(SZI_(G)) ! The in situ density, in kg m-3.
   real :: Pa_to_H   ! A factor to convert from Pa to the thicknesss units (H).
 !  real :: oneatm = 101325.0  ! 1 atm in Pa (kg/ms2)
-  real :: I_gEarth
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk
@@ -183,6 +184,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbc
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
+  g_Earth_z = GV%g_Earth*GV%Z_to_m
+  I_gEarth = 1.0 / g_Earth_z
 
   if (use_p_atm) then
     !$OMP parallel do default(shared)
@@ -199,8 +202,6 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbc
   do j=Jsq,Jeq+1 ; do k=2,nz+1 ; do i=Isq,Ieq+1
     p(i,j,K) = p(i,j,K-1) + GV%H_to_Pa * h(i,j,k-1)
   enddo ; enddo ; enddo
-
-  I_gEarth = 1.0 / GV%g_Earth
 
   if (use_EOS) then
   !   With a bulk mixed layer, replace the T & S of any layers that are
@@ -269,7 +270,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbc
   !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1
     do i=Isq,Ieq+1
-      za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*GV%Z_to_m*G%bathyT(i,j)
+      za(i,j) = alpha_ref*p(i,j,nz+1) - g_Earth_z*G%bathyT(i,j)
     enddo
     do k=nz,1,-1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) + dza(i,j,k)
@@ -282,10 +283,10 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbc
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth
     enddo ; enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=1.0)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      za(i,j) = za(i,j) - GV%g_Earth*e_tidal(i,j)
+      za(i,j) = za(i,j) - g_Earth_z * e_tidal(i,j)
     enddo ; enddo
   endif
 
@@ -761,7 +762,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
     endif
   endif
 
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, GV%Z_to_m*e_tidal(:,:), CS%diag)
+  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
 
 end subroutine PressureForce_blk_AFV_Bouss
 
@@ -827,7 +828,7 @@ subroutine PressureForce_blk_AFV_init(Time, G, GV, param_file, diag, CS, tides_C
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
-        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter')
+        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=GV%Z_to_m)
   endif
 
   CS%GFS_scale = 1.0
