@@ -176,6 +176,7 @@ contains
         o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
         o2x(ind%o2x_So_u, n) = ocn_public%u_surf(ig,jg) * grid%mask2dT(i,j)
         o2x(ind%o2x_So_v, n) = ocn_public%v_surf(ig,jg) * grid%mask2dT(i,j)
+        o2x(ind%o2x_So_bldepth, n) = ocn_public%OBLD(ig,jg) * grid%mask2dT(i,j)
         ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
         if (ocn_public%frazil(ig,jg) > 0.0) then
           ! Frazil: change from J/m^2 to W/m^2

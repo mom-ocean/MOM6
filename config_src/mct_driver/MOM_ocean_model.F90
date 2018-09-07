@@ -140,7 +140,8 @@ type, public ::  ocean_public_type
     frazil =>NULL(), &   !< Accumulated heating (in Joules/m^2) from frazil
                          !! formation in the ocean.
     melt_potential => NULL(), & !< Accumulated heat used to melt sea ice (in W/m^2)
-    area => NULL()              !< cell area of the ocean surface, in m2.
+    area => NULL(), &    !< cell area of the ocean surface, in m2.
+    OBLD => NULL()       !< Ocean boundary layer depth, in m.
   type(coupler_2d_bc_type) :: fields    !< A structure that may contain an
                                         !! array of named tracer-related fields.
   integer                  :: avg_kount !< Used for accumulating averages of this type.
@@ -732,6 +733,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
             Ocean_sfc%v_surf (isc:iec,jsc:jec), &
             Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
             Ocean_sfc%area   (isc:iec,jsc:jec), &
+            Ocean_sfc%OBLD   (isc:iec,jsc:jec), &
             Ocean_sfc%melt_potential(isc:iec,jsc:jec), &
             Ocean_sfc%frazil (isc:iec,jsc:jec))
 
@@ -742,6 +744,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
   Ocean_sfc%sea_lev = 0.0  ! time averaged thickness of top model grid cell (m) plus patm/rho0/grav
   Ocean_sfc%frazil  = 0.0  ! time accumulated frazil (J/m^2) passed to ice model
   Ocean_sfc%melt_potential  = 0.0  ! time accumulated melt potential (J/m^2) passed to ice model
+  Ocean_sfc%OBLD    = 0.0  ! ocean boundary layer depth, in m
   Ocean_sfc%area    = 0.0
   Ocean_sfc%axes    = diag%axesT1%handles !diag axes to be used by coupler tracer flux diagnostics
 
@@ -812,6 +815,8 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
       Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
     if (allocated(state%melt_potential)) &
       Ocean_sfc%melt_potential(i,j) = state%melt_potential(i+i0,j+j0)
+    if (allocated(state%Hml)) &
+      Ocean_sfc%OBLD(i,j) = state%Hml(i+i0,j+j0)
   enddo ; enddo
 
   if (Ocean_sfc%stagger == AGRID) then
@@ -1036,6 +1041,7 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
   write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
   write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
   write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
+  write(outunit,100) 'ocean%OBLD     ',mpp_chksum(ocn%OBLD   )
   write(outunit,100) 'ocean%melt_potential  ',mpp_chksum(ocn%melt_potential)
 
   call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
