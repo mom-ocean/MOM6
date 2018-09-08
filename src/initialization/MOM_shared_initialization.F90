@@ -525,24 +525,68 @@ subroutine initialize_grid_rotation_angle(G, PF)
                                                !! to parse for model parameter values.
 
   real    :: angle, lon_scale
-  integer :: i, j
+  real    :: pi_720deg  ! One quarter the conversion factor from degrees to radians.
+  real    :: lonB(2,2)  ! The longitude of a point, shifted to have about the same value.
+  character(len=40)  :: mdl = "initialize_grid_rotation_angle" ! This subroutine's name.
+  logical :: use_bugs
+  integer :: i, j, m, n
 
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    lon_scale    = cos((G%geoLatBu(I-1,J-1) + G%geoLatBu(I,J-1  ) + &
-                        G%geoLatBu(I-1,J) + G%geoLatBu(I,J)) * atan(1.0)/180)
-    angle        = atan2((G%geoLonBu(I-1,J) + G%geoLonBu(I,J) - &
-                          G%geoLonBu(I-1,J-1) - G%geoLonBu(I,J-1))*lon_scale, &
-                          G%geoLatBu(I-1,J) + G%geoLatBu(I,J) - &
-                          G%geoLatBu(I-1,J-1) - G%geoLatBu(I,J-1) )
-    G%sin_rot(i,j) = sin(angle) ! angle is the clockwise angle from lat/lon to ocean
-    G%cos_rot(i,j) = cos(angle) ! grid (e.g. angle of ocean "north" from true north)
-  enddo ; enddo
+  call get_param(PF, mdl, "GRID_ROTATION_ANGLE_BUGS", use_bugs, &
+                 "If true, use an older algorithm to calculate the sine and \n"//&
+                 "cosines needed rotate between grid-oriented directions and \n"//&
+                 "true north and east.  Differences arise at the tripolar fold.", &
+                 default=.True.)
 
-  ! ### THIS DOESN'T SEEM RIGHT AT A CUBED-SPHERE FOLD -RWH
-  call pass_var(G%cos_rot, G%Domain)
-  call pass_var(G%sin_rot, G%Domain)
+  if (use_bugs) then
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      lon_scale    = cos((G%geoLatBu(I-1,J-1) + G%geoLatBu(I,J-1  ) + &
+                          G%geoLatBu(I-1,J) + G%geoLatBu(I,J)) * atan(1.0)/180)
+      angle        = atan2((G%geoLonBu(I-1,J) + G%geoLonBu(I,J) - &
+                            G%geoLonBu(I-1,J-1) - G%geoLonBu(I,J-1))*lon_scale, &
+                            G%geoLatBu(I-1,J) + G%geoLatBu(I,J) - &
+                            G%geoLatBu(I-1,J-1) - G%geoLatBu(I,J-1) )
+      G%sin_rot(i,j) = sin(angle) ! angle is the clockwise angle from lat/lon to ocean
+      G%cos_rot(i,j) = cos(angle) ! grid (e.g. angle of ocean "north" from true north)
+    enddo ; enddo
+
+    ! This is not right at a tripolar or cubed-sphere fold.
+    call pass_var(G%cos_rot, G%Domain)
+    call pass_var(G%sin_rot, G%Domain)
+  else
+    pi_720deg = atan(1.0) / 180.0
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      do n=1,2 ; do m=1,2
+        lonB(m,n) = modulo_around_point(G%geoLonBu(I+m-2,J+n-2), G%geoLonT(i,j), 360.0)
+      enddo ; enddo
+      lon_scale = cos(pi_720deg*((G%geoLatBu(I-1,J-1) + G%geoLatBu(I,J)) + &
+                                 (G%geoLatBu(I,J-1) + G%geoLatBu(I-1,J)) ) )
+      angle = atan2(lon_scale*((lonB(1,2) - lonB(2,1)) + (lonB(2,2) - lonB(1,1))), &
+                    (G%geoLatBu(I-1,J) - G%geoLatBu(I,J-1)) + &
+                    (G%geoLatBu(I,J) - G%geoLatBu(I-1,J-1)) )
+      G%sin_rot(i,j) = sin(angle) ! angle is the clockwise angle from lat/lon to ocean
+      G%cos_rot(i,j) = cos(angle) ! grid (e.g. angle of ocean "north" from true north)
+    enddo ; enddo
+
+    call pass_vector(G%cos_rot, G%sin_rot, G%Domain, stagger=AGRID)
+  endif
 
 end subroutine initialize_grid_rotation_angle
+
+! -----------------------------------------------------------------------------
+!> Return the modulo value of x in an interval [xc-(Lx/2) xc+(Lx/2)]
+!! If Lx<=0, then it returns x without applying modulo arithmetic.
+function modulo_around_point(x, xc, Lx) result(x_mod)
+  real, intent(in) :: x  !< Value to which to apply modulo arithmetic
+  real, intent(in) :: xc !< Center of modulo range
+  real, intent(in) :: Lx !< Modulo range width
+  real :: x_mod          !< x shifted by an integer multiple of Lx to be close to xc.
+
+  if (Lx > 0.0) then
+    x_mod = modulo(x - (xc - 0.5*Lx), Lx) + (xc - 0.5*Lx)
+  else
+    x_mod = x
+  endif
+end function modulo_around_point
 
 ! -----------------------------------------------------------------------------
 !>   This subroutine sets the open face lengths at selected points to restrict
