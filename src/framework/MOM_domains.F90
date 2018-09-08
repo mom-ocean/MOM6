@@ -240,7 +240,7 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner
     ! Convert to local indices for arrays starting at 1.
     isc = isc - (isd-1) ; iec = iec - (isd-1) ; ied = ied - (isd-1) ; isd = 1
     jsc = jsc - (jsd-1) ; jec = jec - (jsd-1) ; jed = jed - (jsd-1) ; jsd = 1
-    i_halo = min(inner_halo, isc-1) ; j_halo = min(inner_halo, jsc-1) ; 
+    i_halo = min(inner_halo, isc-1) ; j_halo = min(inner_halo, jsc-1)
 
     ! Figure out the array index extents of the eastern, western, northern and southern regions to copy.
     if (pos == CENTER) then
