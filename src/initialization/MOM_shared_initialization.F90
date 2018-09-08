@@ -525,6 +525,7 @@ subroutine initialize_grid_rotation_angle(G, PF)
                                                !! to parse for model parameter values.
 
   real    :: angle, lon_scale
+  real    :: len_lon    ! The periodic range of longitudes, usually 360 degrees.
   real    :: pi_720deg  ! One quarter the conversion factor from degrees to radians.
   real    :: lonB(2,2)  ! The longitude of a point, shifted to have about the same value.
   character(len=40)  :: mdl = "initialize_grid_rotation_angle" ! This subroutine's name.
@@ -554,9 +555,10 @@ subroutine initialize_grid_rotation_angle(G, PF)
     call pass_var(G%sin_rot, G%Domain)
   else
     pi_720deg = atan(1.0) / 180.0
+    len_lon = 360.0 ; if (G%len_lon > 0.0) len_lon = G%len_lon
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       do n=1,2 ; do m=1,2
-        lonB(m,n) = modulo_around_point(G%geoLonBu(I+m-2,J+n-2), G%geoLonT(i,j), 360.0)
+        lonB(m,n) = modulo_around_point(G%geoLonBu(I+m-2,J+n-2), G%geoLonT(i,j), len_lon)
       enddo ; enddo
       lon_scale = cos(pi_720deg*((G%geoLatBu(I-1,J-1) + G%geoLatBu(I,J)) + &
                                  (G%geoLatBu(I,J-1) + G%geoLatBu(I-1,J)) ) )
@@ -806,6 +808,8 @@ subroutine reset_face_lengths_list(G, param_file)
   real, pointer, dimension(:) :: &
     u_width => NULL(), v_width => NULL()
   real    :: lat, lon     ! The latitude and longitude of a point.
+  real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
+  real    :: len_lat      ! The range of latitudes, usually 180 degrees.
   real    :: lon_p, lon_m ! The longitude of a point shifted by 360 degrees.
   logical :: check_360    ! If true, check for longitudes that are shifted by
                           ! +/- 360 degrees from the specified range of values.
@@ -852,6 +856,8 @@ subroutine reset_face_lengths_list(G, param_file)
     call read_face_length_list(iounit, filename, num_lines, lines)
   endif
 
+  len_lon = 360.0 ; if (G%len_lon > 0.0) len_lon = G%len_lon
+  len_lat = 180.0 ; if (G%len_lat > 0.0) len_lat = G%len_lat
   ! Broadcast the number of lines and allocate the required space.
   call broadcast(num_lines, root_PE())
   u_pt = 0 ; v_pt = 0
@@ -893,11 +899,11 @@ subroutine reset_face_lengths_list(G, param_file)
         read(line(isu+8:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt)
         if (is_root_PE()) then
           if (check_360) then
-            if ((abs(u_lon(1,u_pt)) > 360.0) .or. (abs(u_lon(2,u_pt)) > 360.0)) &
+            if ((abs(u_lon(1,u_pt)) > len_lon) .or. (abs(u_lon(2,u_pt)) > len_lon)) &
               call MOM_error(WARNING, "reset_face_lengths_list : Out-of-bounds "//&
                  "u-longitude found when reading line "//trim(line)//" from file "//&
                  trim(filename))
-            if ((abs(u_lat(1,u_pt)) > 180.0) .or. (abs(u_lat(2,u_pt)) > 180.0)) &
+            if ((abs(u_lat(1,u_pt)) > len_lat) .or. (abs(u_lat(2,u_pt)) > len_lat)) &
               call MOM_error(WARNING, "reset_face_lengths_list : Out-of-bounds "//&
                  "u-latitude found when reading line "//trim(line)//" from file "//&
                  trim(filename))
@@ -920,11 +926,11 @@ subroutine reset_face_lengths_list(G, param_file)
         read(line(isv+8:),*) v_lon(1:2,v_pt), v_lat(1:2,v_pt), v_width(v_pt)
         if (is_root_PE()) then
           if (check_360) then
-            if ((abs(v_lon(1,v_pt)) > 360.0) .or. (abs(v_lon(2,v_pt)) > 360.0)) &
+            if ((abs(v_lon(1,v_pt)) > len_lon) .or. (abs(v_lon(2,v_pt)) > len_lon)) &
               call MOM_error(WARNING, "reset_face_lengths_list : Out-of-bounds "//&
                  "v-longitude found when reading line "//trim(line)//" from file "//&
                  trim(filename))
-            if ((abs(v_lat(1,v_pt)) > 180.0) .or. (abs(v_lat(2,v_pt)) > 180.0)) &
+            if ((abs(v_lat(1,v_pt)) > len_lat) .or. (abs(v_lat(2,v_pt)) > len_lat)) &
               call MOM_error(WARNING, "reset_face_lengths_list : Out-of-bounds "//&
                  "v-latitude found when reading line "//trim(line)//" from file "//&
                  trim(filename))
@@ -950,7 +956,7 @@ subroutine reset_face_lengths_list(G, param_file)
 
   do j=jsd,jed ; do I=IsdB,IedB
     lat = G%geoLatCu(I,j) ; lon = G%geoLonCu(I,j)
-    if (check_360) then ; lon_p = lon+360.0 ; lon_m = lon-360.0
+    if (check_360) then ; lon_p = lon+len_lon ; lon_m = lon-len_lon
     else ; lon_p = lon ; lon_m = lon ; endif
 
     do npt=1,u_pt
@@ -980,7 +986,7 @@ subroutine reset_face_lengths_list(G, param_file)
 
   do J=JsdB,JedB ; do i=isd,ied
     lat = G%geoLatCv(i,J) ; lon = G%geoLonCv(i,J)
-    if (check_360) then ; lon_p = lon+360.0 ; lon_m = lon-360.0
+    if (check_360) then ; lon_p = lon+len_lon ; lon_m = lon-len_lon
     else ; lon_p = lon ; lon_m = lon ; endif
 
     do npt=1,v_pt
