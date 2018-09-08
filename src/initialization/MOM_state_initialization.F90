@@ -649,23 +649,22 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
                  "would indicate.", default=.false., do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
 
-    call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain)
-    ! if (GV%m_to_Z /= 1.0) eta(:,:,:) = GV%m_to_Z*eta(:,:,:)
+    call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=GV%m_to_Z)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, eta, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) then
-          eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
+        if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
+          eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
           h(i,j,k) = GV%Angstrom_H
         else
-          h(i,j,k) = GV%m_to_H * (eta(i,j,K) - eta(i,j,K+1))
+          h(i,j,k) = GV%Z_to_H * (eta(i,j,K) - eta(i,j,K+1))
         endif
       enddo ; enddo ; enddo
 
       do j=js,je ; do i=is,ie
-        if (abs(eta(i,j,nz+1) + G%Zd_to_m*G%bathyT(i,j)) > 1.0) &
+        if (abs(eta(i,j,nz+1) + G%bathyT(i,j)) > 1.0*GV%m_to_Z) &
           inconsistent = inconsistent + 1
       enddo ; enddo
       call sum_across_PEs(inconsistent)
@@ -692,20 +691,21 @@ end subroutine initialize_thickness_from_file
 subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
   type(ocean_grid_type),                      intent(in)    :: G   !< The ocean's grid structure
   type(verticalGrid_type),                    intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: eta !< Interface heights, in m
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: eta !< Interface heights, in Z
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h   !< Layer thicknesses, in H
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
-  real, parameter :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
+  real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
   real :: hTmp, eTmp, dilate
   character(len=100) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  hTolerance = 0.1*GV%m_to_Z
 
   contractions = 0
   do j=js,je ; do i=is,ie
-    if (-eta(i,j,nz+1) > G%Zd_to_m*G%bathyT(i,j) + hTolerance) then
-      eta(i,j,nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+    if (-eta(i,j,nz+1) > G%bathyT(i,j) + hTolerance) then
+      eta(i,j,nz+1) = -G%bathyT(i,j)
       contractions = contractions + 1
     endif
   enddo ; enddo
@@ -716,14 +716,14 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
     call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
   endif
 
-  !   To preserve previous answers, delay converting thicknesses to units of H
-  ! until the end of this routine.
+  !   To preserve previous answers in non-Boussinesq cases, delay converting
+  ! thicknesses to units of H until the end of this routine.
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
     ! Collapse layers to thinnest possible if the thickness less than
     ! the thinnest possible (or negative).
-    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_m)) then
-      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_m
-      h(i,j,k) = GV%Angstrom_m
+    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
+      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
+      h(i,j,k) = GV%Angstrom_Z
     else
       h(i,j,k) = (eta(i,j,K) - eta(i,j,K+1))
     endif
@@ -734,12 +734,12 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
     ! This should be...  if ((G%mask2dt(i,j)*(eta(i,j,1)-eta(i,j,nz+1)) > 0.0) .and. &
-    if (-eta(i,j,nz+1) < G%Zd_to_m*G%bathyT(i,j) - hTolerance) then
+    if (-eta(i,j,nz+1) < G%bathyT(i,j) - hTolerance) then
       dilations = dilations + 1
       if (eta(i,j,1) <= eta(i,j,nz+1)) then
-        do k=1,nz ; h(i,j,k) = (eta(i,j,1) + G%Zd_to_m*G%bathyT(i,j)) / real(nz) ; enddo
+        do k=1,nz ; h(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
       else
-        dilate = (eta(i,j,1) + G%Zd_to_m*G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
+        dilate = (eta(i,j,1) + G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
         do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
       endif
       do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + h(i,j,k) ; enddo
@@ -748,7 +748,7 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
 
   ! Now convert thicknesses to units of H.
   do k=1,nz ; do j=js,je ; do i=is,ie
-    h(i,j,k) = h(i,j,k)*GV%m_to_H
+    h(i,j,k) = h(i,j,k)*GV%Z_to_H
   enddo ; enddo ; enddo
 
   call sum_across_PEs(dilations)
@@ -1936,7 +1936,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   real, dimension(:), allocatable :: z_edges_in, z_in, Rb
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi  ! Interface heights in m.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights in Z.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi_m ! Interface heights in m.
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press
 
@@ -2228,21 +2229,24 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%Zd_to_m*G%bathyT(is:ie,js:je), &
                          nlevs(is:ie,js:je), nkml, nkbl, min_depth)
+    do K=1,nz+1 ; do j=js,je ; do i=is,ie
+      zi_m(i,j,K) = zi(i,j,K) ; zi(i,j,K) = GV%m_to_Z*zi(i,j,K)
+    enddo ; enddo ; enddo
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, zi, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_m)) then
-          zi(i,j,K) = zi(i,j,K+1) + GV%Angstrom_m
+        if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_Z)) then
+          zi(i,j,K) = zi(i,j,K+1) + GV%Angstrom_Z
           h(i,j,k) = GV%Angstrom_H
         else
-          h(i,j,k) = GV%m_to_H * (zi(i,j,K) - zi(i,j,K+1))
+          h(i,j,k) = GV%Z_to_H * (zi(i,j,K) - zi(i,j,K+1))
         endif
       enddo ; enddo ; enddo
       inconsistent=0
       do j=js,je ; do i=is,ie
-        if (abs(zi(i,j,nz+1) + G%Zd_to_m*G%bathyT(i,j)) > 1.0) &
+        if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0*GV%m_to_Z) &
           inconsistent = inconsistent + 1
       enddo ; enddo
       call sum_across_PEs(inconsistent)
@@ -2254,10 +2258,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
       endif
     endif
 
-    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:), &
+    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi_m(is:ie,js:je,:), &
                                         nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz, &
                                         nlevs(is:ie,js:je),dbg,idbg,jdbg)
-    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:), &
+    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi_m(is:ie,js:je,:), &
                                         nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz, &
                                         nlevs(is:ie,js:je))
 
