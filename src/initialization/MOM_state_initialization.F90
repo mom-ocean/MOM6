@@ -1096,7 +1096,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
                  "file SURFACE_PRESSURE_FILE into a surface pressure.", &
                  units="file dependent", default=1., do_not_log=just_read)
   call get_param(PF, mdl, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
-                 units='m', default=1.e-3, do_not_log=just_read)
+                 units='m', default=1.e-3, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(PF, mdl, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
                  default=.false., do_not_log=just_read)
@@ -1122,7 +1122,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV%Rho0, GV%g_Earth, G%Zd_to_m*G%bathyT(i,j), &
+    call cut_off_column_top(GV%ke, tv, GV, GV%g_Earth*GV%Z_to_m, G%bathyT(i,j), &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS)
   enddo ; enddo
@@ -1131,14 +1131,14 @@ end subroutine trim_for_ice
 
 !> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
 !! pressure matches p_surf
-subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
+subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
                               T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS)
   integer,               intent(in)    :: nk !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
-  real,                  intent(in)    :: Rho0 !< Reference density (kg/m3)
-  real,                  intent(in)    :: G_earth !< Gravitational acceleration (m/s2)
-  real,                  intent(in)    :: depth !< Depth of ocean column (m)
-  real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (m)
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real,                  intent(in)    :: G_earth !< Gravitational acceleration (m2 Z-1 s-2)
+  real,                  intent(in)    :: depth !< Depth of ocean column (Z)
+  real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (Z)
   real, dimension(nk),   intent(inout) :: T !< Layer mean temperature
   real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer
   real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer
@@ -1149,6 +1149,7 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
   real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
+
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
   real, dimension(nk) :: h0, S0, T0, h1, S1, T1
@@ -1158,7 +1159,7 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
   ! Calculate original interface positions
   e(nk+1) = -depth
   do k=nk,1,-1
-    e(K) = e(K+1) + h(k)
+    e(K) = e(K+1) + GV%H_to_Z*h(k)
     h0(k) = h(nk+1-k) ! Keep a copy to use in remapping
   enddo
 
@@ -1166,7 +1167,7 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
   e_top = e(1)
   do k=1,nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, p_surf, Rho0, G_earth, tv%eqn_of_state, P_b, z_out)
+                                        P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, P_b, z_out)
     if (z_out>=e(K)) then
       ! Imposed pressure was less that pressure at top of cell
       exit
@@ -1183,14 +1184,14 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
   if (e_top<e(1)) then
     ! Clip layers from the top down, if at all
     do K=1,nk
-      if (e(K)>e_top) then
+      if (e(K) > e_top) then
         ! Original e(K) is too high
         e(K) = e_top
         e_top = e_top - min_thickness ! Next interface must be at least this deep
       endif
       ! This layer needs trimming
-      h(k) = max( min_thickness, e(K) - e(K+1) )
-      if (e(K)<e_top) exit ! No need to go further
+      h(k) = GV%Z_to_H * max( min_thickness, e(K) - e(K+1) )
+      if (e(K) < e_top) exit ! No need to go further
     enddo
   endif
 
@@ -1202,8 +1203,8 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
       T0(k) = T(nk+1-k)
       h1(k) = h(nk+1-k)
     enddo
-    call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1)
-    call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1)
+    call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+    call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
     do k=1,nk
       S(k) = S1(nk+1-k)
       T(k) = T1(nk+1-k)
@@ -1775,7 +1776,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
     enddo ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
-      h(i,j,k) = GV%m_to_H*(eta(i,j,k)-eta(i,j,k+1))
+      h(i,j,k) = GV%Z_to_H*(eta(i,j,k)-eta(i,j,k+1))
     enddo ; enddo ; enddo
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
     deallocate(eta)
@@ -1913,11 +1914,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   integer :: nkml, nkbl         ! number of mixed and buffer layers
 
   integer :: kd, inconsistent
-  integer :: nkd ! number of levels to use for regridding input arrays
+  integer :: nkd      ! number of levels to use for regridding input arrays
+  real    :: eps_Z    ! A negligibly thin layer thickness, in Z.
   real    :: PI_180             ! for conversion from degrees to radians
 
   real, dimension(:,:), pointer :: shelf_area => NULL()
-  real    :: min_depth
+  real    :: min_depth ! The minimum depth in Z.
   real    :: dilate
   real    :: missing_value_temp, missing_value_salt
   logical :: correct_thickness
@@ -1937,19 +1939,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights in Z.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi_m ! Interface heights in m.
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
-  real, dimension(SZI_(G))   :: press
+  real, dimension(SZI_(G))   :: press  ! Pressures in Pa.
 
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: hTarget
+  real, dimension(:), allocatable :: hTarget ! Target thicknesses in Z.
   real, dimension(:,:), allocatable :: area_shelf_h
   real, dimension(:,:), allocatable, target :: frac_shelf_h
   real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
   real, dimension(:,:,:), allocatable :: tmp_mask_in
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses in H.
   real, dimension(:,:,:), allocatable :: dz_interface ! Change in position of interface due to regridding
-  real :: zTopOfCell, zBottomOfCell
+  real :: zTopOfCell, zBottomOfCell ! Heights in Z units
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
@@ -1985,7 +1986,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 
   reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x,default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
-  call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, default=0.0)
+  call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, default=0.0, scale=GV%m_to_Z)
 
   call get_param(PF, mdl, "NKML",nkml,default=0)
   call get_param(PF, mdl, "NKBL",nkbl,default=0)
@@ -2059,6 +2060,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
     return ! All run-time parameters have been read, so return.
   endif
 
+  !### Change this to GV%Angstrom_Z
+  eps_z = 1.0e-10*GV%m_to_Z
+
   ! Read input grid coordinates for temperature and salinity field
   ! in z-coordinate dataset. The file is REQUIRED to contain the
   ! following:
@@ -2081,6 +2085,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
 
   kd = size(z_in,1)
+
+  ! Convert the units and sign convention of z_in and Z_edges_in.
+  do k=1,kd ; z_in(k) = GV%m_to_Z*z_in(k) ; enddo
+  do k=1,size(Z_edges_in,1) ; Z_edges_in(k) = -GV%m_to_Z*Z_edges_in(k) ; enddo
 
   allocate(rho_z(isd:ied,jsd:jed,kd))
   allocate(area_shelf_h(isd:ied,jsd:jed))
@@ -2140,21 +2148,21 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
         tmp_mask_in(i,j,1:kd) = mask_z(i,j,:)
         do k = 1, nkd
           if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
-            zBottomOfCell = max( -z_edges_in(k+1), -G%Zd_to_m*G%bathyT(i,j) )
+            zBottomOfCell = max( z_edges_in(k+1), -G%bathyT(i,j) )
             tmpT1dIn(i,j,k) = temp_z(i,j,k)
             tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
-            zBottomOfCell = -G%Zd_to_m*G%bathyT(i,j)
+            zBottomOfCell = -G%bathyT(i,j)
             tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
             tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land
             tmpT1dIn(i,j,k) = -99.9
             tmpS1dIn(i,j,k) = -99.9
           endif
-          h1(i,j,k) = GV%m_to_H * (zTopOfCell - zBottomOfCell)
+          h1(i,j,k) = GV%Z_to_H * (zTopOfCell - zBottomOfCell)
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        h1(i,j,kd) = h1(i,j,kd) + GV%m_to_H * max(0., zTopOfCell + G%Zd_to_m*G%bathyT(i,j) )
+        h1(i,j,kd) = h1(i,j,kd) + GV%Z_to_H * max(0., zTopOfCell + G%bathyT(i,j) )
         ! The max here is in case the data data is shallower than model
       endif ! mask2dT
     enddo ; enddo
@@ -2170,15 +2178,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
       allocate( hTarget(nz) )
-      hTarget = getCoordinateResolution( regridCS )
+      hTarget = GV%m_to_Z * getCoordinateResolution( regridCS )
       do j = js, je ; do i = is, ie
         h(i,j,:) = 0.
         if (G%mask2dT(i,j)>0.) then
           ! Build the target grid combining hTarget and topography
           zTopOfCell = 0. ; zBottomOfCell = 0.
           do k = 1, nz
-            zBottomOfCell = max( zTopOfCell - hTarget(k), -G%Zd_to_m*G%bathyT(i,j) )
-            h(i,j,k) = GV%m_to_H * (zTopOfCell - zBottomOfCell)
+            zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
+            h(i,j,k) = GV%Z_to_H * (zTopOfCell - zBottomOfCell)
             zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
           enddo
         else
@@ -2227,11 +2235,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
     do k=2,nz ; Rb(k)=0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
     Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
-    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%Zd_to_m*G%bathyT(is:ie,js:je), &
-                         nlevs(is:ie,js:je), nkml, nkbl, min_depth)
-    do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      zi_m(i,j,K) = zi(i,j,K) ; zi(i,j,K) = GV%m_to_Z*zi(i,j,K)
-    enddo ; enddo ; enddo
+    zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
+                                        nlevs(is:ie,js:je), nkml, nkbl, min_depth, eps_z=eps_z)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, zi, h)
@@ -2252,25 +2257,25 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
       call sum_across_PEs(inconsistent)
 
       if ((inconsistent > 0) .and. (is_root_pe())) then
-        write(mesg,'("Thickness initial conditions are inconsistent ",'// &
-                 '"with topography in ",I5," places.")') inconsistent
+        write(mesg, '("Thickness initial conditions are inconsistent ",'// &
+                    '"with topography in ",I5," places.")') inconsistent
         call MOM_error(WARNING, mesg)
       endif
     endif
 
-    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi_m(is:ie,js:je,:), &
-                                        nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz, &
-                                        nlevs(is:ie,js:je),dbg,idbg,jdbg)
-    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi_m(is:ie,js:je,:), &
-                                        nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz, &
-                                        nlevs(is:ie,js:je))
+    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
+                                        nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
+                                        nlevs(is:ie,js:je),dbg,idbg,jdbg, eps_z=eps_z)
+    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:), z_edges_in, zi(is:ie,js:je,:), &
+                                        nkml, nkbl, missing_value, G%mask2dT(is:ie,js:je), nz, &
+                                        nlevs(is:ie,js:je), eps_z=eps_z)
 
     do k=1,nz
       nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
       do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) >= 1.0) then
         nPoints = nPoints + 1
         tempAvg = tempAvg + tv%T(i,j,k)
-        saltAvg =saltAvg + tv%S(i,j,k)
+        saltAvg = saltAvg + tv%S(i,j,k)
       endif ; enddo ; enddo
 
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
@@ -2279,8 +2284,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
         call sum_across_PEs(tempAvg)
         call sum_across_PEs(saltAvg)
         if (nPoints>0) then
-          tempAvg = tempAvg/real(nPoints)
-          saltAvg = saltAvg/real(nPoints)
+          tempAvg = tempAvg / real(nPoints)
+          saltAvg = saltAvg / real(nPoints)
         endif
         tv%T(:,:,k) = tempAvg
         tv%S(:,:,k) = saltAvg
@@ -2292,13 +2297,13 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   ! Fill land values
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (tv%T(i,j,k) == missing_value) then
-      tv%T(i,j,k)=temp_land_fill
-      tv%S(i,j,k)=salt_land_fill
+      tv%T(i,j,k) = temp_land_fill
+      tv%S(i,j,k) = salt_land_fill
     endif
   enddo ; enddo ; enddo
 
   ! Finally adjust to target density
-  ks=max(0,nkml)+max(0,nkbl)+1
+  ks = max(0,nkml)+max(0,nkbl)+1
 
   if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
@@ -2307,7 +2312,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   endif
 
   deallocate(z_in, z_edges_in, temp_z, salt_z, mask_z)
-  deallocate(rho_z) ; deallocate(area_shelf_h, frac_shelf_h)
+  deallocate(rho_z, area_shelf_h, frac_shelf_h)
 
   call pass_var(h, G%Domain)
   call pass_var(tv%T, G%Domain)
@@ -2365,7 +2370,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   write(0,*) ' ==================================================================== '
   write(0,*) ''
   write(0,*) h
-  call cut_off_column_top(nk, tv, GV%Rho0, GV%g_Earth, -e(nk+1), GV%Angstrom_H, &
+  call cut_off_column_top(nk, tv, GV, GV%g_Earth, -e(nk+1), GV%Angstrom_H, &
                T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
   write(0,*) h
 
