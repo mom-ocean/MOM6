@@ -678,20 +678,24 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   ! Note that by convention, e and Z_int decrease with increasing k.
   if (e(K+1)<=Z_bot) then
     wt(k) = 1.0 ; k_bot = k
-    Ih = 1.0 / (e(K)-e(K+1))
+    Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
     e_c = 0.5*(e(K)+e(K+1))
     z1(k) = (e_c - MIN(e(K),Z_top)) * Ih
     z2(k) = (e_c - Z_bot) * Ih
   else
     wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
-    z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K),Z_top)) / (e(K)-e(K+1))
+    if (e(K) /= e(K+1)) then
+      z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K), Z_top)) / (e(K)-e(K+1))
+    else ; z1(k) = -0.5 ; endif
     z2(k) = 0.5
     k_bot = k_max
     do k=k_top+1,k_max
       if (e(K+1)<=Z_bot) then
         k_bot = k
         wt(k) = e(K) - Z_bot ; z1(k) = -0.5
-        z2(k) = (0.5*(e(K)+e(K+1)) - Z_bot) / (e(K)-e(K+1))
+        if (e(K) /= e(K+1)) then
+          z2(k) = (0.5*(e(K)+e(K+1)) - Z_bot) / (e(K)-e(K+1))
+        else ; z2(k) = 0.5 ; endif
       else
         wt(k) = e(K) - e(K+1) ; z1(k) = -0.5 ; z2(k) = 0.5
       endif
@@ -705,7 +709,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
 
 end subroutine find_overlap
 
-!>   This subroutine determines a limited slope for val to be advected with
+!> This subroutine determines a limited slope for val to be advected with
 !! a piecewise limited scheme.
 subroutine find_limited_slope(val, e, slope, k)
   real, dimension(:), intent(in)  :: val !< A column of values that are being interpolated.
@@ -715,10 +719,10 @@ subroutine find_limited_slope(val, e, slope, k)
   ! Local variables
   real :: d1, d2
 
-  if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
+  d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
+  if (((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) .or. (d1*d2 <= 0.0)) then
     slope = 0.0 ! ; curvature = 0.0
   else
-    d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
     slope = (d1**2*(val(k+1) - val(k)) + d2**2*(val(k) - val(k-1))) * &
             ((e(K) - e(K+1)) / (d1*d2*(d1+d2)))
     ! slope = 0.5*(val(k+1) - val(k-1))
