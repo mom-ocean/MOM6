@@ -21,21 +21,23 @@ public baroclinic_zone_init_temperature_salinity
 contains
 
 !> Reads the parameters unique to this module
-subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
+subroutine bcz_params(G, GV, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
                       delta_T, dTdx, L_zone, just_read_params)
-  type(ocean_grid_type), intent(in)  :: G          !< Grid structure
-  type(param_file_type), intent(in)  :: param_file !< Parameter file handle
-  real,                  intent(out) :: S_ref      !< Reference salinity (ppt)
-  real,                  intent(out) :: dSdz       !< Salinity stratification (ppt/m)
-  real,                  intent(out) :: delta_S    !< Salinity difference across baroclinic zone (ppt)
-  real,                  intent(out) :: dSdx       !< Linear salinity gradient (ppt/m)
-  real,                  intent(out) :: T_ref      !< Reference temperature (ppt)
-  real,                  intent(out) :: dTdz       !< Temperature stratification (ppt/m)
-  real,                  intent(out) :: delta_T    !< Temperature difference across baroclinic zone (ppt)
-  real,                  intent(out) :: dTdx       !< Linear temperature gradient (ppt/m)
-  real,                  intent(out) :: L_zone     !< Width of baroclinic zone (m)
-  logical,     optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  type(ocean_grid_type),   intent(in)  :: G          !< Grid structure
+  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in)  :: param_file !< Parameter file handle
+  real,                    intent(out) :: S_ref      !< Reference salinity (ppt)
+  real,                    intent(out) :: dSdz       !< Salinity stratification (ppt/Z)
+  real,                    intent(out) :: delta_S    !< Salinity difference across baroclinic zone (ppt)
+  real,                    intent(out) :: dSdx       !< Linear salinity gradient (ppt/m)
+  real,                    intent(out) :: T_ref      !< Reference temperature (ppt)
+  real,                    intent(out) :: dTdz       !< Temperature stratification (ppt/Z)
+  real,                    intent(out) :: delta_T    !< Temperature difference across baroclinic zone (ppt)
+  real,                    intent(out) :: dTdx       !< Linear temperature gradient (ppt/m)
+  real,                    intent(out) :: L_zone     !< Width of baroclinic zone (m)
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                     !! only read parameters without changing h.
+
   logical :: just_read    ! If true, just read parameters but set nothing.
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
@@ -45,16 +47,16 @@ subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
   call openParameterBlock(param_file,'BCZIC')
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', units='ppt', &
                  default=35., do_not_log=just_read)
-  call get_param(param_file, mdl,"DSDZ",dSdz,'Salinity stratification',units='ppt/m', &
-                 default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "DSDZ", dSdz, 'Salinity stratification', &
+                 units='ppt/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl,"DELTA_S",delta_S,'Salinity difference across baroclinic zone', &
                  units='ppt', default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl,"DSDX",dSdx,'Meridional salinity difference', &
                  units='ppt/'//trim(G%x_axis_units), default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature',units='C', &
                  default=10., do_not_log=just_read)
-  call get_param(param_file, mdl,"DTDZ",dTdz,'Temperature stratification',units='C/m', &
-                 default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "DTDZ", dTdz, 'Temperature stratification', &
+                 units='C/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl,"DELTA_T",delta_T,'Temperature difference across baroclinic zone', &
                  units='C', default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl,"DTDX",dTdx,'Meridional temperature difference', &
@@ -89,8 +91,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone, just_read_params)
-  dTdz = GV%Z_to_m*dTdz ; dSdz = GV%Z_to_m*dSdz
+  call bcz_params(G, GV, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
