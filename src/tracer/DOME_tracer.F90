@@ -169,8 +169,9 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
   real :: dist2  ! The distance squared from a line, in m2.
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
-  real :: e(SZK_(G)+1), e_top, e_bot, d_tr
+                            ! in roundoff and can be neglected, in H.
+  real :: e(SZK_(G)+1), e_top, e_bot ! Heights in Z.
+  real :: d_tr   ! A change in tracer concentraions, in tracer units.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -213,21 +214,21 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
       if (NTR > 7) then
         do j=js,je ; do i=is,ie
-          e(nz+1) = -G%Zd_to_m*G%bathyT(i,j)
+          e(nz+1) = -G%bathyT(i,j)
           do k=nz,1,-1
-            e(K) = e(K+1) + h(i,j,k)*GV%H_to_m
+            e(K) = e(K+1) + h(i,j,k)*GV%H_to_Z
             do m=7,NTR
-              e_top = -600.0*real(m-1) + 3000.0
-              e_bot = -600.0*real(m-1) + 2700.0
+              e_top = (-600.0*real(m-1) + 3000.0) * GV%m_to_Z
+              e_bot = (-600.0*real(m-1) + 2700.0) * GV%m_to_Z
               if (e_top < e(K)) then
                 if (e_top < e(K+1)) then ; d_tr = 0.0
                 elseif (e_bot < e(K+1)) then
-                  d_tr = (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
-                else ; d_tr = (e_top-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
+                  d_tr = 1.0 * (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
+                else ; d_tr = 1.0 * (e_top-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
                 endif
               elseif (e_bot < e(K)) then
                 if (e_bot < e(K+1)) then ; d_tr = 1.0
-                else ; d_tr = (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
+                else ; d_tr = 1.0 * (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
                 endif
               else
                 d_tr = 0.0
