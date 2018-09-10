@@ -507,7 +507,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     do k=1,nz+1 ; do j=Jsq,Jeq+1
       call calculate_density(tv_tmp%T(:,j,k), tv_tmp%S(:,j,k), p_ref, rho_star(:,j,k), &
                              Isq,Ieq-Isq+2,tv%eqn_of_state)
-      do i=Isq,Ieq+1 ; rho_star(i,j,k) = GV%Z_to_m*G_Rho0*rho_star(i,j,k) ; enddo
+      do i=Isq,Ieq+1 ; rho_star(i,j,k) = G_Rho0*rho_star(i,j,k) ; enddo
     enddo ; enddo
   endif                                               ! use_EOS
 
