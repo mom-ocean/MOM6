@@ -61,8 +61,7 @@ use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_ALE_sponge,          only : apply_ALE_sponge, ALE_sponge_CS
-use MOM_time_manager,        only : operator(-), set_time
-use MOM_time_manager,        only : operator(<=), time_type ! for testing itides (BDM)
+use MOM_time_manager,        only : time_type, real_to_time, operator(-), operator(<=)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_tracer_diabatic,     only : tracer_vertdiff
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
@@ -440,7 +439,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! the end of the diabatic processes.
   if (associated(tv%T) .AND. associated(tv%frazil)) then
     ! For frazil diagnostic, the first call covers the first half of the time step
-    call enable_averaging(0.5*dt, Time_end - set_time(int(floor(0.5*dt+0.5))), CS%diag)
+    call enable_averaging(0.5*dt, Time_end - real_to_time(0.5*dt), CS%diag)
     if (CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
@@ -1316,7 +1315,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   ! the end of the diabatic processes.
   if (associated(tv%T) .AND. associated(tv%frazil)) then
     ! For frazil diagnostic, the first call covers the first half of the time step
-    call enable_averaging(0.5*dt, Time_end - set_time(int(floor(0.5*dt+0.5))), CS%diag)
+    call enable_averaging(0.5*dt, Time_end - real_to_time(0.5*dt), CS%diag)
     if (CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
