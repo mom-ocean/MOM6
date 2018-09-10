@@ -217,14 +217,12 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   Idt = 1.0 / dt
 
   !Check if Stokes mixing allowed if requested (present and associated)
+  DoStokesMixing=.false.
   if (CS%StokesMixing) then
-    DoStokesMixing=(present(Waves) .and. associated(Waves))
-    if (.not.DoStokesMixing) then
+    if (present(Waves)) DoStokesMixing = associated(Waves)
+    if (.not. DoStokesMixing) &
       call MOM_error(FATAL,"Stokes Mixing called without allocated"//&
-                    "Waves Control Structure")
-    endif
-  else
-    DoStokesMixing=.false.
+                     "Waves Control Structure")
   endif
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
@@ -232,16 +230,16 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
 
-  ! When mixing down Eulerian current + Stokes drift add before calling solver
-  if (DoStokesMixing) then ; do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
-    if (G%mask2dCu(I,j) > 0) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
-  enddo ; enddo ; enddo ; endif
-
   !$OMP parallel do default(shared) firstprivate(Ray) &
   !$OMP                 private(do_i,surface_stress,zDS,stress,h_a,hfr, &
   !$OMP                         b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
+
+    ! When mixing down Eulerian current + Stokes drift add before calling solver
+    if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
+      if (do_i(I)) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
+    enddo ; enddo ; endif
 
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = u(I,j,k)
@@ -330,25 +328,26 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
         taux_bot(I,j) = taux_bot(I,j) + Rho0 * (Ray(I,k)*u(I,j,k))
       enddo ; enddo ; endif
     endif
+
+    ! When mixing down Eulerian current + Stokes drift subtract after calling solver
+    if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
+      if (do_i(I)) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
+    enddo ; enddo ; endif
+
   enddo ! end u-component j loop
 
-  ! When mixing down Eulerian current + Stokes drift subtract after calling solver
-  if (DoStokesMixing) then ; do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
-    if (G%mask2dCu(I,j) > 0) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
-  enddo ; enddo ; enddo ; endif
-
   ! Now work on the meridional velocity component.
-  ! When mixing down Eulerian current + Stokes drift add before calling solver
-  if (DoStokesMixing) then ; do k=1,nz ; do j=Jsq,Jeq ; do I=Is,Ie
-    if (G%mask2dCv(I,j) > 0) &
-      v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
-  enddo ; enddo ; enddo ; endif
 
   !$OMP parallel do default(shared) firstprivate(Ray) &
   !$OMP               private(do_i,surface_stress,zDS,stress,h_a,hfr, &
   !$OMP                       b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
+
+    ! When mixing down Eulerian current + Stokes drift add before calling solver
+    if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
+      if (do_i(i)) v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
+    enddo ; enddo ; endif
 
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = v(i,J,k)
@@ -411,12 +410,13 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
         tauy_bot(i,J) = tauy_bot(i,J) + Rho0 * (Ray(i,k)*v(i,J,k))
       enddo ; enddo ; endif
     endif
-  enddo ! end of v-component J loop
 
-  ! When mixing down Eulerian current + Stokes drift subtract after calling solver
-  if (DoStokesMixing) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=Is,Ie
-    if (G%mask2dCv(i,J) > 0) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
-  enddo ; enddo ; enddo ; endif
+    ! When mixing down Eulerian current + Stokes drift subtract after calling solver
+    if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
+      if (do_i(i)) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
+    enddo ; enddo ; endif
+
+  enddo ! end of v-component J loop
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 

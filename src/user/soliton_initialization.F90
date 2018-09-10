@@ -53,7 +53,7 @@ subroutine soliton_initialize_thickness(h, G, GV)
       y = G%geoLatT(i,j)-y0
       val3 = exp(-val1*x)
       val4 = val2*((2.0*val3/(1.0+(val3*val3)))**2)
-      h(i,j,k) = GV%m_to_H * (0.25*val4 * (6.0*y*y+3.0) * exp(-0.5*y*y))
+      h(i,j,k) = GV%m_to_H * (0.25*val4 * (6.0*y*y+3.0) * exp(-0.5*y*y) + G%bathyT(i,j))
     enddo
   enddo ; enddo
 
