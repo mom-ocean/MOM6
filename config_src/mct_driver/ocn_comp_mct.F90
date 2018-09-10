@@ -1790,8 +1790,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%diag)
-  call mech_forcing_diags(OS%forces, OS%fluxes, time_step, OS%grid, &
-                          OS%diag, OS%forcing_CSp%handles)
+  call mech_forcing_diags(OS%forces, time_step, OS%grid, OS%diag, OS%forcing_CSp%handles)
   call disable_averaging(OS%diag)
 
   if (OS%fluxes%fluxes_used) then
