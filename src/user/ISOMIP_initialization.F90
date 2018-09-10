@@ -294,7 +294,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
       dS_dz = (s_sur - s_bot) / G%max_depth
       dT_dz = (t_sur - t_bot) / G%max_depth
       do j=js,je ; do i=is,ie
-        xi0 = -G%Zd_to_m * G%bathyT(i,j)
+        xi0 = -G%bathyT(i,j)
         do k = nz,1,-1
           xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth in middle of layer
           S(i,j,k) = S_sur + dS_dz * xi0
@@ -497,14 +497,14 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   enddo ; enddo
 
   ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
-  call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
-  !write (*,*)'Surface density in sponge:', rho_sur
+  call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state)
+  !write (mesg,*) 'Surface density in sponge:', rho_sur
   ! call MOM_mesg(mesg,5)
-  call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
-  !write (*,*)'Bottom density in sponge:', rho_bot
+  call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state)
+  !write (mesg,*) 'Bottom density in sponge:', rho_bot
   ! call MOM_mesg(mesg,5)
   rho_range = rho_bot - rho_sur
-  !write (*,*)'Density range in sponge:', rho_range
+  !write (mesg,*) 'Density range in sponge:', rho_range
   ! call MOM_mesg(mesg,5)
 
   if (use_ALE) then
@@ -530,9 +530,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
            eta1D(k) = e0(k)
            if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
              eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-             h(i,j,k) = GV%Angstrom_m
+             h(i,j,k) = GV%Angstrom_H
            else
-             h(i,j,k) = GV%Z_to_m*(eta1D(k) - eta1D(k+1))
+             h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
            endif
          enddo
        enddo ; enddo
