@@ -232,9 +232,9 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
             ! is this layer vanished?
             eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-            h(i,j,k) = GV%Angstrom_m
+            h(i,j,k) = GV%Angstrom_H
           else
-            h(i,j,k) = GV%Z_to_m * (eta1D(k) - eta1D(k+1))
+            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
           endif
         enddo
       enddo
@@ -253,7 +253,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
         x = (G%geoLonT(i,j) - G%west_lon) / G%len_lon
         do k = 1,nz
           ! nondimensional middle of layer
-          zmid = zi + 0.5 * h(i,j,k) / (GV%Z_to_m * G%max_depth)
+          zmid = zi + 0.5 * h(i,j,k) / (GV%Z_to_H * G%max_depth)
 
           if (x > (1. - east_sponge_width)) then
             !if (zmid >= 0.9 * sill_height) &
@@ -264,7 +264,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
                  S(i,j,k) = S_ref + S_range * (zmid - mld) / (1.0 - mld)
           endif
 
-          zi = zi + h(i,j,k) / (GV%Z_to_m * G%max_depth)
+          zi = zi + h(i,j,k) / (GV%Z_to_H * G%max_depth)
         enddo
       enddo
     enddo
