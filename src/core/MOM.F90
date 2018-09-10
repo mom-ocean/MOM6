@@ -39,7 +39,7 @@ use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
-use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
+use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : operator(>=), increment_date
 use MOM_unit_tests,           only : unit_tests
@@ -556,7 +556,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
     if (associated(CS%VarMix)) then
-      call enable_averaging(cycle_time, Time_start+set_time(int(cycle_time)), &
+      call enable_averaging(cycle_time, Time_start + real_to_time(cycle_time), &
                             CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, CS%VarMix)
       call disable_averaging(CS%diag)
@@ -582,7 +582,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
     if (CS%UseWaves) then
       ! Update wave information, which is presently kept static over each call to step_mom
-      call enable_averaging(time_interval, Time_start + set_time(int(floor(time_interval+0.5))), CS%diag)
+      call enable_averaging(time_interval, Time_start + real_to_time(time_interval), CS%diag)
       call Update_Stokes_Drift(G, GV, Waves, h, forces%ustar)
       call disable_averaging(CS%diag)
     endif
@@ -604,9 +604,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   do n=1,n_max
     rel_time = rel_time + dt ! The relative time at the end of the step.
     ! Set the universally visible time to the middle of the time step.
-    CS%Time = Time_start + set_time(int(floor(0.5 + rel_time - 0.5*dt)))
+    CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
     ! Set the local time to the end of the time step.
-    Time_local = Time_start + set_time(int(floor(rel_time+0.5)))
+    Time_local = Time_start + real_to_time(rel_time)
 
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
@@ -633,10 +633,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       if (dtdia > dt) then
         ! If necessary, temporarily reset CS%Time to the center of the period covered
         ! by the call to step_MOM_thermo, noting that they begin at the same time.
-        CS%Time = CS%Time + set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
+        CS%Time = CS%Time + real_to_time(0.5*(dtdia-dt))
         ! The end-time of the diagnostic interval needs to be set ahead if there
         ! are multiple dynamic time steps worth of thermodynamics applied here.
-        end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
+        end_time_thermo = Time_local + real_to_time(dtdia-dt)
       endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
@@ -649,7 +649,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
       if (dtdia > dt) & ! Reset CS%Time to its previous value.
-        CS%Time = Time_start + set_time(int(floor(0.5 + rel_time - 0.5*dt)))
+        CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
@@ -731,7 +731,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
       ! If necessary, temporarily reset CS%Time to the center of the period covered
       ! by the call to step_MOM_thermo, noting that they end at the same time.
-      if (dtdia > dt) CS%Time = CS%Time - set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
+      if (dtdia > dt) CS%Time = CS%Time - real_to_time(0.5*(dtdia-dt))
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
@@ -740,7 +740,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       CS%t_dyn_rel_thermo = 0.0
 
       if (dtdia > dt) & ! Reset CS%Time to its previous value.
-        CS%Time = Time_start + set_time(int(floor(0.5 + rel_time - 0.5*dt)))
+        CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
     endif
 
     if (do_dyn) then
@@ -774,7 +774,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       CS%t_dyn_rel_diag = 0.0
 
       call cpu_clock_begin(id_clock_Z_diag)
-      if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
+      if (Time_local + real_to_time(0.5*dt_therm) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
       !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
@@ -852,7 +852,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   if (MOM_state_is_synchronized(CS)) &
     call write_energy(CS%u, CS%v, CS%h, CS%tv, Time_local, CS%nstep_tot, &
                       G, GV, CS%sum_output_CSp, CS%tracer_flow_CSp, &
-                      dt_forcing=set_time(int(floor(time_interval+0.5))) )
+                      dt_forcing=real_to_time(time_interval) )
 
   call cpu_clock_end(id_clock_other)
 
@@ -912,7 +912,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
 
-    call enable_averaging(dt_thermo, Time_local+set_time(int(floor(dt_thermo-dt+0.5))), CS%diag)
+    call enable_averaging(dt_thermo, Time_local+real_to_time(dt_thermo-dt), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
@@ -931,7 +931,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
     call enable_averaging(bbl_time_int, &
-              Time_local + set_time(int(bbl_time_int-dt+0.5)), CS%diag)
+              Time_local + real_to_time(bbl_time_int-dt), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
     call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, &
@@ -2135,8 +2135,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
-  if (CS%debug .or. G%symmetric) &
+  if (CS%debug .or. G%symmetric) then
     call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
+  else ; G%Domain_aux => G%Domain ; endif
   ! Copy common variables from the vertical grid to the horizontal grid.
   ! Consider removing this later?
   G%ke = GV%ke ; G%g_Earth = GV%g_Earth
@@ -2165,8 +2166,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call MOM_grid_end(G) ; deallocate(G)
 
     G => CS%G
-    if (CS%debug .or. CS%G%symmetric) &
+    if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
+    else ; CS%G%Domain_aux => CS%G%Domain ;endif
     G%ke = GV%ke ; G%g_Earth = GV%g_Earth
   endif
 
@@ -2286,7 +2288,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
               CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt)
     if (CS%dtbt_reset_period > 0.0) then
-      CS%dtbt_reset_interval = set_time(int(floor(CS%dtbt_reset_period)))
+      CS%dtbt_reset_interval = real_to_time(CS%dtbt_reset_period)
       ! Set dtbt_reset_time to be the next even multiple of dtbt_reset_interval.
       CS%dtbt_reset_time = Time_init + CS%dtbt_reset_interval * &
                                  ((Time - Time_init) / CS%dtbt_reset_interval)
@@ -2325,11 +2327,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
   call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
 
-  CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
-       max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
+  CS%Z_diag_interval = real_to_time(CS%dt_therm * max(1,floor(0.01 + Z_diag_int/CS%dt_therm)))
   call MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS%diag_to_Z_CSp)
   CS%Z_diag_time = Start_time + CS%Z_diag_interval * (1 + &
-    ((Time + set_time(int(CS%dt_therm))) - Start_time) / CS%Z_diag_interval)
+    ((Time + real_to_time(CS%dt_therm)) - Start_time) / CS%Z_diag_interval)
 
   if (associated(CS%sponge_CSp)) &
     call init_sponge_diags(Time, G, diag, CS%sponge_CSp)

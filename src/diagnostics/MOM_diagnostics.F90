@@ -1952,6 +1952,14 @@ subroutine write_static_fields(G, GV, tv, diag)
         'Open zonal grid spacing at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dx_Cv, diag, .true.)
 
+  id = register_static_field('ocean_model', 'sin_rot', diag%axesT1, &
+        'sine of the clockwise angle of the ocean grid north to true north', 'none')
+  if (id > 0) call post_data(id, G%sin_rot, diag, .true.)
+
+  id = register_static_field('ocean_model', 'cos_rot', diag%axesT1, &
+        'cosine of the clockwise angle of the ocean grid north to true north', 'none')
+  if (id > 0) call post_data(id, G%cos_rot, diag, .true.)
+
 
   ! This static diagnostic is from CF 1.8, and is the fraction of a cell
   ! covered by ocean, given as a percentage (poorly named).
