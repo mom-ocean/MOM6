@@ -773,7 +773,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time, write_restart)
   if (write_restart) then
      call ocean_model_save_restart(Ocean_state, Time)
   end if
-  call diag_mediator_end(Time, Ocean_state%diag)
+  call diag_mediator_end(Time, Ocean_state%diag, end_diag_manager=.true.)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 
