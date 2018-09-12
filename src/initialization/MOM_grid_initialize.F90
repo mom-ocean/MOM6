@@ -183,6 +183,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
   integer :: err=0, ni, nj, global_indices(4)
   type(MOM_domain_type) :: SGdom ! Supergrid domain
+  logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
   integer :: i, j, i2, j2
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
@@ -193,6 +194,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   call get_param(param_file, mdl, "GRID_FILE", grid_file, &
                  "Name of the file from which to read horizontal grid data.", &
                  fail_if_missing=.true.)
+  call get_param(param_file, mdl, "USE_TRIPOLAR_GEOLONB_BUG", lon_bug, &
+                 "If true, use older code that incorrectly sets the longitude \n"//&
+                 "in some points along the tripolar fold to be off by 360 degrees.", &
+                 default=.true.)
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(adjustl(inputdir)) // trim(adjustl(grid_file))
@@ -248,7 +253,11 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   tmpZ(:,:) = 999.
   call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
 
-  call pass_var(tmpZ, SGdom, position=CORNER)
+  if (lon_bug) then
+    call pass_var(tmpZ, SGdom, position=CORNER)
+  else
+    call pass_var(tmpZ, SGdom, position=CORNER, inner_halo=0)
+  endif
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
