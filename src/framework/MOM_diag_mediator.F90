@@ -1330,10 +1330,10 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
     else
       if (is_stat) then
         if (present(mask)) then
-          call assert(size(locfield) == size(mask), &
+          call assert(size(locfield) == size(locmask), &
               'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
           used = send_data(diag%fms_diag_id, locfield, &
-                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
        !elseif (associated(diag%axes%mask3d)) then
        !  used = send_data(diag_field_id, locfield, &
        !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask3d)
@@ -1342,7 +1342,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
         endif
       elseif (diag_cs%ave_enabled) then
-        if (associated(locmask)) then
+       if (present(mask)) then
+          call assert(size(locfield) == size(locmask), &
+              'post_data_3d_low: mask size mismatch: '//diag%debug_str)
           used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                            is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                            weight=diag_cs%time_int, rmask=locmask)
