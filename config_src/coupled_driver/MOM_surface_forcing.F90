@@ -1413,9 +1413,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the \n"//&
                  "data_table using the component name 'OCN'.", default=.false.)
-  if (CS%allow_flux_adjustments) then
-    call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
-  endif
+
+  call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
 
   if (CS%restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)

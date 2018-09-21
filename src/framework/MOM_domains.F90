@@ -27,18 +27,18 @@ use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
-use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
+use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
 use fms_io_mod,        only : file_exist, parse_mask_table
 
 implicit none ; private
 
 public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent
 public :: MOM_define_domain, MOM_define_io_domain, clone_MOM_domain
-public :: pass_var, pass_vector, broadcast, PE_here, root_PE, num_PEs
-public :: pass_var_start, pass_var_complete, fill_symmetric_edges
+public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
+public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
 public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
-public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
+public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER, CENTER
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
@@ -179,8 +179,7 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo, &
 end subroutine pass_var_3d
 
 !> pass_var_2d does a halo update for a two-dimensional array.
-subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
-                       clock)
+subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner_halo, clock)
   real, dimension(:,:),  intent(inout) :: array    !< The array which is having its halos points
                                                    !! exchanged.
   type(MOM_domain_type), intent(inout) :: MOM_dom  !< The MOM_domain_type containing the mpp_domain
@@ -198,9 +197,18 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
                                                    !! by default.
   integer,     optional, intent(in)    :: halo     !< The size of the halo to update - the full halo
                                                    !! by default.
-  integer,      optional, intent(in)   :: clock    !< The handle for a cpu time clock that should be
+  integer,     optional, intent(in)    :: inner_halo !< The size of an inner halo to avoid updating,
+                                                   !! or 0 to avoid updating symmetric memory
+                                                   !! computational domain points.  Setting this >=0
+                                                   !! also enforces that complete=.true.
+  integer,     optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                    !! started then stopped to time this routine.
 
+  ! Local variables
+  real, allocatable, dimension(:,:) :: tmp
+  integer :: pos, i_halo, j_halo
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
+  integer :: inner, i, j, isfw, iefw, isfe, iefe, jsfs, jefs, jsfn, jefn
   integer :: dirflag
   logical :: block_til_complete
 
@@ -208,8 +216,15 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
 
   dirflag = To_All ! 60
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
-  block_til_complete = .true.
-  if (present(complete)) block_til_complete = complete
+  block_til_complete = .true. ; if (present(complete)) block_til_complete = complete
+  pos = CENTER ; if (present(position)) pos = position
+
+  if (present(inner_halo)) then ; if (inner_halo >= 0) then
+    ! Store the original values.
+    allocate(tmp(size(array,1), size(array,2)))
+    tmp(:,:) = array(:,:)
+    block_til_complete = .true.
+  endif ; endif
 
   if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
@@ -219,6 +234,46 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                         complete=block_til_complete, position=position)
   endif
+
+  if (present(inner_halo)) then ; if (inner_halo >= 0) then
+    call mpp_get_compute_domain(MOM_dom%mpp_domain, isc, iec, jsc, jec)
+    call mpp_get_data_domain(MOM_dom%mpp_domain, isd, ied, jsd, jed)
+    ! Convert to local indices for arrays starting at 1.
+    isc = isc - (isd-1) ; iec = iec - (isd-1) ; ied = ied - (isd-1) ; isd = 1
+    jsc = jsc - (jsd-1) ; jec = jec - (jsd-1) ; jed = jed - (jsd-1) ; jsd = 1
+    i_halo = min(inner_halo, isc-1) ; j_halo = min(inner_halo, jsc-1)
+
+    ! Figure out the array index extents of the eastern, western, northern and southern regions to copy.
+    if (pos == CENTER) then
+      if (size(array,1) == ied) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for CENTER array.") ; endif
+      if (size(array,2) == jed) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for CENTER array.") ; endif
+    elseif (pos == CORNER) then
+      if (size(array,1) == ied) then
+        isfw = max(isc - (i_halo+1), 1) ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      elseif (size(array,1) == ied+1) then
+        isfw = isc - i_halo ; iefw = isc+1 ; isfe = iec+1 ; iefe = min(iec + 1 + i_halo, ied+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for CORNER array.") ; endif
+      if (size(array,2) == jed) then
+        jsfs = max(jsc - (j_halo+1), 1) ; jefs = jsc ; jsfn = jec ; jefn = jec + j_halo
+      elseif (size(array,2) == jed+1) then
+        jsfs = jsc - j_halo ; jefs = jsc+1 ; jsfn = jec+1 ; jefn = min(jec + 1 + j_halo, jed+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for CORNER array.") ; endif
+    else
+      call MOM_error(FATAL, "pass_var_2d: Unrecognized position")
+    endif
+
+    ! Copy back the stored inner halo points
+    do j=jsfs,jefn ; do i=isfw,iefw ; array(i,j) = tmp(i,j) ; enddo ; enddo
+    do j=jsfs,jefn ; do i=isfe,iefe ; array(i,j) = tmp(i,j) ; enddo ; enddo
+    do j=jsfs,jefs ; do i=isfw,iefe ; array(i,j) = tmp(i,j) ; enddo ; enddo
+    do j=jsfn,jefn ; do i=isfw,iefe ; array(i,j) = tmp(i,j) ; enddo ; enddo
+
+    deallocate(tmp)
+  endif ; endif
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_end(clock) ; endif
 

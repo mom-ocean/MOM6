@@ -77,7 +77,7 @@ contains
 !! This subroutine warms any water that is colder than the (currently
 !! surface) freezing point up to the freezing point and accumulates
 !! the required heat (in J m-2) in tv%frazil.
-subroutine make_frazil(h, tv, G, GV, CS, p_surf)
+subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -88,6 +88,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
                                                !! call to diabatic_aux_init.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(in)    :: p_surf !< The pressure at the ocean surface, in Pa.
+  integer,       optional, intent(in)    :: halo !< Halo width over which to calculate frazil
 
 !   Frazil formation keeps the temperature above the freezing point.
 ! This subroutine warms any water that is colder than the (currently
@@ -113,7 +114,11 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
   logical :: T_fr_set  ! True if the freezing point has been calculated for a
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  if (present(halo)) then
+    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  endif
 
   call cpu_clock_begin(id_clock_frazil)
 
@@ -309,7 +314,7 @@ end subroutine differential_diffuse_T_S
 !> This subroutine keeps salinity from falling below a small but positive threshold.
 !! This usually occurs when the ice model attempts to extract more salt then
 !! is actually available to it from the ocean.
-subroutine adjust_salt(h, tv, G, GV, CS)
+subroutine adjust_salt(h, tv, G, GV, CS, halo)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -318,6 +323,7 @@ subroutine adjust_salt(h, tv, G, GV, CS)
                                                  !! available thermodynamic fields.
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
                                                  !! call to diabatic_aux_init.
+  integer,       optional, intent(in)    :: halo !< Halo width over which to work
 
   ! local variables
   real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement
@@ -325,6 +331,9 @@ subroutine adjust_salt(h, tv, G, GV, CS)
   real :: mc         !< A layer's mass kg  m-2 .
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  if (present(halo)) then
+    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  endif
 
 !  call cpu_clock_begin(id_clock_adjust_salt)
 
