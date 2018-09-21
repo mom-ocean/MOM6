@@ -274,11 +274,11 @@ type, public :: MOM_control_struct ; private
 
   ! These elements are used to control the calculation and error checking of the surface state
   real :: Hmix                  !< Diagnostic mixed layer thickness over which to
-                                !! average surface tracer properties (in meter) when
+                                !! average surface tracer properties (in depth units, Z) when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
   real :: Hmix_UV               !< Depth scale over which to average surface flow to
-                                !! feedback to the coupler/driver (m) when
+                                !! feedback to the coupler/driver (in depth units, Z) when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
   logical :: check_bad_sfc_vals !< If true, scan surface state for ridiculous values.
@@ -1572,7 +1572,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
-  real :: conv2watt, conv2salt, H_convert
+  real :: conv2watt, conv2salt
   character(len=48) :: flux_units, S_flux_units
 
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
@@ -1751,12 +1751,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
                  "over which to average to find surface properties like \n"//&
                  "SST and SSS or density (but not surface velocities).", &
-                 units="m", default=1.0)
+                 units="m", default=1.0) !, scale=GV%m_to_Z)
     call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
                  "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
                  "over which to average to find surface flow properties,\n"//&
                  "SSU, SSV. A non-positive value indicates no averaging.", &
-                 units="m", default=0.)
+                 units="m", default=0.) !, scale=GV%m_to_Z)
   endif
   call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
                  "The minimum amount of time in seconds between \n"//&
@@ -1944,6 +1944,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call verticalGridInit( param_file, CS%GV )
   GV => CS%GV
 !  dG%g_Earth = GV%g_Earth
+  !### These should be merged with the get_param calls, but must follow verticalGridInit.
+  if (.not.bulkmixedlayer) then
+    CS%Hmix = CS%Hmix * GV%m_to_Z
+    CS%Hmix_UV = CS%Hmix_UV * GV%m_to_Z
+  endif
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
@@ -2001,10 +2006,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       conv2watt    = GV%H_to_kg_m2 * CS%tv%C_p
       if (GV%Boussinesq) then
         conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
-        H_convert = GV%H_to_m
       else
         conv2salt = GV%H_to_kg_m2
-        H_convert = GV%H_to_kg_m2
       endif
       call register_tracer(CS%tv%T, CS%tracer_Reg, param_file, dG%HI, GV, &
                            tr_desc=vd_T, registry_diags=.true., flux_nameroot='T', &
@@ -2675,11 +2678,12 @@ subroutine extract_surface_state(CS, sfc_state)
     u => NULL(), & ! u : zonal velocity component (m/s)
     v => NULL(), & ! v : meridional velocity component (m/s)
     h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))           ! distance from the surface (meter)
-  real :: depth_ml                    ! depth over which to average to
-                                      ! determine mixed layer properties (meter)
-  real :: dh                          ! thickness of a layer within mixed layer (meter)
-  real :: mass                        ! mass per unit area of a layer (kg/m2)
+  real :: depth(SZI_(CS%G))  ! Distance from the surface in depth units (Z)
+  real :: depth_ml           ! Depth over which to average to determine mixed
+                             ! layer properties (Z)
+  real :: dh                 ! Thickness of a layer within the mixed layer (Z)
+  real :: mass               ! Mass per unit area of a layer (kg/m2)
+  real :: bathy_m            ! The depth of bathymetry in m (not Z), used for error checking.
 
   logical :: use_temperature   ! If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
@@ -2731,7 +2735,8 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%Hml(i,j) = CS%Hml(i,j)
     enddo ; enddo ; endif
   else  ! (CS%Hmix >= 0.0)
-
+    !### This calculation should work in thickness (H) units instead of Z, but that
+    !### would change answers at roundoff in non-Boussinesq cases.
     depth_ml = CS%Hmix
   !   Determine the mean tracer properties of the uppermost depth_ml fluid.
     !$OMP parallel do default(shared) private(depth,dh)
@@ -2746,8 +2751,8 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (depth(i) + h(i,j,k)*GV%H_to_m < depth_ml) then
-          dh = h(i,j,k)*GV%H_to_m
+        if (depth(i) + h(i,j,k)*GV%H_to_Z < depth_ml) then
+          dh = h(i,j,k)*GV%H_to_Z
         elseif (depth(i) < depth_ml) then
           dh = depth_ml - depth(i)
         else
@@ -2763,20 +2768,22 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-            depth(i) = GV%H_subroundoff*GV%H_to_m
+        if (depth(i) < GV%H_subroundoff*GV%H_to_Z) &
+            depth(i) = GV%H_subroundoff*GV%H_to_Z
         if (use_temperature) then
           sfc_state%SST(i,j) = sfc_state%SST(i,j) / depth(i)
           sfc_state%SSS(i,j) = sfc_state%SSS(i,j) / depth(i)
         else
           sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
         endif
-        sfc_state%Hml(i,j) = depth(i)
+        sfc_state%Hml(i,j) = GV%Z_to_m * depth(i)
       enddo
     enddo ! end of j loop
 
 !   Determine the mean velocities in the uppermost depth_ml fluid.
     if (CS%Hmix_UV>0.) then
+      !### This calculation should work in thickness (H) units instead of Z, but that
+      !### would change answers at roundoff in non-Boussinesq cases.
       depth_ml = CS%Hmix_UV
       !$OMP parallel do default(shared) private(depth,dh,hv)
       do J=jscB,jecB
@@ -2785,7 +2792,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%v(i,J) = 0.0
         enddo
         do k=1,nz ; do i=is,ie
-          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_m
+          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_Z
           if (depth(i) + hv < depth_ml) then
             dh = hv
           elseif (depth(i) < depth_ml) then
@@ -2798,8 +2805,8 @@ subroutine extract_surface_state(CS, sfc_state)
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
         do i=is,ie
-          if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-              depth(i) = GV%H_subroundoff*GV%H_to_m
+          if (depth(i) < GV%H_subroundoff*GV%H_to_Z) &
+              depth(i) = GV%H_subroundoff*GV%H_to_Z
           sfc_state%v(i,J) = sfc_state%v(i,J) / depth(i)
         enddo
       enddo ! end of j loop
@@ -2811,7 +2818,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%u(I,j) = 0.0
         enddo
         do k=1,nz ; do I=iscB,iecB
-          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_m
+          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_Z
           if (depth(i) + hu < depth_ml) then
             dh = hu
           elseif (depth(I) < depth_ml) then
@@ -2824,8 +2831,8 @@ subroutine extract_surface_state(CS, sfc_state)
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
         do I=iscB,iecB
-          if (depth(I) < GV%H_subroundoff*GV%H_to_m) &
-              depth(I) = GV%H_subroundoff*GV%H_to_m
+          if (depth(I) < GV%H_subroundoff*GV%H_to_Z) &
+              depth(I) = GV%H_subroundoff*GV%H_to_Z
           sfc_state%u(I,j) = sfc_state%u(I,j) / depth(I)
         enddo
       enddo ! end of j loop
@@ -2900,10 +2907,11 @@ subroutine extract_surface_state(CS, sfc_state)
     numberOfErrors=0 ! count number of errors
     do j=js,je; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
-        localError = sfc_state%sea_lev(i,j)<=-G%Zd_to_m*G%bathyT(i,j) &
+        bathy_m = G%Zd_to_m*G%bathyT(i,j)
+        localError = sfc_state%sea_lev(i,j)<=-bathy_m &
                 .or. sfc_state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j)<=-CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j) + G%Zd_to_m*G%bathyT(i,j) < CS%bad_vol_col_thick
+                .or. sfc_state%sea_lev(i,j) + bathy_m < CS%bad_vol_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &
@@ -2916,7 +2924,7 @@ subroutine extract_surface_state(CS, sfc_state)
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),8(a,es11.4,x))') &
                 'Extreme surface sfc_state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
-                'D=',G%Zd_to_m*G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
+                'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
@@ -2924,7 +2932,7 @@ subroutine extract_surface_state(CS, sfc_state)
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),6(a,es11.4))') &
                 'Extreme surface sfc_state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
-                'D=',G%Zd_to_m*G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
+                'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
             endif
