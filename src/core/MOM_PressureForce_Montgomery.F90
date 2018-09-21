@@ -686,12 +686,12 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
     !$OMP parallel do default(share) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        Ihtot(i) = GV%H_to_m / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
+        Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
         pbce(i,j,1) = GV%g_prime(1) * GV%H_to_m
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k-1) + &
-                      GV%g_prime(K) * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
+                      (GV%g_prime(K)*GV%H_to_m) * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
      enddo ; enddo
     enddo ! end of j loop
   endif ! use_EOS
