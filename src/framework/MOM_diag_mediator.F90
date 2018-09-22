@@ -2190,7 +2190,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   character(len=240), allocatable :: diag_coords(:)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
+  character(len=40) :: mdl = "MOM_diag_mediator" ! This module's name.
 
   id_clock_diag_mediator = cpu_clock_id('(Ocean diagnostics framework)', grain=CLOCK_MODULE)
   id_clock_diag_remap = cpu_clock_id('(Ocean diagnostics remapping)', grain=CLOCK_ROUTINE)
@@ -2204,22 +2204,22 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   enddo
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, 'NUM_DIAG_COORDS', diag_cs%num_diag_coords, &
+  call get_param(param_file, mdl, 'NUM_DIAG_COORDS', diag_cs%num_diag_coords, &
                  'The number of diagnostic vertical coordinates to use.\n'//&
                  'For each coordinate, an entry in DIAG_COORDS must be provided.', &
                  default=1)
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_coords(diag_cs%num_diag_coords))
     if (diag_cs%num_diag_coords==1) then ! The default is to provide just one instance of Z*
-      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+      call get_param(param_file, mdl, 'DIAG_COORDS', diag_coords, &
                  'A list of string tuples associating diag_table modules to\n'//&
                  'a coordinate definition used for diagnostics. Each string\n'//&
                  'is of the form "MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME".', &
                  default='z Z ZSTAR')
     else ! If using more than 1 diagnostic coordinate, all must be explicitly defined
-      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+      call get_param(param_file, mdl, 'DIAG_COORDS', diag_coords, &
                  'A list of string tuples associating diag_table modules to\n'//&
                  'a coordinate definition used for diagnostics. Each string\n'//&
                  'is of the form "MODULE_SUFFIX,PARAMETER_SUFFIX,COORDINATE_NAME".', &
@@ -2233,10 +2233,10 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
     deallocate(diag_coords)
   endif
 
-  call get_param(param_file, mod, 'DIAG_MISVAL', diag_cs%missing_value, &
+  call get_param(param_file, mdl, 'DIAG_MISVAL', diag_cs%missing_value, &
                  'Set the default missing value to use for diagnostics.', &
                  default=1.e20)
-  call get_param(param_file, mod, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
+  call get_param(param_file, mdl, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
                  'Instead of writing diagnostics to the diag manager, write\n' //&
                  'a textfile containing the checksum (bitcount) of the array.',  &
                  default=.false.)
@@ -2263,7 +2263,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit < 0)) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "available_diags."//this_pe
-    call get_param(param_file, mod, "AVAILABLE_DIAGS_FILE", doc_file, &
+    call get_param(param_file, mdl, "AVAILABLE_DIAGS_FILE", doc_file, &
                  "A file into which to write a list of all available \n"//&
                  "ocean diagnostics that can be included in a diag_table.", &
                  default=doc_file_dflt, do_not_log=(diag_CS%available_diag_doc_unit/=-1))
@@ -2301,7 +2301,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   if (is_root_pe() .and. (diag_CS%chksum_diag_doc_unit < 0) .and. diag_CS%diag_as_chksum) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "chksum_diag."//this_pe
-    call get_param(param_file, mod, "CHKSUM_DIAG_FILE", doc_file, &
+    call get_param(param_file, mdl, "CHKSUM_DIAG_FILE", doc_file, &
                  "A file into which to write all checksums of the \n"//&
                  "diagnostics listed in the diag_table.", &
                  default=doc_file_dflt, do_not_log=(diag_CS%chksum_diag_doc_unit/=-1))
