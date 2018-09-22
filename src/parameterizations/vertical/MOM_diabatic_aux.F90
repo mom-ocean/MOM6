@@ -1299,7 +1299,7 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_diabatic_aux" ! This module's name.
+  character(len=40)  :: mdl  = "MOM_diabatic_aux" ! This module's name.
   character(len=48)  :: thickness_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
@@ -1316,15 +1316,15 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
   CS%diag => diag
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
                    "The following parameters are used for auxiliary diabatic processes.")
 
-  call get_param(param_file, mod, "RECLAIM_FRAZIL", CS%reclaim_frazil, &
+  call get_param(param_file, mdl, "RECLAIM_FRAZIL", CS%reclaim_frazil, &
                  "If true, try to use any frazil heat deficit to cool any\n"//&
                  "overlying layers down to the freezing point, thereby \n"//&
                  "avoiding the creation of thin ice when the SST is above \n"//&
                  "the freezing point.", default=.true.)
-  call get_param(param_file, mod, "PRESSURE_DEPENDENT_FRAZIL", &
+  call get_param(param_file, mdl, "PRESSURE_DEPENDENT_FRAZIL", &
                                 CS%pressure_dependent_frazil, &
                  "If true, use a pressure dependent freezing temperature \n"//&
                  "when making frazil. The default is false, which will be \n"//&
@@ -1332,27 +1332,27 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
                  default=.false.)
 
   if (use_ePBL) then
-    call get_param(param_file, mod, "IGNORE_FLUXES_OVER_LAND", CS%ignore_fluxes_over_land,&
+    call get_param(param_file, mdl, "IGNORE_FLUXES_OVER_LAND", CS%ignore_fluxes_over_land,&
          "If true, the model does not check if fluxes are being applied\n"//&
          "over land points. This is needed when the ocean is coupled \n"//&
          "with ice shelves and sea ice, since the sea ice mask needs to \n"//&
          "be different than the ocean mask to avoid sea ice formation \n"//&
          "under ice shelves. This flag only works when use_ePBL = True.", default=.false.)
-    call get_param(param_file, mod, "DO_RIVERMIX", CS%do_rivermix, &
+    call get_param(param_file, mdl, "DO_RIVERMIX", CS%do_rivermix, &
                  "If true, apply additional mixing whereever there is \n"//&
                  "runoff, so that it is mixed down to RIVERMIX_DEPTH \n"//&
                  "if the ocean is that deep.", default=.false.)
     if (CS%do_rivermix) &
-      call get_param(param_file, mod, "RIVERMIX_DEPTH", CS%rivermix_depth, &
+      call get_param(param_file, mdl, "RIVERMIX_DEPTH", CS%rivermix_depth, &
                  "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
                  "defined.", units="m", default=0.0)
   else ; CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; endif
   if (GV%nkml == 0) then
-    call get_param(param_file, mod, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
+    call get_param(param_file, mdl, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
                    "If true, use the fluxes%runoff_Hflx field to set the \n"//&
                    "heat carried by runoff, instead of using SST*CP*liq_runoff.", &
                    default=.false.)
-    call get_param(param_file, mod, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
+    call get_param(param_file, mdl, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
                    "If true, use the fluxes%calving_Hflx field to set the \n"//&
                    "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
                    default=.false.)

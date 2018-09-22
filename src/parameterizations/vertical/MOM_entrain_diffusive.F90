@@ -2157,7 +2157,7 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
   real :: decay_length, dt, Kd
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_entrain_diffusive" ! This module's name.
+  character(len=40)  :: mdl = "MOM_entrain_diffusive" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "entrain_diffusive_init called with an associated "// &
@@ -2171,22 +2171,22 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
   CS%bulkmixedlayer = (GV%nkml > 0)
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "CORRECT_DENSITY", CS%correct_density, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "CORRECT_DENSITY", CS%correct_density, &
                  "If true, and USE_EOS is true, the layer densities are \n"//&
                  "restored toward their target values by the diapycnal \n"//&
                  "mixing, as described in Hallberg (MWR, 2000).", &
                  default=.true.)
-  call get_param(param_file, mod, "MAX_ENT_IT", CS%max_ent_it, &
+  call get_param(param_file, mdl, "MAX_ENT_IT", CS%max_ent_it, &
                  "The maximum number of iterations that may be used to \n"//&
                  "calculate the interior diapycnal entrainment.", default=5)
 ! In this module, KD is only used to set the default for TOLERANCE_ENT. (m2 s-1)
-  call get_param(param_file, mod, "KD", Kd, fail_if_missing=.true.)
-  call get_param(param_file, mod, "DT", dt, &
+  call get_param(param_file, mdl, "KD", Kd, fail_if_missing=.true.)
+  call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
                  fail_if_missing=.true.)
 ! CS%Tolerance_Ent = MAX(100.0*GV%Angstrom_H,1.0e-4*sqrt(dt*Kd)) !
-  call get_param(param_file, mod, "TOLERANCE_ENT", CS%Tolerance_Ent, &
+  call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)))
 
