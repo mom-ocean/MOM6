@@ -37,7 +37,7 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
   real :: x, y
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "Neverland_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "Neverland_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   real :: nl_roughness_amp
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -45,8 +45,8 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "NL_ROUGHNESS_AMP", nl_roughness_amp, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "NL_ROUGHNESS_AMP", nl_roughness_amp, &
                  "Amplitude of wavy signal in bathymetry.", default=0.05)
 
   PI = 4.0*atan(1.0)
@@ -119,13 +119,13 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
                             ! usually negative because it is positive upward.
   real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile (Z)
   real :: e_interface ! Current interface position (m)
-  character(len=40)  :: mod = "Neverland_initialize_thickness" ! This subroutine's name.
+  character(len=40)  :: mdl = "Neverland_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_thickness: setting thickness", 5)
-  call get_param(param_file, mod, "INIT_THICKNESS_PROFILE", h_profile, &
+  call get_param(param_file, mdl, "INIT_THICKNESS_PROFILE", h_profile, &
                  "Profile of initial layer thicknesses.", units="m", scale=GV%m_to_Z, &
                  fail_if_missing=.true.)
 

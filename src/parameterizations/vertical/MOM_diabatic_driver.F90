@@ -2724,7 +2724,7 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_diabatic_driver" ! This module's name.
+  character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "adiabatic_driver_init called with an "// &
@@ -2737,7 +2737,7 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
                    "The following parameters are used for diabatic processes.")
 
 end subroutine adiabatic_driver_init
@@ -2770,7 +2770,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_diabatic_driver" ! This module's name.
+  character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
   character(len=48)  :: thickness_units
   character(len=40)  :: var_name
   character(len=160) :: var_descript
@@ -2798,25 +2798,25 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   CS%bulkmixedlayer = (GV%nkml > 0)
 
   ! Set default, read and log parameters
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
                    "The following parameters are used for diabatic processes.")
-  call get_param(param_file, mod, "SPONGE", CS%use_sponge, &
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified via calls to initialize_sponge and possibly \n"//&
                  "set_up_sponge_field.", default=.false.)
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
-  call get_param(param_file, mod, "ENERGETICS_SFC_PBL", CS%use_energetic_PBL, &
+  call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", CS%use_energetic_PBL, &
                  "If true, use an implied energetics planetary boundary \n"//&
                  "layer scheme to determine the diffusivity and viscosity \n"//&
                  "in the surface boundary layer.", default=.false.)
-  call get_param(param_file, mod, "EPBL_IS_ADDITIVE", CS%ePBL_is_additive, &
+  call get_param(param_file, mdl, "EPBL_IS_ADDITIVE", CS%ePBL_is_additive, &
                  "If true, the diffusivity from ePBL is added to all\n"//&
                  "other diffusivities. Otherwise, the larger of kappa-\n"//&
                  "shear and ePBL diffusivities are used.", default=.true.)
-  call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
+  call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
 
@@ -2832,55 +2832,55 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   CS%use_CVMix_shear = CVMix_shear_is_used(param_file)
 
   if (CS%bulkmixedlayer) then
-    call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
+    call get_param(param_file, mdl, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
                  "before interior diapycnal mixing.  0 by default.", &
                  units="nondim", default=0.0)
-    call get_param(param_file, mod, "NKBL", CS%nkbl, default=2, do_not_log=.true.)
+    call get_param(param_file, mdl, "NKBL", CS%nkbl, default=2, do_not_log=.true.)
   else
     CS%ML_mix_first = 0.0
   endif
   if (use_temperature) then
-    call get_param(param_file, mod, "DO_GEOTHERMAL", CS%use_geothermal, &
+    call get_param(param_file, mdl, "DO_GEOTHERMAL", CS%use_geothermal, &
                  "If true, apply geothermal heating.", default=.false.)
   else
     CS%use_geothermal = .false.
   endif
-  call get_param(param_file, mod, "INTERNAL_TIDES", CS%use_int_tides, &
+  call get_param(param_file, mdl, "INTERNAL_TIDES", CS%use_int_tides, &
                  "If true, use the code that advances a separate set of \n"//&
                  "equations for the internal tide energy density.", default=.false.)
   CS%nMode = 1
   if (CS%use_int_tides) then
     ! SET NUMBER OF MODES TO CONSIDER
-    call get_param(param_file, mod, "INTERNAL_TIDE_MODES", CS%nMode, &
+    call get_param(param_file, mdl, "INTERNAL_TIDE_MODES", CS%nMode, &
                  "The number of distinct internal tide modes \n"//&
                  "that will be calculated.", default=1, do_not_log=.true.)
 
     ! The following parameters are used in testing the internal tide code.
     ! GET LOCATION AND DURATION OF ENERGY POINT SOURCE FOR TESTING (BDM)
-    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
                  "If true, apply an arbitrary generation site for internal tide testing", &
                  default=.false.)
     if (CS%int_tide_source_test)then
-      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+      call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)
-      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+      call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
                  "Y Location of generation site for internal tide", default=1.)
-      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", CS%tlen_days, &
+      call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", CS%tlen_days, &
                  "Time interval from start of experiment for adding wave source", &
                  units="days", default=0)
       CS%time_max_source = increment_time(Time,0,days=CS%tlen_days)
     endif
     ! GET UNIFORM MODE VELOCITY FOR TESTING (BDM)
-    call get_param(param_file, mod, "UNIFORM_CG", CS%uniform_cg, &
+    call get_param(param_file, mdl, "UNIFORM_CG", CS%uniform_cg, &
                  "If true, set cg = cg_test everywhere for test case", default=.false.)
     if (CS%uniform_cg)then
-      call get_param(param_file, mod, "CG_TEST", CS%cg_test, &
+      call get_param(param_file, mdl, "CG_TEST", CS%cg_test, &
                  "Uniform group velocity of internal tide for test case", default=1.)
     endif
   endif
 
-  call get_param(param_file, mod, "MASSLESS_MATCH_TARGETS", &
+  call get_param(param_file, mdl, "MASSLESS_MATCH_TARGETS", &
                                 CS%massless_match_targets, &
                  "If true, the temperature and salinity of massless layers \n"//&
                  "are kept consistent with their target densities. \n"//&
@@ -2888,7 +2888,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "diffusively to match massive neighboring layers.", &
                  default=.true.)
 
-  call get_param(param_file, mod, "AGGREGATE_FW_FORCING", CS%aggregate_FW_forcing, &
+  call get_param(param_file, mdl, "AGGREGATE_FW_FORCING", CS%aggregate_FW_forcing, &
                  "If true, the net incoming and outgoing fresh water fluxes are combined\n"//&
                  "and applied as either incoming or outgoing depending on the sign of the net.\n"//&
                  "If false, the net incoming fresh water flux is added to the model and\n"//&
@@ -2896,44 +2896,44 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "into the first non-vanished layer for which the column remains stable", &
                  default=.true.)
 
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
-  call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debugConservation, &
+  call get_param(param_file, mdl, "DEBUG_CONSERVATION", CS%debugConservation, &
                  "If true, monitor conservation and extrema.", &
                  default=.false., debuggingParam=.true.)
 
-  call get_param(param_file, mod, "DEBUG_ENERGY_REQ", CS%debug_energy_req, &
+  call get_param(param_file, mdl, "DEBUG_ENERGY_REQ", CS%debug_energy_req, &
                  "If true, debug the energy requirements.", default=.false., do_not_log=.true.)
-  call get_param(param_file, mod, "MIX_BOUNDARY_TRACERS", CS%mix_boundary_tracers, &
+  call get_param(param_file, mdl, "MIX_BOUNDARY_TRACERS", CS%mix_boundary_tracers, &
                  "If true, mix the passive tracers in massless layers at \n"//&
                  "the bottom into the interior as though a diffusivity of \n"//&
                  "KD_MIN_TR were operating.", default=.true.)
 
   if (CS%mix_boundary_tracers) then
-    call get_param(param_file, mod, "KD", Kd, fail_if_missing=.true.)
-    call get_param(param_file, mod, "KD_MIN_TR", CS%Kd_min_tr, &
+    call get_param(param_file, mdl, "KD", Kd, fail_if_missing=.true.)
+    call get_param(param_file, mdl, "KD_MIN_TR", CS%Kd_min_tr, &
                  "A minimal diffusivity that should always be applied to \n"//&
                  "tracers, especially in massless layers near the bottom. \n"//&
                  "The default is 0.1*KD.", units="m2 s-1", default=0.1*Kd)
-    call get_param(param_file, mod, "KD_BBL_TR", CS%Kd_BBL_tr, &
+    call get_param(param_file, mdl, "KD_BBL_TR", CS%Kd_BBL_tr, &
                  "A bottom boundary layer tracer diffusivity that will \n"//&
                  "allow for explicitly specified bottom fluxes. The \n"//&
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
                  "over the same distance.", units="m2 s-1", default=0.)
   endif
 
-  call get_param(param_file, mod, "TRACER_TRIDIAG", CS%tracer_tridiag, &
+  call get_param(param_file, mdl, "TRACER_TRIDIAG", CS%tracer_tridiag, &
                  "If true, use the passive tracer tridiagonal solver for T and S\n", &
                  default=.false.)
 
-  call get_param(param_file, mod, "MINIMUM_FORCING_DEPTH", CS%minimum_forcing_depth, &
+  call get_param(param_file, mdl, "MINIMUM_FORCING_DEPTH", CS%minimum_forcing_depth, &
                  "The smallest depth over which forcing can be applied. This\n"//&
                  "only takes effect when near-surface layers become thin\n"//&
                  "relative to this scale, in which case the forcing tendencies\n"//&
                  "scaled down by distributing the forcing over this depth scale.", &
                  units="m", default=0.001)
-  call get_param(param_file, mod, "EVAP_CFL_LIMIT", CS%evap_CFL_limit, &
+  call get_param(param_file, mdl, "EVAP_CFL_LIMIT", CS%evap_CFL_limit, &
                  "The largest fraction of a layer than can be lost to forcing\n"//&
                  "(e.g. evaporation, sea-ice formation) in one time-step. The unused\n"//&
                  "mass loss is passed down through the column.", &
@@ -3000,7 +3000,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       'Squared buoyancy frequency below mixed layer', 's-2')
   CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &
       'Mixed layer depth (used defined)', 'm')
-  call get_param(param_file, mod, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
+  call get_param(param_file, mdl, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
                  "The density difference used to determine a diagnostic mixed\n"//&
                  "layer depth, MLD_user, following the definition of Levitus 1982. \n"//&
                  "The MLD is the depth at which the density is larger than the\n"//&
@@ -3087,7 +3087,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
            'set DOUBLE_DIFFUSION=False and USE_CVMIX_DDIFF=True.')
   endif
 
-  call get_param(param_file, mod, "SALT_REJECT_BELOW_ML", CS%salt_reject_below_ML, &
+  call get_param(param_file, mdl, "SALT_REJECT_BELOW_ML", CS%salt_reject_below_ML, &
                  "If true, place salt from brine rejection below the mixed layer,\n"// &
                  "into the first non-vanished layer for which the column remains stable", &
                  default=.false.)
@@ -3322,7 +3322,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   ! obtain information about the number of bands for penetrative shortwave
   if (use_temperature) then
-    call get_param(param_file, mod, "PEN_SW_NBANDS", nbands, default=1)
+    call get_param(param_file, mdl, "PEN_SW_NBANDS", nbands, default=1)
     if (nbands > 0) then
       allocate(CS%optics)
       call opacity_init(Time, G, param_file, diag, CS%tracer_flow_CSp, CS%opacity_CSp, CS%optics)
