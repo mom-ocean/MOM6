@@ -85,7 +85,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step, in m2 s-1.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, m.
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, Z s-1.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
@@ -215,7 +215,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k)*GV%Z_to_m*dt; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
@@ -413,7 +413,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step, in m2 s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, m.
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, Z s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc, in m.
@@ -547,7 +547,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, vel_rpt, str, a
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k)*GV%Z_to_m*dt; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
