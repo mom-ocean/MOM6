@@ -2717,6 +2717,13 @@ subroutine extract_surface_state(CS, sfc_state)
     sfc_state%sea_lev(i,j) = CS%ave_ssh_ibc(i,j)
   enddo ; enddo
 
+  ! copy Hml into sfc_state, so that caps can access it
+  if (associated(CS%Hml)) then
+    do j=js,je ; do i=is,ie
+      sfc_state%Hml(i,j) = CS%Hml(i,j)
+    enddo ; enddo
+  endif
+
   if (CS%Hmix < 0.0) then  ! A bulk mixed layer is in use, so layer 1 has the properties
     if (use_temperature) then ; do j=js,je ; do i=is,ie
       sfc_state%SST(i,j) = CS%tv%T(i,j,1)
@@ -2729,9 +2736,6 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%v(i,J) = v(i,J,1)
     enddo ; enddo
 
-    if (associated(CS%Hml)) then ; do j=js,je ; do i=is,ie
-      sfc_state%Hml(i,j) = CS%Hml(i,j)
-    enddo ; enddo ; endif
   else  ! (CS%Hmix >= 0.0)
 
     depth_ml = CS%Hmix
@@ -2773,7 +2777,6 @@ subroutine extract_surface_state(CS, sfc_state)
         else
           sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
         endif
-        sfc_state%Hml(i,j) = depth(i)
       enddo
     enddo ! end of j loop
 
