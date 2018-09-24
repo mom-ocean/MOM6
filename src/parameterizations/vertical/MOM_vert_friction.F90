@@ -625,9 +625,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   real :: z2      ! The distance from the bottom, normalized by Hbbl, nondim.
   real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2.
   real :: z_clear ! The clearance of an interface above the surrounding topography, in H.
-  real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H.
-  real :: m_to_H ! Unit conversion factors.
+  real :: h_neglect  ! A thickness that is so small it is usually lost
+                     ! in roundoff and can be neglected, in H.
 
   real :: I_valBL ! The inverse of a scaling factor determining when water is
                   ! still within the boundary layer, as determined by the sum
@@ -645,7 +644,6 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
          "Module must be initialized before it is used.")
 
   h_neglect = GV%H_subroundoff
-  m_to_H = GV%m_to_H
   I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
@@ -679,7 +677,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
 
     if (CS%bottomdraglaw) then ; do I=Isq,Ieq
       kv_bbl(I) = visc%kv_bbl_u(I,j)
-      bbl_thick(I) = visc%bbl_thick_u(I,j) * m_to_H
+      bbl_thick(I) = visc%bbl_thick_u(I,j) * GV%m_to_H
       if (do_i(I)) I_Hbbl(I) = 1.0 / (bbl_thick(I) + h_neglect)
     enddo ; endif
 
@@ -776,7 +774,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
           ! Perhaps this needs to be done more carefully, via find_eta.
           do I=Isq,Ieq ; if (do_i_shelf(I)) then
             zh(I) = 0.0 ; Ztop_min(I) = min(zcol(i), zcol(i+1))
-            I_HTbl(I) = 1.0 / (visc%tbl_thick_shelf_u(I,j)*m_to_H + h_neglect)
+            I_HTbl(I) = 1.0 / (visc%tbl_thick_shelf_u(I,j)*GV%m_to_H + h_neglect)
           endif ; enddo
           do k=1,nz
             do i=Isq,Ieq+1 ; zcol(i) = zcol(i) - h(i,j,k) ; enddo
@@ -839,14 +837,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
 
   ! Now work on v-points.
   !$OMP parallel do default(private) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
-  !$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL,Kv_v) &
+  !$OMP                                  OBC,h_neglect,dt,I_valBL,Kv_v) &
   !$OMP                     firstprivate(i_hbbl)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
     if (CS%bottomdraglaw) then ; do i=is,ie
       kv_bbl(i) = visc%kv_bbl_v(i,J)
-      bbl_thick(i) = visc%bbl_thick_v(i,J) * m_to_H
+      bbl_thick(i) = visc%bbl_thick_v(i,J) * GV%m_to_H
       if (do_i(i)) I_Hbbl(i) = 1.0 / bbl_thick(i)
     enddo ; endif
 
@@ -944,7 +942,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
           ! Perhaps this needs to be done more carefully, via find_eta.
           do i=is,ie ; if (do_i_shelf(i)) then
             zh(i) = 0.0 ; Ztop_min(I) = min(zcol1(i), zcol2(i))
-            I_HTbl(i) = 1.0 / (visc%tbl_thick_shelf_v(i,J)*m_to_H + h_neglect)
+            I_HTbl(i) = 1.0 / (visc%tbl_thick_shelf_v(i,J)*GV%m_to_H + h_neglect)
           endif ; enddo
           do k=1,nz
             do i=is,ie ; if (do_i_shelf(i)) then
@@ -1087,7 +1085,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: h_neglect   ! A thickness that is so small it is usually lost
                       ! in roundoff and can be neglected, in H.
   real :: z2      ! A copy of z_i, nondim.
-  real :: H_to_m, m_to_H, m2_to_Z2 ! Unit conversion factors.
+  real :: m2_to_Z2 ! Unit conversion factors.
   real :: topfn
   real :: a_top
   logical :: do_shelf, do_OBCs
@@ -1101,7 +1099,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   else ; is = G%isc ; ie = G%iec ; endif
   nz = G%ke
   h_neglect = GV%H_subroundoff
-  H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   m2_to_Z2 = GV%m_to_Z*GV%m_to_Z
 
   !   The maximum coupling coefficent was originally introduced to avoid
@@ -1120,7 +1117,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if ((GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
     if (do_i(i)) a_cpl(i,K) = 2.0*CS%Kv
   enddo ; enddo ; else
-    I_Hmix = 1.0 / (CS%Hmix * m_to_H + h_neglect)
+    I_Hmix = 1.0 / (CS%Hmix * GV%m_to_H + h_neglect)
     do i=is,ie ; z_t(i) = h_neglect*I_Hmix ; enddo
     do K=2,nz ; do i=is,ie ; if (do_i(i)) then
       z_t(i) = z_t(i) + h_harm(i,k-1)*I_Hmix
@@ -1261,10 +1258,10 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     do i=is,ie ; if (do_i(i)) then
       if (work_on_u) then
         kv_tbl(i) = visc%kv_tbl_shelf_u(I,j)
-        tbl_thick(i) = visc%tbl_thick_shelf_u(I,j) * m_to_H
+        tbl_thick(i) = visc%tbl_thick_shelf_u(I,j) * GV%m_to_H
       else
         kv_tbl(i) = visc%kv_tbl_shelf_v(i,J)
-        tbl_thick(i) = visc%tbl_thick_shelf_v(i,J) * m_to_H
+        tbl_thick(i) = visc%tbl_thick_shelf_v(i,J) * GV%m_to_H
       endif
       z_t(i) = 0.0
 
