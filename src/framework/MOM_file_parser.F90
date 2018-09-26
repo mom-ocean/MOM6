@@ -1688,7 +1688,7 @@ end subroutine get_param_int_array
 !! and logs it in documentation files.
 subroutine get_param_real(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, &
-               static_value, debuggingParam, scale)
+               static_value, debuggingParam, scale, unscaled)
   type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in)    :: modulename !< The name of the calling module
@@ -1712,6 +1712,8 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
                                          !! logged in the debugging parameter file
   real,             optional, intent(in)    :: scale   !< A scaling factor that the parameter is
                                          !! multiplied by before it is returned.
+  real,             optional, intent(out)   :: unscaled !< The value of the parameter that would be
+                                         !! returned without any multiplication by a scaling factor.
 
   logical :: do_read, do_log
 
@@ -1729,6 +1731,7 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
                         default, debuggingParam)
   endif
 
+  if (present(unscaled)) unscaled = value
   if (present(scale)) value = scale*value
 
 end subroutine get_param_real
@@ -1736,7 +1739,7 @@ end subroutine get_param_real
 !> This subroutine reads the values of an array of real model parameters from a parameter file
 !! and logs them in documentation files.
 subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, static_value, scale)
+               default, fail_if_missing, do_not_read, do_not_log, static_value, scale, unscaled)
   type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in)    :: modulename !< The name of the calling module
@@ -1758,6 +1761,8 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
                                          !! parameter to the documentation files
   real,             optional, intent(in)    :: scale   !< A scaling factor that the parameter is
                                          !! multiplied by before it is returned.
+  real, dimension(:), optional, intent(out) :: unscaled !< The value of the parameter that would be
+                                         !! returned without any multiplication by a scaling factor.
 
   logical :: do_read, do_log
 
@@ -1775,6 +1780,7 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
                               units, default)
   endif
 
+  if (present(unscaled)) unscaled(:) = value(:)
   if (present(scale)) value(:) = scale*value(:)
 
 end subroutine get_param_real_array
