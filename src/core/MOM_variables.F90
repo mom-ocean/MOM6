@@ -40,8 +40,8 @@ type, public :: surface
     v, &        !< The mixed layer meridional velocity in m s-1.
     sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
                 !! used, that is compensated for in sea_lev.
-    melt_potential, & !< Amount of heat that can be used to melt sea ice, in J m-2.
-                      !! This is computed w.r.t. surface freezing temperature.
+    melt_potential, & !< instantaneous amount of heat that can be used to melt sea ice,
+                      !! in J m-2. This is computed w.r.t. surface freezing temperature.
     ocean_mass, &  !< The total mass of the ocean in kg m-2.
     ocean_heat, &  !< The total heat content of the ocean in C kg m-2.
     ocean_salt, &  !< The total salt content of the ocean in kgSalt m-2.
