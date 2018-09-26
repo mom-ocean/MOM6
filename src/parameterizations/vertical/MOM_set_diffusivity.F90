@@ -549,7 +549,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
-      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true.)
+      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true., scale=GV%Z_to_m)
     endif
 
   endif
@@ -1279,7 +1279,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
       else ; TKE_to_layer = 0.0 ; endif
 
       ! TKE_Ray has been initialized to 0 above.
-      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * G%IareaT(i,j) * &
+      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * GV%Z_to_m * G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
@@ -1459,7 +1459,8 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       dhm1 = GV%H_to_m * h(i,j,km1) ! Thickness of level above in m.
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
-      if (Rayleigh_drag) TKE_remaining = TKE_remaining + 0.5*CS%BBL_effic * G%IareaT(i,j) * &
+      if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
+            0.5*CS%BBL_effic * GV%Z_to_m * G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
