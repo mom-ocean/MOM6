@@ -450,6 +450,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                do_not_log=just_read)
   if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&
            "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
+  if (new_sim .and. debug .and. (depress_sfc .or. trim_ic_for_p_surf)) &
+    call hchksum(h, "Pre-depress: h ", G%HI, haloshift=1, scale=GV%H_to_m)
   if (depress_sfc) call depress_surface(h, G, GV, PF, tv, just_read_params=just_read)
   if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params=just_read)
 
@@ -469,6 +471,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
       call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true.)
 
+      if (new_sim .and. debug) &
+        call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_m)
       call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, u, v, tracer_Reg, &
                                   dt=dt, initial=.true.)
     endif
@@ -500,7 +504,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       write(mesg,'("MOM_IS: S[",I2,"]")') k
       call hchksum(tv%S(:,:,k), mesg, G%HI, haloshift=1)
     enddo ; endif
-
   endif
 
   call get_param(PF, mdl, "SPONGE", use_sponge, &
@@ -1073,10 +1076,11 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b ! Top and bottom edge values for reconstructions
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity and temperature within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
-  real :: scale_factor, min_thickness
+  real :: scale_factor   ! A file-dependent scaling vactor for the input pressurs.
+  real :: min_thickness  ! The minimum layer thickness, recast into Z units.
   integer :: i, j, k
   logical :: just_read    ! If true, just read parameters but set nothing.
-  logical :: use_remapping
+  logical :: use_remapping ! If true, remap the initial conditions.
   type(remapping_CS), pointer :: remap_CS => NULL()
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
@@ -1124,31 +1128,35 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call cut_off_column_top(GV%ke, tv, GV, GV%g_Earth*GV%Z_to_m, G%bathyT(i,j), &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
-               tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS)
+               tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
+               z_tol=1.0e-5*GV%m_to_Z)
   enddo ; enddo
 
 end subroutine trim_for_ice
 
-!> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
-!! pressure matches p_surf
+
+!> Adjust the layer thicknesses by removing the top of the water column above the
+!! depth where the hydrostatic pressure matches p_surf
 subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
-                              T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS)
-  integer,               intent(in)    :: nk !< Number of layers
-  type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
-  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
+                              T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS, z_tol)
+  integer,               intent(in)    :: nk  !< Number of layers
+  type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
+  type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   real,                  intent(in)    :: G_earth !< Gravitational acceleration (m2 Z-1 s-2)
   real,                  intent(in)    :: depth !< Depth of ocean column (Z)
   real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (Z)
-  real, dimension(nk),   intent(inout) :: T !< Layer mean temperature
+  real, dimension(nk),   intent(inout) :: T   !< Layer mean temperature
   real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer
   real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer
-  real, dimension(nk),   intent(inout) :: S !< Layer mean salinity
+  real, dimension(nk),   intent(inout) :: S   !< Layer mean salinity
   real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer
   real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer
   real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
-  real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  real, dimension(nk),   intent(inout) :: h   !< Layer thickness (H units, m or Pa)
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
+  real,        optional, intent(in)    :: z_tol !< The tolerance with which to find the depth
+                                                !! matching the specified pressure, in Z.
 
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
@@ -1167,7 +1175,8 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
   e_top = e(1)
   do k=1,nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, P_b, z_out)
+                                        P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, &
+                                        P_b, z_out, z_tol=z_tol)
     if (z_out>=e(K)) then
       ! Imposed pressure was less that pressure at top of cell
       exit
