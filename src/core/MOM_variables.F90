@@ -219,10 +219,10 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: nkml_visc_v => NULL()
                 !< The number of layers in the viscous surface mixed layer at v-points (nondimensional).
   real, pointer, dimension(:,:) :: &
-    MLD => NULL()       !< Instantaneous active mixing layer depth (H units).
+    MLD => NULL()      !< Instantaneous active mixing layer depth (H units).
   real, pointer, dimension(:,:,:) :: &
-    Ray_u => NULL(), &  !< The Rayleigh drag velocity to be applied to each layer at u-points, in m s-1.
-    Ray_v => NULL()     !< The Rayleigh drag velocity to be applied to each layer at v-points, in m s-1.
+    Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points, in Z s-1.
+    Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points, in Z s-1.
   real, pointer, dimension(:,:,:) :: Kd_extra_T => NULL()
                 !< The extra diffusivity of temperature due to double diffusion relative to the
                 !! diffusivity of density, in m2 s-1.
