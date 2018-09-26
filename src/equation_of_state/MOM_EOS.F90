@@ -1355,20 +1355,21 @@ end subroutine int_density_dz_generic_plm
 
 !> Find the depth at which the reconstructed pressure matches P_tgt
 subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
-                       rho_ref, G_e, EOS, P_b, z_out)
+                       rho_ref, G_e, EOS, P_b, z_out, z_tol)
   real,           intent(in)  :: T_t !< Potential temperatue at the cell top (degC)
   real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom (degC)
   real,           intent(in)  :: S_t !< Salinity at the cell top (ppt)
   real,           intent(in)  :: S_b !< Salinity at the cell bottom (ppt)
-  real,           intent(in)  :: z_t !< Absolute height of top of cell (m)   (Boussinesq ????)
-  real,           intent(in)  :: z_b !< Absolute height of bottom of cell (m)
+  real,           intent(in)  :: z_t !< Absolute height of top of cell (Z)   (Boussinesq ????)
+  real,           intent(in)  :: z_b !< Absolute height of bottom of cell (Z)
   real,           intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t (Pa)
   real,           intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out (Pa)
   real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to
-  real,           intent(in)  :: G_e !< Gravitational acceleration (m/s2)
+  real,           intent(in)  :: G_e !< Gravitational acceleration (m2 Z-1 s-2)
   type(EOS_type), pointer     :: EOS !< Equation of state structure
   real,           intent(out) :: P_b !< Pressure at the bottom of the cell (Pa)
-  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt (m)
+  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt (Z)
+  real, optional, intent(in)  :: z_tol !< The tolerance in finding z_out, in Z.
   ! Local variables
   real :: top_weight, bottom_weight, rho_anom, w_left, w_right, GxRho, dz, dp, F_guess, F_l, F_r
   real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz
@@ -1394,7 +1395,8 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   Pa_left = P_t - P_tgt ! Pa_left < 0
   F_r = 1.
   Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.e-5
+  Pa_tol = GxRho * 1.e-5 ! 1e-5 has diimensions of m, but should be converted to the units of z.
+  if (present(z_tol)) Pa_tol = GxRho * z_tol
   F_guess = F_l - Pa_left / ( Pa_right -Pa_left ) * ( F_r - F_l )
   Pa = Pa_right - Pa_left ! To get into iterative loop
   do while ( abs(Pa) > Pa_tol )
@@ -1435,7 +1437,7 @@ real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EO
   real,           intent(in)  :: rho_ref !< A mean density, in kg m-3, that is subtracted out to
                                      !! reduce the magnitude of each of the integrals.
   real,           intent(in)  :: G_e !< The Earth's gravitational acceleration, in m s-2.
-  real,           intent(in)  :: pos !< The fractional vertical position, nondim.
+  real,           intent(in)  :: pos !< The fractional vertical position, nondim, 0 to 1.
   type(EOS_type), pointer     :: EOS !< Equation of state structure
   ! Local variables
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
