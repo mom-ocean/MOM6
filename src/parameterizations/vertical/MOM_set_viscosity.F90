@@ -883,11 +883,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
         if (m==1) then
           visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
-          visc%bbl_thick_u(I,j) = GV%Z_to_m * bbl_thick_Z
+          visc%bbl_thick_u(I,j) = bbl_thick_Z
         else
           visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
-          visc%bbl_thick_v(i,J) = GV%Z_to_m * bbl_thick_Z
+          visc%bbl_thick_v(i,J) = bbl_thick_Z
         endif
 
       else ! Not Channel_drag.
@@ -896,10 +896,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
         bbl_thick_Z = bbl_thick * GV%H_to_Z
         if (m==1) then
           visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
-          visc%bbl_thick_u(I,j) = GV%Z_to_m * bbl_thick_Z
+          visc%bbl_thick_u(I,j) = bbl_thick_Z
         else
           visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
-          visc%bbl_thick_v(i,J) = GV%Z_to_m * bbl_thick_Z
+          visc%bbl_thick_v(i,J) = bbl_thick_Z
         endif
       endif
     endif ; enddo ! end of i loop
@@ -926,7 +926,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
         call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=GV%Z_to_m**2)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
         call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
-                      visc%bbl_thick_v, G%HI, haloshift=0)
+                      visc%bbl_thick_v, G%HI, haloshift=0, scale=GV%Z_to_m)
   endif
 
 end subroutine set_viscous_BBL
@@ -1438,7 +1438,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
-       !visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
+       !visc%tbl_thick_shelf_u(I,j) = GV%H_to_Z * max(CS%Htbl_shelf_min, &
        !    htot(I) / (0.5 + sqrt(0.25 + &
        !                 (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
        !                 (ustar(i)*GV%Z_to_H)**2 )) )
@@ -1446,7 +1446,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
         h2f2 = (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
-        visc%tbl_thick_shelf_u(I,j) = GV%Z_to_m * tbl_thick_Z
+        visc%tbl_thick_shelf_u(I,j) = tbl_thick_Z
         visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
       endif ; enddo ! I-loop
     endif ! do_any_shelf
@@ -1683,7 +1683,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
-       !visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
+       !visc%tbl_thick_shelf_v(i,J) = GV%H_to_Z * max(CS%Htbl_shelf_min, &
        !    htot(i) / (0.5 + sqrt(0.25 + &
        !        (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
        !        (ustar(i)*GV%Z_to_H)**2 )) )
@@ -1691,7 +1691,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
         h2f2 = (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
-        visc%tbl_thick_shelf_v(i,J) = GV%Z_to_m * tbl_thick_Z
+        visc%tbl_thick_shelf_v(i,J) = tbl_thick_Z
         visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
 
       endif ; enddo ! i-loop
@@ -2023,11 +2023,11 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
-       diag%axesCu1, Time, 'BBL thickness at u points', 'm')
+       diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=GV%Z_to_m)
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
        Time, 'BBL viscosity at u points', 'm2 s-1', conversion=GV%Z_to_m**2)
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
-       diag%axesCv1, Time, 'BBL thickness at v points', 'm')
+       diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=GV%Z_to_m)
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
        Time, 'BBL viscosity at v points', 'm2 s-1', conversion=GV%Z_to_m**2)
   endif
