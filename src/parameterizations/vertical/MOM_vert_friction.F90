@@ -265,7 +265,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     enddo ; endif ! direct_stress
 
     if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-      Ray(I,k) = GV%m_to_Z*visc%Ray_u(I,j,k)
+      Ray(I,k) = visc%Ray_u(I,j,k)
     enddo ; enddo ; endif
 
     ! perform forward elimination on the tridiagonal system
@@ -373,7 +373,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     enddo ; endif ! direct_stress
 
     if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-      Ray(i,k) = GV%m_to_Z*visc%Ray_v(i,J,k)
+      Ray(i,k) = visc%Ray_v(i,J,k)
     enddo ; enddo ; endif
 
     do i=is,ie ; if (do_i(i)) then
@@ -501,7 +501,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
     if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-      Ray(I,k) = GV%m_to_Z*visc%Ray_u(I,j,k)
+      Ray(I,k) = visc%Ray_u(I,j,k)
     enddo ; enddo ; endif
 
     do I=Isq,Ieq ; if (do_i(I)) then
@@ -532,7 +532,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
     if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-      Ray(i,k) = GV%m_to_Z*visc%Ray_v(i,J,k)
+      Ray(i,k) = visc%Ray_v(i,J,k)
     enddo ; enddo ; endif
 
     do i=is,ie ; if (do_i(i)) then
