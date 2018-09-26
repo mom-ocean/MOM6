@@ -548,7 +548,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   if (therm_reset) then
     CS%time_in_thermo_cycle = 0.0
-    if (allocated(sfc_state%melt_potential)) sfc_state%melt_potential(:,:)  = 0.0
     if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
     if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
     if (associated(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
@@ -2717,6 +2716,13 @@ subroutine extract_surface_state(CS, sfc_state)
     sfc_state%sea_lev(i,j) = CS%ave_ssh_ibc(i,j)
   enddo ; enddo
 
+  ! copy Hml into sfc_state, so that caps can access it
+  if (associated(CS%Hml)) then
+    do j=js,je ; do i=is,ie
+      sfc_state%Hml(i,j) = CS%Hml(i,j)
+    enddo ; enddo
+  endif
+
   if (CS%Hmix < 0.0) then  ! A bulk mixed layer is in use, so layer 1 has the properties
     if (use_temperature) then ; do j=js,je ; do i=is,ie
       sfc_state%SST(i,j) = CS%tv%T(i,j,1)
@@ -2729,9 +2735,6 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%v(i,J) = v(i,J,1)
     enddo ; enddo
 
-    if (associated(CS%Hml)) then ; do j=js,je ; do i=is,ie
-      sfc_state%Hml(i,j) = CS%Hml(i,j)
-    enddo ; enddo ; endif
   else  ! (CS%Hmix >= 0.0)
 
     depth_ml = CS%Hmix
@@ -2773,7 +2776,6 @@ subroutine extract_surface_state(CS, sfc_state)
         else
           sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
         endif
-        sfc_state%Hml(i,j) = depth(i)
       enddo
     enddo ! end of j loop
 
@@ -2867,12 +2869,13 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
 
       do i=is,ie
+       ! set melt_potential to zero to avoid passing previous values
+       sfc_state%melt_potential(i,j) = 0.0
+
        if (G%mask2dT(i,j)>0.) then
-         ! time accumulated melt_potential, in J/m^2
-         sfc_state%melt_potential(i,j) = sfc_state%melt_potential(i,j) +  (CS%tv%C_p * CS%GV%Rho0 * delT(i))
-       else
-         sfc_state%melt_potential(i,j) = 0.0
-       endif! G%mask2dT
+         ! instantaneous melt_potential, in J/m^2
+         sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * delT(i)
+       endif
       enddo
     enddo ! end of j loop
   endif   ! melt_potential
