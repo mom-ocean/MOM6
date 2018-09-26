@@ -260,9 +260,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
   real :: root             ! A temporary variable with units of H s-1.
 
   real :: Cell_width       ! The transverse width of the velocity cell, in m.
-  real :: Rayleigh         ! A nondimensional value that is multiplied by the
-                           ! layer's velocity magnitude to give the Rayleigh
-                           ! drag velocity.
+  real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's
+                           ! velocity magnitude to give the Rayleigh drag velocity,
+                           ! times a lateral to vertical distance conversion factor, in Z L-1.
   real :: gam              ! The ratio of the change in the open interface width
                            ! to the open interface width atop a cell, nondim.
   real :: BBL_frac         ! The fraction of a layer's drag that goes into the
@@ -856,7 +856,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
             if (m==1) then ; Cell_width = G%dy_Cu(I,j)
             else ; Cell_width = G%dx_Cv(i,J) ; endif
             gam = 1.0 - L(K+1)/L(K)
-            Rayleigh = CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
+            Rayleigh = GV%m_to_Z * CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
                 (12.0*CS%c_Smag*h_vel_pos) /  (12.0*CS%c_Smag*h_vel_pos + &
                  GV%m_to_H * CS%cdrag * gam*(1.0-gam)*(1.0-1.5*gam) * L(K)**2 * Cell_width)
           else ! This layer feels no drag.
@@ -921,7 +921,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
   if (CS%debug) then
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0)
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=GV%Z_to_m)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
         call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
@@ -2035,9 +2035,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
-       Time, 'Rayleigh drag velocity at u points', 'm s-1')
+       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=GV%Z_to_m)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
-       Time, 'Rayleigh drag velocity at v points', 'm s-1')
+       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=GV%Z_to_m)
   endif
 
   if (use_CVMix_ddiff .or. differential_diffusion) then
