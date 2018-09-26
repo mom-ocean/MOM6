@@ -333,8 +333,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
         do k = 1,nz
           !T0(k) = T_Ref; S0(k) = S_Ref
           xi1 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z
-          S0(k) = S_sur + dS_dz * xi1
-          T0(k) = T_sur + dT_dz * xi1
+          S0(k) = S_sur - dS_dz * xi1
+          T0(k) = T_sur - dT_dz * xi1
           xi0 = xi0 + h(i,j,k) * GV%H_to_Z
           ! write(mesg,*) 'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
           ! call MOM_mesg(mesg,5)
