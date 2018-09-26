@@ -599,7 +599,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     z_i         ! An estimate of each interface's height above the bottom,
                 ! normalized by the bottom boundary layer thickness, nondim.
   real, dimension(SZIB_(G)) :: &
-    kv_bbl, &     ! The bottom boundary layer viscosity in m2 s-1.
+    kv_bbl, &     ! The bottom boundary layer viscosity in Z2 s-1.
     bbl_thick, &  ! The bottom boundary layer thickness in m or kg m-2.
     I_Hbbl, &     ! The inverse of the bottom boundary layer thickness, in units
                   ! of H-1 (i.e., m-1 or m2 kg-1).
@@ -1045,7 +1045,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
                              intent(in)  :: h_harm !< Harmonic mean of thicknesses around a velocity
                                                    !! grid point, in H
   real, dimension(SZIB_(G)), intent(in)  :: bbl_thick !< Bottom boundary layer thickness, in H
-  real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, in m2 s-1
+  real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, in Z2 s-1
   real, dimension(SZIB_(G),SZK_(GV)+1), &
                              intent(in)  :: z_i  !< Estimate of interface heights above the bottom,
                                                  !! normalized by the bottom boundary layer thickness
@@ -1070,7 +1070,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     nk_visc, &  ! The (real) interface index of the base of mixed layer.
     z_t, &      ! The distance from the top, sometimes normalized
                 ! by Hmix, in m or nondimensional.
-    kv_tbl, &
+    kv_tbl, &   ! The viscosity in a top boundary layer under ice, in Z2 s-1.
     tbl_thick
   real, dimension(SZIB_(G),SZK_(GV)) :: &
     Kv_add      ! A viscosity to add, in m2 s-1.
@@ -1130,9 +1130,9 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     if (CS%bottomdraglaw) then
       r = hvel(i,nz)*0.5
       if (r < bbl_thick(i)) then
-        a_cpl(i,nz+1) = 1.0*m2_to_Z2*kv_bbl(i) / (I_amax* m2_to_Z2*kv_bbl(i) + r*GV%H_to_Z)
+        a_cpl(i,nz+1) = 1.0*kv_bbl(i) / (I_amax*kv_bbl(i) + r*GV%H_to_Z)
       else
-        a_cpl(i,nz+1) = 1.0*m2_to_Z2*kv_bbl(i) / (I_amax* m2_to_Z2*kv_bbl(i) + bbl_thick(i)*GV%H_to_Z)
+        a_cpl(i,nz+1) = 1.0*kv_bbl(i) / (I_amax*kv_bbl(i) + bbl_thick(i)*GV%H_to_Z)
       endif
     else
       a_cpl(i,nz+1) = 2.0*m2_to_Z2*CS%Kvbbl / (hvel(i,nz)*GV%H_to_Z + 2.0*I_amax* m2_to_Z2*CS%Kvbbl)
@@ -1236,7 +1236,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
 
     if (CS%bottomdraglaw) then
-      a_cpl(i,K) = a_cpl(i,K) + 2.0*(kv_bbl(i)-CS%Kv)*botfn
+      a_cpl(i,K) = a_cpl(i,K) + 2.0*((GV%Z_to_m**2)*kv_bbl(i) - CS%Kv)*botfn
       r = (hvel(i,k)+hvel(i,k-1))
       if (r > 2.0*bbl_thick(i)) then
         h_shear = ((1.0 - botfn) * r + botfn*2.0*bbl_thick(i))
@@ -1267,9 +1267,9 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
       ! If a_cpl(i,1) were not already 0, it would be added here.
       if (0.5*hvel(i,1) > tbl_thick(i)) then
-        a_cpl(i,1) = m2_to_Z2 * kv_tbl(i) / (tbl_thick(i) *GV%H_to_Z + I_amax*(m2_to_Z2*kv_tbl(i)))
+        a_cpl(i,1) = kv_tbl(i) / (tbl_thick(i) *GV%H_to_Z + I_amax*kv_tbl(i))
       else
-        a_cpl(i,1) = m2_to_Z2 * kv_tbl(i) / (0.5*hvel(i,1)*GV%H_to_Z + I_amax*(m2_to_Z2*kv_tbl(i)))
+        a_cpl(i,1) = kv_tbl(i) / (0.5*hvel(i,1)*GV%H_to_Z + I_amax*kv_tbl(i))
       endif
     endif ; enddo
 
@@ -1284,7 +1284,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         h_shear = r
       endif
 
-      a_top = 2.0 * topfn * (m2_to_Z2 * kv_tbl(i))
+      a_top = 2.0 * topfn * kv_tbl(i)
       a_cpl(i,K) = a_cpl(i,K) + a_top / (h_shear*GV%H_to_Z + I_amax*a_top)
     endif ; enddo ; enddo
   elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0)) then

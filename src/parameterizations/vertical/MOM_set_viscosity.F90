@@ -881,11 +881,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
         bbl_thick_Z = bbl_thick * GV%H_to_Z
         if (m==1) then
-          visc%kv_bbl_u(I,j) = (GV%Z_to_m**2) * max(CS%KV_BBL_min, &
+          visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
           visc%bbl_thick_u(I,j) = GV%Z_to_m * bbl_thick_Z
         else
-          visc%kv_bbl_v(i,J) = (GV%Z_to_m**2) * max(CS%KV_BBL_min, &
+          visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
           visc%bbl_thick_v(i,J) = GV%Z_to_m * bbl_thick_Z
         endif
@@ -895,10 +895,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 ! the correct stress when the shear occurs over bbl_thick.
         bbl_thick_Z = bbl_thick * GV%H_to_Z
         if (m==1) then
-          visc%kv_bbl_u(I,j) = (GV%Z_to_m**2) * max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
+          visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
           visc%bbl_thick_u(I,j) = GV%Z_to_m * bbl_thick_Z
         else
-          visc%kv_bbl_v(i,J) = (GV%Z_to_m**2) * max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
+          visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
           visc%bbl_thick_v(i,J) = GV%Z_to_m * bbl_thick_Z
         endif
       endif
@@ -923,7 +923,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
         call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=GV%Z_to_m)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0)
+        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=GV%Z_to_m**2)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
         call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
                       visc%bbl_thick_v, G%HI, haloshift=0)
@@ -1447,7 +1447,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_u(I,j) = GV%Z_to_m * tbl_thick_Z
-        visc%kv_tbl_shelf_u(I,j) = (GV%Z_to_m**2) * max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
+        visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
       endif ; enddo ! I-loop
     endif ! do_any_shelf
 
@@ -1692,7 +1692,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_v(i,J) = GV%Z_to_m * tbl_thick_Z
-        visc%kv_tbl_shelf_v(i,J) = (GV%Z_to_m**2) * max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
+        visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
 
       endif ; enddo ! i-loop
     endif ! do_any_shelf
@@ -2025,11 +2025,11 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
        diag%axesCu1, Time, 'BBL thickness at u points', 'm')
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
-       Time, 'BBL viscosity at u points', 'm2 s-1')
+       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=GV%Z_to_m**2)
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
        diag%axesCv1, Time, 'BBL thickness at v points', 'm')
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
-       Time, 'BBL viscosity at v points', 'm2 s-1')
+       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=GV%Z_to_m**2)
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0

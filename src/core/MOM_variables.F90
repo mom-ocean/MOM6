@@ -194,8 +194,8 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points, in m.
     bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points, in m.
-    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in m2 s-1.
-    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in m2 s-1.
+    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in Z2 s-1.
+    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in Z2 s-1.
     ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in m s-1.
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
@@ -208,9 +208,9 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
                 !< Thickness of the viscous top boundary layer under ice shelves at v-points, in m.
   real, pointer, dimension(:,:) :: kv_tbl_shelf_u => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at u-points, in m2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at u-points, in Z2 s-1.
   real, pointer, dimension(:,:) :: kv_tbl_shelf_v => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at v-points, in m2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at v-points, in Z2 s-1.
   real, pointer, dimension(:,:) :: nkml_visc_u => NULL()
                 !< The number of layers in the viscous surface mixed layer at u-points (nondimensional).
                 !! This is not an integer because there may be fractional layers, and it is stored in
@@ -243,7 +243,7 @@ type, public :: vertvisc_type
                 !! corner columns, in m2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_slow  => NULL()
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
-                !! background, convection etc).
+                !! background, convection etc), in m2 s-1.
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
                 !< The turbulent kinetic energy per unit mass at the interfaces, in m2 s-2.
                 !! This may be at the tracer or corner points
