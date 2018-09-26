@@ -31,9 +31,9 @@ public updateCFLtruncationValue
 
 !> The control structure with parameters and memory for the MOM_vert_friction module
 type, public :: vertvisc_CS ; private
-  real    :: Hmix            !< The mixed layer thickness in m.
+  real    :: Hmix            !< The mixed layer thickness in thickness units (H).
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
-                             !! stress is applied with direct_stress, in m.
+                             !! stress is applied with direct_stress, in H.
   real    :: Kvml            !< The mixed layer vertical viscosity in m2 s-1.
   real    :: Kv              !< The interior vertical viscosity in m2 s-1.
   real    :: Hbbl            !< The static bottom boundary layer thickness, in m.
@@ -207,7 +207,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
          "Module must be initialized before it is used.")
 
   if (CS%direct_stress) then
-    Hmix = CS%Hmix_stress*GV%m_to_H
+    Hmix = CS%Hmix_stress
     I_Hmix = 1.0 / Hmix
   endif
   dt_Rho0 = dt/GV%H_to_kg_m2
@@ -1073,7 +1073,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     kv_tbl, &   ! The viscosity in a top boundary layer under ice, in Z2 s-1.
     tbl_thick
   real, dimension(SZIB_(G),SZK_(GV)) :: &
-    Kv_add      ! A viscosity to add, in m2 s-1.
+    Kv_add      ! A viscosity to add, in Z2 s-1.
   real :: h_shear ! The distance over which shears occur, m or kg m-2.
   real :: r       ! A thickness to compare with Hbbl, in m or kg m-2.
   real :: visc_ml ! The mixed layer viscosity, in m2 s-1.
@@ -1117,7 +1117,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if ((GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
     if (do_i(i)) a_cpl(i,K) = 2.0*CS%Kv
   enddo ; enddo ; else
-    I_Hmix = 1.0 / (CS%Hmix * GV%m_to_H + h_neglect)
+    I_Hmix = 1.0 / (CS%Hmix + h_neglect)
     do i=is,ie ; z_t(i) = h_neglect*I_Hmix ; enddo
     do K=2,nz ; do i=is,ie ; if (do_i(i)) then
       z_t(i) = z_t(i) + h_harm(i,k-1)*I_Hmix
@@ -1135,7 +1135,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         a_cpl(i,nz+1) = 1.0*kv_bbl(i) / (I_amax*kv_bbl(i) + bbl_thick(i)*GV%H_to_Z)
       endif
     else
-      a_cpl(i,nz+1) = 2.0*m2_to_Z2*CS%Kvbbl / (hvel(i,nz)*GV%H_to_Z + 2.0*I_amax* m2_to_Z2*CS%Kvbbl)
+      a_cpl(i,nz+1) = 2.0*CS%Kvbbl / (hvel(i,nz)*GV%H_to_Z + 2.0*I_amax*CS%Kvbbl)
     endif
   endif ; enddo
 
@@ -1146,14 +1146,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
      !      equal to 2 x \delta z
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
+        Kv_add(i,K) = (2.*0.5)*m2_to_Z2*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1162,14 +1162,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
+        Kv_add(i,K) = (2.*0.5)*m2_to_Z2*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1182,11 +1182,11 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if (associated(visc%Kv_shear_Bu)) then
     if (work_on_u) then
       do K=2,nz ; do I=Is,Ie ; If (do_i(I)) then
-        a_cpl(I,K) = a_cpl(I,K) + (2.*0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
+        a_cpl(I,K) = a_cpl(I,K) + (2.*0.5)*m2_to_Z2*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + (2.*0.5)*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
+        a_cpl(i,K) = a_cpl(i,K) + (2.*0.5)*m2_to_Z2*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     endif
   endif
@@ -1196,14 +1196,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
+        Kv_add(i,K) = Kv_add(i,K) + 1.0 * m2_to_Z2*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1212,14 +1212,15 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
+        Kv_add(i,K) = Kv_add(i,K) + 1.0*m2_to_Z2*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
       endif ; enddo ; enddo
+      !### I am pretty sure that this is double counting here! - RWH
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1236,7 +1237,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
 
     if (CS%bottomdraglaw) then
-      a_cpl(i,K) = a_cpl(i,K) + 2.0*((GV%Z_to_m**2)*kv_bbl(i) - CS%Kv)*botfn
+      a_cpl(i,K) = a_cpl(i,K) + 2.0*(kv_bbl(i) - CS%Kv)*botfn
       r = (hvel(i,k)+hvel(i,k-1))
       if (r > 2.0*bbl_thick(i)) then
         h_shear = ((1.0 - botfn) * r + botfn*2.0*bbl_thick(i))
@@ -1248,8 +1249,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       h_shear = hvel(i,k) + hvel(i,k-1) + h_neglect
     endif
 
-    !   Up to this point a has units of m2 s-1, but now is converted to Z s-1.
-    a_cpl(i,K) = a_cpl(i,K) * m2_to_Z2
+    !  Up to this point a_cpl has had units of Z2 s-1, but now is converted to Z s-1.
     a_cpl(i,K) = a_cpl(i,K) / (h_shear*GV%H_to_Z + I_amax*a_cpl(i,K))
   endif ; enddo ; enddo ! i & k loops
 
@@ -1576,6 +1576,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   ! Local variables
 
   real :: hmix_str_dflt
+  real :: Kv_dflt ! A default viscosity in m2 s-1.
+  real :: Hmix_m  ! A boundary layer thickness, in m.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1642,16 +1644,17 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
-                 "mixed layer is not used.", units="m", fail_if_missing=.true.)
+                 "mixed layer is not used.", units="m", scale=GV%m_to_H, &
+                 unscaled=Hmix_m, fail_if_missing=.true.)
   if (CS%direct_stress) then
     if (GV%nkml < 1) then
       call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if \n"//&
-                 "DIRECT_STRESS is true.", units="m", default=CS%Hmix)
+                 "DIRECT_STRESS is true.", units="m", default=Hmix_m, scale=GV%m_to_H)
     else
       call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if \n"//&
-                 "DIRECT_STRESS is true.", units="m", fail_if_missing=.true.)
+                 "DIRECT_STRESS is true.", units="m", fail_if_missing=.true., scale=GV%m_to_H)
     endif
     if (CS%Hmix_stress <= 0.0) call MOM_error(FATAL, "vertvisc_init: " // &
        "HMIX_STRESS must be set to a positive value if DIRECT_STRESS is true.")
@@ -1659,19 +1662,18 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", fail_if_missing=.true.)
+                 units="m2 s-1", fail_if_missing=.true., scale=GV%m_to_Z**2, unscaled=Kv_dflt)
 
-! CS%Kvml = CS%Kv ; CS%Kvbbl = CS%Kv ! Needed? -AJA
   if (GV%nkml < 1) call get_param(param_file, mdl, "KVML", CS%Kvml, &
                  "The kinematic viscosity in the mixed layer.  A typical \n"//&
                  "value is ~1e-2 m2 s-1. KVML is not used if \n"//&
                  "BULKMIXEDLAYER is true.  The default is set by KV.", &
-                 units="m2 s-1", default=CS%Kv)
+                 units="m2 s-1", default=Kv_dflt, scale=GV%m_to_Z**2)
   if (.not.CS%bottomdraglaw) call get_param(param_file, mdl, "KVBBL", CS%Kvbbl, &
                  "The kinematic viscosity in the benthic boundary layer. \n"//&
                  "A typical value is ~1e-2 m2 s-1. KVBBL is not used if \n"//&
                  "BOTTOMDRAGLAW is true.  The default is set by KV.", &
-                 units="m2 s-1", default=CS%Kv)
+                 units="m2 s-1", default=Kv_dflt, scale=GV%m_to_Z**2)
   call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
                  "The thickness of a bottom boundary layer with a \n"//&
                  "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or \n"//&
