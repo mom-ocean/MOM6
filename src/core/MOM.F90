@@ -548,7 +548,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   if (therm_reset) then
     CS%time_in_thermo_cycle = 0.0
-    if (allocated(sfc_state%melt_potential)) sfc_state%melt_potential(:,:)  = 0.0
     if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
     if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
     if (associated(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
@@ -2870,12 +2869,13 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
 
       do i=is,ie
+       ! set melt_potential to zero to avoid passing previous values
+       sfc_state%melt_potential(i,j) = 0.0
+
        if (G%mask2dT(i,j)>0.) then
-         ! time accumulated melt_potential, in J/m^2
-         sfc_state%melt_potential(i,j) = sfc_state%melt_potential(i,j) +  (CS%tv%C_p * CS%GV%Rho0 * delT(i))
-       else
-         sfc_state%melt_potential(i,j) = 0.0
-       endif! G%mask2dT
+         ! instantaneous melt_potential, in J/m^2
+         sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * delT(i)
+       endif
       enddo
     enddo ! end of j loop
   endif   ! melt_potential
