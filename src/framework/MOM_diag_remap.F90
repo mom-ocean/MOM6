@@ -54,7 +54,6 @@ public diag_remap_diag_registration_closed
 public vertically_reintegrate_diag_field
 public vertically_interpolate_diag_field
 public horizontally_average_diag_field
-public horizontally_decimate_diag_field
 
 !> Represents remapping of diagnostics to a particular vertical coordinate.
 !!
@@ -704,21 +703,5 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
   enddo
 
 end subroutine horizontally_average_diag_field
-
-!> Horizontally decimate field
-subroutine horizontally_decimate_diag_field(G, h, &
-                                           is_layer, is_extensive, &
-                                           missing_value, decimation_factor, field, decimated_field)
-  type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
-  real, dimension(:,:,:), intent(in) :: h !< The current thicknesses
-  logical,                intent(in) :: is_layer !< True if the z-axis location is at h points
-  logical,                intent(in) :: is_extensive !< True if the z-direction is spatially integrated (over layers)
-  real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
-  integer,                intent(in) :: decimation_factor !< The factor by which to decimate the diag output field
-  real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
-  real, dimension(:),  intent(inout) :: decimated_field !< Field argument horizontally averaged
-  ! Local variables
-
-end subroutine horizontally_decimate_diag_field
 
 end module MOM_diag_remap
