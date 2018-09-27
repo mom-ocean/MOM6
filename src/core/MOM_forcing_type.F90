@@ -2133,7 +2133,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         if (associated(fluxes%frunoff))     res(i,j) = res(i,j)+fluxes%frunoff(i,j)
         if (associated(fluxes%vprec))       res(i,j) = res(i,j)+fluxes%vprec(i,j)
       enddo ; enddo
-      call post_data(handles%id_prcme, res, diag)
+      if (handles%id_prcme > 0) call post_data(handles%id_prcme, res, diag)
       if (handles%id_total_prcme > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_prcme, total_transport, diag)
@@ -2151,7 +2151,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         if (fluxes%vprec(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
         if (fluxes%evap(i,j)  < 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massout, res, diag)
+      if (handles%id_net_massout > 0) call post_data(handles%id_net_massout, res, diag)
       if (handles%id_total_net_massout > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_massout, total_transport, diag)
@@ -2168,7 +2168,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         ! fluxes%cond is not needed because it is derived from %evap > 0
         if (fluxes%evap(i,j)  > 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massin, res, diag)
+      if (handles%id_net_massin > 0) call post_data(handles%id_net_massin, res, diag)
       if (handles%id_total_net_massin > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_massin, total_transport, diag)
@@ -2322,7 +2322,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       if (associated(fluxes%sens))       res(i,j) = res(i,j) + fluxes%sens(i,j)
       if (associated(fluxes%SW))         res(i,j) = res(i,j) + fluxes%SW(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_heat_coupler, res, diag)
+      if (handles%id_net_heat_coupler > 0) call post_data(handles%id_net_heat_coupler, res, diag)
       if (handles%id_total_net_heat_coupler > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_heat_coupler, total_transport, diag)
@@ -2382,7 +2382,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
           if (associated(fluxes%heat_content_massout)) res(i,j) = res(i,j) + fluxes%heat_content_massout(i,j)
       ! endif
       enddo ; enddo
-      call post_data(handles%id_heat_content_surfwater, res, diag)
+      if (handles%id_heat_content_surfwater > 0) call post_data(handles%id_heat_content_surfwater, res, diag)
       if (handles%id_total_heat_content_surfwater > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_heat_content_surfwater, total_transport, diag)
