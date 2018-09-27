@@ -73,7 +73,7 @@ interface zap2_sample
 end interface zap2_sample
 
 interface decimate_sample
-   module procedure decimate_sample_2d, decimate_sample_3d
+   module procedure decimate_sample_2d, decimate_sample_3d, decimate_sample_3d_out
 end interface decimate_sample
 
 interface decimate_diag_field
@@ -176,6 +176,8 @@ type diagcs_decim
   type(axes_grp)  :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp)  :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp)  :: axesB1, axesT1, axesCu1, axesCv1
+  type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
+  type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
 
   real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
   real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
@@ -305,11 +307,10 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
                                                        !! vertical axes
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
-  integer :: i, j, k, nz, dl
+  integer :: id_zl_native, id_zi_native
+  integer :: i, j, k, nz
   real :: zlev(GV%ke), zinter(GV%ke+1)
   logical :: set_vert
-  real, dimension(:), pointer :: gridLonT_zap =>NULL() 
-  real, dimension(:), pointer :: gridLatT_zap =>NULL() 
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
@@ -326,7 +327,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   else
     id_zl = -1 ; id_zi = -1
   endif
-
+  id_zl_native = id_zl ; id_zi_native = id_zi
   ! Vertical axes for the interfaces and layers
   call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, 1, &
        v_cell_method='point', is_interface=.true.)
@@ -391,79 +392,8 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   ! Axis group for special null axis from diag manager
   call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
 
-  !Axes group for native decimated diagnostics
-  do dl=2,MAX_DECIM_LEV
 
-     if(dl .eq. 2) then
-        allocate(gridLonT_zap(diag_cs%decim(dl)%isg:diag_cs%decim(dl)%ieg))
-        allocate(gridLatT_zap(diag_cs%decim(dl)%jsg:diag_cs%decim(dl)%jeg))
-
-        do i=diag_cs%decim(dl)%isg,diag_cs%decim(dl)%ieg;  gridLonT_zap(i) = G%gridLonT(G%isg+dl*i-2); enddo
-        do j=diag_cs%decim(dl)%jsg,diag_cs%decim(dl)%jeg;  gridLatT_zap(j) = G%gridLatT(G%jsg+dl*j-2); enddo
-           
-           
-           !  if (G%symmetric) then
-           !    id_xq = diag_axis_init('xq', G%gridLonB_zap2(G%isgB:G%iegB), G%x_axis_units, 'x', &
-           !              'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-           !    id_yq = diag_axis_init('yq', G%gridLatB_zap2(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-           !              'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
-           !  else
-           id_xq = diag_axis_init('xq', gridLonT_zap, G%x_axis_units, 'x', &
-                'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-           id_yq = diag_axis_init('yq', gridLatT_zap, G%y_axis_units, 'y', &
-                'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
-           !  endif
-           id_xh = diag_axis_init('xh', gridLonT_zap, G%x_axis_units, 'x', &
-                'h point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-           id_yh = diag_axis_init('yh', gridLatT_zap, G%y_axis_units, 'y', &
-                'h point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
-
-           deallocate(gridLonT_zap)
-           deallocate(gridLatT_zap)
-     else
-           call MOM_error(FATAL, "This decimation level is not supported yet!")
-     endif
-
-     ! Axis groupings for the model layers
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%decim(dl)%axesTL, dl, &
-          x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
-          is_h_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%decim(dl)%axesBL, dl, &
-          x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
-          is_q_point=.true., is_layer=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%decim(dl)%axesCuL, dl, &
-          x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
-          is_u_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%decim(dl)%axesCvL, dl, &
-          x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
-          is_v_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
-
-     ! Axis groupings for the model interfaces
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%decim(dl)%axesTi, dl, &
-          x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
-          is_h_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%decim(dl)%axesBi, dl, &
-          x_cell_method='point', y_cell_method='point', v_cell_method='point', &
-          is_q_point=.true., is_interface=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%decim(dl)%axesCui, dl, &
-          x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
-          is_u_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%decim(dl)%axesCvi, dl, &
-          x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
-          is_v_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
-
-     ! Axis groupings for 2-D arrays
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh /), diag_cs%decim(dl)%axesT1, dl, &
-          x_cell_method='mean', y_cell_method='mean', is_h_point=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq /), diag_cs%decim(dl)%axesB1, dl, &
-          x_cell_method='point', y_cell_method='point', is_q_point=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh /), diag_cs%decim(dl)%axesCu1, dl, &
-          x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq /), diag_cs%decim(dl)%axesCv1, dl, &
-          x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
-
-  enddo
-
+  !Non-native Non-decimated
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_cs%remap_axesZL(diag_cs%num_diag_coords))
     allocate(diag_cs%remap_axesTL(diag_cs%num_diag_coords))
@@ -549,10 +479,185 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
            needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
     endif
   enddo
+
+  !Defien the decimated axes
+  call set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
   
   call diag_grid_storage_init(diag_CS%diag_grid_temp, G, diag_CS)
 
 end subroutine set_axes_info
+
+subroutine set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
+  type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
+  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
+  type(param_file_type), intent(in)    :: param_file !< Parameter file structure
+  type(diag_ctrl),       intent(inout) :: diag_cs !< Diagnostics control structure
+  integer,               intent(in)    :: id_zl_native, id_zi_native
+
+  ! Local variables
+  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
+  integer :: i, j, k, nz, dl
+  real, dimension(:), pointer :: gridLonT_zap =>NULL() 
+  real, dimension(:), pointer :: gridLatT_zap =>NULL()
+
+  id_zl = id_zl_native ; id_zi = id_zi_native
+  !Axes group for native decimated diagnostics
+  do dl=2,MAX_DECIM_LEV
+     if(dl .ne. 2) call MOM_error(FATAL, "Decimation level other than 2 is not supported yet!")
+     allocate(gridLonT_zap(diag_cs%decim(dl)%isg:diag_cs%decim(dl)%ieg))
+     allocate(gridLatT_zap(diag_cs%decim(dl)%jsg:diag_cs%decim(dl)%jeg))
+
+     do i=diag_cs%decim(dl)%isg,diag_cs%decim(dl)%ieg;  gridLonT_zap(i) = G%gridLonT(G%isg+dl*i-2); enddo
+     do j=diag_cs%decim(dl)%jsg,diag_cs%decim(dl)%jeg;  gridLatT_zap(j) = G%gridLatT(G%jsg+dl*j-2); enddo
+
+     !  if (G%symmetric) then
+     !    id_xq = diag_axis_init('xq', G%gridLonB_zap2(G%isgB:G%iegB), G%x_axis_units, 'x', &
+     !              'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
+     !    id_yq = diag_axis_init('yq', G%gridLatB_zap2(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+     !              'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+     !  else
+     id_xq = diag_axis_init('xq', gridLonT_zap, G%x_axis_units, 'x', &
+          'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
+     id_yq = diag_axis_init('yq', gridLatT_zap, G%y_axis_units, 'y', &
+          'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+     !  endif
+     id_xh = diag_axis_init('xh', gridLonT_zap, G%x_axis_units, 'x', &
+          'h point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
+     id_yh = diag_axis_init('yh', gridLatT_zap, G%y_axis_units, 'y', &
+          'h point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+
+     deallocate(gridLonT_zap)
+     deallocate(gridLatT_zap)
+
+     ! Axis groupings for the model layers
+     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%decim(dl)%axesTL, dl, &
+          x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
+          is_h_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
+     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%decim(dl)%axesBL, dl, &
+          x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
+          is_q_point=.true., is_layer=.true.)
+     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%decim(dl)%axesCuL, dl, &
+          x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
+          is_u_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
+     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%decim(dl)%axesCvL, dl, &
+          x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
+          is_v_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
+
+     ! Axis groupings for the model interfaces
+     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%decim(dl)%axesTi, dl, &
+          x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
+          is_h_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
+     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%decim(dl)%axesBi, dl, &
+          x_cell_method='point', y_cell_method='point', v_cell_method='point', &
+          is_q_point=.true., is_interface=.true.)
+     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%decim(dl)%axesCui, dl, &
+          x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
+          is_u_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
+     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%decim(dl)%axesCvi, dl, &
+          x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
+          is_v_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
+
+     ! Axis groupings for 2-D arrays
+     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh /), diag_cs%decim(dl)%axesT1, dl, &
+          x_cell_method='mean', y_cell_method='mean', is_h_point=.true.)
+     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq /), diag_cs%decim(dl)%axesB1, dl, &
+          x_cell_method='point', y_cell_method='point', is_q_point=.true.)
+     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh /), diag_cs%decim(dl)%axesCu1, dl, &
+          x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
+     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq /), diag_cs%decim(dl)%axesCv1, dl, &
+          x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
+
+     !Non-native axes
+     if (diag_cs%num_diag_coords>0) then
+!        allocate(diag_cs%decim(dl)%remap_axesZL(diag_cs%num_diag_coords))
+!        allocate(diag_cs%decim(dl)%remap_axesZi(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesTL(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesBL(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesCuL(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesCvL(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesTi(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesBi(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesCui(diag_cs%num_diag_coords))
+        allocate(diag_cs%decim(dl)%remap_axesCvi(diag_cs%num_diag_coords))
+     endif
+
+     do i=1, diag_cs%num_diag_coords
+        ! For each possible diagnostic coordinate
+        !call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), GV, param_file)
+
+        ! This vertical coordinate has been configured so can be used.
+        if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then
+
+           ! This fetches the 1D-axis id for layers and interfaces and overwrite
+           ! id_zl and id_zi from above. It also returns the number of layers.
+           call diag_remap_get_axes_info(diag_cs%diag_remap_cs(i), nz, id_zL, id_zi)
+
+           ! Axes for z layers
+           !This should be the same as non-decimated one which should already be set
+!           call define_axes_group(diag_cs, (/ id_zL /), diag_cs%decim(dl)%remap_axesZL(i), &
+!                nz=nz, vertical_coordinate_number=i, &
+!                v_cell_method='mean', &
+!                is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+
+           call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%decim(dl)%remap_axesTL(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
+                is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
+                xyave_axes=diag_cs%remap_axesZL(i))
+
+           !! \note Remapping for B points is not yet implemented so needs_remapping is not
+           !! provided for remap_axesBL
+           call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%decim(dl)%remap_axesBL(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
+                is_q_point=.true., is_layer=.true., is_native=.false.)
+
+           call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%decim(dl)%remap_axesCuL(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
+                is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
+                xyave_axes=diag_cs%remap_axesZL(i))
+
+           call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%decim(dl)%remap_axesCvL(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
+                is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
+                xyave_axes=diag_cs%remap_axesZL(i))
+
+           ! Axes for z interfaces
+!           call define_axes_group_decim(diag_cs, (/ id_zi /), diag_cs%decim(dl)%remap_axesZi(i),&
+!                nz=nz, vertical_coordinate_number=i, &
+!                v_cell_method='point', &
+!                is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true.)
+           call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%decim(dl)%remap_axesTi(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
+                is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true., &
+                xyave_axes=diag_cs%remap_axesZi(i))
+
+           !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
+           call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%decim(dl)%remap_axesBi(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='point', y_cell_method='point', v_cell_method='point', &
+                is_q_point=.true., is_interface=.true., is_native=.false.)
+
+           call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%decim(dl)%remap_axesCui(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
+                is_u_point=.true., is_interface=.true., is_native=.false., &
+                needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
+
+           call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%decim(dl)%remap_axesCvi(i), dl, &
+                nz=nz, vertical_coordinate_number=i, &
+                x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
+                is_v_point=.true., is_interface=.true., is_native=.false., &
+                needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
+        endif
+     enddo
+  enddo
+  
+end subroutine set_axes_info_decim
+ 
 
 !> set_masks_for_axes sets up the 2d and 3d masks for diagnostics using the current grid
 !! recorded after calling diag_update_remap_grids()
@@ -650,7 +755,49 @@ subroutine set_masks_for_axes(G, diag_cs)
     endif
   enddo
 
+  call set_masks_for_axes_decim(G, diag_cs)
+  
 end subroutine set_masks_for_axes
+
+subroutine set_masks_for_axes_decim(G, diag_cs)
+  type(ocean_grid_type), target, intent(in) :: G !< The ocean grid type.
+  type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
+                                                       !! used for diagnostics
+  ! Local variables
+  integer :: c, nk, i, j, k, ii, jj
+  integer :: dl
+  type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
+
+  do dl=2,MAX_DECIM_LEV
+     if(dl .ne. 2) call MOM_error(FATAL, "Decimation level other than 2 is not supported yet!")
+     do c=1, diag_cs%num_diag_coords
+        ! Level/layer h-points in diagnostic coordinate
+        axes => diag_cs%remap_axesTL(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        ! Level/layer u-points in diagnostic coordinate
+        axes => diag_cs%remap_axesCuL(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        ! Level/layer v-points in diagnostic coordinate
+        axes => diag_cs%remap_axesCvL(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        ! Level/layer q-points in diagnostic coordinate
+        axes => diag_cs%remap_axesBL(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        ! Interface h-points in diagnostic coordinate (w-point)
+        axes => diag_cs%remap_axesTi(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        ! Interface u-points in diagnostic coordinate
+        axes => diag_cs%remap_axesCui(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        ! Interface v-points in diagnostic coordinate
+        axes => diag_cs%remap_axesCvi(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        ! Interface q-points in diagnostic coordinate
+        axes => diag_cs%remap_axesBi(c)
+        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+     enddo
+  enddo
+end subroutine set_masks_for_axes_decim
 
 !> Attaches the id of cell areas to axes groups for use with cell_measures
 subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
@@ -1685,6 +1832,54 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
              y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
              conversion=conversion, v_extensive=v_extensive)
 
+  ! For each diagnostic coordinate register the diagnostic again under a different module name
+  do i=1,diag_cs%num_diag_coords
+     new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)
+
+     ! Register diagnostics remapped to z vertical coordinate
+     if (axes_in%rank == 3) then
+        remap_axes => null()
+        if ((axes_in%id == diag_cs%axesTL%id)) then
+           remap_axes => diag_cs%remap_axesTL(i)
+        elseif (axes_in%id == diag_cs%axesBL%id) then
+           remap_axes => diag_cs%remap_axesBL(i)
+        elseif (axes_in%id == diag_cs%axesCuL%id ) then
+           remap_axes => diag_cs%remap_axesCuL(i)
+        elseif (axes_in%id == diag_cs%axesCvL%id) then
+           remap_axes => diag_cs%remap_axesCvL(i)
+        elseif (axes_in%id == diag_cs%axesTi%id) then
+           remap_axes => diag_cs%remap_axesTi(i)
+        elseif (axes_in%id == diag_cs%axesBi%id) then
+           remap_axes => diag_cs%remap_axesBi(i)
+        elseif (axes_in%id == diag_cs%axesCui%id ) then
+           remap_axes => diag_cs%remap_axesCui(i)
+        elseif (axes_in%id == diag_cs%axesCvi%id) then
+           remap_axes => diag_cs%remap_axesCvi(i)
+        endif
+
+        ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
+        ! always exist but in the mean-time we have to do this check:
+        ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+        if (associated(remap_axes)) then
+           if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
+              active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, remap_axes, &
+                   init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                   range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                   verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                   interp_method=interp_method, tile_count=tile_count, &
+                   cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
+                   cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
+                   cell_methods=cell_methods, x_cell_method=x_cell_method, &
+                   y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
+                   conversion=conversion, v_extensive=v_extensive)
+              if (active) then
+                 call diag_remap_set_active(diag_cs%diag_remap_cs(i))
+              endif
+           endif ! remap_axes%needs_remapping
+        endif ! associated(remap_axes)
+     endif ! axes%rank == 3
+  enddo ! i
+
   do dl=2,MAX_DECIM_LEV
      new_module_name = trim(module_name)//'_d2'
 
@@ -1733,54 +1928,55 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
           y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
           conversion=conversion, v_extensive=v_extensive)
      endif
+
+     ! For each diagnostic coordinate register the diagnostic again under a different module name
+     do i=1,diag_cs%num_diag_coords
+        new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)//'_d2'
+
+        ! Register diagnostics remapped to z vertical coordinate
+        if (axes_in%rank == 3) then
+           remap_axes => null()
+           if ((axes_in%id == diag_cs%axesTL%id)) then
+              remap_axes => diag_cs%decim(dl)%remap_axesTL(i)
+           elseif (axes_in%id == diag_cs%axesBL%id) then
+              remap_axes => diag_cs%decim(dl)%remap_axesBL(i)
+           elseif (axes_in%id == diag_cs%axesCuL%id ) then
+              remap_axes => diag_cs%decim(dl)%remap_axesCuL(i)
+           elseif (axes_in%id == diag_cs%axesCvL%id) then
+              remap_axes => diag_cs%decim(dl)%remap_axesCvL(i)
+           elseif (axes_in%id == diag_cs%axesTi%id) then
+              remap_axes => diag_cs%decim(dl)%remap_axesTi(i)
+           elseif (axes_in%id == diag_cs%axesBi%id) then
+              remap_axes => diag_cs%decim(dl)%remap_axesBi(i)
+           elseif (axes_in%id == diag_cs%axesCui%id ) then
+              remap_axes => diag_cs%decim(dl)%remap_axesCui(i)
+           elseif (axes_in%id == diag_cs%axesCvi%id) then
+              remap_axes => diag_cs%decim(dl)%remap_axesCvi(i)
+           endif
+
+           ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
+           ! always exist but in the mean-time we have to do this check:
+           ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+           if (associated(remap_axes)) then
+              if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
+                 active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, remap_axes, &
+                      init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                      range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                      verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                      interp_method=interp_method, tile_count=tile_count, &
+                      cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
+                      cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
+                      cell_methods=cell_methods, x_cell_method=x_cell_method, &
+                      y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
+                      conversion=conversion, v_extensive=v_extensive)
+                 if (active) then
+                    call diag_remap_set_active(diag_cs%diag_remap_cs(i))
+                 endif
+              endif ! remap_axes%needs_remapping
+           endif ! associated(remap_axes)
+        endif ! axes%rank == 3
+     enddo ! i
   enddo
-  ! For each diagnostic coordinate register the diagnostic again under a different module name
-  do i=1,diag_cs%num_diag_coords
-    new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)
-
-    ! Register diagnostics remapped to z vertical coordinate
-    if (axes_in%rank == 3) then
-      remap_axes => null()
-      if ((axes_in%id == diag_cs%axesTL%id)) then
-          remap_axes => diag_cs%remap_axesTL(i)
-      elseif (axes_in%id == diag_cs%axesBL%id) then
-          remap_axes => diag_cs%remap_axesBL(i)
-      elseif (axes_in%id == diag_cs%axesCuL%id ) then
-          remap_axes => diag_cs%remap_axesCuL(i)
-      elseif (axes_in%id == diag_cs%axesCvL%id) then
-          remap_axes => diag_cs%remap_axesCvL(i)
-      elseif (axes_in%id == diag_cs%axesTi%id) then
-          remap_axes => diag_cs%remap_axesTi(i)
-      elseif (axes_in%id == diag_cs%axesBi%id) then
-          remap_axes => diag_cs%remap_axesBi(i)
-      elseif (axes_in%id == diag_cs%axesCui%id ) then
-          remap_axes => diag_cs%remap_axesCui(i)
-      elseif (axes_in%id == diag_cs%axesCvi%id) then
-          remap_axes => diag_cs%remap_axesCvi(i)
-      endif
-
-      ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
-      ! always exist but in the mean-time we have to do this check:
-      ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
-      if (associated(remap_axes)) then
-        if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
-          active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, remap_axes, &
-                     init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-                     range=range, mask_variant=mask_variant, standard_name=standard_name, &
-                     verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-                     interp_method=interp_method, tile_count=tile_count, &
-                     cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
-                     cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
-                     cell_methods=cell_methods, x_cell_method=x_cell_method, &
-                     y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
-                     conversion=conversion, v_extensive=v_extensive)
-          if (active) then
-            call diag_remap_set_active(diag_cs%diag_remap_cs(i))
-          endif
-        endif ! remap_axes%needs_remapping
-      endif ! associated(remap_axes)
-    endif ! axes%rank == 3
-  enddo ! i
 
   register_diag_field = dm_id
 
@@ -3410,5 +3606,27 @@ subroutine decimate_sample_2d(field_in, level)
   enddo; enddo
   field_in => field_out  
 end subroutine decimate_sample_2d
+
+subroutine decimate_sample_3d_out(field_in, field_out, level)
+  integer , intent(in) :: level
+  real, dimension(:,:,:) , pointer :: field_in, field_out
+  integer :: i,j,ii,jj,is,js
+  integer :: isl,iel,jsl,jel
+  integer :: k,ks,ke
+  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
+  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
+  !Always start from the first element
+  is=1
+  js=1
+  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
+  isl=1; iel=size(field_in,1)/level
+  jsl=1; jel=size(field_in,2)/level  
+  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+  do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+     ii = is+level*(i-isl)
+     jj = js+level*(j-jsl)
+     field_out(i,j,k)  = field_in(ii,jj,k)
+  enddo; enddo; enddo
+end subroutine decimate_sample_3d_out
 
 end module MOM_diag_mediator
