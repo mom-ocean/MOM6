@@ -354,7 +354,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
       if (CS%debug) then
         call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear",G%HI)
-        call Bchksum(visc%Kv_shear, "after calc_KS_vert visc%Kv_shear_Bu",G%HI)
+        call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu",G%HI)
         call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb",G%HI)
       endif
     else
@@ -1892,7 +1892,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
 end subroutine set_density_ratios
 
 subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp, int_tide_CSp, &
-                                tm_CSp)
+                                tm_CSp, halo_TS)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -1907,6 +1907,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                                                   !! structure (BDM)
   type(tidal_mixing_cs),    pointer       :: tm_csp  !< pointer to tidal mixing control
                                                   !! structure
+  integer,        optional, intent(out)   :: halo_TS !< The halo size of tracer points that must be
+                                                  !! valid for the calculations in set_diffusivity.
 
   ! local variables
   real :: decay_length
@@ -2227,6 +2229,11 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   CS%use_CVMix_ddiff = CVMix_ddiff_init(Time, G, GV, param_file, CS%diag, CS%CVMix_ddiff_csp)
   if (CS%use_CVMix_ddiff) &
     id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion via CVMix)', grain=CLOCK_MODULE)
+
+  if (present(halo_TS)) then
+    halo_TS = 0
+    if (CS%Vertex_Shear) halo_TS = 1
+  endif
 
 end subroutine set_diffusivity_init
 
