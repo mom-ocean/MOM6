@@ -644,7 +644,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
          "Module must be initialized before it is used.")
 
   h_neglect = GV%H_subroundoff
-  I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
+  I_Hbbl(:) = 1.0 / (CS%Hbbl + h_neglect)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
   if (CS%id_Kv_u > 0) then
@@ -828,7 +828,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     ! Diagnose total Kv at u-points
     if (CS%id_Kv_u > 0) then
       do k=1,nz ; do I=Isq,Ieq
-        if (do_i(I)) Kv_u(I,j,k) = 0.5 * GV%Z_to_m*(CS%a_u(I,j,K)+CS%a_u(I,j,K+1)) * CS%h_u(I,j,k)
+        if (do_i(I)) Kv_u(I,j,k) = 0.5 * GV%H_to_Z*(CS%a_u(I,j,K)+CS%a_u(I,j,K+1)) * CS%h_u(I,j,k)
       enddo ; enddo
     endif
 
@@ -996,7 +996,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     ! Diagnose total Kv at v-points
     if (CS%id_Kv_v > 0) then
       do k=1,nz ; do i=is,ie
-        if (do_i(I)) Kv_v(i,J,k) = 0.5 * GV%Z_to_m*(CS%a_v(i,J,K)+CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
+        if (do_i(I)) Kv_v(i,J,k) = 0.5 * GV%H_to_Z*(CS%a_v(i,J,K)+CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
       enddo ; enddo
     endif
 
@@ -1679,7 +1679,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or \n"//&
                  "the thickness over which near-bottom velocities are \n"//&
                  "averaged for the drag law if BOTTOMDRAGLAW is defined \n"//&
-                 "but LINEAR_DRAG is not.", units="m", fail_if_missing=.true.)
+                 "but LINEAR_DRAG is not.", units="m", fail_if_missing=.true., scale=GV%m_to_H)
   call get_param(param_file, mdl, "MAXVEL", CS%maxvel, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8)
@@ -1737,10 +1737,10 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
      'Slow varying vertical viscosity', 'm2 s-1')
 
   CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
-     'Total vertical viscosity at u-points', 'm2 s-1')
+     'Total vertical viscosity at u-points', 'm2 s-1', conversion=GV%Z_to_m**2)
 
   CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
-     'Total vertical viscosity at v-points', 'm2 s-1')
+     'Total vertical viscosity at v-points', 'm2 s-1', conversion=GV%Z_to_m**2)
 
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=GV%Z_to_m)
