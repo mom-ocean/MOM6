@@ -29,9 +29,9 @@ public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 
 !> Control structure for diabatic_aux
 type, public :: diabatic_aux_CS ; private
-  logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff
-                                   !! at the river mouths to "rivermix_depth" meters
-  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T, in m.
+  logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff at the
+                                   !! river mouths to a depth of "rivermix_depth"
+  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T, in Z.
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
                              !! to cool the topmost layer down to the freezing
                              !! point.  The default is false.
@@ -660,25 +660,32 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
   integer,       optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
 
   ! Local variables
-  real, dimension(SZI_(G))          :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD
-  real, dimension(SZI_(G))          :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
-  real, dimension(SZI_(G), SZJ_(G)) :: MLD ! Diagnosed mixed layer depth
-  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML
-  real, dimension(SZI_(G), SZJ_(G)) :: MLD2 ! Diagnosed MLD^2
-  real, parameter                   :: dz_subML = 50. ! Depth below ML over which to diagnose stratification (m)
+  real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences, in kg m-3.
+  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2     ! Reference pressures in Pa.
+  real, dimension(SZI_(G)) :: dK, dKm1, d1          ! Depths in Z.
+  real, dimension(SZI_(G)) :: rhoSurf, rhoAtK, rho1 ! Densities used for N2, in kg m-3.
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth, in m.
+  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML, in s-2.
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2, in m2.
+  real :: Rho_x_gE         ! The product of density, gravitational acceleartion and a unit
+                           ! conversion factor, in kg m-1 Z-1 s-2.
+  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density, in m4 s-2 kg-1.
+  real :: dz_subML         ! Depth below ML over which to diagnose stratification, in Z.
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
 
-  id_N2 = -1
-  if (PRESENT(id_N2subML)) id_N2 = id_N2subML
+  id_N2 = -1 ; if (PRESENT(id_N2subML)) id_N2 = id_N2subML
 
-  id_SQ = -1
-  if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
+  id_SQ = -1 ; if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
+
+  Rho_x_gE = (GV%g_Earth * GV%Z_to_m) * GV%Rho0
+  gE_rho0 = GV%m_to_Z * GV%g_Earth / GV%Rho0
+  dz_subML = 50.*GV%m_to_Z
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pRef_MLD(:) = 0. ; pRef_N2(:) = 0.
   do j=js,je
-    do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_m ; enddo ! Depth of center of surface layer
+    do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
     call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, tv%eqn_of_state)
     do i=is,ie
       deltaRhoAtK(i) = 0.
@@ -687,20 +694,20 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
         subMLN2(i,j) = 0.
         rho1(i) = 0.
         d1(i) = 0.
-        pRef_N2(i) = GV%g_Earth * GV%Rho0 * h(i,j,1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+        pRef_N2(i) = Rho_x_gE * h(i,j,1) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
         !### This should be: pRef_N2(i) = GV%g_Earth * GV%H_to_kg_m2 * h(i,j,1) ! This might change answers at roundoff.
       endif
     enddo
     do k=2,nz
       do i=is,ie
         dKm1(i) = dK(i) ! Depth of center of layer K-1
-        dK(i) = dK(i) + 0.5 * ( h(i,j,k) + h(i,j,k-1) ) * GV%H_to_m ! Depth of center of layer K
+        dK(i) = dK(i) + 0.5 * ( h(i,j,k) + h(i,j,k-1) ) * GV%H_to_Z ! Depth of center of layer K
       enddo
 
       ! Stratification, N2, immediately below the mixed layer, averaged over at least 50 m.
       if (id_N2>0) then
         do i=is,ie
-          pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+          pRef_N2(i) = pRef_N2(i) + Rho_x_gE * h(i,j,k) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
           !### This should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k)
           !### This might change answers at roundoff.
         enddo
@@ -712,12 +719,12 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
               d1(i) = dK(i)
               !### It looks to me like there is bad logic here. - RWH
               ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
-              pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+              pRef_N2(i) = pRef_N2(i) + Rho_x_gE * h(i,j,k) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
               !### This line should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k)
               !### This might change answers at roundoff.
             endif
             if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
-              subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+              subMLN2(i,j) = gE_rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
             endif
           endif
         enddo ! i-loop
@@ -741,7 +748,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
    !  if (id_N2>0 .and. subMLN2(i,j)==0. .and. d1(i)>0. .and. dK(i)-d1(i)>0.) then
    !    ! Use what ever stratification we can, measured over what ever distance is available
-   !    subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+   !    subMLN2(i,j) = gE_rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
    !  endif
     enddo
   enddo ! j-loop
@@ -818,8 +825,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
   real                                                  :: hGrounding(maxGroundings)
   real    :: Temp_in, Salin_in
-  real    :: I_G_Earth, g_Hconv2
-  real    :: GoRho
+  real    :: I_G_Earth
+  real    :: g_Hconv2
+  real    :: GoRho    ! g_Earth times a unit conversion factor divided by density, in Z m3 s-2 kg-1
   logical :: calculate_energetics
   logical :: calculate_buoyancy
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
@@ -844,7 +852,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho       = GV%g_Earth / GV%Rho0
+    GoRho       = GV%Z_to_m*GV%g_Earth / GV%Rho0
     start       = 1 + G%isc - G%isd
     npts        = 1 + G%iec - G%isc
   endif
@@ -1032,7 +1040,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
             ! rivermix_depth =  The prescribed depth over which to mix river inflow
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
-            RivermixConst = -0.5*(CS%rivermix_depth*dt)*GV%m_to_H*GV%H_to_Pa
+            RivermixConst = -0.5*(CS%rivermix_depth*dt)*GV%Z_to_H*GV%H_to_Pa
 
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
                   (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
@@ -1099,7 +1107,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                          tv%T(i,j,k) * min(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          tv%T(i,j,k) * dThickness * GV%H_to_kg_m2
-!NOTE tv%T should be T2d
+!### NOTE: tv%T should be T2d in the expressions above.
 
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
@@ -1249,7 +1257,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
       do i=is,ie
-        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_m * ( &
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * ( &
             dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
       enddo
@@ -1345,7 +1353,7 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
     if (CS%do_rivermix) &
       call get_param(param_file, mdl, "RIVERMIX_DEPTH", CS%rivermix_depth, &
                  "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
-                 "defined.", units="m", default=0.0)
+                 "defined.", units="m", default=0.0, scale=GV%m_to_Z)
   else ; CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; endif
   if (GV%nkml == 0) then
     call get_param(param_file, mdl, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
