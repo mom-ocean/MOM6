@@ -931,7 +931,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 #endif
 
   ! some constants
-  GoRho = GV%g_Earth / GV%Rho0
+  GoRho = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
 
   ! loop over horizontal points on processor
   !$OMP parallel do default(shared)

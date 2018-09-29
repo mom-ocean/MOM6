@@ -858,7 +858,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
 
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = GV%g_Earth / GV%Rho0
+  GoRho       = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 

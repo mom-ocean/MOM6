@@ -73,7 +73,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
   real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
-  GoRho = GV%g_Earth / GV%Rho0
+  GoRho = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec

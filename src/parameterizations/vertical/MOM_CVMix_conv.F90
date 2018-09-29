@@ -166,7 +166,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k
 
-  g_o_rho0 = GV%g_Earth / GV%Rho0
+  g_o_rho0 = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0

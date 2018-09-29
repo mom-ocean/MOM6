@@ -124,10 +124,10 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth/GV%Rho0
+  g_Rho0 = (GV%g_Earth*GV%m_to_Z)/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = GV%g_Earth * GV%Rho0
+  H_to_pres = (GV%g_Earth*GV%m_to_Z) * GV%Rho0
   H_to_m = GV%H_to_m
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
@@ -596,10 +596,10 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth/GV%Rho0
+  g_Rho0 = (GV%g_Earth*GV%m_to_Z)/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = GV%g_Earth * GV%Rho0
+  H_to_pres = (GV%g_Earth*GV%m_to_Z) * GV%Rho0
   H_to_m = GV%H_to_m
 
   min_h_frac = tol1 / real(nz)
