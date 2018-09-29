@@ -162,7 +162,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   enddo ; enddo
 
   ! Calculates interface heights, e, in m.
-  call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=1)
+  call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, e, halo_size=1)
 
   ! Set the diffusivities.
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
@@ -518,10 +518,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = GV%g_Earth
+  G_scale = (GV%g_Earth*GV%m_to_Z)
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = GV%H_subroundoff*H_to_m
-  G_rho0 = GV%g_Earth / GV%Rho0
+  G_rho0 = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
   N2_floor = CS%N2_floor
 
   use_EOS = associated(tv%eqn_of_state)

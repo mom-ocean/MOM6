@@ -142,7 +142,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  g_Earth_z = GV%g_Earth*GV%Z_to_m
+  g_Earth_z = GV%g_Earth
   I_gEarth = 1.0 / g_Earth_z
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
@@ -302,7 +302,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 
   ! Note that ddM/dPb = alpha_star(i,j,1)
   if (present(pbce)) then
-    call Set_pbce_nonBouss(p, tv_tmp, G, GV, GV%g_Earth, CS%GFS_scale, pbce, &
+    call Set_pbce_nonBouss(p, tv_tmp, G, GV, (GV%g_Earth*GV%m_to_Z), CS%GFS_scale, pbce, &
                            alpha_star)
   endif
 
@@ -432,7 +432,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
   h_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/CS%Rho0
-  G_Rho0 = GV%Z_to_m*GV%g_Earth/GV%Rho0
+  G_Rho0 = GV%g_Earth/GV%Rho0
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction
@@ -537,7 +537,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
   endif ! use_EOS
 
   if (present(pbce)) then
-    call Set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce, rho_star)
+    call Set_pbce_Bouss(e, tv_tmp, G, GV, (GV%g_Earth*GV%m_to_Z), CS%Rho0, CS%GFS_scale, pbce, rho_star)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -636,7 +636,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   Rho0xG = Rho0*g_Earth*GV%Z_to_m
-  G_Rho0 = GV%Z_to_m*GV%g_Earth / GV%Rho0
+  G_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   z_neglect = GV%H_subroundoff*GV%H_to_Z
 
@@ -871,7 +871,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
+  if (GV%g_prime(1) /= (GV%g_Earth*GV%m_to_Z)) CS%GFS_scale = GV%g_prime(1) / (GV%g_Earth*GV%m_to_Z)
 
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 

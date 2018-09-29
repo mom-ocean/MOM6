@@ -393,7 +393,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
+    call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)

@@ -202,7 +202,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
-      dUdT = ( GV%Z_to_m*GV%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
+      dUdT = ( GV%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.

@@ -251,7 +251,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   nz = G%ke
   h_neglect = GV%H_subroundoff
 
-  I_G_Earth = 1.0 / GV%g_Earth
+  I_G_Earth = 1.0 / (GV%g_Earth*GV%m_to_Z)
   debug = .true.
 
   surface_BL = .true. ; bottom_BL = .true. ; halves = .true.
@@ -269,7 +269,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     T0(k) = T_in(k) ; S0(k) = S_in(k)
     h_tr(k) = h_in(k)
     htot = htot + h_tr(k)
-    pres(K+1) = pres(K) + GV%g_Earth * GV%H_to_kg_m2 * h_tr(k)
+    pres(K+1) = pres(K) + GV%H_to_Pa * h_tr(k)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
     Z_int(K+1) = Z_int(K) - GV%H_to_m * h_tr(k)
   enddo
@@ -290,7 +290,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 
   do k=1,nz
     dMass = GV%H_to_kg_m2 * h_tr(k)
-    dPres = GV%g_Earth * dMass
+    dPres = (GV%g_Earth*GV%m_to_Z) * dMass
     dT_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dT(k)
     dS_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dS(k)
     dT_to_dColHt(k) = dMass * dSV_dT(k) * CS%ColHt_scaling
@@ -931,7 +931,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = (GV%g_Earth * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*GV%m_to_Z) * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
@@ -942,7 +942,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = (GV%g_Earth * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*GV%m_to_Z) * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo
