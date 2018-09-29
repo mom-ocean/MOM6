@@ -56,9 +56,9 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
   do k = 1,nz
     Rlay(k) = (rho_bot - rho_top)/(nz-1)*real(k-1) + rho_top
     if (k >1) then
-      g_prime(k) = (Rlay(k) - Rlay(k-1))*GV%g_earth/GV%rho0
+      g_prime(k) = (Rlay(k) - Rlay(k-1))*(GV%g_Earth*GV%m_to_Z)/GV%rho0
     else
-      g_prime(k) = GV%g_earth
+      g_prime(k) = (GV%g_Earth*GV%m_to_Z)
     endif
     !Rlay(:) = 0.0
     !g_prime(:) = 0.0

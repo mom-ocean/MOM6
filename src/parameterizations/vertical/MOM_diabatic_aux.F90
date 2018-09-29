@@ -678,8 +678,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
 
   id_SQ = -1 ; if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
 
-  Rho_x_gE = (GV%g_Earth * GV%Z_to_m) * GV%Rho0
-  gE_rho0 = GV%m_to_Z * GV%g_Earth / GV%Rho0
+  Rho_x_gE = (GV%g_Earth) * GV%Rho0
+  gE_rho0 = GV%m_to_Z * (GV%g_Earth*GV%m_to_Z) / GV%Rho0
   dz_subML = 50.*GV%m_to_Z
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -695,7 +695,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
         rho1(i) = 0.
         d1(i) = 0.
         pRef_N2(i) = Rho_x_gE * h(i,j,1) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
-        !### This should be: pRef_N2(i) = GV%g_Earth * GV%H_to_kg_m2 * h(i,j,1) ! This might change answers at roundoff.
+        !### This should be: pRef_N2(i) = GV%H_to_Pa * h(i,j,1) ! This might change answers at roundoff.
       endif
     enddo
     do k=2,nz
@@ -708,7 +708,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       if (id_N2>0) then
         do i=is,ie
           pRef_N2(i) = pRef_N2(i) + Rho_x_gE * h(i,j,k) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
-          !### This should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k)
+          !### This should be: pRef_N2(i) = pRev_N2(i) + GV%H_to_Pa * h(i,j,k)
           !### This might change answers at roundoff.
         enddo
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
@@ -720,7 +720,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
               !### It looks to me like there is bad logic here. - RWH
               ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
               pRef_N2(i) = pRef_N2(i) + Rho_x_gE * h(i,j,k) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
-              !### This line should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k)
+              !### This line should be: pRef_N2(i) = pRev_N2(i) + GV%H_to_Pa * h(i,j,k)
               !### This might change answers at roundoff.
             endif
             if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
@@ -846,13 +846,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
-  I_G_Earth = 1.0 / GV%g_Earth
-  g_Hconv2 = GV%g_Earth * GV%H_to_kg_m2**2
+  I_G_Earth = 1.0 / (GV%g_Earth*GV%m_to_Z)
+  g_Hconv2 = GV%H_to_Pa * GV%H_to_kg_m2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho       = GV%Z_to_m*GV%g_Earth / GV%Rho0
+    GoRho       = GV%g_Earth / GV%Rho0
     start       = 1 + G%isc - G%isd
     npts        = 1 + G%iec - G%isc
   endif
@@ -905,7 +905,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       do i=is,ie ; pres(i) = 0.0 ; enddo ! Add surface pressure?
       do k=1,nz
         do i=is,ie
-          d_pres(i) = GV%g_Earth * GV%H_to_kg_m2 * h2d(i,k)
+          d_pres(i) = GV%H_to_Pa * h2d(i,k)
           p_lay(i) = pres(i) + 0.5*d_pres(i)
           pres(i) = pres(i) + d_pres(i)
         enddo
