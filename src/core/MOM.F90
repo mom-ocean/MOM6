@@ -749,7 +749,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
       CS%time_in_cycle = CS%time_in_cycle + dt
-      call find_eta(h, CS%tv, GV%g_Earth, G, GV, ssh, CS%eta_av_bc)
+      call find_eta(h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, ssh, CS%eta_av_bc)
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
       enddo ; enddo
@@ -1943,7 +1943,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call verticalGridInit( param_file, CS%GV )
   GV => CS%GV
-!  dG%g_Earth = GV%g_Earth
+!  dG%g_Earth = (GV%g_Earth*GV%m_to_Z)
   !### These should be merged with the get_param calls, but must follow verticalGridInit.
   if (.not.bulkmixedlayer) then
     CS%Hmix = CS%Hmix * GV%m_to_Z
@@ -2150,7 +2150,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else ; G%Domain_aux => G%Domain ; endif
   ! Copy common variables from the vertical grid to the horizontal grid.
   ! Consider removing this later?
-  G%ke = GV%ke ; G%g_Earth = GV%g_Earth
+  G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*GV%m_to_Z)
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
                             dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -2179,7 +2179,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
     else ; CS%G%Domain_aux => CS%G%Domain ;endif
-    G%ke = GV%ke ; G%g_Earth = GV%g_Earth
+    G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*GV%m_to_Z)
   endif
 
 
@@ -2431,9 +2431,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (.not.query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, CS%ave_ssh_ibc, eta)
+      call find_eta(CS%h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%ave_ssh_ibc, eta)
     else
-      call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, CS%ave_ssh_ibc)
+      call find_eta(CS%h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%ave_ssh_ibc)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2470,7 +2470,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(verticalGrid_type), pointer :: GV => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp_tmp => NULL()
   real, allocatable :: z_interface(:,:,:) ! Interface heights (meter)
-  real, allocatable :: eta(:,:) ! Interface heights (meter)
   type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)
@@ -2484,7 +2483,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
-    call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, z_interface)
+    call find_eta(CS%h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, z_interface)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
 
@@ -2653,7 +2652,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
       else
         Rho_conv=GV%Rho0
       endif
-      IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
+      IgR0 = 1.0 / (Rho_conv * (GV%g_Earth*GV%m_to_Z))
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif

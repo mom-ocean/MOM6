@@ -19,8 +19,8 @@ type, public :: verticalGrid_type
 
   ! Commonly used parameters
   integer :: ke     !< The number of layers/levels in the vertical
-  real :: max_depth !< The maximum depth of the ocean in meters.
-  real :: g_Earth   !< The gravitational acceleration in m s-2.
+  real :: max_depth !< The maximum depth of the ocean in Z (often m).
+  real :: g_Earth   !< The gravitational acceleration in m2 Z-1 s-2.
   real :: Rho0      !< The density used in the Boussinesq approximation or nominal
                     !! density used to convert depths into mass units, in kg m-3.
 
@@ -125,6 +125,7 @@ subroutine verticalGridInit( param_file, GV )
   if (Z_power /= 0) Z_rescale_factor = 2.0**Z_power
   GV%Z_to_m = 1.0 * Z_rescale_factor
   GV%m_to_Z = 1.0 / Z_rescale_factor
+  GV%g_Earth = GV%g_Earth * GV%Z_to_m
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
   call get_param(param_file, mdl, "NK", nk, &
@@ -151,7 +152,7 @@ subroutine verticalGridInit( param_file, GV )
     GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
   endif
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
-  GV%H_to_Pa = GV%g_Earth * GV%H_to_kg_m2
+  GV%H_to_Pa = (GV%g_Earth*GV%m_to_Z) * GV%H_to_kg_m2
 
   GV%H_to_Z = GV%H_to_m * GV%m_to_Z
   GV%Z_to_H = GV%Z_to_m * GV%m_to_H

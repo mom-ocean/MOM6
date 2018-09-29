@@ -284,7 +284,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, CS%e, eta_bt)
+    call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%e, eta_bt)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
@@ -294,7 +294,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         CS%e_D(i,j,k) = CS%e(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, GV%g_Earth, G, GV, CS%e_D, eta_bt)
+      call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%e_D, eta_bt)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
@@ -351,7 +351,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         endif
         do k=1,nz ! Integrate vertically downward for pressure
           do i=is,ie ! Pressure for EOS at the layer center (Pa)
-            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
           ! Store in-situ density (kg/m3) in work_3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
@@ -360,7 +360,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
             work_3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k)) / work_3d(i,j,k)
           enddo
           do i=is,ie ! Pressure for EOS at the bottom interface (Pa)
-            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
         enddo ! k
       enddo ! j
@@ -815,7 +815,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
   endif
 
   if (CS%id_col_ht > 0) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, z_top)
+    call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, z_top)
     do j=js,je ; do i=is,ie
       z_bot(i,j) = z_top(i,j) + G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
@@ -826,7 +826,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / GV%g_Earth
+        IG_Earth = 1.0 / (GV%g_Earth*GV%m_to_Z)
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
         do k=1,nz
@@ -835,7 +835,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_m*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, GV%H_to_kg_m2, GV%g_Earth, &
+                              z_top, z_bot, 0.0, GV%H_to_kg_m2, (GV%g_Earth*GV%m_to_Z), &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -860,7 +860,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
       !     pbo = (mass * g) + p_surf
       ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = mass(i,j) * GV%g_Earth
+        btm_pres(i,j) = mass(i,j) * (GV%g_Earth*GV%m_to_Z)
         if (associated(p_surf)) then
           btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif

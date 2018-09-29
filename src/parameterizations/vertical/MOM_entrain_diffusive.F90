@@ -226,7 +226,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   tolerance = m_to_H * CS%Tolerance_Ent
-  g_2dt = 0.5 * GV%g_Earth / dt
+  g_2dt = 0.5 * (GV%g_Earth*GV%m_to_Z) / dt
   kmb = GV%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
   if (.not. CS%bulkmixedlayer) then

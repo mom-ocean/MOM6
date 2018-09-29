@@ -194,7 +194,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
 !  Ri_crit = CS%Rino_crit
-!  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = GV%g_Earth/GV%Rho0
+!  gR0 = GV%Rho0*(GV%g_Earth*GV%m_to_Z) ; g_R0 = (GV%g_Earth*GV%m_to_Z)/GV%Rho0
 
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
@@ -492,7 +492,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
 !  Ri_crit = CS%Rino_crit
-!  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = GV%g_Earth/GV%Rho0
+!  gR0 = GV%Rho0*(GV%g_Earth*GV%m_to_Z) ; g_R0 = (GV%g_Earth*GV%m_to_Z)/GV%Rho0
 
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
@@ -821,7 +821,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   integer :: k, itt, itt_dt
 
   Ri_crit = CS%Rino_crit
-  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = GV%g_Earth/GV%Rho0
+  gR0 = GV%Rho0*(GV%g_Earth*GV%m_to_Z) ; g_R0 = (GV%g_Earth*GV%m_to_Z)/GV%Rho0
   k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
