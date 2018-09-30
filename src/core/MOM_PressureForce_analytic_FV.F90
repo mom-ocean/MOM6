@@ -403,7 +403,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
   enddo
 
   if (present(pbce)) then
-    call set_pbce_nonBouss(p, tv_tmp, G, GV, (GV%g_Earth*GV%m_to_Z), CS%GFS_scale, pbce)
+    call set_pbce_nonBouss(p, tv_tmp, G, GV, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
@@ -748,7 +748,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   endif
 
   if (present(pbce)) then
-    call set_pbce_Bouss(e, tv_tmp, G, GV, (GV%g_Earth*GV%m_to_Z), CS%Rho0, CS%GFS_scale, pbce)
+    call set_pbce_Bouss(e, tv_tmp, G, GV, CS%Rho0, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then

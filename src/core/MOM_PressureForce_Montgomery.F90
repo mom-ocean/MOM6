@@ -116,8 +116,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
                              ! barotropic and baroclinic pieces.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
 
-  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2.
-  real :: I_gEarth           ! The inverse of g_Earth_z, in s2 Z m-2
+  real :: I_gEarth           ! The inverse of g_Earth, in s2 Z m-2
   real :: dalpha
   real :: Pa_to_H   ! A factor to convert from Pa to the thicknesss units (H).
   real :: alpha_Lay(SZK_(G)) ! The specific volume of each layer, in kg m-3.
@@ -142,8 +141,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  g_Earth_z = GV%g_Earth
-  I_gEarth = 1.0 / g_Earth_z
+  I_gEarth = 1.0 / GV%g_Earth
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
@@ -202,12 +200,12 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -g_Earth_z*(e_tidal(i,j) + G%bathyT(i,j))
+      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -g_Earth_z*G%bathyT(i,j)
+      geopot_bot(i,j) = -GV%g_Earth*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -302,8 +300,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 
   ! Note that ddM/dPb = alpha_star(i,j,1)
   if (present(pbce)) then
-    call Set_pbce_nonBouss(p, tv_tmp, G, GV, (GV%g_Earth*GV%m_to_Z), CS%GFS_scale, pbce, &
-                           alpha_star)
+    call Set_pbce_nonBouss(p, tv_tmp, G, GV, CS%GFS_scale, pbce, alpha_star)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -537,7 +534,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
   endif ! use_EOS
 
   if (present(pbce)) then
-    call Set_pbce_Bouss(e, tv_tmp, G, GV, (GV%g_Earth*GV%m_to_Z), CS%Rho0, CS%GFS_scale, pbce, rho_star)
+    call Set_pbce_Bouss(e, tv_tmp, G, GV, CS%Rho0, CS%GFS_scale, pbce, rho_star)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -600,12 +597,11 @@ end subroutine PressureForce_Mont_Bouss
 
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the free surface height.
-subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star)
+subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in Z.
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
-  real,                                 intent(in)  :: g_Earth !< The gravitational acceleration, in m s-2.
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density, in kg m-3.
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
                                                             !! and the gravitational acceleration of the planet.
@@ -635,7 +631,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
-  Rho0xG = Rho0*g_Earth*GV%Z_to_m
+  Rho0xG = Rho0*GV%g_Earth
   G_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   z_neglect = GV%H_subroundoff*GV%H_to_Z
@@ -700,12 +696,11 @@ end subroutine Set_pbce_Bouss
 
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the column mass.
-subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
+subroutine Set_pbce_nonBouss(p, tv, G, GV, GFS_scale, pbce, alpha_star)
   type(ocean_grid_type),                intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: p !< Interface pressures, in Pa.
   type(thermo_var_ptrs),                intent(in)  :: tv !< Thermodynamic variables
-  real,                                 intent(in)  :: g_Earth !< The gravitational acceleration, in m s-2.
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
                                                                  !! and the gravitational acceleration of the planet.
                                                                  !! Usually this ratio is 1.
@@ -738,7 +733,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
 
   use_EOS = associated(tv%eqn_of_state)
 
-  dP_dH = g_Earth * GV%H_to_kg_m2
+  dP_dH = GV%H_to_Pa
   dp_neglect = dP_dH * GV%H_subroundoff
 
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
