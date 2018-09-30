@@ -139,7 +139,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, param_file, just_read_param
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
-                 "zonal-mean jet.", units="m", &
+                 "zonal-mean jet.", units="m", scale=GV%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.

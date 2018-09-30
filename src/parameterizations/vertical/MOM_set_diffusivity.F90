@@ -1810,7 +1810,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
 !                      below it (nondimensional)
 !  (in)      rho_0   - layer potential densities relative to surface press (kg/m3)
 
-  real :: g_R0                     ! g_R0 is g/Rho (m4 kg-1 s-2)
+  real :: g_R0                     ! g_R0 is g/Rho (m5 Z-1 kg-1 s-2)
   real :: eps, tmp                 ! nondimensional temproray variables
   real :: a(SZK_(G)), a_0(SZK_(G)) ! nondimensional temporary variables
   real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures
@@ -1833,7 +1833,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
   enddo
 
   if (CS%bulkmixedlayer) then
-    g_R0 = (GV%g_Earth*GV%m_to_Z)/GV%Rho0
+    g_R0 = GV%g_Earth/GV%Rho0
     kmb = GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
