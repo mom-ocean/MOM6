@@ -527,11 +527,11 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        M(i,j,1) = GV%g_prime(1) * GV%Z_to_m*e(i,j,1)
+        M(i,j,1) = GV%g_prime(1) * e(i,j,1)
         if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
-        M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * GV%Z_to_m*e(i,j,K)
+        M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * e(i,j,K)
       enddo ; enddo
     enddo
   endif ! use_EOS
@@ -687,11 +687,11 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
-        pbce(i,j,1) = GV%g_prime(1) * GV%H_to_m
+        pbce(i,j,1) = GV%g_prime(1) * GV%H_to_Z
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k-1) + &
-                      (GV%g_prime(K)*GV%H_to_m) * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
+                      (GV%g_prime(K)*GV%H_to_Z) * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
      enddo ; enddo
     enddo ! end of j loop
   endif ! use_EOS
@@ -871,7 +871,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= (GV%g_Earth*GV%m_to_Z)) CS%GFS_scale = GV%g_prime(1) / (GV%g_Earth*GV%m_to_Z)
+  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 

@@ -2977,7 +2977,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       if (segment%direction == OBC_DIRECTION_W) ishift=1
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%Zd_to_m*G%bathyT(i+ishift,j))
+        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
         segment%Htot(I,j)=0.0
         do k=1,G%ke
           segment%h(I,j,k) = h(i+ishift,j,k)
@@ -2990,7 +2990,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%Zd_to_m*G%bathyT(i,j+jshift))
+        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
         segment%Htot(i,J)=0.0
         do k=1,G%ke
           segment%h(i,J,k) = h(i,j+jshift,k)

@@ -252,9 +252,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
-  real :: D_edge            ! The thickness in m of the dense fluid at the
+  real :: D_edge            ! The thickness in Z of the dense fluid at the
                             ! inner edge of the inflow.
-  real :: g_prime_tot       ! The reduced gravity across all layers, m s-2.
+  real :: g_prime_tot       ! The reduced gravity across all layers, m2 Z-1 s-2.
   real :: Def_Rad           ! The deformation radius, based on fluid of
                             ! thickness D_edge, in the same units as lat.
   real :: Ri_trans          ! The shear Richardson number in the transition
@@ -271,15 +271,15 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! The following variables should be transformed into runtime parameters.
-  D_edge = 300.0  ! The thickness of dense fluid in the inflow.
+  D_edge = 300.0*GV%m_to_Z  ! The thickness of dense fluid in the inflow.
   Ri_trans = 1.0/3.0 ! The shear Richardson number in the transition region
                      ! region of the specified shear profile.
 
   if (.not.associated(OBC)) return
 
-  g_prime_tot = ((GV%g_Earth*GV%m_to_Z)/GV%Rho0)*2.0
+  g_prime_tot = (GV%g_Earth/GV%Rho0)*2.0
   Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
-  tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
+  tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%Z_to_H
 
   if (OBC%number_of_segments /= 1) then
     call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)
