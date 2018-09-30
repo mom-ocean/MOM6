@@ -729,7 +729,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
             Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope)
-            hN2_u(I,K) = GV%g_prime(K)
+            hN2_u(I,K) = GV%g_prime(K)*GV%m_to_Z
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
           hN2_u(I,K) = N2_floor * dz_neglect
@@ -975,7 +975,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
             Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope)
-            hN2_v(i,K) = GV%g_prime(K)
+            hN2_v(i,K) = GV%g_prime(K)*GV%m_to_Z
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
           hN2_v(i,K) = N2_floor * dz_neglect

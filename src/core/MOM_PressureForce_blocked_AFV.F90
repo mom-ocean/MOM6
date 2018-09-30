@@ -832,7 +832,7 @@ subroutine PressureForce_blk_AFV_init(Time, G, GV, param_file, diag, CS, tides_C
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= (GV%g_Earth*GV%m_to_Z)) CS%GFS_scale = GV%g_prime(1) / (GV%g_Earth*GV%m_to_Z)
+  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 

@@ -643,7 +643,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
           hint = H_0APE(K) + (hbelow - G%Zd_to_m*G%bathyT(i,j))
           hbot = H_0APE(K) - G%Zd_to_m*G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (GV%Rho0*GV%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (GV%Rho0*GV%m_to_Z*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -653,7 +653,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
         do k=nz,1,-1
           hint = H_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(H_0APE(K) - G%Zd_to_m*G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (GV%Rho0*GV%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (GV%Rho0*GV%m_to_Z*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
