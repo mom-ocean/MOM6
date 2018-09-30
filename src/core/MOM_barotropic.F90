@@ -2640,14 +2640,14 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(i,j) = eta(i,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (GV%Z_to_m*G%bathyT(i,j) + eta(i,j))) !### * GV%H_to_m?
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + GV%m_to_Z*eta(i,j))) !### * GV%H_to_m?
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
             BT_OBC%H_u(i,j) = eta(i+1,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (GV%Z_to_m*G%bathyT(i+1,j) + eta(i+1,j))) !### * GV%H_to_m?
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i+1,j) + GV%m_to_Z*eta(i+1,j))) !### * GV%H_to_m?
           endif
         endif
         if (GV%Boussinesq) then
-          BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * BT_OBC%H_u(i,j)) !### * GV%H_to_m?
+          BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*GV%m_to_Z * BT_OBC%H_u(i,j)) !### * GV%H_to_m?
         endif
       endif
     endif ; enddo ; enddo
@@ -2696,14 +2696,14 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = eta(i,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (GV%Z_to_m*G%bathyT(i,j) + eta(i,j))) !### * GV%H_to_m?
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + eta(i,j)*GV%m_to_Z)) !### * GV%H_to_m?
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             BT_OBC%H_v(i,J) = eta(i,j+1)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (GV%Z_to_m*G%bathyT(i,j+1) + eta(i,j+1))) !### * GV%H_to_m?
+            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j+1) + eta(i,j+1)*GV%m_to_Z)) !### * GV%H_to_m?
           endif
         endif
         if (GV%Boussinesq) then
-          BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * BT_OBC%H_v(i,J)) !### * GV%H_to_m?
+          BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*GV%m_to_Z * BT_OBC%H_v(i,J)) !### * GV%H_to_m?
         endif
       endif
     endif ; enddo ; enddo
@@ -4143,7 +4143,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 
   ! Estimate the maximum stable barotropic time step.
   gtot_estimate = 0.0
-  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K) ; enddo
+  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K)*GV%m_to_Z ; enddo
   call set_dtbt(G, GV, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
 
   if (dtbt_input > 0.0) then
