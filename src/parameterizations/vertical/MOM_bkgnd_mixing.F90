@@ -179,7 +179,12 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
-  prandtl_bkgnd_default = Kv/CS%Kd
+  if (CS%Kd == 0.0) then
+    prandtl_bkgnd_default = 0.0
+  else
+    prandtl_bkgnd_default = Kv/CS%Kd
+  endif
+
   call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
                  "Turbulent Prandtl number used to convert vertical \n"//&
                  "background diffusivities into viscosities.", &
@@ -269,7 +274,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
   if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
 
-  if (CS%Kd>1.e-14 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
+  if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
     call MOM_error(WARNING, "set_diffusivity_init: a nonzero constant background "//&
          "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
