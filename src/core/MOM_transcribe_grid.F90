@@ -1,3 +1,5 @@
+!> Module with routines for copying information from a shared dynamic horizontal
+!! grid to an ocean-specific horizontal grid and the reverse.
 module MOM_transcribe_grid
 
 ! This file is part of MOM6. See LICENSE.md for the license.

@@ -1,51 +1,7 @@
+!> Simulates CFCs using the OCMIP2 protocols
 module MOM_OCMIP2_CFC
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2007                                           *
-!*                                                                     *
-!*    This file contains an example of the code that is needed to set  *
-!*  up and use CFC-11 and CFC-12 in a fully coupled or ice-ocean model *
-!*  context. There are 5 subroutines in this file.                     *
-!*                                                                     *
-!*    register_OCMIP2_CFC determines if the module is going to work,   *
-!*  then makes several calls registering tracers to be advected and    *
-!*  read from a restart file. it also sets various run-time parameters *
-!*  for this module and sets up a "control structure" (CS) to store    *
-!*  all information for this module.                                   *
-!*                                                                     *
-!*    initialize_OCMIP2_CFC initializes this modules arrays if they    *
-!*  have not been found in a restart file.  It also determines which   *
-!*  diagnostics will need to be calculated.                            *
-!*                                                                     *
-!*    OCMIP2_CFC_column_physics updates the CFC concentrations,        *
-!*  applying everthing but horizontal advection and diffusion.         *
-!*  Surface fluxes are applied inside an implicit vertical advection   *
-!*  and diffusion tridiagonal solver, and any interior sources and     *
-!*  sinks (not applicable for CFCs) would also be applied here.  This  *
-!*  subroutine also sends out any requested interior diagnostics.      *
-!*                                                                     *
-!*    OCMIP2_CFC_surface_state calculates the information required     *
-!*  from the ocean for the FMS coupler to calculate CFC fluxes.        *
-!*                                                                     *
-!*    OCMIP2_CFC_end deallocates the persistent run-time memory used   *
-!*  by this module.                                                    *
-!*                                                                     *
-!*     A small fragment of the horizontal grid is shown below:         *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v,                                       *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, CFC11, CFC12                          *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
@@ -78,19 +34,20 @@ public OCMIP2_CFC_column_physics, OCMIP2_CFC_surface_state
 public OCMIP2_CFC_stock, OCMIP2_CFC_end
 
 
-! NTR is the number of tracers in this module.
-integer, parameter :: NTR = 2
+integer, parameter :: NTR = 2 !< the number of tracers in this module.
 
+!> The control structure for the  OCMPI2_CFC tracer package
 type, public :: OCMIP2_CFC_CS ; private
-  character(len=200) :: IC_file ! The file in which the CFC initial values can
-                    ! be found, or an empty string for internal initilaization.
-  logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false..
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
+  character(len=200) :: IC_file !< The file in which the CFC initial values can
+                                !! be found, or an empty string for internal initilaization.
+  logical :: Z_IC_file !< If true, the IC_file is in Z-space.  The default is false..
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM6 tracer registry
   real, pointer, dimension(:,:,:) :: &
-    CFC11 => NULL(), &     ! The CFC11 concentration in mol m-3.
-    CFC12 => NULL()        ! The CFC12 concentration in mol m-3.
+    CFC11 => NULL(), &     !< The CFC11 concentration in mol m-3.
+    CFC12 => NULL()        !< The CFC12 concentration in mol m-3.
   ! In the following variables a suffix of _11 refers to CFC11 and _12 to CFC12.
+  !>@{ Coefficients used in the CFC11 and CFC12 solubility calculation
   real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
   real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
                                        ! units of ND, degC-1, degC-2, degC-3.
@@ -100,29 +57,34 @@ type, public :: OCMIP2_CFC_CS ; private
   real :: e1_11, e2_11, e3_11          ! More coefficients in the calculation of
   real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
                                        ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
-  real :: CFC11_IC_val = 0.0    ! The initial value assigned to CFC11.
-  real :: CFC12_IC_val = 0.0    ! The initial value assigned to CFC12.
-  real :: CFC11_land_val = -1.0 ! The values of CFC11 and CFC12 used where
-  real :: CFC12_land_val = -1.0 ! land is masked out.
-  logical :: tracers_may_reinit  ! If true, tracers may go through the
-                           ! initialization code if they are not found in the
-                           ! restart files.
-  character(len=16) :: CFC11_name, CFC12_name ! Variable names.
+  !!@}
+  real :: CFC11_IC_val = 0.0    !< The initial value assigned to CFC11.
+  real :: CFC12_IC_val = 0.0    !< The initial value assigned to CFC12.
+  real :: CFC11_land_val = -1.0 !< The value of CFC11 used where land is masked out.
+  real :: CFC12_land_val = -1.0 !< The value of CFC12 used where land is masked out.
+  logical :: tracers_may_reinit !< If true, tracers may be reset via the initialization code
+                                !! if they are not found in the restart files.
+  character(len=16) :: CFC11_name !< CFC11 variable name
+  character(len=16) :: CFC12_name !< CFC12 variable name
 
-  integer :: ind_cfc_11_flux  ! Indices returned by aof_set_coupler_flux that
-  integer :: ind_cfc_12_flux  ! are used to pack and unpack surface boundary
-                              ! condition arrays.
+  integer :: ind_cfc_11_flux  !< Index returned by aof_set_coupler_flux that is used to
+                              !! pack and unpack surface boundary condition arrays.
+  integer :: ind_cfc_12_flux  !< Index returned by aof_set_coupler_flux that is used to
+                              !! pack and unpack surface boundary condition arrays.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() ! A structure that is used to
+                                   ! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   ! The following vardesc types contain a package of metadata about each tracer.
-  type(vardesc) :: CFC11_desc, CFC12_desc
+  type(vardesc) :: CFC11_desc !< A set of metadata for the CFC11 tracer
+  type(vardesc) :: CFC12_desc !< A set of metadata for the CFC12 tracer
 end type OCMIP2_CFC_CS
 
 contains
 
+!> Register the OCMIP2 CFC tracers to be used with MOM and read the parameters
+!! that are used with this tracer package
 function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
@@ -134,19 +96,13 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control structure.
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in/out)  tr_Reg - A pointer to the tracer registry.
-!  (in)      restart_CS - A pointer to the restart control structure.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
   character(len=40)  :: mdl = "MOM_OCMIP2_CFC" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  real, dimension(:,:,:), pointer :: tr_ptr
+  ! This include declares and sets the variable "version".
+#include "version_variable.h"
+  real, dimension(:,:,:), pointer :: tr_ptr => NULL()
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
   real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
   real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
@@ -351,8 +307,7 @@ subroutine flux_init_OCMIP2_CFC(CS, verbosity)
 
 end subroutine flux_init_OCMIP2_CFC
 
-!> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
-!! and it sets up the tracer output.
+!> Initialize the OCMP2 CFC tracer fields and set up the tracer output.
 subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
                                  sponge_CSp, diag_to_Z_CSp)
   logical,                        intent(in) :: restart    !< .true. if the fields have already been
@@ -378,21 +333,6 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
 !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
-! Arguments: restart - .true. if the fields have already been read from
-!                     a restart file.
-!  (in)      day - Time of the start of the run.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 register_OCMIP2_CFC.
-!  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
-!                         they are in use.  Otherwise this may be unassociated.
-!  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
-!                            in depth space.
   logical :: from_file = .false.
 
   if (.not.associated(CS)) return
@@ -460,10 +400,9 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
 
 end subroutine init_tracer_CFC
 
-!>  This subroutine applies diapycnal diffusion and any other column
-! tracer physics or chemistry to the tracers from this file.
-! CFCs are relatively simple, as they are passive tracers. with only a surface
-! flux as a source.
+!>  This subroutine applies diapycnal diffusion, souces and sinks and any other column
+!! tracer physics or chemistry to the OCMIP2 CFC tracers.
+!! CFCs are relatively simple, as they are passive tracers with only a surface flux as a source.
 subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
@@ -494,31 +433,16 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 ! CFCs are relatively simple, as they are passive tracers. with only a surface
 ! flux as a source.
 
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
-!  (in)      ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in m or kg m-2.
-!  (in)      eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in m or kg m-2.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_OCMIP2_CFC.
-!
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
+  ! Local variables
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     CFC11_flux, &    ! The fluxes of CFC11 and CFC12 into the ocean, in the
     CFC12_flux       ! units of CFC concentrations times meters per second.
-  real, pointer, dimension(:,:,:) :: CFC11, CFC12
+  real, pointer, dimension(:,:,:) :: CFC11 => NULL(), CFC12 => NULL()
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   integer :: i, j, k, m, is, ie, js, je, nz, idim(4), jdim(4)
 
@@ -580,23 +504,9 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
   character(len=*), dimension(:),  intent(out)   :: units  !< The units of the stocks calculated.
   integer, optional,               intent(in)    :: stock_index !< The coded index of a specific
                                                                 !! stock being sought.
-  integer                                        :: OCMIP2_CFC_stock
-! This function calculates the mass-weighted integral of all tracer stocks,
-! returning the number of stocks it has calculated.  If the stock_index
-! is present, only the stock corresponding to that coded index is returned.
+  integer                                        :: OCMIP2_CFC_stock !< The number of stocks calculated here.
 
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (out)     stocks - the mass-weighted integrated amount of each tracer,
-!                     in kg times concentration units.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_OCMIP2_CFC.
-!  (out)     names - the names of the stocks calculated.
-!  (out)     units - the units of the stocks calculated.
-!  (in,opt)  stock_index - the coded index of a specific stock being sought.
-! Return value: the number of stocks calculated here.
-
+  ! Local variables
   real :: mass
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -639,6 +549,7 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   type(OCMIP2_CFC_CS),    pointer       :: CS !< The control structure returned by a previous
                                               !! call to register_OCMIP2_CFC.
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     CFC11_Csurf, &  ! The CFC-11 and CFC-12 surface concentrations times the
     CFC12_Csurf, &  ! Schmidt number term, both in mol m-3.
@@ -700,6 +611,7 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
 
 end subroutine OCMIP2_CFC_surface_state
 
+!> Deallocate any memory associated with the OCMIP2 CFC tracer package
 subroutine OCMIP2_CFC_end(CS)
   type(OCMIP2_CFC_CS), pointer :: CS   !< The control structure returned by a
                                        !! previous call to register_OCMIP2_CFC.
@@ -715,5 +627,14 @@ subroutine OCMIP2_CFC_end(CS)
     deallocate(CS)
   endif
 end subroutine OCMIP2_CFC_end
+
+
+!> \namespace mom_ocmip2_cfc
+!!
+!!   By Robert Hallberg, 2007
+!!
+!!     This module contains the code that is needed to set
+!!   up and use CFC-11 and CFC-12 in a fully coupled or ice-ocean model
+!!   context using the OCMIP2 protocols
 
 end module MOM_OCMIP2_CFC

@@ -1,35 +1,7 @@
+!> Provides regularization of layers in isopycnal mode
 module MOM_regularize_layers
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, 2011.                     *
-!*                                                                     *
-!*    This file contains the code to do vertical remapping of mass,    *
-!*  temperature and salinity in MOM. Other tracers and the horizontal  *
-!*  velocity components will be remapped outside of this subroutine    *
-!*  using the values that are stored in ea and eb.                     *
-!*    The code that is here now only applies in very limited cases     *
-!*  where the mixed- and buffer-layer structures are problematic, but  *
-!*  future additions will include the ability to emulate arbitrary     *
-!*  vertical coordinates.                                              *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, T, S, ea, eb, etc.                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -49,34 +21,38 @@ implicit none ; private
 
 public regularize_layers, regularize_layers_init
 
+!> This control structure holds parameters used by the MOM_regularize_layers module
 type, public :: regularize_layers_CS ; private
-  logical :: regularize_surface_layers ! If true, vertically restructure the
-                             ! near-surface layers when they have too much
-                             ! lateral variations to allow for sensible lateral
-                             ! barotropic transports.
-  logical :: reg_sfc_detrain
-  real    :: h_def_tol1      ! The value of the relative thickness deficit at
-                             ! which to start modifying the structure, 0.5 by
-                             ! default (or a thickness ratio of 5.83).
-  real    :: h_def_tol2      ! The value of the relative thickness deficit at
-                             ! which to the structure modification is in full
-                             ! force, now 20% of the way from h_def_tol1 to 1.
-  real    :: h_def_tol3      ! The values of the relative thickness defitic at
-  real    :: h_def_tol4      ! which to start detrainment from the buffer layers
-                             ! to the interior, and at which to do this at full
-                             ! intensity.  Now 30% and 50% of the way from
-                             ! h_def_tol1 to 1.
-  real    :: Hmix_min        ! The minimum mixed layer thickness in m.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  logical :: debug           ! If true, do more thorough checks for debugging purposes.
+  logical :: regularize_surface_layers !< If true, vertically restructure the
+                             !! near-surface layers when they have too much
+                             !! lateral variations to allow for sensible lateral
+                             !! barotropic transports.
+  logical :: reg_sfc_detrain !< If true, allow the buffer layers to detrain into the
+                             !! interior as a part of the restructuring when
+                             !! regularize_surface_layers is true
+  real    :: h_def_tol1      !< The value of the relative thickness deficit at
+                             !! which to start modifying the structure, 0.5 by
+                             !! default (or a thickness ratio of 5.83).
+  real    :: h_def_tol2      !< The value of the relative thickness deficit at
+                             !! which to the structure modification is in full
+                             !! force, now 20% of the way from h_def_tol1 to 1.
+  real    :: h_def_tol3      !< The value of the relative thickness deficit at which to start
+                             !! detrainment from the buffer layers to the interior, now 30% of
+                             !! the way from h_def_tol1 to 1.
+  real    :: h_def_tol4      !< The value of the relative thickness deficit at which to do
+                             !! detrainment from the buffer layers to the interior at full
+                             !! force, now 50% of the way from h_def_tol1 to 1.
+  real    :: Hmix_min        !< The minimum mixed layer thickness in m.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                             !! regulate the timing of diagnostic output.
+  logical :: debug           !< If true, do more thorough checks for debugging purposes.
 
-  integer :: id_def_rat = -1
-  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called
-                                        ! from inside loops that can be threaded.
-                                        ! To run with multiple threads, set to False.
+  integer :: id_def_rat = -1 !< A diagnostic ID
+  logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that
+                             !! can be threaded. To run with multiple threads, set to False.
 #ifdef DEBUG_CODE
+  !>@{ Diagnostic IDs
   integer :: id_def_rat_2 = -1, id_def_rat_3 = -1
   integer :: id_def_rat_u = -1, id_def_rat_v = -1
   integer :: id_e1 = -1, id_e2 = -1, id_e3 = -1
@@ -85,10 +61,14 @@ type, public :: regularize_layers_CS ; private
   integer :: id_def_rat_v_2 = -1, id_def_rat_v_2b = -1
   integer :: id_def_rat_u_3 = -1, id_def_rat_u_3b = -1
   integer :: id_def_rat_v_3 = -1, id_def_rat_v_3b = -1
+  !!@}
 #endif
 end type regularize_layers_CS
 
+!>@{ Clock IDs
+!! \todo Should these be global?
 integer :: id_clock_pass, id_clock_EOS
+!!@}
 
 contains
 
@@ -115,26 +95,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! m or kg m-2 (i.e., H).
   type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
                                                   !! call to regularize_layers_init.
-
-!    This subroutine partially steps the bulk mixed layer model.
-!  The following processes are executed, in the order listed.
-
-! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)
-!                The units of h are referred to as H below.
-!  (in/out)  tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      dt - Time increment, in s.
-!  (in/out)  ea - The amount of fluid moved downward into a layer; this should
-!                 be increased due to mixed layer detrainment, in the same units
-!                 as h - usually m or kg m-2 (i.e., H).
-!  (in/out)  eb - The amount of fluid moved upward into a layer; this should
-!                 be increased due to mixed layer entrainment, in the same units
-!                 as h - usually m or kg m-2 (i.e., H).
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 regularize_layers_init.
-
+  ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -174,26 +135,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! m or kg m-2 (i.e., H).
   type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
                                                   !! call to regularize_layers_init.
-
-!    This subroutine ensures that there is a degree of horizontal smoothness
-!  in the depths of the near-surface interfaces.
-
-! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)
-!                The units of h are referred to as H below.
-!  (in/out)  tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      dt - Time increment, in s.
-!  (in/out)  ea - The amount of fluid moved downward into a layer; this should
-!                 be increased due to mixed layer detrainment, in the same units
-!                 as h - usually m or kg m-2 (i.e., H).
-!  (in/out)  eb - The amount of fluid moved upward into a layer; this should
-!                 be increased due to mixed layer entrainment, in the same units
-!                 as h - usually m or kg m-2 (i.e., H).
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 regularize_layers_init.
-
+  ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     def_rat_u   ! The ratio of the thickness deficit to the minimum depth, ND.
   real, dimension(SZI_(G),SZJB_(G)) :: &
@@ -808,25 +750,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                                        !! m-2); if h is not present, vertical
                                                        !! differences in interface heights are used
                                                        !! instead.
-
-!    This subroutine determines the amount by which the harmonic mean
-!  thickness at velocity points differ from the arithmetic means, relative to
-!  the the arithmetic means, after eliminating thickness variations that are
-!  solely due to topography and aggregating all interior layers into one.
-
-! Arguments: e - Interface depths, in m or kg m-2.
-!  (out)     def_rat_u - The thickness deficit ratio at u points, nondim.
-!  (out)     def_rat_v - The thickness deficit ratio at v points, nondim.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 regularize_layers_init.
-!  (out,opt) def_rat_u_2lay - The thickness deficit ratio at u points when the
-!                 mixed and buffer layers are aggregated into 1 layer, nondim.
-!  (out,opt) def_rat_v_2lay - The thickness deficit ratio at v pointswhen the
-!                 mixed and buffer layers are aggregated into 1 layer, nondim.
-!  (in,opt)  halo - An extra-wide halo size, 0 by default.
-!  (in,opt)  h - The layer thicknesse; if not present take vertical differences of e.
+  ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     h_def_u, &  ! The vertically summed thickness deficits at u-points, in H.
     h_norm_u, & ! The vertically summed arithmetic mean thickness by which
@@ -951,6 +875,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
 
 end subroutine find_deficit_ratios
 
+!> Initializes the regularize_layers control structure
 subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -960,14 +885,6 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
                                                  !! diagnostic output.
   type(regularize_layers_CS), pointer    :: CS   !< A pointer that is set to point to the
                                                  !! control structure for this module.
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                  for this module
-! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature

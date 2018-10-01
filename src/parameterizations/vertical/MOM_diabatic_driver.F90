@@ -92,6 +92,8 @@ type, public:: diabatic_CS; private
   logical :: use_energetic_PBL       !< If true, use the implicit energetics planetary
                                      !! boundary layer scheme to determine the diffusivity
                                      !! in the surface boundary layer.
+  logical :: use_KPP                 !< If true, use CVMix/KPP boundary layer scheme to determine the
+                                     !! OBLD and the diffusivities within this layer.
   logical :: use_kappa_shear         !< If true, use the kappa_shear module to find the
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_CVMix_shear         !< If true, use the CVMix module to find the
@@ -152,7 +154,7 @@ type, public:: diabatic_CS; private
                                      !! applied to tracers, especially in massless layers
                                      !! near the bottom, in m2 s-1.
   real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
-                                           !! fluxes is applied, in m.
+                                           !! fluxes are applied, in m.
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
                                      !! evaporated in one time-step (non-dim).
 
@@ -163,11 +165,12 @@ type, public:: diabatic_CS; private
   logical :: debugConservation       !< If true, monitor conservation and extrema.
   logical :: tracer_tridiag          !< If true, use tracer_vertdiff instead of tridiagTS for
                                      !< vertical diffusion of T and S
-  logical :: debug_energy_req        !  If true, test the mixing energy requirement code.
+  logical :: debug_energy_req        !< If true, test the mixing energy requirement code.
   type(diag_ctrl), pointer :: diag   !< structure used to regulate timing of diagnostic output
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user
   integer :: nsw                     !< SW_NBANDS
 
+  !>@{ Diagnostic IDs
   integer :: id_cg1      = -1                 ! diag handle for mode-1 speed (BDM)
   integer, allocatable, dimension(:) :: id_cn ! diag handle for all mode speeds (BDM)
   integer :: id_wd       = -1, id_ea       = -1, id_eb           = -1 ! used by layer diabatic
@@ -190,7 +193,6 @@ type, public:: diabatic_CS; private
   integer :: id_diabatic_diff_heat_tend_2d  = -1
   integer :: id_diabatic_diff_salt_tend_2d  = -1
   integer :: id_diabatic_diff_h= -1
-  logical :: diabatic_diff_tendency_diag    = .false.
 
   integer :: id_boundary_forcing_h       = -1
   integer :: id_boundary_forcing_h_tendency   = -1
@@ -200,38 +202,39 @@ type, public:: diabatic_CS; private
   integer :: id_boundary_forcing_salt_tend    = -1
   integer :: id_boundary_forcing_heat_tend_2d = -1
   integer :: id_boundary_forcing_salt_tend_2d = -1
-  logical :: boundary_forcing_tendency_diag   = .false.
 
   integer :: id_frazil_h    = -1
   integer :: id_frazil_temp_tend    = -1
   integer :: id_frazil_heat_tend    = -1
   integer :: id_frazil_heat_tend_2d = -1
-  logical :: frazil_tendency_diag   = .false.
+  !!@}
+
+  logical :: diabatic_diff_tendency_diag = .false. !< If true calculate diffusive tendency diagnostics
+  logical :: boundary_forcing_tendency_diag = .false. !< If true calculate frazil diagnostics
+  logical :: frazil_tendency_diag = .false. !< If true calculate frazil tendency diagnostics
   real, allocatable, dimension(:,:,:) :: frazil_heat_diag !< diagnose 3d heat tendency from frazil
   real, allocatable, dimension(:,:,:) :: frazil_temp_diag !< diagnose 3d temp tendency from frazil
 
-  real    :: ppt2mks = 0.001
-
-  type(diabatic_aux_CS),        pointer :: diabatic_aux_CSp      => NULL()
-  type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
-  type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL()
-  type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL()
-  type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL()
-  type(geothermal_CS),          pointer :: geothermal_CSp        => NULL()
-  type(int_tide_CS),            pointer :: int_tide_CSp          => NULL()
-  type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL()
-  type(int_tide_input_type),    pointer :: int_tide_input        => NULL()
-  type(opacity_CS),             pointer :: opacity_CSp           => NULL()
-  type(set_diffusivity_CS),     pointer :: set_diff_CSp          => NULL()
-  type(sponge_CS),              pointer :: sponge_CSp            => NULL()
-  type(ALE_sponge_CS),          pointer :: ALE_sponge_CSp        => NULL()
-  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL()
-  type(optics_type),            pointer :: optics                => NULL()
-  type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
-  type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
-  type(tidal_mixing_cs),        pointer :: tidal_mixing_csp      => NULL()
-  type(CVMix_conv_cs),          pointer :: CVMix_conv_csp        => NULL()
-  type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL()
+  type(diabatic_aux_CS),        pointer :: diabatic_aux_CSp      => NULL() !< Control structure for a child module
+  type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL() !< Control structure for a child module
+  type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL() !< Control structure for a child module
+  type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL() !< Control structure for a child module
+  type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
+  type(geothermal_CS),          pointer :: geothermal_CSp        => NULL() !< Control structure for a child module
+  type(int_tide_CS),            pointer :: int_tide_CSp          => NULL() !< Control structure for a child module
+  type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL() !< Control structure for a child module
+  type(int_tide_input_type),    pointer :: int_tide_input        => NULL() !< Control structure for a child module
+  type(opacity_CS),             pointer :: opacity_CSp           => NULL() !< Control structure for a child module
+  type(set_diffusivity_CS),     pointer :: set_diff_CSp          => NULL() !< Control structure for a child module
+  type(sponge_CS),              pointer :: sponge_CSp            => NULL() !< Control structure for a child module
+  type(ALE_sponge_CS),          pointer :: ALE_sponge_CSp        => NULL() !< Control structure for a child module
+  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL() !< Control structure for a child module
+  type(optics_type),            pointer :: optics                => NULL() !< Control structure for a child module
+  type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL() !< Control structure for a child module
+  type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
+  type(tidal_mixing_cs),        pointer :: tidal_mixing_csp      => NULL() !< Control structure for a child module
+  type(CVMix_conv_cs),          pointer :: CVMix_conv_csp        => NULL() !< Control structure for a child module
+  type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
   type(group_pass_type) :: pass_Kv         !< For group halo pass
@@ -265,7 +268,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness (m for Bouss / kg/m2 for non-Bouss)
   type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
-  real, dimension(:,:),                      pointer       :: Hml       !< active mixed layer depth
+  real, dimension(:,:),                      pointer       :: Hml       !< mixed layer depth, m
   type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
                                                                         !! unused fields have NULL ptrs
   type(vertvisc_type),                       intent(inout) :: visc      !< vertical viscosities, BBL properies, and
@@ -614,6 +617,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
       call pass_var(Hml, G%domain, halo=1)
+      ! If visc%MLD exists, copy KPP's BLD into it
+      if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
 
     call cpu_clock_end(id_clock_kpp)
@@ -733,11 +738,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
-    ! If visc%MLD exists, copy the ePBL's MLD into it
-    if (associated(visc%MLD)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
-      call pass_var(visc%MLD, G%domain, halo=1)
-      Hml(:,:) = visc%MLD(:,:)
+    if (associated(Hml)) then
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G)
+      call pass_var(Hml, G%domain, halo=1)
+      ! If visc%MLD exists, copy KPP's BLD into it
+      if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
 
     ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
@@ -1531,6 +1536,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
       call pass_var(Hml, G%domain, halo=1)
+      ! If visc%MLD exists, copy KPP's BLD into it
+      if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
 
     if (.not. CS%KPPisPassive) then
@@ -2428,12 +2435,14 @@ end subroutine legacy_diabatic
 !! each returned argument is an optional argument
 subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
                                    evap_CFL_limit, minimum_forcing_depth)
-  type(diabatic_CS),           intent(in   ) :: CS
+  type(diabatic_CS),           intent(in   ) :: CS !< module control structure
   ! All output arguments are optional
-  type(opacity_CS),  optional, pointer       :: opacity_CSp
-  type(optics_type), optional, pointer       :: optics_CSp
-  real,              optional, intent(  out) :: evap_CFL_limit
-  real,              optional, intent(  out) :: minimum_forcing_depth
+  type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
+  type(optics_type), optional, pointer       :: optics_CSp  !< A pointer to be set to the optics control structure
+  real,              optional, intent(  out) :: evap_CFL_limit !<The largest fraction of a layer that can be
+                                                            !! evaporated in one time-step (non-dim).
+  real,              optional, intent(  out) :: minimum_forcing_depth !< The smallest depth over which heat
+                                                            !! and freshwater fluxes are applied, in m.
 
   ! Pointers to control structures
   if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
@@ -2479,9 +2488,11 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   real,                                      intent(in) :: dt       !< time step (sec)
   type(diabatic_CS),                         pointer    :: CS       !< module control structure
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real    :: Idt
+  real :: Idt  ! The inverse of the timestep, in s-1
+  real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -2528,7 +2539,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   ! salt tendency
   if (CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = h(i,j,k) * GV%H_to_kg_m2 * CS%ppt2mks * work_3d(i,j,k)
+      work_3d(i,j,k) = h(i,j,k) * GV%H_to_kg_m2 * ppt2mks * work_3d(i,j,k)
     enddo ; enddo ; enddo
     if (CS%id_diabatic_diff_salt_tend > 0) then
       call post_data(CS%id_diabatic_diff_salt_tend, work_3d, CS%diag, alt_h = h)
@@ -2567,9 +2578,11 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   real,                    intent(in) :: dt       !< time step (sec)
   type(diabatic_CS),       pointer    :: CS       !< module control structure
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real    :: Idt
+  real :: Idt  ! The inverse of the timestep, in s-1
+  real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -2623,7 +2636,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   ! salt tendency
   if (CS%id_boundary_forcing_salt_tend > 0 .or. CS%id_boundary_forcing_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = GV%H_to_kg_m2 * CS%ppt2mks * Idt * (h(i,j,k) * tv%S(i,j,k) - h_old(i,j,k) * saln_old(i,j,k))
+      work_3d(i,j,k) = GV%H_to_kg_m2 * ppt2mks * Idt * (h(i,j,k) * tv%S(i,j,k) - h_old(i,j,k) * saln_old(i,j,k))
     enddo ; enddo ; enddo
     if (CS%id_boundary_forcing_salt_tend > 0) then
       call post_data(CS%id_boundary_forcing_salt_tend, work_3d, CS%diag, alt_h = h_old)
@@ -2804,7 +2817,10 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
-
+  call get_param(param_file, mod, "USE_KPP", CS%use_KPP, &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
+                 "to calculate diffusivities and non-local transport in the OBL.",     &
+                 default=.false., do_not_log=.true.)
   CS%use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
 
   if (CS%use_CVMix_ddiff .and. differentialDiffusion) then

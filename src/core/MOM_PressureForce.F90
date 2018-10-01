@@ -26,7 +26,7 @@ implicit none ; private
 
 public PressureForce, PressureForce_init, PressureForce_end
 
-! Pressure force control structure
+!> Pressure force control structure
 type, public :: PressureForce_CS ; private
   logical :: Analytic_FV_PGF !< If true, use the analytic finite volume form
                              !! (Adcroft et al., Ocean Mod. 2008) of the PGF.

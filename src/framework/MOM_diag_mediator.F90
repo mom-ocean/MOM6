@@ -1,13 +1,9 @@
+!> The subroutines here provide convenient wrappers to the fms diag_manager
+!! interfaces with additional diagnostic capabilies.
 module MOM_diag_mediator
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    The subroutines here provide convenient wrappers to the fms      *
-!*  diag_manager interfaces with additional diagnostic capabilies.     *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_checksums,        only : chksum_general
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -66,6 +62,7 @@ public diag_grid_storage_init, diag_grid_storage_end
 public diag_copy_diag_to_storage, diag_copy_storage_to_diag
 public diag_save_grids, diag_restore_grids
 
+!> Make a diagnostic available for averaging or output.
 interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
 end interface post_data
@@ -126,6 +123,7 @@ type, public :: diag_grid_storage
 end type diag_grid_storage
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
+!!
 !! There can be both 'primary' and 'seconday' diagnostics. The primaries
 !! reside in the diag_cs%diags array. They have an id which is an index
 !! into this array. The secondaries are 'variations' on the primary diagnostic.
@@ -136,8 +134,8 @@ type, private :: diag_type
   integer :: fms_diag_id !< Underlying FMS diag_manager id.
   integer :: fms_xyave_diag_id = -1 !< For a horizontally area-averaged diagnostic.
   character(64) :: debug_str = '' !< For FATAL errors and debugging.
-  type(axes_grp), pointer :: axes => null()
-  type(diag_type), pointer :: next => null() !< Pointer to the next diag.
+  type(axes_grp), pointer :: axes => null() !< The axis group for this diagnostic
+  type(diag_type), pointer :: next => null() !< Pointer to the next diagnostic
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
   logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated).
                                    !! False for intensive (concentrations).
@@ -153,41 +151,53 @@ type, public :: diag_ctrl
   logical :: diag_as_chksum !< If true, log chksums in a text file instead of posting diagnostics
 
 ! The following fields are used for the output of the data.
-  integer :: is, ie, js, je
-  integer :: isd, ied, jsd, jed
+  integer :: is  !< The start i-index of cell centers within the computational domain
+  integer :: ie  !< The end i-index of cell centers within the computational domain
+  integer :: js  !< The start j-index of cell centers within the computational domain
+  integer :: je  !< The end j-index of cell centers within the computational domain
+
+  integer :: isd !< The start i-index of cell centers within the data domain
+  integer :: ied !< The end i-index of cell centers within the data domain
+  integer :: jsd !< The start j-index of cell centers within the data domain
+  integer :: jed !< The end j-index of cell centers within the data domain
   real :: time_int              !< The time interval in s for any fields
                                 !! that are offered for averaging.
   type(time_type) :: time_end   !< The end time of the valid
                                 !! interval for any offered field.
   logical :: ave_enabled = .false. !< True if averaging is enabled.
 
-  ! The following are axis types defined for output.
+  !>@{ The following are 3D and 2D axis groups defined for output.  The names
+  !! indicate the horizontal (B, T, Cu, or Cv) and vertical (L, i, or 1) locations.
   type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
-  type(axes_grp) :: axesZi, axesZL, axesNull
+  !!@}
+  type(axes_grp) :: axesZi !< A 1-D z-space axis at interfaces
+  type(axes_grp) :: axesZL !< A 1-D z-space axis at layer centers
+  type(axes_grp) :: axesNull !< An axis group for scalars
 
-  ! Mask arrays for diagnostics
-  real, dimension(:,:),   pointer :: mask2dT   => null()
-  real, dimension(:,:),   pointer :: mask2dBu  => null()
-  real, dimension(:,:),   pointer :: mask2dCu  => null()
-  real, dimension(:,:),   pointer :: mask2dCv  => null()
+  real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
+  real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
+  real, dimension(:,:),   pointer :: mask2dCu  => null() !< 2D mask array for east-face points
+  real, dimension(:,:),   pointer :: mask2dCv  => null() !< 2D mask array for north-face points
+  !>@{ 3D mask arrays for diagnostics at layers (mask...L) and interfaces (mask...i)
   real, dimension(:,:,:), pointer :: mask3dTL  => null()
-  real, dimension(:,:,:), pointer :: mask3dBL => null()
+  real, dimension(:,:,:), pointer :: mask3dBL  => null()
   real, dimension(:,:,:), pointer :: mask3dCuL => null()
   real, dimension(:,:,:), pointer :: mask3dCvL => null()
   real, dimension(:,:,:), pointer :: mask3dTi  => null()
-  real, dimension(:,:,:), pointer :: mask3dBi => null()
+  real, dimension(:,:,:), pointer :: mask3dBi  => null()
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
+  !!@}
 
 ! Space for diagnostics is dynamically allocated as it is needed.
 ! The chunk size is how much the array should grow on each new allocation.
 #define DIAG_ALLOC_CHUNK_SIZE 100
-  type(diag_type), dimension(:), allocatable :: diags
-  integer :: next_free_diag_id
+  type(diag_type), dimension(:), allocatable :: diags !< The list of diagnostics
+  integer :: next_free_diag_id !< The next unused diagnostic ID
 
-  !default missing value to be sent to ALL diagnostics registrations
+  !> default missing value to be sent to ALL diagnostics registrations
   real :: missing_value = -1.0e+34
 
   !> Number of diagnostic vertical coordinates (remapped)
@@ -197,20 +207,23 @@ type, public :: diag_ctrl
   type(diag_grid_storage) :: diag_grid_temp !< Stores the remapped diagnostic grid
   logical :: diag_grid_overridden = .false. !< True if the diagnostic grids have been overriden
 
-  !> Axes groups for each possible coordinate (these will all be 3D groups)
-  type(axes_grp), dimension(:), allocatable :: remap_axesZL, remap_axesZi
+  type(axes_grp), dimension(:), allocatable :: &
+    remap_axesZL, &  !< The 1-D z-space cell-centered axis for remapping
+    remap_axesZi     !< The 1-D z-space interface axis for remapping
+  !!@{
   type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
   type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
+  !!@}
 
   ! Pointer to H, G and T&S needed for remapping
-  real, dimension(:,:,:), pointer :: h => null()
-  real, dimension(:,:,:), pointer :: T => null()
-  real, dimension(:,:,:), pointer :: S => null()
-  type(EOS_type),  pointer :: eqn_of_state => null()
-  type(ocean_grid_type), pointer :: G => null()
-  type(verticalGrid_type), pointer :: GV => null()
+  real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping
+  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping
+  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping
+  type(EOS_type),  pointer :: eqn_of_state => null() !< The equation of state type
+  type(ocean_grid_type), pointer :: G => null()  !< The ocean grid type
+  type(verticalGrid_type), pointer :: GV => null()  !< The model's vertical ocean grid
 
-  ! The volume cell measure (special diagnostic) manager id
+  !> The volume cell measure (special diagnostic) manager id
   integer :: volume_cell_measure_dm_id = -1
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
@@ -416,7 +429,7 @@ subroutine set_masks_for_axes(G, diag_cs)
                                                        !! used for diagnostics
   ! Local variables
   integer :: c, nk, i, j, k
-  type(axes_grp), pointer :: axes, h_axes ! Current axes, for convenience
+  type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
 
   do c=1, diag_cs%num_diag_coords
     ! This vertical coordinate has been configured so can be used.
@@ -555,7 +568,7 @@ subroutine diag_associate_volume_cell_measure(diag_cs, id_h_volume)
   type(diag_ctrl),   intent(inout) :: diag_cs     !< Diagnostics control structure
   integer,           intent(in)    :: id_h_volume !< Diag_manager id for volume of h-cells
   ! Local variables
-  type(diag_type), pointer :: tmp
+  type(diag_type), pointer :: tmp => NULL()
 
   if (id_h_volume<=0) return ! Do nothing
   diag_cs%volume_cell_measure_dm_id = id_h_volume ! Record for diag_get_volume_cell_measure_dm_id()
@@ -696,10 +709,6 @@ subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(diag_ctrl),  intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
 
-! Arguments:
-!  (inout)    G   - ocean grid structure
-!  (inout)   diag - structure used to regulate diagnostic output
-
   diag_cs%is = G%isc - (G%isd-1) ; diag_cs%ie = G%iec - (G%isd-1)
   diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied
@@ -715,14 +724,7 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
-! Arguments:
-!  (in) diag_field_id  - the id for an output variable returned by a
-!                            previous call to register_diag_field.
-!  (in)      field     - 0-d array being offered for output or averaging.
-!  (inout)   diag_cs - structure used to regulate diagnostic output.
-!  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask      - If present, use this real array as the data mask.
-
+  ! Local variables
   logical :: used, is_stat
   type(diag_type), pointer :: diag => null()
 
@@ -754,13 +756,7 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
-! Arguments:
-!  (in) diag_field_id - id for an output variable returned by a
-!                       previous call to register_diag_field.
-!  (in)         field - 1-d array being offered for output or averaging
-!  (inout)    diag_cs - structure used to regulate diagnostic output
-!  (in)        static - If true, this is a static field that is always offered.
-
+  ! Local variables
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
   integer :: isv, iev, jsv, jev
@@ -794,14 +790,7 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
   real,    optional, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
 
-! Arguments:
-!  (in) diag_field_id  - id for an output variable returned by a
-!                        previous call to register_diag_field.
-!  (in)         field  - 2-d array being offered for output or averaging.
-!  (inout)    diag_cs  - structure used to regulate diagnostic output.
-!  (in,opt)  is_static - If true, this is a static field that is always offered.
-!  (in,opt)   mask     - If present, use this real array as the data mask.
-
+  ! Local variables
   type(diag_type), pointer :: diag => null()
 
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
@@ -827,13 +816,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
   real,    optional, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
 
-! Arguments:
-!  (in) diag          - structure representing the diagnostic to post
-!  (in)        field  - 2-d array being offered for output or averaging
-!  (inout) diag_cs    - structure used to regulate diagnostic output
-!  (in,opt) is_static - If true, this is a static field that is always offered.
-!  (in,opt)  mask     - If present, use this real array as the data mask.
-
+  ! Local variables
   real, dimension(:,:), pointer :: locfield => NULL()
   character(len=300) :: mesg
   logical :: used, is_stat
@@ -947,19 +930,12 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
          target, optional, intent(in) :: alt_h  !< An alternate thickness to use for vertically
                                                 !! remapping this diagnostic, in H.
 
-! Arguments:
-!  (in) diag_field_id - id for an output variable returned by a
-!                       previous call to register_diag_field.
-!  (in)         field - 3-d array being offered for output or averaging
-!  (inout)       diag - structure used to regulate diagnostic output
-!  (in)        static - If true, this is a static field that is always offered.
-!  (in,opt)      mask - If present, use this real array as the data mask.
-
+  ! Local variables
   type(diag_type), pointer :: diag => null()
   integer :: nz, i, j, k
   real, dimension(:,:,:), allocatable :: remapped_field
   logical :: staggered_in_x, staggered_in_y
-  real, dimension(:,:,:), pointer :: h_diag
+  real, dimension(:,:,:), pointer :: h_diag => NULL()
 
   if (present(alt_h)) then
     h_diag => alt_h
@@ -1070,13 +1046,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
   real,    optional, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
 
-! Arguments:
-!  (in) diag          - the diagnostic to post.
-!  (in)         field - 3-d array being offered for output or averaging
-!  (inout)    diag_cs - structure used to regulate diagnostic output
-!  (in)        static - If true, this is a static field that is always offered.
-!  (in,opt)      mask - If present, use this real array as the data mask.
-
+  ! Local variables
   real, dimension(:,:,:), pointer :: locfield => NULL()
   character(len=300) :: mesg
   logical :: used  ! The return value of send_data is not used for anything.
@@ -1260,12 +1230,6 @@ subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
 ! This subroutine enables the accumulation of time averages over the
 ! specified time interval.
 
-! Arguments:
-!  (in)      time_int_in - time interval in s over which any
-!                          values that are offered are valid.
-!  (in)      time_end_in - end time  of the valid interval
-!  (inout)   diag        - structure used to regulate diagnostic output
-
 !  if (num_file==0) return
   diag_cs%time_int = time_int_in
   diag_cs%time_end = time_end_in
@@ -1275,9 +1239,6 @@ end subroutine enable_averaging
 !> Call this subroutine to avoid averaging any offered fields.
 subroutine disable_averaging(diag_cs)
   type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
-
-! Argument:
-! diag - structure used to regulate diagnostic output
 
   diag_cs%time_int = 0.0
   diag_cs%ave_enabled = .false.
@@ -1291,11 +1252,6 @@ function query_averaging_enabled(diag_cs, time_int, time_end)
   real,            optional, intent(out) :: time_int !< Current setting of diag%time_int, in s
   type(time_type), optional, intent(out) :: time_end !< Current setting of diag%time_end
   logical :: query_averaging_enabled
-
-! Arguments:
-!  (in)          diag - structure used to regulate diagnostic output
-!  (out,opt) time_int - current setting of diag%time_int, in s
-!  (out,opt) time_end - current setting of diag%time_end
 
   if (present(time_int)) time_int = diag_cs%time_int
   if (present(time_end)) time_end = diag_cs%time_end
@@ -1844,7 +1800,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
      long_name, units, missing_value, range, standard_name, &
      do_not_log, err_msg, interp_method, cmor_field_name, &
      cmor_long_name, cmor_units, cmor_standard_name)
-  integer :: register_scalar_field
+  integer :: register_scalar_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -1865,25 +1821,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
   character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
 
-  ! Output:    An integer handle for a diagnostic array.
-  ! Arguments:
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name    - name of the diagnostic field.
-  !  (in)      init_time     - time at which a field is first available?
-  !  (inout)   diag_cs     - structure used to regulate diagnostic output
-  !  (in,opt)  long_name     - long name of a field
-  !  (in,opt)  units         - units of a field
-  !  (in,opt)  missing_value - indicates missing values
-  !  (in,opt)  standard_name - standardized name associated with a field
-
-  ! Following params have yet to be used in MOM.
-  !  (in,opt)  range         - valid range of a variable
-  !  (in,opt)  verbose       - If true, FMS is verbosed
-  !  (in,opt)  do_not_log    - If true, do not log something
-  !  (out,opt) err_msg       - character string into which an error message might be placed
-  !  (in,opt)  interp_method - If 'none' indicates the field should not be interpolated as a scalar
-  !  (in,opt)  tile_count    - no clue
-
+  ! Local variables
   real :: MOM_missing_value
   integer :: dm_id, fms_id
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
@@ -1959,7 +1897,7 @@ function register_static_field(module_name, field_name, axes, &
      do_not_log, interp_method, tile_count, &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
      x_cell_method, y_cell_method, area_cell_method)
-  integer :: register_static_field
+  integer :: register_static_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -1985,23 +1923,7 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
   character(len=*), optional, intent(in) :: area_cell_method !< Specifies the cell method for area
 
-  ! Output:    An integer handle for a diagnostic array.
-  ! Arguments:
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name    - name of the diagnostic field
-  !  (in)      axes          - container with up to 3 integer handles that indicates axes for this field
-  !  (in,opt)  long_name     - long name of a field
-  !  (in,opt)  units         - units of a field
-  !  (in,opt)  missing_value - A value that indicates missing values.
-  !  (in,opt)  standard_name - standardized name associated with a field
-
-  ! Following params have yet to be used in MOM.
-  !  (in,opt)  range          - valid range of a variable
-  !  (in,opt)  mask_variant   - If true a logical mask must be provided with post_data calls
-  !  (in,opt)  do_not_log     - If true, do not log something
-  !  (in,opt)  interp_method  - If 'none' indicates the field should not be interpolated as a scalar
-  !  (in,opt)  tile_count     - no clue
-
+  ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs => null()
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
@@ -2128,7 +2050,7 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axes_grp), pointer :: axes
+  type(axes_grp), pointer :: axes => NULL()
 
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
                      z_grid=z_grid, caller="ocean_register_diag")
@@ -2426,7 +2348,8 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
                                                         !! the current salinity
   ! Local variables
   integer :: i
-  real, dimension(:,:,:), pointer :: h_diag, T_diag, S_diag
+  real, dimension(:,:,:), pointer :: h_diag => NULL()
+  real, dimension(:,:,:), pointer :: T_diag => NULL(), S_diag => NULL()
 
   if (present(alt_h)) then
     h_diag => alt_h
@@ -2637,7 +2560,7 @@ subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
   type(diag_ctrl), target, intent(inout) :: diag_cs !< structure used to regulate diagnostic output
   type(diag_type),         pointer       :: diag    !< structure representing a diagnostic (inout)
 
-  type(diag_type), pointer :: tmp
+  type(diag_type), pointer :: tmp => NULL()
 
   if (.not. diag_cs%diags(diag_id)%in_use) then
     diag => diag_cs%diags(diag_id)

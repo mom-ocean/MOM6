@@ -1,27 +1,7 @@
+!> Used to initialize tracers from a depth- (or z*-) space file.
 module MOM_tracer_Z_init
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, September 2009                                 *
-!*                                                                     *
-!*    This file contains a subroutine to initialize tracers into the   *
-!*  MOM vertical grid from a depth- (or z*-) space file.               *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:                                           *
-!*    j+1  > o > o >   At ^:                                           *
-!*    j    x ^ x ^ x   At >:                                           *
-!*    j    > o > o >   At o:  tr                                       *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_to_Z, only : find_overlap, find_limited_slope
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -39,26 +19,24 @@ public tracer_Z_init
 
 contains
 
+!>   This function initializes a tracer by reading a Z-space file, returning
+!! .true. if this appears to have been successful, and false otherwise.
 function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
-  logical :: tracer_Z_init
-  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: tr
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  character(len=*),                      intent(in)    :: filename, tr_name
-! type(param_file_type),                 intent(in)    :: param_file !< A structure to parse for run-time parameters
-  real,                        optional, intent(in)    :: missing_val
-  real,                        optional, intent(in)    :: land_val
-!   This function initializes a tracer by reading a Z-space file, returning
-! .true. if this appears to have been successful, and false otherwise.
-! Arguments: tr - The tracer to initialize.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      filename - The name of the file to read from.
-!  (in)      tr_name - The name of the tracer in the file.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in,opt)  missing_val - The missing value for the tracer.
-!  (in,opt)  land_val - The value to use to fill in land points.
+  logical :: tracer_Z_init !< A return code indicating if the initialization has been successful
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(out)   :: tr   !< The tracer to initialize
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  character(len=*),      intent(in)    :: filename !< The name of the file to read from
+  character(len=*),      intent(in)    :: tr_name !< The name of the tracer in the file
+! type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
+  real,        optional, intent(in)    :: missing_val !< The missing value for the tracer
+  real,        optional, intent(in)    :: land_val !< A value to use to fill in land points
+
+  !   This function initializes a tracer by reading a Z-space file, returning true if this
+  ! appears to have been successful, and false otherwise.
+!
   integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -288,28 +266,23 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 
 end function tracer_Z_init
 
-
+!> This subroutine reads the vertical coordinate data for a field from a NetCDF file.
+!! It also might read the missing value attribute for that same field.
 subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
                         use_missing, missing)
-  character(len=*),                intent(in)    :: filename, tr_name
-  real, allocatable, dimension(:), intent(out)   :: z_edges
-  integer,                         intent(out)   :: nz_out
-  logical,                         intent(out)   :: has_edges
-  logical,                         intent(inout) :: use_missing
-  real,                            intent(inout) :: missing
-!   This subroutine reads the vertical coordinate data for a field from a
-! NetCDF file.  It also might read the missing value attribute for that
-! same field.
-! Arguments: filename - The file to be read from.
-!  (in)      tr_name - The name of the tracer to be read.
-!  (out)     z_edges - The depths of the vertical edges of the tracer array.
-!  (out)     nz_out - The number of vertical layers in the tracer array.
-!  (out)     has_edges - If true, the values in z_edges are the edges of the
-!                        tracer cells, otherwise they are the cell centers.
-!  (inout)   use_missing - If false on input, see whether the tracer has a
-!                          missing value, and if so return true.
-!  (inout)   missing - The missing value, if one has been found.
+  character(len=*), intent(in)    :: filename !< The name of the file to read from.
+  character(len=*), intent(in)    :: tr_name !< The name of the tracer in the file.
+  real, dimension(:), allocatable, &
+                    intent(out)   :: z_edges !< The depths of the vertical edges of the tracer array
+  integer,          intent(out)   :: nz_out  !< The number of vertical layers in the tracer array
+  logical,          intent(out)   :: has_edges !< If true the values in z_edges are the edges of the
+                                             !! tracer cells, otherwise they are the cell centers
+  logical,          intent(inout) :: use_missing !< If false on input, see whether the tracer has a
+                                             !! missing value, and if so return true
+  real,             intent(inout) :: missing !< The missing value, if one has been found
 
+  !   This subroutine reads the vertical coordinate data for a field from a
+  ! NetCDF file.  It also might read the missing value attribute for that same field.
   character(len=32) :: mdl
   character(len=120) :: dim_name, edge_name, tr_msg, dim_msg
   logical :: monotonic

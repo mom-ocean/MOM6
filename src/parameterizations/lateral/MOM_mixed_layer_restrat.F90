@@ -937,7 +937,7 @@ end subroutine mixedlayer_restrat_register_restarts
 
 !> \namespace mom_mixed_layer_restrat
 !!
-!! \section mle-module Mixed-layer eddy parameterization module
+!! \section section_mle Mixed-layer eddy parameterization module
 !!
 !! The subroutines in this file implement a parameterization of unresolved viscous
 !! mixed layer restratification of the mixed layer as described in Fox-Kemper et
@@ -956,7 +956,7 @@ end subroutine mixedlayer_restrat_register_restarts
 !! grid scale (whichever is smaller to the dominant horizontal length-scale of the
 !! sub-meso-scale mixed layer instabilities.
 !!
-!! \subsection section-submeso-nutshell "Sub-meso" in a nutshell
+!! \subsection section_mle_nutshell "Sub-meso" in a nutshell
 !!
 !! The parameterization is colloquially referred to as "sub-meso".
 !!
@@ -995,7 +995,7 @@ end subroutine mixedlayer_restrat_register_restarts
 !! \f$ C_e \f$ is hard-coded as 0.0625. \f$ \tau \f$ is calculated from the surface friction velocity \f$ u^* \f$.
 !! \todo Explain expression for momentum mixing time-scale.
 !!
-!! \subsection section-mle-filtering Time-filtering of mixed-layer depth
+!! \subsection section_mle_filtering Time-filtering of mixed-layer depth
 !!
 !! Using the instantaneous mixed-layer depth is inconsistent with the finite life-time of
 !! mixed-layer instabilities. We provide a one-sided running-mean filter of mixed-layer depth, \f$ H \f$, of the form:
@@ -1006,7 +1006,7 @@ end subroutine mixedlayer_restrat_register_restarts
 !! but to decay with time-scale \f$ \tau_h \f$.
 !! \f$ \bar{H} \f$ is substituted for \f$ H \f$ in the above equations.
 !!
-!! \subsection section-mle-mld Defining the mixed-layer-depth
+!! \subsection section_mle_mld Defining the mixed-layer-depth
 !!
 !! If the parameter MLE_USE_PBL_MLD=True then the mixed-layer depth is defined/diagnosed by the
 !! boundary-layer parameterization (e.g. ePBL, KPP, etc.).
@@ -1015,7 +1015,7 @@ end subroutine mixedlayer_restrat_register_restarts
 !! as the depth of a given density difference, \f$ \Delta \rho \f$, with the surface where the
 !! density difference is the parameter MLE_DENSITY_DIFF.
 !!
-!! \subsection section-mle-ref References
+!! \subsection section_mle_ref References
 !!
 !! Fox-Kemper, B., Ferrari, R. and Hallberg, R., 2008:
 !! Parameterization of Mixed Layer Eddies. Part I: Theory and Diagnosis

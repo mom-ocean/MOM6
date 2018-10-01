@@ -34,12 +34,14 @@ type, public :: tracer_advect_CS ; private
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
   logical :: usePPM                !< If true, use PPM instead of PLM
   logical :: useHuynh              !< If true, use the Huynh scheme for PPM interface values
-  type(group_pass_type) :: pass_uhr_vhr_t_hprev ! For group pass
+  type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structred used for group passes
 end type tracer_advect_CS
 
+!>@{ CPU time clocks
 integer :: id_clock_advect
 integer :: id_clock_pass
 integer :: id_clock_sync
+!!@}
 
 contains
 
@@ -562,13 +564,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
             idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
             if (segment%direction == OBC_DIRECTION_W) then
-                ishift=1
-                idir=-1
+              ishift=1
+              idir=-1
             endif
             ! update the reservoir tracer concentration implicitly
             ! using Backward-Euler timestep
             do m=1,ntr
-             if (associated(segment%tr_Reg%Tr(m)%tres)) then
+              if (associated(segment%tr_Reg%Tr(m)%tres)) then
                 uhh(I)=uhr(I,j,k)
                 u_L_in=max(idir*uhh(I)*segment%Tr_InvLscale3_in,0.)
                 u_L_out=min(idir*uhh(I)*segment%Tr_InvLscale3_out,0.)
@@ -576,21 +578,18 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                      dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
                      u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
-!                if (j == 10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k == 1) &
-!                  print *,'tres=',segment%tr_Reg%Tr(m)%tres(I,j,k),&
-!                segment%tr_Reg%Tr(m)%t(I,j,k), fac1
               endif
             enddo
 
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
-                uhh(I) = uhr(I,j,k)
-                do m=1,ntr
-                  if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                    flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
-                  else; flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc; endif
-                enddo
+              uhh(I) = uhr(I,j,k)
+              do m=1,ntr
+                if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                  flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
+                else; flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc; endif
+              enddo
             endif
           endif
         enddo

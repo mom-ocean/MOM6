@@ -1,15 +1,17 @@
-!> This module is used for runtime remapping of diagnostics to z star, sigma and
-!! rho vertical coordinates. It defines the diag_remap_ctrl type which
-!! represents a remapping of diagnostics to a particular vertical coordinate.
-!! The module is used by the diag mediator module in the following way:
-!! 1) _init() is called to initialise a diag_remap_ctrl instance.
-!! 2) _configure_axes() is called to read the configuration file and set up the
+!> provides runtime remapping of diagnostics to z star, sigma and
+!! rho vertical coordinates.
+!!
+!! The diag_remap_ctrl type represents a remapping of diagnostics to a particular
+!! vertical coordinate. The module is used by the diag mediator module in the
+!! following way:
+!! 1. diag_remap_init() is called to initialize a diag_remap_ctrl instance.
+!! 2. diag_remap_configure_axes() is called to read the configuration file and set up the
 !!    vertical coordinate / axes definitions.
-!! 3) _get_axes_info() returns information needed for the diag mediator to
+!! 3. diag_remap_get_axes_info() returns information needed for the diag mediator to
 !!    define new axes for the remapped diagnostics.
-!! 4) _update() is called periodically (whenever h, T or S change) to either
+!! 4. diag_remap_update() is called periodically (whenever h, T or S change) to either
 !!    create or update the target remapping grids.
-!! 5) _do_remap() is called from within a diag post() to do the remapping before
+!! 5. diag_remap_do_remap() is called from within a diag post() to do the remapping before
 !!    the diagnostic is written out.
 
 module MOM_diag_remap
@@ -53,8 +55,8 @@ public vertically_reintegrate_diag_field
 public vertically_interpolate_diag_field
 public horizontally_average_diag_field
 
-!> This type represents remapping of diagnostics to a particular vertical
-!! coordinate.
+!> Represents remapping of diagnostics to a particular vertical coordinate.
+!!
 !! There is one of these types for each vertical coordinate. The vertical axes
 !! of a diagnostic will reference an instance of this type indicating how (or
 !! if) the diagnostic should be vertically remapped when being posted.
@@ -225,7 +227,9 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),    pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
-  real, dimension(:, :, :), intent(in) :: h, T, S !< New thickness, T and S
+  real, dimension(:, :, :), intent(in) :: h  !< New thickness
+  real, dimension(:, :, :), intent(in) :: T  !< New T
+  real, dimension(:, :, :), intent(in) :: S  !< New S
   type(EOS_type),           pointer    :: eqn_of_state !< A pointer to the equation of state
 
   ! Local variables

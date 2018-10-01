@@ -1,3 +1,4 @@
+!> Configures the model for the idealized seamount test case.
 module seamount_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -21,18 +22,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mdl = "seamount_initialization" ! This module's name.
+character(len=40) :: mdl = "seamount_initialization" !< This module's name.
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public seamount_initialize_topography
 public seamount_initialize_thickness
 public seamount_initialize_temperature_salinity
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
 !> Initialization of topography.
@@ -278,8 +274,4 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
 end subroutine seamount_initialize_temperature_salinity
 
-!> \namespace seamount_initialization
-!!
-!! The module configures the model for the idealized seamount
-!! test case.
 end module seamount_initialization

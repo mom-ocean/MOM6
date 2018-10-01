@@ -310,7 +310,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   glb%grid => glb%ocn_state%grid
 
   ! Allocate IOB data type (needs to be called after glb%grid is set)
-  write(6,*)'DEBUG: isc,iec,jsc,jec= ',glb%grid%isc, glb%grid%iec, glb%grid%jsc, glb%grid%jec
+  !write(6,*)'DEBUG: isc,iec,jsc,jec= ',glb%grid%isc, glb%grid%iec, glb%grid%jsc, glb%grid%jec
   call IOB_allocate(ice_ocean_boundary, glb%grid%isc, glb%grid%iec, glb%grid%jsc, glb%grid%jec)
 
   call t_stopf('MOM_init')
@@ -373,7 +373,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! end if
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_export"
-  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
+  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr, mom_cpl_dt, ncouple_per_day)
 
   call t_stopf('MOM_mct_init')
 
@@ -423,6 +423,10 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   integer            :: shrlogunit ! original log file unit
   integer            :: shrloglev  ! original log level
   logical, save      :: firstCall = .true.
+  real (kind=8), parameter  ::  seconds_in_day = 86400.0 !< number of seconds in one day
+  integer                   :: ocn_cpl_dt   !< one ocn coupling interval in seconds. (to be received from cesm)
+  real (kind=8)             :: mom_cpl_dt   !< one ocn coupling interval in seconds. (internal)
+  integer                   :: ncouple_per_day !< number of ocean coupled call in one day (non-dim)
 
   ! reset shr logging to ocn log file:
   if (is_root_pe()) then
@@ -440,6 +444,10 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
   call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
   coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
+
+  call seq_timemgr_EClockGetData(EClock, dtime=ocn_cpl_dt)
+  ncouple_per_day = seconds_in_day / ocn_cpl_dt
+  mom_cpl_dt = seconds_in_day / ncouple_per_day
 
   ! The following if-block is to correct monthly mean outputs:
   ! With this change, MOM6 starts at the same date as the other components, and runs for the same
@@ -502,7 +510,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   call update_ocean_model(ice_ocean_boundary, glb%ocn_state, glb%ocn_public, time_start, coupling_timestep)
 
   ! Return export state to driver
-  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
+  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr, mom_cpl_dt, ncouple_per_day)
 
   !--- write out intermediate restart file when needed.
   ! Check alarms for flag to write restart at end of day
@@ -806,6 +814,5 @@ end subroutine ocean_model_init_sfc
 !! Boundary layer depth
 !! CO2
 !! DMS
-!! o2x_Fioo_q       !< Heat flux?
 
 end module ocn_comp_mct

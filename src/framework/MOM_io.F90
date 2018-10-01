@@ -17,7 +17,7 @@ use fms_mod,              only : write_version_number, open_namelist_file, check
 use fms_io_mod,           only : file_exist, field_size, read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix
-use mpp_domains_mod,      only : domain1d, mpp_get_domain_components
+use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
@@ -63,11 +63,13 @@ type, public :: vardesc
                                            !! convert from intensive to extensive
 end type vardesc
 
+!> Indicate whether a file exists, perhaps with domain decomposition
 interface file_exists
-  module procedure file_exist
+  module procedure FMS_file_exists
   module procedure MOM_file_exists
 end interface
 
+!> Read a data field from a file
 interface MOM_read_data
   module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
@@ -75,6 +77,7 @@ interface MOM_read_data
   module procedure MOM_read_data_1d
 end interface
 
+!> Read a pair of data fields representing the two components of a vector from a file
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
@@ -830,6 +833,19 @@ function MOM_file_exists(filename, MOM_Domain)
 
 end function MOM_file_exists
 
+!> Returns true if the named file or its domain-decomposed variant exists.
+function FMS_file_exists(filename, domain, no_domain)
+  character(len=*), intent(in)         :: filename  !< The name of the file being inquired about
+  type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
+  logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
+! This function uses the fms_io function file_exist to determine whether
+! a named file (or its decomposed variant) exists.
+
+  logical :: FMS_file_exists
+
+  FMS_file_exists = file_exist(filename, domain, no_domain)
+
+end function FMS_file_exists
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".

@@ -1,37 +1,7 @@
+!> A sample tracer package that has striped initial conditions
 module USER_tracer_example
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2002                                           *
-!*                                                                     *
-!*    This file contains an example of the code that is needed to set  *
-!*  up and use a set (in this case one) of dynamically passive tracers.*
-!*                                                                     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
@@ -59,35 +29,30 @@ implicit none ; private
 public USER_register_tracer_example, USER_initialize_tracer, USER_tracer_stock
 public tracer_column_physics, USER_tracer_surface_state, USER_tracer_example_end
 
-! NTR is the number of tracers in this module.
-integer, parameter :: NTR = 1
+integer, parameter :: NTR = 1 !< The number of tracers in this module.
 
+!> The control structure for the USER_tracer_example module
 type, public :: USER_tracer_example_CS ; private
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
-                                   ! to initialize internally.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
-                                           ! subroutine, in g m-3?
-  real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
-  logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
+  logical :: coupled_tracers = .false. !< These tracers are not offered to the coupler.
+  character(len=200) :: tracer_IC_file !< The full path to the IC file, or " "
+                                       !! to initialize internally.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
+  real, pointer :: tr(:,:,:,:) => NULL()  !< The array of tracers used in this subroutine, in g m-3?
+  real :: land_val(NTR) = -1.0 !< The value of tr that is used where land is masked out.
+  logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
 
-  integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
-             ! if it is used and the surface tracer concentrations are to be
-             ! provided to the coupler.
+  integer, dimension(NTR) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+                                    !! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
-                             ! ocean diagnostic fields and control variables.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the timing of diagnostic output.
 
-  type(vardesc) :: tr_desc(NTR)
+  type(vardesc) :: tr_desc(NTR) !< Descriptions of each of the tracers.
 end type USER_tracer_example_CS
 
 contains
 
-!> This subroutine is used to register tracer fields and subroutines
-!! to be used with MOM.
+!> This subroutine is used to register tracer fields and subroutines to be used with MOM.
 function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),    intent(in)   :: HI   !< A horizontal index type structure
   type(verticalGrid_type), intent(in)   :: GV   !< The ocean's vertical grid structure
@@ -483,4 +448,17 @@ subroutine USER_tracer_example_end(CS)
   endif
 end subroutine USER_tracer_example_end
 
+!> \namespace user_tracer_example
+!!
+!!  Original by Robert Hallberg, 2002
+!!
+!!    This file contains an example of the code that is needed to set
+!!  up and use a set (in this case one) of dynamically passive tracers.
+!!
+!!    A single subroutine is called from within each file to register
+!!  each of the tracers for reinitialization and advection and to
+!!  register the subroutine that initializes the tracers and set up
+!!  their output and the subroutine that does any tracer physics or
+!!  chemistry along with diapycnal mixing (included here because some
+!!  tracers may float or swim vertically or dye diapycnal processes).
 end module USER_tracer_example

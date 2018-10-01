@@ -1,42 +1,21 @@
+!> Piecewise linear reconstruction functions
 module PLM_functions
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!==============================================================================
-!
-! Date of creation: 2008.06.06
-! L. White
-!
-! This module contains routines that handle one-dimensionnal finite volume
-! reconstruction using the piecewise linear method (PLM).
-!
-!==============================================================================
 
 implicit none ; private
 
 public PLM_reconstruction, PLM_boundary_extrapolation
 
-real, parameter :: hNeglect_dflt = 1.E-30
+real, parameter :: hNeglect_dflt = 1.E-30 !< Default negligible cell thickness
 
 contains
 
-!------------------------------------------------------------------------------
 !> Reconstruction by linear polynomials within each cell
+!!
+!! It is assumed that the size of the array 'u' is equal to the number of cells
+!! defining 'grid' and 'ppoly'. No consistency check is performed here.
 subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
-!------------------------------------------------------------------------------
-! Reconstruction by linear polynomials within each cell.
-!
-! N:     number of cells in grid
-! h:     thicknesses of grid cells
-! u:     cell averages to use in constructing piecewise polynomials
-! ppoly_E : edge values of piecewise polynomials
-! ppoly_coef : coefficients of piecewise polynomials
-!
-! It is assumed that the size of the array 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed here.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -213,27 +192,17 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coef, h_neglect )
 end subroutine PLM_reconstruction
 
 
-!------------------------------------------------------------------------------
 !> Reconstruction by linear polynomials within boundary cells
-subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
-!------------------------------------------------------------------------------
-! Reconstruction by linear polynomials within boundary cells.
-! The left and right edge values in the left and right boundary cells,
-! respectively, are estimated using a linear extrapolation within the cells.
-!
-! This extrapolation is EXACT when the underlying profile is linear.
-!
-! N:     number of cells in grid
-! h:     thicknesses of grid cells
-! u:     cell averages to use in constructing piecewise polynomials
-! ppoly_E : edge values of piecewise polynomials
-! ppoly_coef : coefficients of piecewise polynomials
-!
-! It is assumed that the size of the array 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed here.
-!------------------------------------------------------------------------------
+!!
+!! The left and right edge values in the left and right boundary cells,
+!! respectively, are estimated using a linear extrapolation within the cells.
+!!
+!! This extrapolation is EXACT when the underlying profile is linear.
+!!
+!! It is assumed that the size of the array 'u' is equal to the number of cells
+!! defining 'grid' and 'ppoly'. No consistency check is performed here.
 
-  ! Arguments
+subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -298,5 +267,13 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coef, h_neglect )
   ppoly_coef(N,2) = ppoly_E(N,2) - ppoly_E(N,1)
 
 end subroutine PLM_boundary_extrapolation
+
+!> \namespace plm_functions
+!!
+!! Date of creation: 2008.06.06
+!! L. White
+!!
+!! This module contains routines that handle one-dimensionnal finite volume
+!! reconstruction using the piecewise linear method (PLM).
 
 end module PLM_functions

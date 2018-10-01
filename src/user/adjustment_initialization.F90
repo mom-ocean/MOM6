@@ -1,3 +1,4 @@
+!> Configures the model for the geostrophic adjustment test case.
 module adjustment_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -15,27 +16,17 @@ use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 
-character(len=40) :: mdl = "adjustment_initialization" ! This module's name.
+character(len=40) :: mdl = "adjustment_initialization" !< This module's name.
 
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
-! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public adjustment_initialize_thickness
 public adjustment_initialize_temperature_salinity
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-!> Initialization of thicknesses.
-!! This subroutine initializes the layer thicknesses to be uniform.
-!------------------------------------------------------------------------------
+!> Initializes the layer thicknesses in the adjustment test case
 subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_params)
-
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -44,7 +35,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
+  ! Local variables
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -57,7 +48,6 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
   character(len=20) :: verticalCoordinate
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "adjustment_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -183,10 +173,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
 
 end subroutine adjustment_initialize_thickness
 
-
-!------------------------------------------------------------------------------
-!> Initialization of temperature and salinity.
-!------------------------------------------------------------------------------
+!> Initialization of temperature and salinity in the adjustment test case
 subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                     eqn_of_state, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
@@ -297,8 +284,4 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_fi
 
 end subroutine adjustment_initialize_temperature_salinity
 
-!> \namespace adjustment_initialization
-!!
-!! The module configures the model for the geostrophic adjustment
-!! test case.
 end module adjustment_initialization
