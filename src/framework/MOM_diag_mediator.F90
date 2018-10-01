@@ -73,13 +73,13 @@ interface zap2_sample
 end interface zap2_sample
 
 interface decimate_sample
-   module procedure decimate_sample_2d, decimate_sample_3d, decimate_sample_3d_out
+   module procedure decimate_sample_3d_out
 end interface decimate_sample
 
-interface decimate_diag_field
-   module procedure decimate_diag_field_2d,decimate_diag_field_3d
-end interface decimate_diag_field
-  
+interface decimate_diag_field_set
+   module procedure decimate_diag_field_set_2d,decimate_diag_field_set_3d
+end interface decimate_diag_field_set
+
 type, private :: diag_decim 
   real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
   real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes  
@@ -1237,11 +1237,14 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   ! Local variables
   real, dimension(:,:), pointer :: locfield => NULL()
   real, dimension(:,:), pointer :: locmask => NULL()
-  real, dimension(:,:), pointer :: diag_axes_mask2d => NULL()
   character(len=300) :: mesg
   logical :: used, is_stat
   integer :: cszi, cszj, dszi, dszj
-  integer :: isv, iev, jsv, jev, i, j, chksum, dl
+  integer :: isv, iev, jsv, jev, i, j, chksum
+  real, dimension(:,:), pointer :: diag_axes_mask2d => NULL()
+  real, dimension(:,:), allocatable, target :: locfield_decim
+  real, dimension(:,:), allocatable, target :: locmask_decim
+  integer :: isl,iel,jsl,jel,dl
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1324,9 +1327,16 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   diag_axes_mask2d => diag%axes%mask2d
   dl = diag%axes%decimation_level
   if (dl > 1) then
-     call decimate_diag_field(locfield, dl, diag_cs,isv,iev,jsv,jev)
+     isl=1; iel=size(field,1)/dl
+     jsl=1; jel=size(field,2)/dl       
+     call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+     allocate(locfield_decim(isl:iel,jsl:jel))  
+     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel)
+     locfield => locfield_decim
      if (present(mask)) then
-        call decimate_diag_field(locmask, dl)
+        allocate(locmask_decim(isl:iel,jsl:jel))  
+        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel)
+        locmask => locmask_decim
      elseif (associated(diag%axes%decim(dl)%mask2d)) then
         diag_axes_mask2d => diag%axes%decim(dl)%mask2d
      endif        
@@ -1373,7 +1383,6 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
     deallocate( locfield )
-
 end subroutine post_data_2d_low
 
 !> Make a real 3-d array diagnostic available for averaging or output.
@@ -1508,14 +1517,17 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   ! Local variables
   real, dimension(:,:,:), pointer :: locfield => NULL()
   real, dimension(:,:,:), pointer :: locmask => NULL()
-  real, dimension(:,:,:), pointer :: diag_axes_mask3d => NULL()
   character(len=300) :: mesg
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: staggered_in_x, staggered_in_y
   logical :: is_stat
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
-  integer :: chksum, dl
+  integer :: chksum
+  real, dimension(:,:,:), pointer :: diag_axes_mask3d => NULL()
+  real, dimension(:,:,:), allocatable, target :: locfield_decim
+  real, dimension(:,:,:), allocatable, target :: locmask_decim
+  integer :: isl,iel,jsl,jel,dl
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1596,9 +1608,16 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   diag_axes_mask3d => diag%axes%mask3d
   dl = diag%axes%decimation_level
   if (dl > 1) then
-     call decimate_diag_field(locfield, dl, diag_cs,isv,iev,jsv,jev)
+     isl=1; iel=size(field,1)/dl
+     jsl=1; jel=size(field,2)/dl       
+     call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+     allocate(locfield_decim(isl:iel,jsl:jel,ks:ke))  
+     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel,ks,ke)
+     locfield => locfield_decim
      if (present(mask)) then
-        call decimate_diag_field(locmask, dl)
+        allocate(locmask_decim(isl:iel,jsl:jel,ks:ke))  
+        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel,ks,ke)
+        locmask => locmask_decim
      elseif (associated(diag%axes%decim(dl)%mask3d)) then
         diag_axes_mask3d => diag%axes%decim(dl)%mask3d
      endif        
@@ -3464,148 +3483,86 @@ subroutine decimate_diag_masks_set(G, nz, diag_cs)
   enddo
 end subroutine decimate_diag_masks_set
 
-
-
-subroutine decimate_diag_field_2d(field, dl, diag_cs, isv,iev,jsv,jev)
-  real,              pointer    :: field(:,:) !< 2-d array being offered for output or averaging
+subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
+  integer,           intent(in) :: f1,f2
   integer,           intent(in) :: dl         !< integer decimation level
-  type(diag_ctrl),optional,   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  integer, optional, intent(inout) ::isv,iev,jsv,jev
+  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  integer,           intent(inout) ::isv,iev,jsv,jev
   ! Local variables
   integer :: dszi,cszi,dszj,cszj
   character(len=300) :: mesg
 
-  call decimate_sample(field, dl)
+  cszi = diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc +1 ; dszi = diag_cs%decim(dl)%ied-diag_cs%decim(dl)%isd +1
+  cszj = diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc +1 ; dszj = diag_cs%decim(dl)%jed-diag_cs%decim(dl)%jsd +1
 
-  if(present(diag_cs))then
-     cszi = diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc +1 ; dszi = diag_cs%decim(dl)%ied-diag_cs%decim(dl)%isd +1
-     cszj = diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc +1 ; dszj = diag_cs%decim(dl)%jed-diag_cs%decim(dl)%jsd +1
+  isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec
+  jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec
 
-     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec
-     jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec
+  if ( f1 == dszi ) then
+     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec    ! Data domain
+  elseif ( f1 == dszi + 1 ) then
+     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec+1   ! Symmetric data domain
+  elseif ( f1 == cszi) then
+     isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +1  ! Computational domain
+  elseif ( f1 == cszi + 1 ) then
+     isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +2  ! Symmetric computational domain
+  else
+     write (mesg,*) " peculiar size ",f1," in i-direction\n"//&
+          "does not match one of ", cszi, cszi+1, dszi, dszi+1
+     call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
+  endif
+  if ( f2 == dszj ) then
+     jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec     ! Data domain
+  elseif ( f2 == dszj + 1 ) then
+     jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec+1   ! Symmetric data domain
+  elseif ( f2 == cszj) then
+     jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +1  ! Computational domain
+  elseif ( f2 == cszj + 1 ) then
+     jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +2  ! Symmetric computational domain
+  else
+     write (mesg,*) " peculiar size ",f2," in j-direction\n"//&
+          "does not match one of ", cszj, cszj+1, dszj, dszj+1
+     call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
+  endif
 
-     if ( size(field,1) == dszi ) then
-         isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec    ! Data domain
-      elseif ( size(field,1) == dszi + 1 ) then
-         isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec+1   ! Symmetric data domain
-      elseif ( size(field,1) == cszi) then
-         isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +1  ! Computational domain
-      elseif ( size(field,1) == cszi + 1 ) then
-         isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +2  ! Symmetric computational domain
-      else
-         write (mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
-              "does not match one of ", cszi, cszi+1, dszi, dszi+1
-         call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
-      endif
-     if ( size(field,2) == dszj ) then
-         jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec     ! Data domain
-      elseif ( size(field,2) == dszj + 1 ) then
-         jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec+1   ! Symmetric data domain
-      elseif ( size(field,2) == cszj) then
-         jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +1  ! Computational domain
-      elseif ( size(field,2) == cszj + 1 ) then
-         jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +2  ! Symmetric computational domain
-      else
-         write (mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
-              "does not match one of ", cszj, cszj+1, dszj, dszj+1
-         call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
-      endif
-   endif
-   
-end subroutine decimate_diag_field_2d
+end subroutine decimate_diag_indices_get
+ 
 
-subroutine decimate_diag_field_3d(field, dl, diag_cs, isv,iev,jsv,jev)
-  real,              pointer    :: field(:,:,:) !< 3-d array being offered for output or averaging
-  integer,           intent(in) :: dl         !< integer decimation level
-  type(diag_ctrl),optional,   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  integer, optional, intent(inout) ::isv,iev,jsv,jev
-  ! Local variables
-  integer :: dszi,cszi,dszj,cszj
-  character(len=300) :: mesg
-
-  call decimate_sample(field, dl)
-
-  if(present(diag_cs))then
-     cszi = diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc +1 ; dszi = diag_cs%decim(dl)%ied-diag_cs%decim(dl)%isd +1
-     cszj = diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc +1 ; dszj = diag_cs%decim(dl)%jed-diag_cs%decim(dl)%jsd +1
-
-     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec
-     jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec
-
-     if ( size(field,1) == dszi ) then
-         isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec    ! Data domain
-      elseif ( size(field,1) == dszi + 1 ) then
-         isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec+1   ! Symmetric data domain
-      elseif ( size(field,1) == cszi) then
-         isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +1  ! Computational domain
-      elseif ( size(field,1) == cszi + 1 ) then
-         isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +2  ! Symmetric computational domain
-      else
-         write (mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
-              "does not match one of ", cszi, cszi+1, dszi, dszi+1
-         call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
-      endif
-     if ( size(field,2) == dszj ) then
-         jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec     ! Data domain
-      elseif ( size(field,2) == dszj + 1 ) then
-         jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec+1   ! Symmetric data domain
-      elseif ( size(field,2) == cszj) then
-         jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +1  ! Computational domain
-      elseif ( size(field,2) == cszj + 1 ) then
-         jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +2  ! Symmetric computational domain
-      else
-         write (mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
-              "does not match one of ", cszj, cszj+1, dszj, dszj+1
-         call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
-      endif
-   endif
-   
-end subroutine decimate_diag_field_3d
-
-
-subroutine decimate_sample_3d(field_in, level)
-  integer , intent(in) :: level
-  real, dimension(:,:,:) , pointer :: field_in, field_out
+subroutine decimate_diag_field_set_3d(field_in, field_out, level ,isl,iel,jsl,jel,ks,ke) 
+  real, dimension(:,:,:) , pointer :: field_in
+  real, dimension(:,:,:) , intent(inout)  ::  field_out
+  integer , intent(in) :: level, iel,jel,ks,ke
+  integer , intent(inout) :: isl,jsl
   integer :: i,j,ii,jj,is,js
-  integer :: isl,iel,jsl,jel
-  integer :: k,ks,ke
-  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
-  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
+  integer :: k
+
   !Always start from the first element
-  is=1
-  js=1
-  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+  is=1; isl=1
+  js=1; jsl=1
   do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
      ii = is+level*(i-isl)
      jj = js+level*(j-jsl)
      field_out(i,j,k)  = field_in(ii,jj,k)
   enddo; enddo; enddo
-  field_in => field_out  
-end subroutine decimate_sample_3d
+end subroutine decimate_diag_field_set_3d
 
-subroutine decimate_sample_2d(field_in, level)
-  integer , intent(in) :: level
-  real, dimension(:,:) , pointer :: field_in, field_out
+subroutine decimate_diag_field_set_2d(field_in, field_out, level ,isl,iel,jsl,jel) 
+  real, dimension(:,:) , pointer :: field_in
+  real, dimension(:,:), intent(inout)  ::  field_out
+  integer , intent(in) :: level, iel,jel
+  integer , intent(inout) :: isl,jsl
   integer :: i,j,ii,jj,is,js
-  integer :: isl,iel,jsl,jel
-  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
-  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
+
   !Always start from the first element
-  is=1
-  js=1
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel))  
+  is=1; isl=1
+  js=1; jsl=1
   do j=jsl,jel ; do i=isl,iel
      ii = is+level*(i-isl)
      jj = js+level*(j-jsl)
      field_out(i,j)  = field_in(ii,jj)
   enddo; enddo
-  field_in => field_out  
-end subroutine decimate_sample_2d
+end subroutine decimate_diag_field_set_2d
+
 
 subroutine decimate_sample_3d_out(field_in, field_out, level)
   integer , intent(in) :: level
