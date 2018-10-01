@@ -1,16 +1,8 @@
+!> Edge value estimation for high-order resconstruction
 module regrid_edge_values
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!==============================================================================
-!
-! Date of creation: 2008.06.09
-! L. White
-!
-! This module contains routines that estimate edge values to be used in
-! high-order reconstruction schemes.
-!
-!==============================================================================
 use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
 use polynomial_functions, only : evaluation_polynomial
 
@@ -34,16 +26,24 @@ public edge_values_implicit_h6
 ! to a small enough values such that the eigenvalues of the matrix can not
 ! be separated.
 !   Specifying a dimensional parameter value, as is done here, is a terrible idea.
-real, parameter :: hNeglect_edge_dflt = 1.e-10 ! The default value for cut-off minimum
-                                          ! thickness for sum(h) in edge value inversions
-real, parameter :: hNeglect_dflt = 1.e-30 ! The default value for cut-off minimum
-                                          ! thickness for sum(h) in other calculations
-real, parameter :: hMinFrac      = 1.e-5  ! A minimum fraction for min(h)/sum(h)
+real, parameter :: hNeglect_edge_dflt = 1.e-10 !< The default value for cut-off minimum
+                                          !! thickness for sum(h) in edge value inversions
+real, parameter :: hNeglect_dflt = 1.e-30 !< The default value for cut-off minimum
+                                          !! thickness for sum(h) in other calculations
+real, parameter :: hMinFrac      = 1.e-5  !< A minimum fraction for min(h)/sum(h)
 
 contains
 
-!------------------------------------------------------------------------------
 !> Bound edge values by neighboring cell averages
+!!
+!! In this routine, we loop on all cells to bound their left and right
+!! edge values by the cell averages. That is, the left edge value must lie
+!! between the left cell average and the central cell average. A similar
+!! reasoning applies to the right edge values.
+!!
+!! Both boundary edge values are set equal to the boundary cell averages.
+!! Any extrapolation scheme is applied after this routine has been called.
+!! Therefore, boundary cells are treated as if they were local extrama.
 subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
@@ -52,17 +52,6 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
                                            !! with the same units as u.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width
                                            !! in the same units as h.
-! ------------------------------------------------------------------------------
-! In this routine, we loop on all cells to bound their left and right
-! edge values by the cell averages. That is, the left edge value must lie
-! between the left cell average and the central cell average. A similar
-! reasoning applies to the right edge values.
-!
-! Both boundary edge values are set equal to the boundary cell averages.
-! Any extrapolation scheme is applied after this routine has been called.
-! Therefore, boundary cells are treated as if they were local extrama.
-! ------------------------------------------------------------------------------
-
   ! Local variables
   integer       :: k            ! loop index
   integer       :: k0, k1, k2
@@ -147,18 +136,14 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect )
 
 end subroutine bound_edge_values
 
-
-!------------------------------------------------------------------------------
 !> Replace discontinuous collocated edge values with their average
+!!
+!! For each interior edge, check whether the edge values are discontinuous.
+!! If so, compute the average and replace the edge values by the average.
 subroutine average_discontinuous_edge_values( N, edge_val )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:,:), intent(inout) :: edge_val !< Edge values that may be modified
                                            !! the second index size is 2.
-! ------------------------------------------------------------------------------
-! For each interior edge, check whether the edge values are discontinuous.
-! If so, compute the average and replace the edge values by the average.
-! ------------------------------------------------------------------------------
-
   ! Local variables
   integer       :: k            ! loop index
   real          :: u0_minus     ! left value at given edge
@@ -184,18 +169,14 @@ subroutine average_discontinuous_edge_values( N, edge_val )
 
 end subroutine average_discontinuous_edge_values
 
-
-!------------------------------------------------------------------------------
 !> Check discontinuous edge values and replace them with their average if not monotonic
+!!
+!! For each interior edge, check whether the edge values are discontinuous.
+!! If so and if they are not monotonic, replace each edge value by their average.
 subroutine check_discontinuous_edge_values( N, u, edge_val )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
   real, dimension(:,:), intent(inout) :: edge_val !< Cell edge values with the same units as u.
-! ------------------------------------------------------------------------------
-! For each interior edge, check whether the edge values are discontinuous.
-! If so and if they are not monotonic, replace each edge value by their average.
-! ------------------------------------------------------------------------------
-
   ! Local variables
   integer       :: k            ! loop index
   real          :: u0_minus     ! left value at given edge
@@ -231,8 +212,19 @@ subroutine check_discontinuous_edge_values( N, u, edge_val )
 end subroutine check_discontinuous_edge_values
 
 
-!------------------------------------------------------------------------------
 !> Compute h2 edge values (explicit second order accurate)
+!! in the same units as h.
+!
+!! Compute edge values based on second-order explicit estimates.
+!! These estimates are based on a straight line spanning two cells and evaluated
+!! at the location of the middle edge. An interpolant spanning cells
+!! k-1 and k is evaluated at edge k-1/2. The estimate for each edge is unique.
+!!
+!!       k-1     k
+!! ..--o------o------o--..
+!!          k-1/2
+!!
+!! Boundary edge values are set to be equal to the boundary cell averages.
 subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
@@ -240,20 +232,6 @@ subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
   real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
                                            !! same units as u; the second index size is 2.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
-! ------------------------------------------------------------------------------
-! Compute edge values based on second-order explicit estimates.
-! These estimates are based on a straight line spanning two cells and evaluated
-! at the location of the middle edge. An interpolant spanning cells
-! k-1 and k is evaluated at edge k-1/2. The estimate for each edge is unique.
-!
-!       k-1     k
-! ..--o------o------o--..
-!          k-1/2
-!
-! Boundary edge values are set to be equal to the boundary cell averages.
-! ------------------------------------------------------------------------------
-
   ! Local variables
   integer   :: k        ! loop index
   real      :: h0, h1   ! cell widths
@@ -292,9 +270,25 @@ subroutine edge_values_explicit_h2( N, h, u, edge_val, h_neglect )
 
 end subroutine edge_values_explicit_h2
 
-
-!------------------------------------------------------------------------------
 !> Compute h4 edge values (explicit fourth order accurate)
+!! in the same units as h.
+!!
+!! Compute edge values based on fourth-order explicit estimates.
+!! These estimates are based on a cubic interpolant spanning four cells
+!! and evaluated at the location of the middle edge. An interpolant spanning
+!! cells i-2, i-1, i and i+1 is evaluated at edge i-1/2. The estimate for
+!! each edge is unique.
+!!
+!!       i-2    i-1     i     i+1
+!! ..--o------o------o------o------o--..
+!!                 i-1/2
+!!
+!! The first two edge values are estimated by evaluating the first available
+!! cubic interpolant, i.e., the interpolant spanning cells 1, 2, 3 and 4.
+!! Similarly, the last two edge values are estimated by evaluating the last
+!! available interpolant.
+!!
+!! For this fourth-order scheme, at least four cells must exist.
 subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
@@ -302,26 +296,6 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
   real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
                                            !! same units as u; the second index size is 2.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
-! -----------------------------------------------------------------------------
-! Compute edge values based on fourth-order explicit estimates.
-! These estimates are based on a cubic interpolant spanning four cells
-! and evaluated at the location of the middle edge. An interpolant spanning
-! cells i-2, i-1, i and i+1 is evaluated at edge i-1/2. The estimate for
-! each edge is unique.
-!
-!       i-2    i-1     i     i+1
-! ..--o------o------o------o------o--..
-!                 i-1/2
-!
-! The first two edge values are estimated by evaluating the first available
-! cubic interpolant, i.e., the interpolant spanning cells 1, 2, 3 and 4.
-! Similarly, the last two edge values are estimated by evaluating the last
-! available interpolant.
-!
-! For this fourth-order scheme, at least four cells must exist.
-! -----------------------------------------------------------------------------
-
   ! Local variables
   integer               :: i, j
   real                  :: u0, u1, u2, u3
@@ -475,9 +449,32 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect )
 
 end subroutine edge_values_explicit_h4
 
-
-!------------------------------------------------------------------------------
 !> Compute ih4 edge values (implicit fourth order accurate)
+!! in the same units as h.
+!!
+!! Compute edge values based on fourth-order implicit estimates.
+!!
+!! Fourth-order implicit estimates of edge values are based on a two-cell
+!! stencil. A tridiagonal system is set up and is based on expressing the
+!! edge values in terms of neighboring cell averages. The generic
+!! relationship is
+!!
+!! \f[
+!! \alpha u_{i-1/2} + u_{i+1/2} + \beta u_{i+3/2} = a \bar{u}_i + b \bar{u}_{i+1}
+!! \f]
+!!
+!! and the stencil looks like this
+!!
+!!          i     i+1
+!!   ..--o------o------o--..
+!!     i-1/2  i+1/2  i+3/2
+!!
+!! In this routine, the coefficients \f$\alpha\f$, \f$\beta\f$, \f$a\f$ and \f$b\f$ are
+!! computed, the tridiagonal system is built, boundary conditions are prescribed and
+!! the system is solved to yield edge-value estimates.
+!!
+!! There are N+1 unknowns and we are able to write N-1 equations. The
+!! boundary conditions close the system.
 subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
@@ -485,31 +482,6 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
   real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
                                            !! same units as u; the second index size is 2.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
-! -----------------------------------------------------------------------------
-! Compute edge values based on fourth-order implicit estimates.
-!
-! Fourth-order implicit estimates of edge values are based on a two-cell
-! stencil. A tridiagonal system is set up and is based on expressing the
-! edge values in terms of neighboring cell averages. The generic
-! relationship is
-!
-! \alpha u_{i-1/2} + u_{i+1/2} + \beta u_{i+3/2} = a \bar{u}_i + b \bar{u}_{i+1}
-!
-! and the stencil looks like this
-!
-!          i     i+1
-!   ..--o------o------o--..
-!     i-1/2  i+1/2  i+3/2
-!
-! In this routine, the coefficients \alpha, \beta, a and b are computed,
-! the tridiagonal system is built, boundary conditions are prescribed and
-! the system is solved to yield edge-value estimates.
-!
-! There are N+1 unknowns and we are able to write N-1 equations. The
-! boundary conditions close the system.
-! -----------------------------------------------------------------------------
-
   ! Local variables
   integer               :: i, j                 ! loop indexes
   real                  :: h0, h1               ! cell widths
@@ -621,9 +593,41 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect )
 
 end subroutine edge_values_implicit_h4
 
-
-!------------------------------------------------------------------------------
 !> Compute ih6 edge values (implicit sixth order accurate)
+                                           !! in the same units as h.
+!!
+!! Sixth-order implicit estimates of edge values are based on a four-cell,
+!! three-edge stencil. A tridiagonal system is set up and is based on
+!! expressing the edge values in terms of neighboring cell averages.
+!!
+!! The generic relationship is
+!!
+!! \f[
+!! \alpha u_{i-1/2} + u_{i+1/2} + \beta u_{i+3/2} =
+!! a \bar{u}_{i-1} + b \bar{u}_i + c \bar{u}_{i+1} + d \bar{u}_{i+2}
+!! \f]
+!!
+!! and the stencil looks like this
+!!
+!!         i-1     i     i+1    i+2
+!!   ..--o------o------o------o------o--..
+!!            i-1/2  i+1/2  i+3/2
+!!
+!! In this routine, the coefficients \f$\alpha\f$, \f$\beta\f$, a, b, c and d are
+!! computed, the tridiagonal system is built, boundary conditions are
+!! prescribed and the system is solved to yield edge-value estimates.
+!!
+!! Note that the centered stencil only applies to edges 3 to N-1 (edges are
+!! numbered 1 to n+1), which yields N-3 equations for N+1 unknowns. Two other
+!! equations are written by using a right-biased stencil for edge 2 and a
+!! left-biased stencil for edge N. The prescription of boundary conditions
+!! (using sixth-order polynomials) closes the system.
+!!
+!! CAUTION: For each edge, in order to determine the coefficients of the
+!!          implicit expression, a 6x6 linear system is solved. This may
+!!          become computationally expensive if regridding is carried out
+!!          often. Figuring out closed-form expressions for these coefficients
+!!          on nonuniform meshes turned out to be intractable.
 subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
@@ -631,40 +635,6 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   real, dimension(:,:), intent(inout) :: edge_val !< Returned edge values, with the
                                            !! same units as u; the second index size is 2.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width
-                                           !! in the same units as h.
-! -----------------------------------------------------------------------------
-! Sixth-order implicit estimates of edge values are based on a four-cell,
-! three-edge stencil. A tridiagonal system is set up and is based on
-! expressing the edge values in terms of neighboring cell averages.
-!
-! The generic relationship is
-!
-! \alpha u_{i-1/2} + u_{i+1/2} + \beta u_{i+3/2} =
-! a \bar{u}_{i-1} + b \bar{u}_i + c \bar{u}_{i+1} + d \bar{u}_{i+2}
-!
-! and the stencil looks like this
-!
-!         i-1     i     i+1    i+2
-!   ..--o------o------o------o------o--..
-!            i-1/2  i+1/2  i+3/2
-!
-! In this routine, the coefficients \alpha, \beta, a, b, c and d are
-! computed, the tridiagonal system is built, boundary conditions are
-! prescribed and the system is solved to yield edge-value estimates.
-!
-! Note that the centered stencil only applies to edges 3 to N-1 (edges are
-! numbered 1 to n+1), which yields N-3 equations for N+1 unknowns. Two other
-! equations are written by using a right-biased stencil for edge 2 and a
-! left-biased stencil for edge N. The prescription of boundary conditions
-! (using sixth-order polynomials) closes the system.
-!
-! CAUTION: For each edge, in order to determine the coefficients of the
-!          implicit expression, a 6x6 linear system is solved. This may
-!          become computationally expensive if regridding is carried out
-!          often. Figuring out closed-form expressions for these coefficients
-!          on nonuniform meshes turned out to be intractable.
-! -----------------------------------------------------------------------------
-
   ! Local variables
   integer               :: i, j, k              ! loop indexes
   real                  :: h0, h1, h2, h3       ! cell widths
@@ -1115,6 +1085,5 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect )
   edge_val(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h6
-
 
 end module regrid_edge_values

@@ -1,3 +1,8 @@
+!> Configures the model for the Kelvin wave experiment.
+!!
+!! Kelvin = coastally-trapped Kelvin waves from the ROMS examples.
+!! Initialize with level surfaces and drive the wave in at the west,
+!! radiate out at the east.
 module Kelvin_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -171,7 +176,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
   integer :: IsdB, IedB, JsdB, JedB
   real    :: fac, x, y, x1, y1
   real    :: val1, val2, sina, cosa
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -224,6 +229,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           segment%normal_vel_bt(I,j) = val1 * cff * cosa /         &
                  (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
+          ! Not rotated yet
           segment%eta(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
           if (segment%nudged) then
@@ -243,10 +249,21 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           endif
         endif
       enddo ; enddo
-!     if (allocated(segment%tangential_vel)) then
-!       do J=JsdB,JedB ; do I=IsdB,IedB
-!       enddo ; enddo
-!     endif
+      if (associated(segment%tangential_vel)) then
+        do J=JsdB+1,JedB-1 ; do I=IsdB,IedB
+          x1 = 1000. * G%geoLonBu(I,J)
+          y1 = 1000. * G%geoLatBu(I,J)
+          x = (x1 - CS%coast_offset1) * cosa + y1 * sina
+          y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
+          if (CS%mode == 0) then
+            do k=1,nz
+              segment%tangential_vel(I,J,k) = val1 * cff * sina /     &
+                 (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) +           &
+                          G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+            enddo
+          endif
+        enddo ; enddo
+      endif
     else
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
@@ -262,6 +279,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           segment%normal_vel_bt(I,j) = val1 * cff * sina /       &
                  (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
+          ! Not rotated yet
           segment%eta(i,J) = 0.0
           segment%normal_vel_bt(i,J) = 0.0
           if (segment%nudged) then
@@ -279,15 +297,24 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           endif
         endif
       enddo ; enddo
+      if (associated(segment%tangential_vel)) then
+        do J=JsdB,JedB ; do I=IsdB+1,IedB-1
+          x1 = 1000. * G%geoLonBu(I,J)
+          y1 = 1000. * G%geoLatBu(I,J)
+          x = (x1 - CS%coast_offset1) * cosa + y1 * sina
+          y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
+          if (CS%mode == 0) then
+            do k=1,nz
+              segment%tangential_vel(I,J,k) = val1 * cff * sina /     &
+                 (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) +           &
+                          G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+            enddo
+          endif
+        enddo ; enddo
+      endif
     endif
   enddo
 
 end subroutine Kelvin_set_OBC_data
 
-!> \class Kelvin_Initialization
-!!
-!! The module configures the model for the Kelvin wave experiment.
-!! Kelvin = coastally-trapped Kelvin waves from the ROMS examples.
-!! Initialize with level surfaces and drive the wave in at the west,
-!! radiate out at the east.
 end module Kelvin_initialization

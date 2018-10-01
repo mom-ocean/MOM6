@@ -141,17 +141,25 @@ contains
 !=======================================================================
 
   !> Maps outgoing ocean data to MCT attribute vector real array
-  subroutine ocn_export(ind, ocn_public, grid, o2x)
+  subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
     type(cpl_indices_type),  intent(inout) :: ind        !< Structure with coupler indices and vectors
     type(ocean_public_type), intent(in)    :: ocn_public !< Ocean surface state
     type(ocean_grid_type),   intent(in)    :: grid       !< Ocean model grid
     real(kind=8),            intent(inout) :: o2x(:,:)   !< MCT outgoing bugger
+    real(kind=8), intent(in)               :: dt_int     !< Amount of time over which to advance the
+                                                         !! ocean (ocean_coupling_time_step), in sec
+    integer, intent(in)                    :: ncouple_per_day !< Number of ocean coupling calls per day
 
     ! Local variables
     real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
     integer :: i, j, n, ig, jg  !< Grid indices
     real    :: slp_L, slp_R, slp_C, slope, u_min, u_max
+    real :: I_time_int  !< The inverse of coupling time interval in s-1.
+
     !-----------------------------------------------------------------------
+
+    ! Use Adcroft's rule of reciprocals; it does the right thing here.
+    I_time_int = 0.0 ; if (dt_int > 0.0) I_time_int = 1.0 / dt_int
 
     ! Copy from ocn_public to o2x. ocn_public uses global indexing with no halos.
     ! The mask comes from "grid" that uses the usual MOM domain that has halos
@@ -168,6 +176,17 @@ contains
         o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
         o2x(ind%o2x_So_u, n) = ocn_public%u_surf(ig,jg) * grid%mask2dT(i,j)
         o2x(ind%o2x_So_v, n) = ocn_public%v_surf(ig,jg) * grid%mask2dT(i,j)
+        o2x(ind%o2x_So_bldepth, n) = ocn_public%OBLD(ig,jg) * grid%mask2dT(i,j)
+        ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
+        if (ocn_public%frazil(ig,jg) > 0.0) then
+          ! Frazil: change from J/m^2 to W/m^2
+          o2x(ind%o2x_Fioo_q, n) = ocn_public%frazil(ig,jg) * grid%mask2dT(i,j) * I_time_int
+        else
+          ! Melt_potential: change from J/m^2 to W/m^2
+          o2x(ind%o2x_Fioo_q, n) = -ocn_public%melt_potential(ig,jg) * grid%mask2dT(i,j) * I_time_int !* ncouple_per_day
+          ! make sure Melt_potential is always <= 0
+          if (o2x(ind%o2x_Fioo_q, n) > 0.0) o2x(ind%o2x_Fioo_q, n) = 0.0
+        endif
         ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
         ! in order to update halos. i.e. does not use global indexing.
         ssh(i,j) = ocn_public%sea_lev(ig,jg)

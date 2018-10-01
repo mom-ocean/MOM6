@@ -52,7 +52,7 @@ type, public :: thickness_diffuse_CS ; private
                                  !! longer than DT, or 0 (the default) to use DT.
   integer :: nkml                !< number of layers within mixed layer
   logical :: debug               !< write verbose checksums for debugging purposes
-  type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostics
+  type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity (W m-2)
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
   real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
@@ -1829,7 +1829,8 @@ end subroutine thickness_diffuse_init
 
 !> Deallocate the thickness diffusion control structure
 subroutine thickness_diffuse_end(CS)
-  type(thickness_diffuse_CS), pointer :: CS   !< Control structure for thickness diffusion
+  type(thickness_diffuse_CS), pointer :: CS !< Control structure for thickness diffusion
+
   if (associated(CS)) deallocate(CS)
 end subroutine thickness_diffuse_end
 

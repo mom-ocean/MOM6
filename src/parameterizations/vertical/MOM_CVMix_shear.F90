@@ -3,13 +3,7 @@ module MOM_CVMix_shear
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!---------------------------------------------------
-! module MOM_CVMix_shear
-! Author: Brandon Reichl
-! Date: Aug 31, 2016
-! Purpose: Interface to CVMix interior shear schemes
-! Further information to be added at a later time.
-!---------------------------------------------------
+!> \author Brandon Reichl
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -29,7 +23,8 @@ public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear
 
 !> Control structure including parameters for CVMix interior shear schemes.
 type, public :: CVMix_shear_cs
-  logical :: use_LMD94, use_PP81            !< Flags for various schemes
+  logical :: use_LMD94                      !< Flags to use the LMD94 scheme
+  logical :: use_PP81                       !< Flags to use Pacanowski and Philander (JPO 1981)
   logical :: smooth_ri                      !< If true, smooth Ri using a 1-2-1 filter
   real    :: Ri_zero                        !< LMD94 critical Richardson number
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
@@ -41,10 +36,12 @@ type, public :: CVMix_shear_cs
   real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
                                                         !! after smoothing
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
-  ! Daignostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
+
+  type(diag_ctrl), pointer :: diag => NULL() !< Pointer to the diagnostics control structure
+  !>@{ Diagnostic handles
   integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
   integer :: id_ri_grad_smooth = -1
+  !!@}
 
 end type CVMix_shear_cs
 
@@ -293,7 +290,8 @@ end function CVMix_shear_is_used
 
 !> Clear pointers and dealocate memory
 subroutine CVMix_shear_end(CS)
-  type(CVMix_shear_cs), pointer :: CS ! Control structure
+  type(CVMix_shear_cs), pointer :: CS !< Control structure for this module that
+                                      !! will be deallocated in this subroutine
 
   if (.not. associated(CS)) return
 

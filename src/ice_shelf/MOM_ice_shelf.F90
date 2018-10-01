@@ -71,7 +71,7 @@ type, public :: ice_shelf_CS ; private
                                           !! The rest is private
   real ::   flux_factor = 1.0             !< A factor that can be used to turn off ice shelf
                                           !! melting (flux_factor = 0).
-  character(len=128) :: restart_output_dir = ' '
+  character(len=128) :: restart_output_dir = ' ' !< The directory in which to write restart files
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
   type(ice_shelf_dyn_CS), pointer :: dCS => NULL() !< The control structure for the ice-shelf dynamics.
@@ -119,11 +119,12 @@ type, public :: ice_shelf_CS ; private
                             !! it is to estimate the gravitational driving force at the
                             !! shelf front(until we think of a better way to do it-
                             !! but any difference will be negligible)
-  logical :: calve_to_mask
-  real :: min_thickness_simple_calve ! min. ice shelf thickness criteria for calving
-  real :: T0, S0 ! temp/salt at ocean surface in the restoring region
-  real :: input_flux
-  real :: input_thickness
+  logical :: calve_to_mask  !< If true, calve any ice that passes outside of a masked area
+  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving
+  real :: T0                !< temperature at ocean surface in the restoring region, in degC
+  real :: S0                !< Salinity at ocean surface in the restoring region, in ppt.
+  real :: input_flux        !< Ice volume flux at an upstream open boundary, in m3 s-1.
+  real :: input_thickness   !< Ice thickness at an upstream open boundary, in m.
 
   type(time_type) :: Time                !< The component's time.
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
@@ -143,15 +144,16 @@ type, public :: ice_shelf_CS ; private
   logical :: constant_sea_level          !< if true, apply an evaporative, heat and salt
                                          !! fluxes. It will avoid large increase in sea level.
   real    :: cutoff_depth                !< depth above which melt is set to zero (>= 0).
-  real    :: lambda1, lambda2, lambda3   !< liquidus coeffs. Needed if find_salt_root = true
-  !>@{
-  ! Diagnostic handles
+  real    :: lambda1                     !< liquidus coeff., Needed if find_salt_root = true
+  real    :: lambda2                     !< liquidus coeff., Needed if find_salt_root = true
+  real    :: lambda3                     !< liquidus coeff., Needed if find_salt_root = true
+  !>@{ Diagnostic handles
   integer :: id_melt = -1, id_exch_vel_s = -1, id_exch_vel_t = -1, &
              id_tfreeze = -1, id_tfl_shelf = -1, &
              id_thermal_driving = -1, id_haline_driving = -1, &
              id_u_ml = -1, id_v_ml = -1, id_sbdry = -1, &
              id_h_shelf = -1, id_h_mask = -1, &
-!             id_surf_elev = -1, id_bathym = -1, &
+             id_surf_elev = -1, id_bathym = -1, &
              id_area_shelf_h = -1, &
              id_ustar_shelf = -1, id_shelf_mass = -1, id_mass_flux = -1
   !>@}
@@ -162,13 +164,15 @@ type, public :: ice_shelf_CS ; private
                           !! the ice shelf mass read from a file
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to control diagnostic output.
-  type(user_ice_shelf_CS), pointer :: user_CS => NULL()
+  type(user_ice_shelf_CS), pointer :: user_CS => NULL() !< A pointer to the control structure for
+                                  !! user-supplied modifications to the ice shelf code.
 
   logical :: debug                !< If true, write verbose checksums for debugging purposes
                                   !! and use reproducible sums
 end type ice_shelf_CS
 
-integer :: id_clock_shelf, id_clock_pass !< Clock for group pass calls
+integer :: id_clock_shelf !< CPU Clock for the ice shelf code
+integer :: id_clock_pass !< CPU Clock for group pass calls
 
 contains
 
@@ -254,6 +258,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                             ! coupled ice-ocean dynamics.
 
   real, parameter :: c2_3 = 2.0/3.0
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3
   real, parameter :: rho_fw = 1000.0 ! fresh water density
 
@@ -380,14 +385,16 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                   state%sst(i,j))-LF*CS%Gamma_T_3EQ/35.0
             S_c = LF*(CS%Gamma_T_3EQ/35.0)*state%sss(i,j)
 
+            !### Depending on the sign of S_b, one of these will be inaccurate!
             Sbdry1 = (-S_b + SQRT(S_b*S_b-4*S_a*S_c))/(2*S_a)
             Sbdry2 = (-S_b - SQRT(S_b*S_b-4*S_a*S_c))/(2*S_a)
             Sbdry(i,j) = MAX(Sbdry1, Sbdry2)
             ! Safety check
             if (Sbdry(i,j) < 0.) then
-              write(*,*)'state%sss(i,j)',state%sss(i,j)
-              write(*,*)'S_a, S_b, S_c',S_a, S_b, S_c
-              write(*,*)'I,J,Sbdry1,Sbdry2',i,j,Sbdry1,Sbdry2
+              write(mesg,*) 'state%sss(i,j) = ',state%sss(i,j), 'S_a, S_b, S_c', S_a, S_b, S_c
+              call MOM_error(WARNING, mesg, .true.)
+              write(mesg,*) 'I,J,Sbdry1,Sbdry2',i,j,Sbdry1,Sbdry2
+              call MOM_error(WARNING, mesg, .true.)
               call MOM_error(FATAL, "shelf_calc_flux: Negative salinity (Sbdry).")
             endif
           else
@@ -593,20 +600,18 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
       ! haline_driving = state%sss - Sbdry
       !if (fluxes%iceshelf_melt(i,j) /= 0.0) then
       !   if (haline_driving(i,j) /= (state%sss(i,j) - Sbdry(i,j))) then
-      !      write(*,*)'Something is wrong at i,j',i,j
-      !      write(*,*)'haline_driving, sss-Sbdry',haline_driving(i,j), &
-      !                (state%sss(i,j) - Sbdry(i,j))
+      !     write(mesg,*) 'at i,j=',i,j,' haline_driving, sss-Sbdry',haline_driving(i,j), &
+      !                   (state%sss(i,j) - Sbdry(i,j))
       !     call MOM_error(FATAL, &
-      !            "shelf_calc_flux: Inconsistency in melt and haline_driving")
+      !            "shelf_calc_flux: Inconsistency in melt and haline_driving"//trim(mesg))
       !   endif
       !endif
 
-      ! 2) check if |melt| > 0 when star_shelf = 0.
+      ! 2) check if |melt| > 0 when ustar_shelf = 0.
       ! this should never happen
       if ((abs(fluxes%iceshelf_melt(i,j))>0.0) .and. (fluxes%ustar_shelf(i,j) == 0.0)) then
-        write(*,*)'Something is wrong at i,j',i,j
-        call MOM_error(FATAL, &
-            "shelf_calc_flux: |melt| > 0 and star_shelf = 0.")
+        write(mesg,*) "|melt| = ",fluxes%iceshelf_melt(i,j)," > 0 and ustar_shelf = 0. at i,j", i, j
+        call MOM_error(FATAL, "shelf_calc_flux: "//trim(mesg))
       endif
     endif ! area_shelf_h
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!!
@@ -867,6 +872,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
   real, parameter :: rho_fw = 1000.0 ! fresh water density
+  character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -1000,7 +1006,8 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
         delta_mass_shelf = (shelf_mass1 - shelf_mass0)/CS%time_step
 !          delta_mass_shelf = (shelf_mass1 - shelf_mass0)* &
 !                         (rho_fw/CS%density_ice)/CS%time_step
-!          if (is_root_pe()) write(*,*)'delta_mass_shelf',delta_mass_shelf
+!        write(mesg,*)'delta_mass_shelf = ',delta_mass_shelf
+!        call MOM_mesg(mesg,5)
       else! first time step
         delta_mass_shelf = 0.0
       endif
@@ -1025,7 +1032,8 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     enddo ; enddo
 
     if (CS%DEBUG) then
-      if (is_root_pe()) write(*,*)'Mean melt flux (kg/(m^2 s)),dt',mean_melt_flux,CS%time_step
+      write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux, CS%time_step
+      call MOM_mesg(mesg)
       call MOM_forcing_chksum("After constant sea level", fluxes, G, haloshift=0)
     endif
 
@@ -1294,11 +1302,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "A typical density of ice.", units="kg m-3", default=917.0)
 
     call get_param(param_file, mdl, "INPUT_FLUX_ICE_SHELF", CS%input_flux, &
-                 "volume flux at upstream boundary", &
-                 units="m2 s-1", default=0.)
+                 "volume flux at upstream boundary", units="m2 s-1", default=0.)
     call get_param(param_file, mdl, "INPUT_THICK_ICE_SHELF", CS%input_thickness, &
-                 "flux thickness at upstream boundary", &
-                 units="m", default=1000.)
+                 "flux thickness at upstream boundary", units="m", default=1000.)
   else
     ! This is here because of inconsistent defaults.  I don't know why.  RWH
     call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &

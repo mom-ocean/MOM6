@@ -1,3 +1,5 @@
+!> Calculates various values related to the bottom boundary layer, such as the viscosity and
+!! thickness of the BBL (set_viscous_BBL).
 module MOM_set_visc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -6,17 +8,18 @@ use MOM_debugging, only : uvchksum, hchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_domains, only : pass_var, CORNER
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_kappa_shear, only : kappa_shear_is_used
+use MOM_kappa_shear, only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
-use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
+use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -31,65 +34,66 @@ implicit none ; private
 public set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_end
 public set_visc_register_restarts
 
+!> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
-  real    :: Hbbl           ! The static bottom boundary layer thickness, in
-                            ! the same units as thickness (m or kg m-2).
-  real    :: cdrag          ! The quadratic drag coefficient.
-  real    :: c_Smag         ! The Laplacian Smagorinsky coefficient for
-                            ! calculating the drag in channels.
-  real    :: drag_bg_vel    ! An assumed unresolved background velocity for
-                            ! calculating the bottom drag, in m s-1.
-  real    :: BBL_thick_min  ! The minimum bottom boundary layer thickness in
-                            ! the same units as thickness (m or kg m-2).
-                            ! This might be Kv / (cdrag * drag_bg_vel) to give
-                            ! Kv as the minimum near-bottom viscosity.
-  real    :: Htbl_shelf     ! A nominal thickness of the surface boundary layer
-                            ! for use in calculating the near-surface velocity,
-                            ! in units of m.
-  real    :: Htbl_shelf_min ! The minimum surface boundary layer thickness in m.
-  real    :: KV_BBL_min     ! The minimum viscosities in the bottom and top
-  real    :: KV_TBL_min     ! boundary layers, both in m2 s-1.
-
-  logical :: bottomdraglaw  ! If true, the  bottom stress is calculated with a
-                            ! drag law c_drag*|u|*u. The velocity magnitude
-                            ! may be an assumed value or it may be based on the
-                            ! actual velocity in the bottommost HBBL, depending
-                            ! on whether linear_drag is true.
-  logical :: BBL_use_EOS    ! If true, use the equation of state in determining
-                            ! the properties of the bottom boundary layer.
-  logical :: linear_drag    ! If true, the drag law is cdrag*DRAG_BG_VEL*u.
-  logical :: Channel_drag   ! If true, the drag is exerted directly on each
-                            ! layer according to what fraction of the bottom
-                            ! they overlie.
-  logical :: RiNo_mix       ! If true, use Richardson number dependent mixing.
-  logical :: dynamic_viscous_ML  ! If true, use a bulk Richardson number criterion to
-                            ! determine the mixed layer thickness for viscosity.
-  real    :: bulk_Ri_ML     ! The bulk mixed layer used to determine the
-                            ! thickness of the viscous mixed layer.  Nondim.
-  real    :: omega          !   The Earth's rotation rate, in s-1.
-  real    :: ustar_min      ! A minimum value of ustar to avoid numerical
-                            ! problems, in m s-1.  If the value is small enough,
-                            ! this should not affect the solution.
-  real    :: TKE_decay      ! The ratio of the natural Ekman depth to the TKE
-                            ! decay scale, nondimensional.
-  real    :: omega_frac     !   When setting the decay scale for turbulence, use
-                            ! this fraction of the absolute rotation rate blended
-                            ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
-  logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                            ! timing of diagnostic output.
+  real    :: Hbbl           !< The static bottom boundary layer thickness, in
+                            !! the same units as thickness (m or kg m-2).
+  real    :: cdrag          !< The quadratic drag coefficient.
+  real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
+                            !! calculating the drag in channels.
+  real    :: drag_bg_vel    !< An assumed unresolved background velocity for
+                            !! calculating the bottom drag, in m s-1.
+  real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness in
+                            !! the same units as thickness (m or kg m-2).
+                            !! This might be Kv / (cdrag * drag_bg_vel) to give
+                            !! Kv as the minimum near-bottom viscosity.
+  real    :: Htbl_shelf     !< A nominal thickness of the surface boundary layer
+                            !! for use in calculating the near-surface velocity,
+                            !! in units of m.
+  real    :: Htbl_shelf_min !< The minimum surface boundary layer thickness in m.
+  real    :: KV_BBL_min     !< The minimum viscosities in the bottom and top
+  real    :: KV_TBL_min     !< boundary layers, both in m2 s-1.
+  logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
+                            !! drag law c_drag*|u|*u. The velocity magnitude
+                            !! may be an assumed value or it may be based on the
+                            !! actual velocity in the bottommost HBBL, depending
+                            !! on whether linear_drag is true.
+  logical :: BBL_use_EOS    !< If true, use the equation of state in determining
+                            !! the properties of the bottom boundary layer.
+  logical :: linear_drag    !< If true, the drag law is cdrag*DRAG_BG_VEL*u.
+  logical :: Channel_drag   !< If true, the drag is exerted directly on each
+                            !! layer according to what fraction of the bottom
+                            !! they overlie.
+  logical :: RiNo_mix       !< If true, use Richardson number dependent mixing.
+  logical :: dynamic_viscous_ML !< If true, use a bulk Richardson number criterion to
+                            !! determine the mixed layer thickness for viscosity.
+  real    :: bulk_Ri_ML     !< The bulk mixed layer used to determine the
+                            !! thickness of the viscous mixed layer.  Nondim.
+  real    :: omega          !<   The Earth's rotation rate, in s-1.
+  real    :: ustar_min      !< A minimum value of ustar to avoid numerical
+                            !! problems, in m s-1.  If the value is small enough,
+                            !! this should not affect the solution.
+  real    :: TKE_decay      !< The ratio of the natural Ekman depth to the TKE
+                            !! decay scale, nondimensional.
+  real    :: omega_frac     !<   When setting the decay scale for turbulence, use
+                            !! this fraction of the absolute rotation rate blended
+                            !! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
+  logical :: debug          !< If true, write verbose checksums for debugging purposes.
+  type(ocean_OBC_type), pointer :: OBC => NULL() !< Open boundaries control structure
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                            !! regulate the timing of diagnostic output.
+  !>@{ Diagnostics handles
   integer :: id_bbl_thick_u = -1, id_kv_bbl_u = -1
   integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1
   integer :: id_nkml_visc_u = -1, id_nkml_visc_v = -1
-  type(ocean_OBC_type), pointer :: OBC => NULL()
+  !!@}
 end type set_visc_CS
 
 contains
 
-!>   The following subroutine calculates the thickness of the bottom
-!! boundary layer and the viscosity within that layer.  A drag law is
-!! used, either linearized about an assumed bottom velocity or using
+!> Calculates the thickness of the bottom boundary layer and the viscosity within that layer.
+!! A drag law is used, either linearized about an assumed bottom velocity or using
 !! the actual near-bottom velocities combined with an assumed
 !! unresolved velocity.  The bottom boundary layer thickness is
 !! limited by a combination of stratification and rotation, as in the
@@ -928,13 +932,18 @@ end subroutine set_viscous_BBL
 
 !> This subroutine finds a thickness-weighted value of v at the u-points.
 function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
-  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,                                   intent(in) :: i, j, k
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: mask2dCv
-  type(ocean_OBC_type),                      pointer    :: OBC
-  real                                                  :: set_v_at_u
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                         intent(in) :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
+  real, dimension(SZI_(G),SZJB_(G)),&
+                         intent(in) :: mask2dCv !< A multiplicative mask of the v-points
+  type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
+  real                              :: set_v_at_u !< The retur value of v at u points, in m s-1.
 
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(0:1,-1:0)    ! Masked weights used to average u onto v, in H.
@@ -967,12 +976,17 @@ end function set_v_at_u
 !> This subroutine finds a thickness-weighted value of u at the v-points.
 function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  integer,                                   intent(in) :: i, j, k
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: mask2dCu
-  type(ocean_OBC_type),                      pointer    :: OBC
-  real                                                  :: set_u_at_v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                         intent(in) :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  integer,               intent(in) :: i    !< The i-index of the u-location to work on.
+  integer,               intent(in) :: j    !< The j-index of the u-location to work on.
+  integer,               intent(in) :: k    !< The k-index of the u-location to work on.
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                         intent(in) :: mask2dCu !< A multiplicative mask of the u-points
+  type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
+  real                              :: set_u_at_v !< The return value of u at v points, in m s-1.
 
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(-1:0,0:1)    ! Masked weights used to average u onto v, in H.
@@ -1002,11 +1016,11 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
 
 end function set_u_at_v
 
-!>   The following subroutine calculates the thickness of the surface boundary
-!! layer for applying an elevated viscosity.  A bulk Richardson criterion or
-!! the thickness of the topmost NKML layers (with a bulk mixed layer) are
-!! currently used.  The thicknesses are given in terms of fractional layers, so
-!! that this thickness will move as the thickness of the topmost layers change.
+!> Calculates the thickness of the surface boundary layer for applying an elevated viscosity.
+!!
+!! A bulk Richardson criterion or the thickness of the topmost NKML layers (with a bulk mixed layer)
+!! are currently used.  The thicknesses are given in terms of fractional layers, so that this
+!! thickness will move as the thickness of the topmost layers change.
 subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -1028,29 +1042,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
                                                   !! of those values in visc that would be
                                                   !! calculated with symmetric memory.
-
-!   The following subroutine calculates the thickness of the surface boundary
-! layer for applying an elevated viscosity.  A bulk Richardson criterion or
-! the thickness of the topmost NKML layers (with a bulk mixed layer) are
-! currently used.  The thicknesses are given in terms of fractional layers, so
-! that this thickness will move as the thickness of the topmost layers change.
-!
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.  In the comments below,
-!                the units of h are denoted as H.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      forces - A structure containing pointers to mechanical
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (out)     visc - A structure containing vertical viscosities and related
-!                   fields.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 vertvisc_init.
-
+  ! Local variables
   real, dimension(SZIB_(G)) :: &
     htot, &     !   The total depth of the layers being that are within the
                 ! surface mixed layer, in H.
@@ -1178,26 +1170,11 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   if (associated(forces%frac_shelf_u)) then
     ! This configuration has ice shelves, and the appropriate variables need to
     ! be allocated.
-    if (.not.associated(visc%tauy_shelf)) then
-      allocate(visc%tauy_shelf(G%isd:G%ied,G%JsdB:G%JedB))
-      visc%tauy_shelf(:,:) = 0.0
-    endif
-    if (.not.associated(visc%tbl_thick_shelf_u)) then
-      allocate(visc%tbl_thick_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed))
-      visc%tbl_thick_shelf_u(:,:) = 0.0
-    endif
-    if (.not.associated(visc%tbl_thick_shelf_v)) then
-      allocate(visc%tbl_thick_shelf_v(G%isd:G%ied,G%JsdB:G%JedB))
-      visc%tbl_thick_shelf_v(:,:) = 0.0
-    endif
-    if (.not.associated(visc%kv_tbl_shelf_u)) then
-      allocate(visc%kv_tbl_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed))
-      visc%kv_tbl_shelf_u(:,:) = 0.0
-    endif
-    if (.not.associated(visc%kv_tbl_shelf_v)) then
-      allocate(visc%kv_tbl_shelf_v(G%isd:G%ied,G%JsdB:G%JedB))
-      visc%kv_tbl_shelf_v(:,:) = 0.0
-    endif
+    call safe_alloc_ptr(visc%tauy_shelf, G%isd, G%ied, G%JsdB, G%JedB)
+    call safe_alloc_ptr(visc%tbl_thick_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
+    call safe_alloc_ptr(visc%tbl_thick_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
+    call safe_alloc_ptr(visc%kv_tbl_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
+    call safe_alloc_ptr(visc%kv_tbl_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
 
     !  With a linear drag law, the friction velocity is already known.
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
@@ -1730,8 +1707,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
 
 end subroutine set_viscous_ML
 
-!>   This subroutine is used to register any fields associated with the
-!! vertvisc_type.
+!> Register any fields associated with the vertvisc_type.
 subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   type(hor_index_type),    intent(in)    :: HI         !< A horizontal index type structure.
   type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure.
@@ -1742,32 +1718,26 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                                                        !! Allocated here.
   type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control
                                                        !! structure.
-!   This subroutine is used to register any fields associated with the
-! vertvisc_type.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (out)     visc - A structure containing vertical viscosities and related
-!                   fields.  Allocated here.
-!  (in)      restart_CS - A pointer to the restart control structure.
-  type(vardesc) :: vd
-  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
+  ! Local variables
+  logical :: use_kappa_shear, KS_at_vertex
+  logical :: adiabatic, useKPP, useEPBL
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
+  real :: hfreeze !< If hfreeze > 0 (m), melt potential will be computed.
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
 
-  use_kappa_shear = .false. ; use_CVMix_shear = .false.
+  use_kappa_shear = .false. ; KS_at_vertex = .false. ; use_CVMix_shear = .false.
   useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false.
 
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
+    KS_at_vertex    = kappa_shear_at_vertex(param_file)
     use_CVMix_shear = CVMix_shear_is_used(param_file)
-    use_CVMix_conv = CVMix_conv_is_used(param_file)
+    use_CVMix_conv  = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
@@ -1779,41 +1749,58 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   endif
 
   if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
-    allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
-    allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
-    allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
+    call safe_alloc_ptr(visc%Kd_shear, isd, ied, jsd, jed, nz+1)
+    call register_restart_field(visc%Kd_shear, "Kd_shear", .false., restart_CS, &
+                  "Shear-driven turbulent diffusivity at interfaces", "m2 s-1", z_grid='i')
+  endif
+  if (useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv .or. &
+      (use_kappa_shear .and. .not.KS_at_vertex )) then
+    call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
+    call register_restart_field(visc%Kv_shear, "Kv_shear", .false., restart_CS, &
+                  "Shear-driven turbulent viscosity at interfaces", "m2 s-1", z_grid='i')
+  endif
+  if (use_kappa_shear .and. KS_at_vertex) then
+    call safe_alloc_ptr(visc%TKE_turb, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
+    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
+                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", &
+                  hor_grid="Bu", z_grid='i')
+    call safe_alloc_ptr(visc%Kv_shear_Bu, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
+    call register_restart_field(visc%Kv_shear_Bu, "Kv_shear_Bu", .false., restart_CS, &
+                  "Shear-driven turbulent viscosity at vertex interfaces", "m2 s-1", &
+                  hor_grid="Bu", z_grid='i')
+  elseif (use_kappa_shear) then
+    call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
+    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
+                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", z_grid='i')
+  endif
 
   ! MOM_bkgnd_mixing is always used, so always allocate visc%Kv_slow. GMM
-  allocate(visc%Kv_slow(isd:ied,jsd:jed,nz+1)) ; visc%Kv_slow(:,:,:) = 0.0
+  call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
+  call register_restart_field(visc%Kv_slow, "Kv_slow", .false., restart_CS, &
+                "Vertical turbulent viscosity at interfaces due to slow processes", &
+                "m2 s-1", z_grid='i')
 
-    vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
-                  hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kd_shear, vd, .false., restart_CS)
-
-    vd = var_desc("TKE_turb","m2 s-2","Turbulent kinetic energy per unit mass at interfaces", &
-                  hor_grid='h', z_grid='i')
-    call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
-    vd = var_desc("Kv_shear","m2 s-1","Shear-driven turbulent viscosity at interfaces", &
-                  hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kv_shear, vd, .false., restart_CS)
-    vd = var_desc("Kv_slow","m2 s-1","Vertical turbulent viscosity at interfaces due \n" // &
-                  " to slow processes", hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kv_slow, vd, .false., restart_CS)
-
-  endif
-
-  ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
+  ! visc%MLD is used to communicate the state of the (e)PBL or KPP to the rest of the model
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
                  default=.false., do_not_log=.true.)
+  ! visc%MLD needs to be allocated when melt potential is computed (HFREEZE>0)
+  call get_param(param_file, mdl, "HFREEZE", hfreeze, &
+                 default=-1.0, do_not_log=.true.)
+
   if (MLE_use_PBL_MLD) then
-    allocate(visc%MLD(isd:ied,jsd:jed)) ; visc%MLD(:,:) = 0.0
-    vd = var_desc("MLD","m","Instantaneous active mixing layer depth", &
-                  hor_grid='h', z_grid='1')
-    call register_restart_field(visc%MLD, vd, .false., restart_CS)
+    call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
+    call register_restart_field(visc%MLD, "MLD", .false., restart_CS, &
+                  "Instantaneous active mixing layer depth", "m")
   endif
+
+  if (hfreeze >= 0.0 .and. .not.MLE_use_PBL_MLD) then
+    call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
+  endif
+
 
 end subroutine set_visc_register_restarts
 
+!> Initializes the MOM_set_visc control structure
 subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -1826,16 +1813,15 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                                                  !! related fields.  Allocated here.
   type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
-  type(ocean_OBC_type),    pointer       :: OBC
-
-  ! local variables
+  type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
+  ! Local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
   real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
   logical :: use_kappa_shear, adiabatic, use_omega
   logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
-  type(OBC_segment_type), pointer :: segment  ! pointer to OBC segment type
+  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
@@ -1855,10 +1841,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
   CS%diag => diag
 
-! Set default, read and log parameters
+  ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
-  use_kappa_shear = .false. !; adiabatic = .false.  ! Needed? -AJA
   differential_diffusion = .false.
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
@@ -1884,8 +1869,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   endif
 
   if (.not.adiabatic) then
-    use_kappa_shear = kappa_shear_is_used(param_file)
-    CS%RiNo_mix = use_kappa_shear
+    CS%RiNo_mix = kappa_shear_is_used(param_file)
     call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differential_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
@@ -2027,6 +2011,12 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
   endif
 
+  if (CS%RiNo_mix .and. kappa_shear_at_vertex(param_file)) then
+    ! These are necessary for reproduciblity across restarts in non-symmetric mode.
+    call pass_var(visc%TKE_turb, G%Domain, position=CORNER, complete=.false.)
+    call pass_var(visc%Kv_shear_Bu, G%Domain, position=CORNER, complete=.true.)
+  endif
+
   if (CS%bottomdraglaw) then
     allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed)) ; visc%bbl_thick_u = 0.0
     allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed)) ; visc%kv_bbl_u = 0.0
@@ -2072,9 +2062,12 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
 end subroutine set_visc_init
 
+!> This subroutine dellocates any memory in the set_visc control structure.
 subroutine set_visc_end(visc, CS)
-  type(vertvisc_type), intent(inout) :: visc
-  type(set_visc_CS),   pointer       :: CS
+  type(vertvisc_type), intent(inout) :: visc !< A structure containing vertical viscosities and
+                                             !! related fields.  Elements are deallocated here.
+  type(set_visc_CS),   pointer       :: CS   !< The control structure returned by a previous
+                                             !! call to vertvisc_init.
   if (CS%bottomdraglaw) then
     deallocate(visc%bbl_thick_u) ; deallocate(visc%bbl_thick_v)
     deallocate(visc%kv_bbl_u) ; deallocate(visc%kv_bbl_v)
@@ -2089,6 +2082,7 @@ subroutine set_visc_end(visc, CS)
   if (associated(visc%Kv_slow)) deallocate(visc%Kv_slow)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
   if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
+  if (associated(visc%Kv_shear_Bu)) deallocate(visc%Kv_shear_Bu)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)
@@ -2101,37 +2095,12 @@ subroutine set_visc_end(visc, CS)
   deallocate(CS)
 end subroutine set_visc_end
 
-!> \namespace MOM_set_visc
-!!********+*********+*********+*********+*********+*********+*********+**
-!!*                                                                     *
-!!*  By Robert Hallberg, April 1994 - October 2006                      *
-!!*  Quadratic Bottom Drag by James Stephens and R. Hallberg.           *
-!!*                                                                     *
-!!*    This file contains the subroutine that calculates various values *
-!!*  related to the bottom boundary layer, such as the viscosity and    *
-!!*  thickness of the BBL (set_viscous_BBL).  This would also be the    *
-!!*  module in which other viscous quantities that are flow-independent *
-!!*  might be set.  This information is transmitted to other modules    *
-!!*  via a vertvisc type structure.                                     *
-!!*                                                                     *
-!!*    The same code is used for the two velocity components, by        *
-!!*  indirectly referencing the velocities and defining a handful of    *
-!!*  direction-specific defined variables.                              *
-!!*                                                                     *
-!!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!!*                                                                     *
-!!*     A small fragment of the grid is shown below:                    *
-!!*                                                                     *
-!!*    j+1  x ^ x ^ x   At x:  q                                        *
-!!*    j+1  > o > o >   At ^:  v, frhatv, tauy                          *
-!!*    j    x ^ x ^ x   At >:  u, frhatu, taux                          *
-!!*    j    > o > o >   At o:  h                                        *
-!!*    j-1  x ^ x ^ x                                                   *
-!!*        i-1  i  i+1  At x & ^:                                       *
-!!*           i  i+1    At > & o:                                       *
-!!*                                                                     *
-!!*  The boundaries always run through q grid points (x).               *
-!!*                                                                     *
-!!********+*********+*********+*********+*********+*********+*********+**
+!> \namespace mom_set_visc
+!!
+!! This would also be the module in which other viscous quantities that are flow-independent might be set.
+!! This information is transmitted to other modules via a vertvisc type structure.
+!!
+!! The same code is used for the two velocity components, by indirectly referencing the velocities and
+!! defining a handful of direction-specific defined variables.
 
 end module MOM_set_visc

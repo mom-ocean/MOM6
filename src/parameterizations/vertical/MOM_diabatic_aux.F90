@@ -1,3 +1,5 @@
+!> Provides functions for some diabatic processes such as fraxil, brine rejection,
+!! tendency due to surface flux divergence.
 module MOM_diabatic_aux
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -13,7 +15,6 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
-use MOM_io,            only : vardesc
 use MOM_shortwave_abs, only : absorbRemainingSW, optics_type, sumSWoverBands
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -25,12 +26,12 @@ implicit none ; private
 public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
+
 !> Control structure for diabatic_aux
 type, public :: diabatic_aux_CS ; private
   logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff
                                    !! at the river mouths to "rivermix_depth" meters
-  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if
-                                   !! do_rivermix = T, in m.
+  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T, in m.
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
                              !! to cool the topmost layer down to the freezing
                              !! point.  The default is false.
@@ -52,11 +53,11 @@ type, public :: diabatic_aux_CS ; private
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
 
   ! Diagnostic handles
-  integer :: id_createdH       = -1
-  integer :: id_brine_lay      = -1
-  integer :: id_penSW_diag     = -1 !< Penetrative shortwave heating (flux convergence) diagnostic
-  integer :: id_penSWflux_diag = -1 !< Penetrative shortwave flux diagnostic
-  integer :: id_nonpenSW_diag  = -1 !< Non-penetrative shortwave heating diagnostic
+  integer :: id_createdH       = -1 !< Diagnostic ID of mass added to avoid grounding
+  integer :: id_brine_lay      = -1 !< Diagnostic ID of which layer receives the brine
+  integer :: id_penSW_diag     = -1 !< Diagnostic ID of Penetrative shortwave heating (flux convergence)
+  integer :: id_penSWflux_diag = -1 !< Diagnostic ID of Penetrative shortwave flux
+  integer :: id_nonpenSW_diag  = -1 !< Diagnostic ID of Non-penetrative shortwave heating
 
   ! Optional diagnostic arrays
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to avoid grounding (m/s)
@@ -66,17 +67,27 @@ type, public :: diabatic_aux_CS ; private
 
 end type diabatic_aux_CS
 
+!>@{ CPU time clock IDs
 integer :: id_clock_uv_at_h, id_clock_frazil
+!!@}
 
 contains
 
+!> Frazil formation keeps the temperature above the freezing point.
+!! This subroutine warms any water that is colder than the (currently
+!! surface) freezing point up to the freezing point and accumulates
+!! the required heat (in J m-2) in tv%frazil.
 subroutine make_frazil(h, tv, G, GV, CS, p_surf)
-  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  type(diabatic_aux_CS),                 intent(in)    :: CS
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: p_surf
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h  !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any available
+                                               !! thermodynamic fields.
+  type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
+                                               !! call to diabatic_aux_init.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(in)    :: p_surf !< The pressure at the ocean surface, in Pa.
 
 !   Frazil formation keeps the temperature above the freezing point.
 ! This subroutine warms any water that is colder than the (currently
@@ -192,17 +203,18 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
 
 end subroutine make_frazil
 
-!> Applies double diffusion to T & S, assuming no diapycal mass
+!> This subroutine applies double diffusion to T & S, assuming no diapycal mass
 !! fluxes, using a simple triadiagonal solver.
 subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
-  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                 intent(inout) :: tv   !< pointers to any available modynamic fields.
-                                                               !! Absent fields have NULL ptrs.
-  type(vertvisc_type),                   intent(in)    :: visc !< structure containing vertical viscosities,
-                                                               !! layer properies, and related fields.
-  real,                                  intent(in)    :: dt   !< Time increment, in s.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
+                                                 !! available thermodynamic fields.
+  type(vertvisc_type),     intent(in)    :: visc !< Structure containing vertical viscosities, bottom
+                                                 !! boundary layer properies, and related fields.
+  real,                    intent(in)    :: dt   !<  Time increment, in s.
 
   ! local variables
   real, dimension(SZI_(G)) :: &
@@ -223,7 +235,8 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   real :: b_denom_S    ! for b1_T and b1_S, both in m or kg m-2.
 
   integer :: i, j, k, is, ie, js, je, nz
-  real, pointer :: T(:,:,:), S(:,:,:), Kd_T(:,:,:), Kd_S(:,:,:)
+  real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
+  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL()
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   h_neglect = GV%H_subroundoff
 
@@ -293,18 +306,18 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   enddo
 end subroutine differential_diffuse_T_S
 
-!> Keep salinity from falling below a small but positive threshold
-!!  This occurs when the ice model attempts to extract more salt then
-!!  is actually available to it from the ocean.
+!> This subroutine keeps salinity from falling below a small but positive threshold.
+!! This usually occurs when the ice model attempts to extract more salt then
+!! is actually available to it from the ocean.
 subroutine adjust_salt(h, tv, G, GV, CS)
-  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m
-                                                               !! or kg m-2)
-  type(thermo_var_ptrs),                 intent(inout) :: tv   !< structure containing pointers to any
-                                                               !! available thermodynamic fields.
-  type(diabatic_aux_CS),                 intent(in)    :: CS   !< control structure returned by
-                                                               !! a previous call to diabatic_driver_init.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
+                                                 !! available thermodynamic fields.
+  type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
+                                                 !! call to diabatic_aux_init.
 
   ! local variables
   real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement
@@ -315,6 +328,7 @@ subroutine adjust_salt(h, tv, G, GV, CS)
 
 !  call cpu_clock_begin(id_clock_adjust_salt)
 
+!### MAKE THIS A RUN_TIME PARAMETER.  COULD IT BE 0?
   S_min = 0.01
 
   salt_add_col(:,:) = 0.0
@@ -351,27 +365,23 @@ subroutine adjust_salt(h, tv, G, GV, CS)
 
 end subroutine adjust_salt
 
-!> Insert salt from brine rejection into the first layer below
-!! the mixed layer which both contains mass and in which the
-!! change in layer density remains stable after the addition
-!! of salt via brine rejection.
+!> Insert salt from brine rejection into the first layer below the mixed layer
+!! which both contains mass and in which the change in layer density remains
+!! stable after the addition of salt via brine rejection.
 subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
-  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m
-                                                               !! or kg m-2)
-  type(thermo_var_ptrs),                 intent(inout) :: tv   !< structure containing pointers to
-                                                       !! any available hermodynamic fields.
-  type(forcing),                         intent(in)    :: fluxes !< tructure containing pointers
-                                                       !! any possible forcing fields
-  integer,                               intent(in)    :: nkmb !< number of layers in the mixed and
-                                                       !! buffer layers
-  type(diabatic_aux_CS),                 intent(in)    :: CS !< control structure returned by a
-                                                       !! previous call to diabatic_driver_init.
-  real,                                  intent(in)    :: dt !< time step between calls to this
-                                                       !! function (s) ??
-  integer,                               intent(in)    :: id_brine_lay
-
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
+                                                 !! available thermodynamic fields
+  type(forcing),           intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
+  integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
+  type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
+                                                 !! call to diabatic_aux_init
+  real,                    intent(in)    :: dt   !< The thermodyanmic time step, in s.
+  integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic
+                                                 !! which layer receivees the brine.
 
   ! local variables
   real :: salt(SZI_(G)) ! The amount of salt rejected from
@@ -397,7 +407,7 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
 
   p_ref_cv(:)  = tv%P_ref
 
-  inject_layer = nz
+  inject_layer(:,:) = nz
 
   do j=js,je
 
@@ -472,25 +482,34 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
 
   enddo
 
-  if (CS%id_brine_lay > 0) call post_data(CS%id_brine_lay,inject_layer,CS%diag)
+  if (CS%id_brine_lay > 0) call post_data(CS%id_brine_lay, inject_layer, CS%diag)
 
 end subroutine insert_brine
 
-!> Simple tri-diagnonal solver for T and S.
+!> This is a simple tri-diagonal solver for T and S.
 !! "Simple" means it only uses arrays hold, ea and eb.
 subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  integer,                                  intent(in)    :: is, ie, js, je
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold, ea, eb
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T, S
+  integer,                                  intent(in)    :: is   !< The start i-index to work on.
+  integer,                                  intent(in)    :: ie   !< The end i-index to work on.
+  integer,                                  intent(in)    :: js   !< The start j-index to work on.
+  integer,                                  intent(in)    :: je   !< The end j-index to work on.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: ea !< The amount of fluid entrained from the layer
+                                                 !! above within this time step, in units of H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: eb !< The amount of fluid entrained from the layer
+                                                 !! below within this time step, in units of H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T  !< Layer potential temperatures, in degC.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities, in PSU.
+
   ! Local variables
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
   real :: h_tr, b_denom_1
   integer :: i, j, k
-!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,hold,eb,T,S,ea) &
-!$OMP                          private(h_tr,b1,d1,c1,b_denom_1)
+
+  !$OMP parallel do default(shared) private(h_tr,b1,d1,c1,b_denom_1)
   do j=js,je
     do i=is,ie
       h_tr = hold(i,j,1) + GV%H_subroundoff
@@ -515,20 +534,29 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   enddo
 end subroutine triDiagTS
 
-!> Calculates u_h and v_h (velocities at thickness points),
-!! optionally using the entrainments (in m) passed in as arguments.
+!>   This subroutine calculates u_h and v_h (velocities at thickness
+!! points), optionally using the entrainment amounts passed in as arguments.
 subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
-  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out) :: u_h, v_h !< zonal and meridional velocity at thickness
-                                                            !! points entrainment, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in), optional  :: ea, eb !< The amount of fluid entrained
-                                                            !!  from the layer above within this time step
-                                                            !! , in units of m or kg m-2.  Omitting ea is the
-                                                            !! same as setting it to 0.
+  type(ocean_grid_type),     intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),   intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                             intent(in)  :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                             intent(in)  :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(out)   :: u_h !< Zonal velocity interpolated to h points, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(out)   :: v_h !< Meridional velocity interpolated to h points, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                     optional, intent(in)  :: ea !< The amount of fluid entrained from the layer
+                                                 !! above within this time step, in units of H.
+                                                 !! Omitting ea is the same as setting it to 0.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                     optional, intent(in)  :: eb !< The amount of fluid entrained from the layer
+                                                 !! below within this time step, in units of H.
+                                                 !! Omitting eb is the same as setting it to 0.
 
   ! local variables
   real :: b_denom_1    ! The first term in the denominator of b1 in m or kg m-2.
@@ -610,15 +638,17 @@ end subroutine find_uv_at_h
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
 subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, diagPtr, id_N2subML, id_MLDsq)
-  type(ocean_grid_type),                 intent(in) :: G           !< Grid type
-  type(verticalGrid_type),               intent(in) :: GV          !< ocean vertical grid structure
-  integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< Layer thickness
-  type(thermo_var_ptrs),                 intent(in) :: tv          !< Thermodynamics type
-  real,                                  intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
-  type(diag_ctrl),                       pointer    :: diagPtr     !< Diagnostics structure
-  integer,                     optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
-  integer,                     optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
+  type(ocean_grid_type),   intent(in) :: G           !< Grid type
+  type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
+  integer,                 intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h           !< Layer thickness, in H (usually m or kg m-3)
+  type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
+                                                     !! available thermodynamic fields.
+  real,                    intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
+  type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
+  integer,       optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
+  integer,       optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
 
   ! Local variables
   real, dimension(SZI_(G))          :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD
@@ -720,28 +750,32 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
                                     SkinBuoyFlux )
-  type(diabatic_aux_CS),                 pointer       :: CS !< Control structure for diabatic_aux
-  type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in)    :: GV !< ocean vertical grid structure
-  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
-  type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
-  type(optics_type),                     pointer       :: optics !< Optical properties container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
-  type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
-  !> If False, treat in/out fluxes separately.
-  logical,                               intent(in)    :: aggregate_FW_forcing
-  !> The largest fraction of a layer that can be evaporated in one time-step (non-dim).
-  real,                                  intent(in)   :: evap_CFL_limit
-  !> The smallest depth over which heat and freshwater fluxes is applied, in m.
-  real,                                  intent(in)   :: minimum_forcing_depth
-  !> Turbulent kinetic energy requirement to mix forcing through each layer, in W m-2
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: cTKE
-  !> Partial derivative of specific volume with potential temperature, in m3 kg-1 K-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: dSV_dT
-  !> Partial derivative of specific a volume with potential salinity, in m3 kg-1 / (g kg-1).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: dSV_dS
-  !> Buoyancy flux at surface in m2 s-3
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: SkinBuoyFlux
+  type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
+  type(ocean_grid_type),   intent(in)    :: G  !< Grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
+  real,                    intent(in)    :: dt !< Time-step over which forcing is applied (s)
+  type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
+  type(optics_type),       pointer       :: optics !< Optical properties container
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: h  !< Layer thickness in H units
+  type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any
+                                               !! available thermodynamic fields.
+  logical,                 intent(in)    :: aggregate_FW_forcing !< If False, treat in/out fluxes separately.
+  real,                    intent(in)    :: evap_CFL_limit !< The largest fraction of a layer that
+                                               !! can be evaporated in one time-step (non-dim).
+  real,                    intent(in)    :: minimum_forcing_depth !< The smallest depth over which
+                                               !! heat and freshwater fluxes is applied, in m.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 optional, intent(out)   :: cTKE !< Turbulent kinetic energy requirement to mix
+                                               !! forcing through each layer, in W m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
+                                               !! potential temperature, in m3 kg-1 K-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
+                                               !! salinity, in m3 kg-1 / (g kg-1).
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface in m2 s-3
 
   ! Local variables
   integer, parameter :: maxGroundings = 5
@@ -1239,21 +1273,20 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 
 end subroutine applyBoundaryFluxesInOut
 
-!> Initializes this module.
+!> This subroutine initializes the parameters and control structure of the diabatic_aux module.
 subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm, use_ePBL)
-  type(time_type),         intent(in)    :: Time
+  type(time_type),         intent(in)    :: Time !< The current model time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag !< structure used to regulate diagnostic output
-  type(diabatic_aux_CS),   pointer       :: CS   !< pointer set to point to the ontrol structure for
-                                         !! this module
-  logical,                 intent(in)    :: useALEalgorithm !< If True, uses ALE.
-  logical,                 intent(in)    :: use_ePBL        !< If true, use the implicit energetics
-                                         !! planetary boundary layer scheme to determine the
-                                         !! diffusivity in the surface boundary layer.
-  ! local variables
-  type(vardesc) :: vd
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure used to regulate diagnostic output
+  type(diabatic_aux_CS),   pointer       :: CS   !< A pointer to the control structure for the
+                                                 !! diabatic_aux module, which is initialized here.
+  logical,                 intent(in)    :: useALEalgorithm !< If true, use the ALE algorithm rather
+                                                 !! than layered mode.
+  logical,                 intent(in)    :: use_ePBL !< If true, use the implicit energetics planetary
+                                                 !! boundary layer scheme to determine the diffusivity
+                                                 !! in the surface boundary layer.
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
@@ -1360,9 +1393,11 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
 
 end subroutine diabatic_aux_init
 
-
+!> This subroutine initializes the control structure and any related memory
+!! for the diabatic_aux module.
 subroutine diabatic_aux_end(CS)
-  type(diabatic_aux_CS), pointer :: CS
+  type(diabatic_aux_CS), pointer :: CS !< The control structure returned by a previous
+                                       !! call to diabatic_aux_init; it is deallocated here.
 
   if (.not.associated(CS)) return
 
@@ -1375,48 +1410,34 @@ subroutine diabatic_aux_end(CS)
 
 end subroutine diabatic_aux_end
 
-!> \namespace MOM_diabatic_aux
+!> \namespace mom_diabatic_aux
 !!
-!!    This module contains the subroutines that, along with the        *
-!!  subroutines that it calls, implements diapycnal mass and momentum  *
-!!  fluxes and a bulk mixed layer.  The diapycnal diffusion can be     *
-!!  used without the bulk mixed layer.                                 *
-!!                                                                     *
-!!    diabatic first determines the (diffusive) diapycnal mass fluxes  *
-!!  based on the convergence of the buoyancy fluxes within each layer. *
-!!  The dual-stream entrainment scheme of MacDougall and Dewar (JPO,   *
-!!  1997) is used for combined diapycnal advection and diffusion,      *
-!!  calculated implicitly and potentially with the Richardson number   *
-!!  dependent mixing, as described by Hallberg (MWR, 2000). Diapycnal  *
-!!  advection is fundamentally the residual of diapycnal diffusion,    *
-!!  so the fully implicit upwind differencing scheme that is used is   *
-!!  entirely appropriate.  The downward buoyancy flux in each layer    *
-!!  is determined from an implicit calculation based on the previously *
-!!  calculated flux of the layer above and an estimated flux in the    *
-!!  layer below.  This flux is subject to the following conditions:    *
-!!  (1) the flux in the top and bottom layers are set by the boundary  *
-!!  conditions, and (2) no layer may be driven below an Angstrom thick-*
-!!  ness.  If there is a bulk mixed layer, the buffer layer is treat-  *
-!!  ed as a fixed density layer with vanishingly small diffusivity.    *
-!!                                                                     *
-!!    diabatic takes 5 arguments:  the two velocities (u and v), the   *
-!!  thicknesses (h), a structure containing the forcing fields, and    *
-!!  the length of time over which to act (dt).  The velocities and     *
-!!  thickness are taken as inputs and modified within the subroutine.  *
-!!  There is no limit on the time step.                                *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q                                        *
-!!    j+1  > o > o >   At ^:  v                                        *
-!!    j    x ^ x ^ x   At >:  u                                        *
-!!    j    > o > o >   At o:  h, T, S, buoy, ustar, ea, eb, etc.       *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
-!!                                                                     *
-!!********+*********+*********+*********+*********+*********+*********+**
+!!    This module contains the subroutines that, along with the
+!!  subroutines that it calls, implements diapycnal mass and momentum
+!!  fluxes and a bulk mixed layer.  The diapycnal diffusion can be
+!!  used without the bulk mixed layer.
+!!
+!!    diabatic first determines the (diffusive) diapycnal mass fluxes
+!!  based on the convergence of the buoyancy fluxes within each layer.
+!!  The dual-stream entrainment scheme of MacDougall and Dewar (JPO,
+!!  1997) is used for combined diapycnal advection and diffusion,
+!!  calculated implicitly and potentially with the Richardson number
+!!  dependent mixing, as described by Hallberg (MWR, 2000). Diapycnal
+!!  advection is fundamentally the residual of diapycnal diffusion,
+!!  so the fully implicit upwind differencing scheme that is used is
+!!  entirely appropriate.  The downward buoyancy flux in each layer
+!!  is determined from an implicit calculation based on the previously
+!!  calculated flux of the layer above and an estimated flux in the
+!!  layer below.  This flux is subject to the following conditions:
+!!  (1) the flux in the top and bottom layers are set by the boundary
+!!  conditions, and (2) no layer may be driven below an Angstrom thick-
+!!  ness.  If there is a bulk mixed layer, the buffer layer is treat-
+!!  ed as a fixed density layer with vanishingly small diffusivity.
+!!
+!!    diabatic takes 5 arguments:  the two velocities (u and v), the
+!!  thicknesses (h), a structure containing the forcing fields, and
+!!  the length of time over which to act (dt).  The velocities and
+!!  thickness are taken as inputs and modified within the subroutine.
+!!  There is no limit on the time step.
 
 end module MOM_diabatic_aux

@@ -116,8 +116,8 @@ type, public :: KPP_CS ; private
   !> CVMix parameters
   type(CVMix_kpp_params_type), pointer :: KPP_params => NULL()
 
-  ! Diagnostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< Pointer to diagnostics control structure
+  !>@{ Diagnostic handles
   integer :: id_OBLdepth = -1, id_BulkRi   = -1
   integer :: id_N        = -1, id_N2       = -1
   integer :: id_Ws       = -1, id_Vt2      = -1
@@ -137,6 +137,7 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_saln_budget = -1
   integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
   integer :: id_OBLdepth_original = -1
+  !!@}
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
@@ -158,15 +159,11 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
   real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer (m/s)
   real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer (m/s)
-  real, allocatable, dimension(:,:,:)   :: EnhK      !< Enhancement for mixing coefficient
-  real, allocatable, dimension(:,:,:)   :: EnhVt2  !< Enhancement for Vt2
-
-
+  real, allocatable, dimension(:,:,:) :: EnhK      !< Enhancement for mixing coefficient
+  real, allocatable, dimension(:,:,:) :: EnhVt2    !< Enhancement for Vt2
 
 end type KPP_CS
 
-! Module data used for debugging only
-logical, parameter :: verbose = .False.
 #define __DO_SAFETY_CHECKS__
 
 contains
@@ -179,7 +176,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   type(param_file_type),   intent(in)    :: paramFile !< File parser
   type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
-  type(time_type),         intent(in)    :: Time      !< Time
+  type(time_type),         intent(in)    :: Time      !< Model time
   type(KPP_CS),            pointer       :: CS        !< Control structure
   logical,       optional, intent(out)   :: passive   !< Copy of %passiveMode
   type(wave_parameters_CS), optional, pointer :: Waves !< Wave CS
@@ -663,7 +660,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
       if (CS%SW_METHOD == SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
       elseif (CS%SW_METHOD == SW_METHOD_MXL_SW) then
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1) ! We know the actual buoyancy flux into the OBL
+         ! We know the actual buoyancy flux into the OBL
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1)
       elseif (CS%SW_METHOD == SW_METHOD_LV1_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
@@ -935,10 +933,8 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
 
-!$OMP parallel do default(private) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho, &
-!$OMP                                  Waves,buoyFlux)                             &
-
   ! loop over horizontal points on processor
+  !$OMP parallel do default(shared)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -1319,8 +1315,10 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
 
   ! local
   real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_original ! Original OBL depths computed by CVMix
-  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m) (negative in ocean)
+  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m)
+                                                        ! (negative in the ocean)
+  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m)
+                                                        ! (negative in the ocean)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   real :: dh                 ! The local thickness used for calculating interface positions (m)
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers (m)
@@ -1551,7 +1549,7 @@ subroutine KPP_end(CS)
 
 end subroutine KPP_end
 
-!> \namespace mom_kpp
+!> \namespace mom_cvmix_kpp
 !!
 !! \section section_KPP The K-Profile Parameterization
 !!

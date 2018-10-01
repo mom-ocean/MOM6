@@ -93,7 +93,7 @@ type, public :: tracer_type
   character(len=48)               :: cmor_tendprefix = ""     !< The CMOR variable prefix for tendencies of this
                                                               !! tracer, required because CMOR does not follow any
                                                               !! discernable pattern for these names.
-  integer :: ind_tr_squared = -1
+  integer :: ind_tr_squared = -1 !< The tracer registry index for the square of this tracer
 
   !### THESE CAPABILITIES HAVE NOT YET BEEN IMPLEMENTED.
   logical :: advect_tr = .true.     !< If true, this tracer should be advected
@@ -101,6 +101,7 @@ type, public :: tracer_type
   logical :: remap_tr = .true.      !< If true, this tracer should be vertically remapped
 
   integer :: diag_form = 1  !< An integer indicating which template is to be used to label diagnostics.
+  !>@{ Diagnostic IDs
   integer :: id_tr = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
@@ -109,6 +110,7 @@ type, public :: tracer_type
   integer :: id_remap_conc = -1, id_remap_cont = -1, id_remap_cont_2d = -1
   integer :: id_tendency = -1, id_trxh_tendency = -1, id_trxh_tendency_2d = -1
   integer :: id_tr_vardec = -1
+  !!@}
 end type tracer_type
 
 !> Type to carry basic tracer information
@@ -792,7 +794,7 @@ end subroutine tracer_registry_init
 
 !> This routine closes the tracer registry module.
 subroutine tracer_registry_end(Reg)
-  type(tracer_registry_type), pointer :: Reg
+  type(tracer_registry_type), pointer :: Reg !< The tracer registry that will be deallocated
   if (associated(Reg)) deallocate(Reg)
 end subroutine tracer_registry_end
 

@@ -1,21 +1,15 @@
+!> Top-level module for the MOM6 ocean model in coupled mode.
 module ocean_model_mod
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!-----------------------------------------------------------------------
-!
 ! This is the top level module for the MOM6 ocean model.  It contains routines
 ! for initialization, termination and update of ocean model state.  This
 ! particular version wraps all of the calls for MOM6 in the calls that had
 ! been used for MOM4.
 !
-! <CONTACT EMAIL="Robert.Hallberg@noaa.gov"> Robert Hallberg
-! </CONTACT>
-!
-!<OVERVIEW>
 ! This code is a stop-gap wrapper of the MOM6 code to enable it to be called
 ! in the same way as MOM4.
-!</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
@@ -85,6 +79,7 @@ public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
 
+!> This interface extracts a named scalar field or array from the ocean surface or public type
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
   module procedure ocean_model_data2D_get
@@ -220,20 +215,17 @@ end type ocean_state_type
 
 contains
 
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_init">
-!
-! <DESCRIPTION>
-! Initialize the ocean model.
-! </DESCRIPTION>
-
 !> ocean_model_init initializes the ocean model, including registering fields
 !! for restarts and reading restart files if appropriate.
+!!
+!!   This subroutine initializes both the ocean state and the ocean surface type.
+!! Because of the way that indicies and domains are handled, Ocean_sfc must have
+!! been used in a previous call to initialize_ocean_type.
 subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   type(ocean_public_type), target, &
-                       intent(inout) :: Ocean_sfc !< A structure containing various
-                                !! publicly visible ocean surface properties after initialization,
-                                !! the data in this type is intent(out).
+                       intent(inout) :: Ocean_sfc !< A structure containing various publicly
+                                !! visible ocean surface properties after initialization,
+                                !! the data in this type is intent out.
   type(ocean_state_type), pointer    :: OS        !< A structure whose internal
                                 !! contents are private to ocean_model_mod that may be used to
                                 !! contain all information about the ocean's interior state.
@@ -245,20 +237,15 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
-
-!   This subroutine initializes both the ocean state and the ocean surface type.
-! Because of the way that indicies and domains are handled, Ocean_sfc must have
-! been used in a previous call to initialize_ocean_type.
-
-! Arguments: Ocean_sfc - A structure containing various publicly visible ocean
-!                    surface properties after initialization, this is intent(out).
-!  (out,private) OS - A structure whose internal contents are private
-!                    to ocean_model_mod that may be used to contain all
-!                    information about the ocean's interior state.
-!  (in)      Time_init - The start time for the coupled model's calendar.
-!  (in)      Time_in - The time at which to initialize the ocean model.
+  ! Local variables
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
+  real :: HFrz        !< If HFrz > 0 (m), melt potential will be computed.
+                      !! The actual depth over which melt potential is computed will
+                      !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
+                      !! If HFrz <= 0 (default), melt potential will not be computed.
+  logical :: use_melt_pot!< If true, allocate melt_potential array
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
@@ -361,8 +348,20 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
-  call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
-                              do_integrals=.true., gas_fields_ocn=gas_fields_ocn)
+  call get_param(param_file, mdl, "HFREEZE", HFrz, &
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&
+                 "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)
+
+  if (HFrz .gt. 0.0) then
+    use_melt_pot=.true.
+  else
+    use_melt_pot=.false.
+  endif
+
+  call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
+                              gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
@@ -414,17 +413,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
-! </SUBROUTINE> NAME="ocean_model_init"
-
-
-!=======================================================================
-! <SUBROUTINE NAME="update_ocean_model">
-!
-! <DESCRIPTION>
-! Update in time the ocean model fields.  This code wraps the call to step_MOM
-! with MOM4's call.
-! </DESCRIPTION>
-!
 
 !> update_ocean_model uses the forcing in Ice_ocean_boundary to advance the
 !! ocean model's state from the input value of Ocean_state (which must be for
@@ -455,7 +443,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   logical, optional, intent(in)    :: Ocn_fluxes_used !< If present, this indicates whether the
                                               !! cumulative thermodynamic fluxes from the ocean,
                                               !! like frazil, have been used and should be reset.
-
+  ! Local variables
   type(time_type) :: Master_time ! This allows step_MOM to temporarily change
                                  ! the time that is seen by internal modules.
   type(time_type) :: Time1       ! The value of the ocean model's time at the
@@ -682,20 +670,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
-! </SUBROUTINE> NAME="update_ocean_model"
 
-
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_restart">
-!
-! <DESCRIPTION>
-! write out restart file.
-! Arguments:
-!   timestamp (optional, intent(in)) : A character string that represents the model time,
-!                                      used for writing restart. timestamp will prepend to
-!                                      the any restart file name as a prefix.
-! </DESCRIPTION>
-!
+!> This subroutine writes out the ocean model restart file.
 subroutine ocean_model_restart(OS, timestamp)
   type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
                                                !! internal ocean state being saved to a restart file
@@ -732,13 +708,6 @@ subroutine ocean_model_restart(OS, timestamp)
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
 
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_end">
-!
-! <DESCRIPTION>
-! Close down the ocean model
-! </DESCRIPTION>
-
 !> ocean_model_end terminates the model run, saving the ocean state in a restart
 !! and deallocating any data associated with the ocean.
 subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
@@ -749,22 +718,11 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
                                                         !! upon termination.
   type(time_type),         intent(in)    :: Time        !< The model time, used for writing restarts.
 
-!   This subroutine terminates the model run, saving the ocean state in a
-! restart file and deallocating any data associated with the ocean.
-
-! Arguments: Ocean_sfc - An ocean_public_type structure that is to be
-!                        deallocated upon termination.
-!  (inout)   Ocean_state - A pointer to the structure containing the internal
-!                          ocean state to be deallocated upon termination.
-!  (in)      Time - The model time, used for writing restarts.
-
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
-! </SUBROUTINE> NAME="ocean_model_end"
-
 
 !> ocean_model_save_restart causes restart files associated with the ocean to be
 !! written out.
@@ -776,12 +734,6 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
                                                 !! write these restart files.
   character(len=*), optional, intent(in) :: filename_suffix !< An optional suffix (e.g., a time-stamp)
                                                 !! to append to the restart file names.
-! Arguments: Ocean_state - A structure containing the internal ocean state (in).
-!  (in)      Time - The model time at this call.  This is needed for mpp_write calls.
-!  (in, opt) directory - An optional directory into which to write these restart files.
-!  (in, opt) filename_suffix - An optional suffix (e.g., a time-stamp) to append
-!                              to the restart file names.
-
 ! Note: This is a new routine - it will need to exist for the new incremental
 !   checkpointing.  It will also be called by ocean_model_end, giving the same
 !   restart behavior as now in FMS.
@@ -808,15 +760,17 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 
 end subroutine ocean_model_save_restart
 
-!=======================================================================
-
+!> Initialize the public ocean type
 subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
                                         gas_fields_ocn)
-  type(domain2D),          intent(in)    :: input_domain
-  type(ocean_public_type), intent(inout) :: Ocean_sfc
-  type(diag_ctrl),         intent(in)    :: diag
+  type(domain2D),          intent(in)    :: input_domain !< The ocean model domain description
+  type(ocean_public_type), intent(inout) :: Ocean_sfc !< A structure containing various publicly
+                                !! visible ocean surface properties after initialization, whose
+                                !! elements are allocated here.
+  type(diag_ctrl),         intent(in)    :: diag  !< A structure that regulates diagnsotic output
   logical, dimension(:,:), &
-                 optional, intent(in)    :: maskmap
+                 optional, intent(in)    :: maskmap !< A mask indicating which virtual processors
+                                              !! are actually in use.  If missing, all are used.
   type(coupler_1d_bc_type), &
                  optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate
@@ -861,20 +815,23 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
 end subroutine initialize_ocean_public_type
 
-subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, &
-                                       patm, press_to_z)
-  type(surface),           intent(inout) :: sfc_state !< A structure containing fields that
-                                                      !! describe the surface state of the ocean.
+!> This subroutine translates the coupler's ocean_data_type into MOM's
+!! surface state variable.  This may eventually be folded into the MOM
+!! code that calculates the surface state in the first place.
+!! Note the offset in the arrays because the ocean_data_type has no
+!! halo points in its arrays and always uses absolute indicies.
+subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z)
+  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
+                                               !! describe the surface state of the ocean.
   type(ocean_public_type), &
-                   target, intent(inout) :: Ocean_sfc
-  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  real,          optional, intent(in)    :: patm(:,:)
-  real,          optional, intent(in)    :: press_to_z
-! This subroutine translates the coupler's ocean_data_type into MOM's
-! surface state variable.  This may eventually be folded into the MOM
-! code that calculates the surface state in the first place.
-! Note the offset in the arrays because the ocean_data_type has no
-! halo points in its arrays and always uses absolute indicies.
+                 target, intent(inout) :: Ocean_sfc !< A structure containing various publicly
+                                               !! visible ocean surface fields, whose elements
+                                               !! have their data set here.
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface, in Pa.
+  real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and
+                                               !! ocean depth in m, usually 1/(rho_0*g), in m Pa-1.
+  ! Local variables
   real :: IgR0
   character(len=48)  :: val_str
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
@@ -967,21 +924,15 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, &
 
 end subroutine convert_state_to_ocean_type
 
-
-!=======================================================================
-! <SUBROUTINE NAME="ocean_model_init_sfc">
-!
-! <DESCRIPTION>
-!   This subroutine extracts the surface properties from the ocean's internal
-! state and stores them in the ocean type returned to the calling ice model.
-! It has to be separate from the ocean_initialization call because the coupler
-! module allocates the space for some of these variables.
-! </DESCRIPTION>
-
+!>   This subroutine extracts the surface properties from the ocean's internal
+!! state and stores them in the ocean type returned to the calling ice model.
+!! It has to be separate from the ocean_initialization call because the coupler
+!! module allocates the space for some of these variables.
 subroutine ocean_model_init_sfc(OS, Ocean_sfc)
-  type(ocean_state_type),  pointer       :: OS
-  type(ocean_public_type), intent(inout) :: Ocean_sfc
-
+  type(ocean_state_type),  pointer       :: OS  !< The structure with the complete ocean state
+  type(ocean_public_type), intent(inout) :: Ocean_sfc !< A structure containing various publicly
+                                !! visible ocean surface properties after initialization, whose
+                                !! elements have their data set here.
   integer :: is, ie, js, je
 
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
@@ -993,7 +944,6 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
 end subroutine ocean_model_init_sfc
-! </SUBROUTINE NAME="ocean_model_init_sfc">
 
 !> ocean_model_flux_init is used to initialize properties of the air-sea fluxes
 !! as determined by various run-time parameters.  It can be called from
@@ -1018,16 +968,13 @@ subroutine ocean_model_flux_init(OS, verbosity)
 
 end subroutine ocean_model_flux_init
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
-! Ocean_stock_pe - returns stocks of heat, water, etc. for conservation checks.!
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 !> Ocean_stock_pe - returns the integrated stocks of heat, water, etc. for conservation checks.
 !!   Because of the way FMS is coded, only the root PE has the integrated amount,
 !!   while all other PEs get 0.
 subroutine Ocean_stock_pe(OS, index, value, time_index)
   use stock_constants_mod, only : ISTOCK_WATER, ISTOCK_HEAT,ISTOCK_SALT
   type(ocean_state_type), pointer     :: OS         !< A structure containing the internal ocean state.
-                                                    !! The data in OS is intent(in).
+                                                    !! The data in OS is intent in.
   integer,                intent(in)  :: index      !< The stock index for the quantity of interest.
   real,                   intent(out) :: value      !< Sum returned for the conservation quantity of interest.
   integer,      optional, intent(in)  :: time_index !< An unused optional argument, present only for
@@ -1063,13 +1010,18 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
 
 end subroutine Ocean_stock_pe
 
-subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
+!> This subroutine extracts a named 2-D field from the ocean surface or public type
+subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
   use MOM_constants, only : CELSIUS_KELVIN_OFFSET
-  type(ocean_state_type),     pointer    :: OS
-  type(ocean_public_type),    intent(in) :: Ocean
-  character(len=*)          , intent(in) :: name
-  real, dimension(isc:,jsc:), intent(out):: array2D
-  integer                   , intent(in) :: isc,jsc
+  type(ocean_state_type),     pointer    :: OS    !< A pointer to the structure containing the
+                                                  !! internal ocean state (intent in).
+  type(ocean_public_type),    intent(in) :: Ocean !< A structure containing various publicly
+                                                  !! visible ocean surface fields.
+  character(len=*)          , intent(in) :: name  !< The name of the field to extract
+  real, dimension(isc:,jsc:), intent(out):: array2D !< The values of the named field, it must
+                                                  !! cover only the computational domain
+  integer                   , intent(in) :: isc   !< The starting i-index of array2D
+  integer                   , intent(in) :: jsc   !< The starting j-index of array2D
 
   integer :: g_isc, g_iec, g_jsc, g_jec,g_isd, g_ied, g_jsd, g_jed, i, j
 
@@ -1108,14 +1060,16 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
      call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
   end select
 
-
 end subroutine ocean_model_data2D_get
 
-subroutine ocean_model_data1D_get(OS,Ocean, name, value)
-  type(ocean_state_type),     pointer    :: OS
-  type(ocean_public_type),    intent(in) :: Ocean
-  character(len=*)          , intent(in) :: name
-  real                      , intent(out):: value
+!> This subroutine extracts a named scalar field from the ocean surface or public type
+subroutine ocean_model_data1D_get(OS, Ocean, name, value)
+  type(ocean_state_type),     pointer    :: OS    !< A pointer to the structure containing the
+                                                  !! internal ocean state (intent in).
+  type(ocean_public_type),    intent(in) :: Ocean !< A structure containing various publicly
+                                                  !! visible ocean surface fields.
+  character(len=*)          , intent(in) :: name  !< The name of the field to extract
+  real                      , intent(out):: value !< The value of the named field
 
   if (.not.associated(OS)) return
   if (.not.OS%is_ocean_pe) return
@@ -1127,27 +1081,28 @@ subroutine ocean_model_data1D_get(OS,Ocean, name, value)
      call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
   end select
 
-
 end subroutine ocean_model_data1D_get
 
+!> Write out FMS-format checsums on fields from the ocean surface state
 subroutine ocean_public_type_chksum(id, timestep, ocn)
 
-    character(len=*), intent(in) :: id
-    integer         , intent(in) :: timestep
-    type(ocean_public_type), intent(in) :: ocn
-    integer ::   n,m, outunit
+  character(len=*),        intent(in) :: id  !< An identifying string for this call
+  integer,                 intent(in) :: timestep !< The number of elapsed timesteps
+  type(ocean_public_type), intent(in) :: ocn !< A structure containing various publicly
+                                             !! visible ocean surface fields.
+  integer :: n, m, outunit
 
-    outunit = stdout()
+  outunit = stdout()
 
-    write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
-    write(outunit,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
-    write(outunit,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
-    write(outunit,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
-    write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
-    write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
-    write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
+  write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
+  write(outunit,100) 'ocean%t_surf   ',mpp_chksum(ocn%t_surf )
+  write(outunit,100) 'ocean%s_surf   ',mpp_chksum(ocn%s_surf )
+  write(outunit,100) 'ocean%u_surf   ',mpp_chksum(ocn%u_surf )
+  write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
+  write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
+  write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
 
-    call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
+  call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum

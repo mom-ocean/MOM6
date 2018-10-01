@@ -1,3 +1,4 @@
+!> Vertical interpolation for regridding
 module regrid_interp
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -18,6 +19,7 @@ use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 
 implicit none ; private
 
+!> Control structure for regrid_interp module
 type, public :: interp_CS_type ; private
 
   !> The following parameter is only relevant when used with the target
@@ -46,9 +48,10 @@ integer, parameter :: INTERPOLATION_P3M_IH6IH5 = 7 !< O(h^4)
 integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 !< O(h^4)
 integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 !< O(h^5)
 
-!> List of interpolant degrees
+!>@{ Interpolant degrees
 integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4
 integer, public, parameter :: DEGREE_MAX = 5
+!!@}
 
 !> When the N-R algorithm produces an estimate that lies outside [0,1], the
 !! estimate is set to be equal to the boundary location, 0 or 1, plus or minus
@@ -63,8 +66,8 @@ real, public, parameter    :: NR_TOLERANCE = 1e-12
 
 contains
 
-!> Given the set of target values and cell densities, this routine
-!! builds an interpolated profile for the densities within each grid cell.
+!> Builds an interpolated profile for the densities within each grid cell.
+!!
 !! It may happen that, given a high-order interpolator, the number of
 !! available layers is insufficient (e.g., there are two available layers for
 !! a third-order PPM ih4 scheme). In these cases, we resort to the simplest
@@ -85,7 +88,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
   real,      optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                            !! for the purpose of edge value calculations
                                            !! in the same units as h0.
-
+  ! Local variables
   logical :: extrapolate
 
   ! Reset piecewise polynomials
@@ -262,7 +265,6 @@ end subroutine regridding_set_ppolys
 !! are determined by finding the corresponding target interface densities.
 subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
                              target_values, degree, n1, h1, x1 )
-  ! Arguments
   integer,            intent(in)    :: n0            !< Number of points on source grid
   real, dimension(:), intent(in)    :: h0            !< Thicknesses of source grid cells
   real, dimension(:), intent(in)    :: x0            !< Source interface positions
@@ -273,7 +275,6 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
   integer,            intent(in)    :: n1            !< Number of points on target grid
   real, dimension(:), intent(inout) :: h1            !< Thicknesses of target grid cells
   real, dimension(:), intent(inout) :: x1            !< Target interface positions
-
   ! Local variables
   integer        :: k ! loop index
   real           :: t ! current interface target density
@@ -293,6 +294,7 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
 
 end subroutine interpolate_grid
 
+!> Build a grid by interpolating for target values
 subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, &
                                       n1, h1, x1, h_neglect, h_neglect_edge)
   type(interp_CS_type), intent(in)  :: CS  !< A control structure for regrid_interp
@@ -337,8 +339,8 @@ end subroutine build_and_interpolate_grid
 !!
 !! It is assumed that the number of cells defining 'grid' and 'ppoly' are the
 !! same.
-function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefs, &
-                                     target_value, degree ) result ( x_tgt )
+function get_polynomial_coordinate( N, h, x_g, ppoly_E, ppoly_coefs, &
+                                    target_value, degree ) result ( x_tgt )
   ! Arguments
   integer,              intent(in) :: N            !< Number of grid cells
   real, dimension(:),   intent(in) :: h            !< Grid cell thicknesses
@@ -347,9 +349,7 @@ function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefs, &
   real, dimension(:,:), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials
   real,                 intent(in) :: target_value !< Target value to find position for
   integer,              intent(in) :: degree       !< Degree of the interpolating polynomials
-
   real :: x_tgt !< The position of x_g at which target_value is found.
-
   ! Local variables
   integer                     :: i, k        ! loop indices
   integer                     :: k_found     ! index of target cell
