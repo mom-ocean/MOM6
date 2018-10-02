@@ -89,13 +89,13 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
         h_bot(K) = h_bot(K+1) + h_col(k)
       enddo
 
-      ustar = 0.01 ! Change this to being an input parameter?
+      ustar = 0.01*GV%m_to_Z ! Change this to being an input parameter?
       absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                    (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
       Kd(1) = 0.0 ; Kd(nz+1) = 0.0
       do K=2,nz
-        tmp1 = h_top(K) * h_bot(K) * GV%H_to_m
-        Kd(K) = CS%test_Kh_scaling * &
+        tmp1 = h_top(K) * h_bot(K) * GV%H_to_Z
+        Kd(K) = CS%test_Kh_scaling * GV%Z_to_m**2 * &
                 ustar * 0.41 * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
       enddo
     endif
@@ -117,7 +117,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
-                                                  !! in m or kg m-2.
+                                                  !! in H (m or kg m-2).
   real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures, in degC.
   real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities, in g kg-1.
   real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities,
@@ -132,7 +132,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   logical,        optional, intent(in)    :: may_print !< If present and true, write out diagnostics
                                                   !! of energy use.
   type(diapyc_energy_req_CS), &
-                  optional, pointer        :: CS  !< This module's control structure.
+                  optional, pointer       :: CS   !< This module's control structure.
 
 !   This subroutine uses a substantially refactored tridiagonal equation for
 ! diapycnal mixing of temperature and salinity to estimate the potential energy
@@ -931,7 +931,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((GV%g_Earth*GV%m_to_Z) * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*GV%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
@@ -942,7 +942,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((GV%g_Earth*GV%m_to_Z) * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*GV%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo
