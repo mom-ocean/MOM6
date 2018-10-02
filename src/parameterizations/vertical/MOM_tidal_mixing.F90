@@ -84,7 +84,7 @@ type, public :: tidal_mixing_cs
                               !! for dissipation of the lee waves.  Schemes that are
                               !! currently encoded are St Laurent et al (2002) and
                               !! Polzin (2009).
-  real :: Int_tide_decay_scale !< decay scale for internal wave TKE (meter)
+  real :: Int_tide_decay_scale !< decay scale for internal wave TKE (Z)
 
   real :: Mu_itides           !< efficiency for conversion of dissipation
                               !! to potential energy (nondimensional)
@@ -115,7 +115,7 @@ type, public :: tidal_mixing_cs
                               !! profile in Polzin formulation should not exceed
                               !! Polzin_decay_scale_max_factor * depth of the ocean (nondimensional).
   real :: Polzin_min_decay_scale !< minimum decay scale of the tidal dissipation
-                              !! profile in Polzin formulation (meter)
+                              !! profile in Polzin formulation (Z)
 
   real :: TKE_itide_max       !< maximum internal tide conversion (W m-2)
                               !! available to mix above the BBL
@@ -378,7 +378,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "When the Polzin decay profile is used, this is the \n"//&
                  "minimum vertical decay scale for the vertical profile\n"//&
                  "of internal tide dissipation with the Polzin (2009) formulation", &
-                 units="m", default=0.0)
+                 units="m", default=0.0, scale=GV%m_to_Z)
   endif
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
@@ -386,7 +386,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "The decay scale away from the bottom for tidal TKE with \n"//&
                  "the new coding when INT_TIDE_DISSIPATION is used.", &
                  !units="m", default=0.0)
-                 units="m", default=500.0)  ! TODO: confirm this new default
+                 units="m", default=500.0, scale=GV%m_to_Z)  ! TODO: confirm this new default
     call get_param(param_file, mdl, "MU_ITIDES", CS%Mu_itides, &
                  "A dimensionless turbulent mixing efficiency used with \n"//&
                  "INT_TIDE_DISSIPATION, often 0.2.", units="nondim", default=0.2)
@@ -543,7 +543,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     call CVMix_init_tidal(CVmix_tidal_params_user = CS%CVMix_tidal_params,    &
                           mix_scheme              = CVMix_tidal_scheme_str,   &
                           efficiency              = CS%Mu_itides,             &
-                          vertical_decay_scale    = CS%int_tide_decay_scale,  &
+                          vertical_decay_scale    = CS%int_tide_decay_scale*GV%Z_to_m,  &
                           max_coefficient         = CS%tidal_max_coef,        &
                           local_mixing_frac       = CS%Gamma_itides,          &
                           depth_cutoff            = CS%min_zbot_itides)
@@ -772,13 +772,13 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
                                CVMix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! Update diffusivity
-      do k=1,G%ke
+      do k=1,G%ke             ! GV%m_to_Z**2 *
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
       enddo
 
       ! Update viscosity
       if (associated(Kv)) then
-        do k=1,G%ke+1
+        do k=1,G%ke+1           ! GV%m_to_Z**2 *
           Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
         enddo
       endif
@@ -871,13 +871,13 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! Update diffusivity
-      do k=1,G%ke
+      do k=1,G%ke             ! GV%m_to_Z**2 *
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
       enddo
 
       ! Update viscosity
       if (associated(Kv)) then
-        do k=1,G%ke+1
+        do k=1,G%ke+1           ! GV%m_to_Z**2 *
           Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
         enddo
       endif
@@ -947,16 +947,16 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
   real, dimension(SZI_(G)) :: &
     htot,             & ! total thickness above or below a layer, or the
-                        ! integrated thickness in the BBL (meter)
-    htot_WKB,         & ! distance from top to bottom (meter) WKB scaled
+                        ! integrated thickness in the BBL (Z)
+    htot_WKB,         & ! distance from top to bottom (Z) WKB scaled
     TKE_itidal_bot,   & ! internal tide TKE at ocean bottom (m3/s3)
     TKE_Niku_bot,     & ! lee-wave TKE at ocean bottom (m3/s3)
     TKE_lowmode_bot,  & ! internal tide TKE at ocean bottom lost from all remote low modes (m3/s3) (BDM)
     Inv_int,          & ! inverse of TKE decay for int tide over the depth of the ocean (nondim)
     Inv_int_lee,      & ! inverse of TKE decay for lee waves over the depth of the ocean (nondim)
     Inv_int_low,      & ! inverse of TKE decay for low modes over the depth of the ocean (nondim) (BDM)
-    z0_Polzin,        & ! TKE decay scale in Polzin formulation (meter)
-    z0_Polzin_scaled, & ! TKE decay scale in Polzin formulation (meter)
+    z0_Polzin,        & ! TKE decay scale in Polzin formulation (Z)
+    z0_Polzin_scaled, & ! TKE decay scale in Polzin formulation (Z)
                         ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
                         ! z*=int(N2/N2_bot) * N2_bot/N2_meanz = int(N2/N2_meanz)
                         ! z0_Polzin_scaled = z0_Polzin * N2_bot/N2_meanz
@@ -968,8 +968,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
     TKE_frac_top_lee, & ! fraction of bottom TKE that should appear at top of a layer (nondim)
     TKE_frac_top_lowmode, &
                         ! fraction of bottom TKE that should appear at top of a layer (nondim) (BDM)
-    z_from_bot,       & ! distance from bottom (meter)
-    z_from_bot_WKB      ! distance from bottom (meter), WKB scaled
+    z_from_bot,       & ! distance from bottom (Z)
+    z_from_bot_WKB      ! distance from bottom (Z), WKB scaled
 
   real :: I_rho0        ! 1 / RHO0, (m3/kg)
   real :: Kd_add        ! diffusivity to add in a layer (m2/sec)
@@ -977,9 +977,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   real :: TKE_Niku_lay  ! lee-wave TKE imparted to a layer (m3/s3)
   real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) (m3/s3) (BDM)
   real :: frac_used     ! fraction of TKE that can be used in a layer (nondim)
-  real :: Izeta         ! inverse of TKE decay scale (1/meter)
-  real :: Izeta_lee     ! inverse of TKE decay scale for lee waves (1/meter)
-  real :: z0_psl        ! temporary variable with units of meter
+  real :: Izeta         ! inverse of TKE decay scale (1/Z)
+  real :: Izeta_lee     ! inverse of TKE decay scale for lee waves (1/Z)
+  real :: z0_psl        ! temporary variable with units of Z
   real :: TKE_lowmode_tot ! TKE from all low modes (W/m2) (BDM)
 
   logical :: use_Polzin, use_Simmons
@@ -995,7 +995,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
   do i=is,ie ; htot(i) = 0.0 ; Inv_int(i) = 0.0 ; Inv_int_lee(i) = 0.0 ; Inv_int_low(i) = 0.0 ;enddo
   do k=1,nz ; do i=is,ie
-    htot(i) = htot(i) + GV%H_to_m*h(i,j,k)
+    htot(i) = htot(i) + GV%H_to_Z*h(i,j,k)
   enddo ; enddo
 
   I_Rho0 = 1.0/GV%Rho0
@@ -1010,9 +1010,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   ! Calculate parameters for vertical structure of dissipation
   ! Simmons:
   if ( use_Simmons ) then
-    Izeta = 1.0 / max(CS%Int_tide_decay_scale, GV%H_subroundoff*GV%H_to_m)
+    Izeta = 1.0 / max(CS%Int_tide_decay_scale, GV%H_subroundoff*GV%H_to_Z)
     Izeta_lee = 1.0 / max(CS%Int_tide_decay_scale*CS%Decay_scale_factor_lee, &
-                          GV%H_subroundoff*GV%H_to_m)
+                          GV%H_subroundoff*GV%H_to_Z)
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
       if (associated(dd%N2_bot)) dd%N2_bot(i,j) = N2_bot(i)
@@ -1031,7 +1031,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
           Inv_int_low(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
         endif
       endif
-      z_from_bot(i) = GV%H_to_m*h(i,j,nz)
+      z_from_bot(i) = GV%H_to_Z*h(i,j,nz)
     enddo
   endif ! Simmons
 
@@ -1040,10 +1040,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
     ! WKB scaling of the vertical coordinate
     do i=is,ie ; N2_meanz(i)=0.0 ; enddo
     do k=1,nz ; do i=is,ie
-      N2_meanz(i) = N2_meanz(i) + N2_lay(i,k)*GV%H_to_m*h(i,j,k)
+      N2_meanz(i) = N2_meanz(i) + N2_lay(i,k)*GV%H_to_Z*h(i,j,k)
     enddo ; enddo
     do i=is,ie
-      N2_meanz(i) = N2_meanz(i) / (htot(i) + GV%H_subroundoff*GV%H_to_m)
+      N2_meanz(i) = N2_meanz(i) / (htot(i) + GV%H_subroundoff*GV%H_to_Z)
       if (associated(dd%N2_meanz))  dd%N2_meanz(i,j) = N2_meanz(i)
     enddo
 
@@ -1051,7 +1051,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
     do i=is,ie ; htot_WKB(i) = htot(i) ; enddo
 !    do i=is,ie ; htot_WKB(i) = 0.0 ; enddo
 !    do k=1,nz ; do i=is,ie
-!      htot_WKB(i) = htot_WKB(i) + GV%H_to_m*h(i,j,k)*N2_lay(i,k) / N2_meanz(i)
+!      htot_WKB(i) = htot_WKB(i) + GV%H_to_Z*h(i,j,k)*N2_lay(i,k) / N2_meanz(i)
 !    enddo ; enddo
     ! htot_WKB(i) = htot(i) ! Nearly equivalent and simpler
 
@@ -1059,7 +1059,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       CS%Nb(i,j) = sqrt(N2_bot(i))
       if ((CS%tideamp(i,j) > 0.0) .and. &
           (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14) ) then
-        z0_polzin(i) = CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
+        z0_polzin(i) = GV%m_to_Z * CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
                        CS%Nbotref_Polzin**2 * CS%tideamp(i,j) / &
                      ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 )
         if (z0_polzin(i) < CS%Polzin_min_decay_scale) &
@@ -1077,38 +1077,37 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       endif
 
       if (associated(dd%Polzin_decay_scale)) &
-        dd%Polzin_decay_scale(i,j) = z0_polzin(i)
+        dd%Polzin_decay_scale(i,j) = GV%Z_to_m * z0_polzin(i)
       if (associated(dd%Polzin_decay_scale_scaled)) &
-        dd%Polzin_decay_scale_scaled(i,j) = z0_polzin_scaled(i)
+        dd%Polzin_decay_scale_scaled(i,j) = GV%Z_to_m * z0_polzin_scaled(i)
       if (associated(dd%N2_bot)) dd%N2_bot(i,j) = CS%Nb(i,j)*CS%Nb(i,j)
 
       if ( CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
         ! For the Polzin formulation, this if loop prevents the vertical
         ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14) then
-          Inv_int(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1
+        if (htot_WKB(i) > 1.0e-14*GV%m_to_Z) then  !### Avoid using this dimensional constant.
+          Inv_int(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
         endif
       endif
       if ( CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09) ) then
         ! For the Polzin formulation, this if loop prevents the vertical
         ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14) then
-          Inv_int_lee(i) = ( z0_polzin_scaled(i)*CS%Decay_scale_factor_lee / htot_WKB(i) ) + 1
+        if (htot_WKB(i) > 1.0e-14*GV%m_to_Z) then !### Avoid using this dimensional constant.
+          Inv_int_lee(i) = ( z0_polzin_scaled(i)*CS%Decay_scale_factor_lee / htot_WKB(i) ) + 1.0
         endif
       endif
       if ( CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
         ! For the Polzin formulation, this if loop prevents the vertical
         ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14) then
-          Inv_int_low(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1
+        if (htot_WKB(i) > 1.0e-14*GV%m_to_Z) then !### Avoid using this dimensional constant.
+          Inv_int_low(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
         endif
       endif
 
-      z_from_bot(i) = GV%H_to_m*h(i,j,nz)
-      ! Use the new formulation for WKB scaling.  N2 is referenced to its
-      ! vertical mean.
-      if (N2_meanz(i) > 1.0e-14 ) then
-        z_from_bot_WKB(i) = GV%H_to_m*h(i,j,nz)*N2_lay(i,nz) / N2_meanz(i)
+      z_from_bot(i) = GV%H_to_Z*h(i,j,nz)
+      ! Use the new formulation for WKB scaling.  N2 is referenced to its vertical mean.
+      if (N2_meanz(i) > 1.0e-14 ) then  !### Avoid using this dimensional constant.
+        z_from_bot_WKB(i) = GV%H_to_Z*h(i,j,nz)*N2_lay(i,nz) / N2_meanz(i)
       else ; z_from_bot_WKB(i) = 0 ; endif
     enddo
   endif  ! Polzin
@@ -1152,7 +1151,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   if ( use_Simmons ) then
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
-      z_from_bot(i) = z_from_bot(i) + GV%H_to_m*h(i,j,k)
+      z_from_bot(i) = z_from_bot(i) + GV%H_to_Z*h(i,j,k)
 
       ! Fraction of bottom flux predicted to reach top of this layer
       TKE_frac_top(i)         = Inv_int(i)     * exp(-Izeta * z_from_bot(i))
@@ -1167,10 +1166,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
       ! Actual power expended may be less than predicted if stratification is weak; adjust
       if (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay > max_TKE(i,k)) then
-         frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
-         TKE_itide_lay   = frac_used * TKE_itide_lay
-         TKE_Niku_lay    = frac_used * TKE_Niku_lay
-         TKE_lowmode_lay = frac_used * TKE_lowmode_lay
+        frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
+        TKE_itide_lay   = frac_used * TKE_itide_lay
+        TKE_Niku_lay    = frac_used * TKE_Niku_lay
+        TKE_lowmode_lay = frac_used * TKE_lowmode_lay
       endif
 
       ! Calculate vertical flux available to bottom of layer above
@@ -1233,9 +1232,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   if ( use_Polzin ) then
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
-      z_from_bot(i) = z_from_bot(i) + GV%H_to_m*h(i,j,k)
+      z_from_bot(i) = z_from_bot(i) + GV%H_to_Z*h(i,j,k)
       if (N2_meanz(i) > 1.0e-14 ) then
-        z_from_bot_WKB(i) = z_from_bot_WKB(i) + GV%H_to_m*h(i,j,k)*N2_lay(i,k)/N2_meanz(i)
+        z_from_bot_WKB(i) = z_from_bot_WKB(i) + GV%H_to_Z*h(i,j,k)*N2_lay(i,k)/N2_meanz(i)
       else ; z_from_bot_WKB(i) = 0 ; endif
 
       ! Fraction of bottom flux predicted to reach top of this layer
