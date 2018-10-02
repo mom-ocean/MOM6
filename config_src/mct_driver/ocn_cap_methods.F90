@@ -100,9 +100,9 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
         ice_ocean_boundary%sw_flux_vis_dif(i,j) = x2o(ind%x2o_Faxa_swvdf,k) * GRID%mask2dT(ig,jg)
         ice_ocean_boundary%sw_flux_nir_dir(i,j) = x2o(ind%x2o_Faxa_swndr,k) * GRID%mask2dT(ig,jg)
         ice_ocean_boundary%sw_flux_nir_dif(i,j) = x2o(ind%x2o_Faxa_swndf,k) * GRID%mask2dT(ig,jg)
-      end if
-    end do
-  end do
+      endif
+    enddo
+  enddo
 
   if (debug .and. is_root_pe()) then
     call ESMF_ClockGet(EClock, CurrTime=CurrTime, rc=rc)
@@ -132,9 +132,9 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
                           day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i,j)
         write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = ',&
                           day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i,j)
-      end do
-    end do
-  end if
+      enddo
+    enddo
+  endif
 
 end subroutine ocn_import
 
@@ -190,8 +190,8 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
       ! in order to update halos. i.e. does not use global indexing.
       ssh(i,j) = ocn_public%sea_lev(ig,jg)
-    end do
-  end do
+    enddo
+  enddo
 
   ! Update halo of ssh so we can calculate gradients
   call pass_var(ssh, grid%domain)
@@ -218,10 +218,10 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! Extrema in the mean values require a PCM reconstruction avoid generating
       ! larger extreme values.
       slope = 0.0
-    end if
+    endif
     o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
     if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdx, n) = 0.0
-  end do; end do
+  enddo; enddo
 
   ! d/dy ssh
   n = 0
@@ -248,10 +248,10 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! Extrema in the mean values require a PCM reconstruction avoid generating
       ! larger extreme values.
       slope = 0.0
-    end if
+    endif
     o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
     if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdy, n) = 0.0
-  end do; end do
+  enddo; enddo
 
 end subroutine ocn_export
 
