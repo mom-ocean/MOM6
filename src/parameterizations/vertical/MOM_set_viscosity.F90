@@ -18,7 +18,7 @@ use MOM_kappa_shear, only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
-use MOM_restart, only : register_restart_field, MOM_restart_CS
+use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type
@@ -1720,8 +1720,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   type(vertvisc_type),     intent(inout) :: visc       !< A structure containing vertical
                                                        !! viscosities and related fields.
                                                        !! Allocated here.
-  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control
-                                                       !! structure.
+  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
@@ -1795,7 +1794,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 end subroutine set_visc_register_restarts
 
 !> Initializes the MOM_set_visc control structure
-subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
+subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, restart_CS, OBC)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -1807,12 +1806,16 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
                                                  !! related fields.  Allocated here.
   type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
+  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
   ! Local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
   real    :: omega_frac_dflt
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
+  real    :: Z_rescale  ! A rescaling factor for heights from the representation in
+                        ! a reastart fole to the internal representation in this run.
+  integer :: i, j, k, is, ie, js, je, n
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   logical :: use_kappa_shear, adiabatic, use_omega
   logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
@@ -1829,9 +1832,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
   CS%OBC => OBC
 
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
 
   CS%diag => diag
 
@@ -2052,6 +2055,33 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
        diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'm')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
        diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
+  endif
+
+  if ((GV%m_to_Z_restart /= 0.0) .and. (GV%m_to_Z_restart /= GV%m_to_Z)) then
+    Z_rescale = GV%m_to_Z / GV%m_to_Z_restart
+!   if (allocated(visc%Kd_shear)) then ; if (query_initialized(visc%Kd_shear, "Kd_shear", restart_CS)) then
+!     do k=1,nz+1 ; do j=js,je ; do i=is,ie
+!       visc%Kd_shear(i,j,k) = Z_rescale**2 * visc%Kd_shear(i,j,k)
+!     enddo ; enddo ; enddo
+!   endif ; endif
+
+!   if (allocated(visc%Kv_shear)) then ; if (query_initialized(visc%Kv_shear, "Kv_shear", restart_CS)) then
+!     do k=1,nz+1 ; do j=js,je ; do i=is,ie
+!       visc%Kv_shear(i,j,k) = Z_rescale**2 * visc%Kv_shear(i,j,k)
+!     enddo ; enddo ; enddo
+!   endif ; endif
+
+!   if (allocated(visc%Kv_shear_Bu)) then ; if (query_initialized(visc%Kv_shear_Bu, "Kv_shear_Bu", restart_CS)) then
+!     do k=1,nz+1 ; do j=js,je ; do i=is,ie
+!       visc%Kv_shear_Bu(i,j,k) = Z_rescale**2 * visc%Kv_shear_Bu(i,j,k)
+!     enddo ; enddo ; enddo
+!   endif ; endif
+
+    if (associated(visc%Kv_slow)) then ; if (query_initialized(visc%Kv_slow, "Kv_slow", restart_CS)) then
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        visc%Kv_slow(i,j,k) = Z_rescale**2 * visc%Kv_slow(i,j,k)
+      enddo ; enddo ; enddo
+    endif ; endif
   endif
 
 end subroutine set_visc_init

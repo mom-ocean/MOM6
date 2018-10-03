@@ -675,7 +675,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                                             !! diffusivity due to TKE-based processes, in m2 s-1.
                                                             !! Set this to a negative value to have no limit.
   real, dimension(:,:,:),           pointer       :: Kv     !< The "slow" vertical viscosity at each interface
-                                                            !! (not layer!) in m2 s-1.
+                                                            !! (not layer!) in Z2 s-1.
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
@@ -703,7 +703,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: Kd    !< The diapycnal diffusivities in the layers, in m2 s-1
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
-                                                  !! (not layer!) in m2 s-1.
+                                                  !! (not layer!) in Z2 s-1.
   ! Local variables
   real, dimension(SZK_(G)+1) :: Kd_tidal    ! tidal diffusivity [m2/s]
   real, dimension(SZK_(G)+1) :: Kv_tidal    ! tidal viscosity [m2/s]
@@ -776,10 +776,10 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
       enddo
 
-      ! Update viscosity
+      ! Update viscosity with the proper unit conversion.
       if (associated(Kv)) then
-        do k=1,G%ke+1           ! GV%m_to_Z**2 *
-          Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
+        do k=1,G%ke+1
+          Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * Kv_tidal(k)
         enddo
       endif
 
@@ -877,8 +877,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
 
       ! Update viscosity
       if (associated(Kv)) then
-        do k=1,G%ke+1           ! GV%m_to_Z**2 *
-          Kv(i,j,k) = Kv(i,j,k) + Kv_tidal(k)
+        do k=1,G%ke+1
+          Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * Kv_tidal(k)
         enddo
       endif
 
