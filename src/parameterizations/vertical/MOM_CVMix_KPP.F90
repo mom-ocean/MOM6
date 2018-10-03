@@ -533,7 +533,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%Vt2(:,:,:) = 0.
   if (CS%id_OBLdepth_original > 0) allocate( CS%OBLdepth_original( SZI_(G), SZJ_(G) ) )
 
-  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0
+  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) ) ; CS%OBLdepthprev(:,:) = 0.0
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
   if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
   if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -585,8 +585,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
                                                                     !< (out) Vertical diffusivity including KPP (m2/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
                                                                     !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (m2/s)
-                                                                    !< (out) Vertical viscosity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (Z2/s)
+                                                                    !< (out) Vertical viscosity including KPP (Z2/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
@@ -673,7 +673,7 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
       else
          Kdiffusivity(:,1) = Kt(i,j,:)
          Kdiffusivity(:,2) = Ks(i,j,:)
-         Kviscosity(:)=Kv(i,j,:)
+         Kviscosity(:) = GV%Z_to_m**2 * Kv(i,j,:)
       endif
 
       call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity (m2/s)
@@ -816,15 +816,15 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
           do k=1, G%ke+1
             Kt(i,j,k) = Kt(i,j,k) + Kdiffusivity(k,1)
             Ks(i,j,k) = Ks(i,j,k) + Kdiffusivity(k,2)
-            Kv(i,j,k) = Kv(i,j,k) + Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, G%ke+1
             if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
             if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
-            if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            if (Kviscosity(k) /= 0.) Kv(i,j,k) = GV%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
           enddo
         endif
       endif

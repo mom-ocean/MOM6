@@ -1146,14 +1146,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
      !      equal to 2 x \delta z
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*m2_to_Z2*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
+        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1162,14 +1162,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*m2_to_Z2*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
+        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = 2.*m2_to_Z2*visc%Kv_shear(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1182,11 +1182,11 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if (associated(visc%Kv_shear_Bu)) then
     if (work_on_u) then
       do K=2,nz ; do I=Is,Ie ; If (do_i(I)) then
-        a_cpl(I,K) = a_cpl(I,K) + (2.*0.5)*m2_to_Z2*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
+        a_cpl(I,K) = a_cpl(I,K) + (2.*0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + (2.*0.5)*m2_to_Z2*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
+        a_cpl(i,K) = a_cpl(i,K) + (2.*0.5)*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     endif
   endif

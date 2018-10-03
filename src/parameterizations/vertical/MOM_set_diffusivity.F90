@@ -354,7 +354,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
       if (CS%debug) then
         call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear",G%HI)
-        call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu",G%HI)
+        call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu", G%HI, scale=GV%Z_to_m**2)
         call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb",G%HI)
       endif
     else
@@ -363,9 +363,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
                                  visc%Kv_shear, dt, G, GV, CS%kappaShear_CSp)
       if (CS%debug) then
-        call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear",G%HI)
-        call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear",G%HI)
-        call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
+        call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear", G%HI)
+        call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear", G%HI, scale=GV%Z_to_m**2)
+        call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb", G%HI)
       endif
     endif
     call cpu_clock_end(id_clock_kappaShear)
@@ -374,8 +374,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear, G, GV, CS%CVMix_shear_CSp)
     if (CS%debug) then
-      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear",G%HI)
-      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear",G%HI)
+      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear", G%HI)
+      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear", G%HI, scale=GV%Z_to_m**2)
     endif
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0.0 ! needed if calculate_kappa_shear is not enabled
