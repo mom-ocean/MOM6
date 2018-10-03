@@ -594,7 +594,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call cpu_clock_begin(id_clock_kpp)
     ! total vertical viscosity in the interior is represented via visc%Kv_shear
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + GV%Z_to_m**2*visc%Kv_slow(i,j,k)
+      visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + visc%Kv_slow(i,j,k)
     enddo ; enddo ; enddo
 
     ! KPP needs the surface buoyancy flux but does not update state variables.
@@ -691,7 +691,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       Kd_heat(i,j,k) = Kd_heat(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
       Kd_salt(i,j,k) = Kd_salt(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
       if (CS%useKPP) then
-        visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
+        visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kv_conv(i,j,k)
       else
         visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kv_conv(i,j,k)
       endif
@@ -745,12 +745,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
     ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
     do K=2,nz ; do j=js,je ; do i=is,ie
+      !### These expressesions assume a Prandtl number of 1.
       if (CS%ePBL_is_additive) then
         Kd_add_here = Kd_ePBL(i,j,K)
-        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
+        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + GV%m_to_Z**2 * Kd_ePBL(i,j,K)
       else
         Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
+        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), GV%m_to_Z**2 * Kd_ePBL(i,j,K))
       endif
 
       Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_add_here
@@ -1725,10 +1726,10 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
         if (CS%ePBL_is_additive) then
           Kd_add_here = Kd_ePBL(i,j,K)
-          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
+          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + GV%m_to_Z**2 * Kd_ePBL(i,j,K)
         else
           Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
+          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), GV%m_to_Z**2 * Kd_ePBL(i,j,K))
         endif
         Ent_int = Kd_add_here * (GV%m_to_H**2 * dt) / &
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
