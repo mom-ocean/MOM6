@@ -2059,11 +2059,11 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, restart_CS, OB
 
   if ((GV%m_to_Z_restart /= 0.0) .and. (GV%m_to_Z_restart /= GV%m_to_Z)) then
     Z_rescale = GV%m_to_Z / GV%m_to_Z_restart
-!   if (associated(visc%Kd_shear)) then ; if (query_initialized(visc%Kd_shear, "Kd_shear", restart_CS)) then
-!     do k=1,nz+1 ; do j=js,je ; do i=is,ie
-!       visc%Kd_shear(i,j,k) = Z_rescale**2 * visc%Kd_shear(i,j,k)
-!     enddo ; enddo ; enddo
-!   endif ; endif
+    if (associated(visc%Kd_shear)) then ; if (query_initialized(visc%Kd_shear, "Kd_shear", restart_CS)) then
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        visc%Kd_shear(i,j,k) = Z_rescale**2 * visc%Kd_shear(i,j,k)
+      enddo ; enddo ; enddo
+    endif ; endif
 
     if (associated(visc%Kv_shear)) then ; if (query_initialized(visc%Kv_shear, "Kv_shear", restart_CS)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie

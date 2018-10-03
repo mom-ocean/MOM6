@@ -234,7 +234,7 @@ type, public :: vertvisc_type
   ! DOUBLE_DIFFUSION is true.
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
-                !! in tracer columns, in m2 s-1.
+                !! in tracer columns, in Z2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_shear => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers
                 !! in tracer columns, in Z2 s-1.
