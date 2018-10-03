@@ -2639,11 +2639,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
           endif
         else
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            BT_OBC%H_u(i,j) = eta(i,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + GV%m_to_Z*eta(i,j))) !### * GV%H_to_m?
+            BT_OBC%H_u(I,j) = eta(i,j)
+            BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + GV%m_to_Z*eta(i,j))) !### * GV%H_to_m?
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            BT_OBC%H_u(i,j) = eta(i+1,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i+1,j) + GV%m_to_Z*eta(i+1,j))) !### * GV%H_to_m?
+            BT_OBC%H_u(I,j) = eta(i+1,j)
+            BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * (G%bathyT(i+1,j) + GV%m_to_Z*eta(i+1,j))) !### * GV%H_to_m?
           endif
         endif
         if (GV%Boussinesq) then
@@ -3732,6 +3732,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                                        ! drag piston velocity.
   character(len=80)  :: wave_drag_var  ! The wave drag piston velocity variable
                                        ! name in wave_drag_file.
+  real :: uH_rescale ! A rescaling factor for thickness transports from the representation in
+                     ! a restart file to the internal representation in this run.
   real, allocatable, dimension(:,:) :: lin_drag_h
   type(memory_size_type) :: MS
   type(group_pass_type) :: pass_static_data, pass_q_D_Cor
@@ -4330,6 +4332,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
       .NOT.query_initialized(CS%vhbt_IC,"vhbt_IC",restart_CS)) then
     do j=js,je ; do I=is-1,ie ; CS%uhbt_IC(I,j) = CS%ubtav(I,j) * Datu(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; CS%vhbt_IC(i,J) = CS%vbtav(i,J) * Datv(i,J) ; enddo ; enddo
+  elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+    uH_rescale = GV%m_to_H / GV%m_to_H_restart
+    do j=js,je ; do I=is-1,ie ; CS%uhbt_IC(I,j) = uH_rescale * CS%uhbt_IC(I,j) ; enddo ; enddo
+    do J=js-1,je ; do i=is,ie ; CS%vhbt_IC(i,J) = uH_rescale * CS%vhbt_IC(I,j) ; enddo ; enddo
   endif
 
   call create_group_pass(pass_bt_hbt_btav, CS%ubt_IC, CS%vbt_IC, G%Domain)
@@ -4414,7 +4420,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   call register_restart_field(CS%vbt_IC, vd(3), .false., restart_CS)
 
   if (GV%Boussinesq) then
-   vd(2) = var_desc("uhbt_IC", "m3 s-1", &
+    vd(2) = var_desc("uhbt_IC", "m3 s-1", &
                 longname="Next initial condition for the barotropic zonal transport", &
                 hor_grid='u', z_grid='1')
     vd(3) = var_desc("vhbt_IC", "m3 s-1", &

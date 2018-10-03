@@ -15,7 +15,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : vardesc, var_desc
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_restart,       only : register_restart_field, MOM_restart_CS
+use MOM_restart,       only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : calculate_density
@@ -771,17 +771,22 @@ end subroutine mixedlayer_restrat_BML
 
 
 !> Initialize the mixed layer restratification module
-logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
+logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS, restart_CS)
   type(time_type),             intent(in)    :: Time       !< Current model time
   type(ocean_grid_type),       intent(inout) :: G          !< Ocean grid structure
   type(verticalGrid_type),     intent(in)    :: GV         !< Ocean vertical grid structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(diag_ctrl), target,     intent(inout) :: diag       !< Regulate diagnostics
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
+  type(MOM_restart_CS),        pointer       :: restart_CS !< A pointer to the restart control structure
+
   ! Local variables
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-  real :: flux_to_kg_per_s
+  real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
+                     ! a restart file to the internal representation in this run.
+  real :: flux_to_kg_per_s ! A unit conversion factor for fluxes.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  integer :: i, j
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -888,6 +893,26 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   CS%id_vml = register_diag_field('ocean_model', 'vml_restrat', diag%axesCv1, Time, &
       'Surface meridional velocity component of mixed layer restratification', 'm s-1')
 
+  ! Rescale variables from restart files if the internal dimensional scalings have changed.
+  if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0.) then
+    if (query_initialized(CS%MLD_filtered, "MLD_MLE_filtered", restart_CS) .and. &
+        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+      H_rescale = GV%m_to_H / GV%m_to_H_restart
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        CS%MLD_filtered(i,j) = H_rescale * CS%MLD_filtered(i,j)
+      enddo ; enddo
+    endif
+  endif
+  if (CS%MLE_MLD_decay_time2>0.) then
+    if (query_initialized(CS%MLD_filtered_slow, "MLD_MLE_filtered_slow", restart_CS) .and. &
+        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+      H_rescale = GV%m_to_H / GV%m_to_H_restart
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        CS%MLD_filtered_slow(i,j) = H_rescale * CS%MLD_filtered_slow(i,j)
+      enddo ; enddo
+    endif
+  endif
+
   ! If MLD_filtered is being used, we need to update halo regions after a restart
   if (associated(CS%MLD_filtered)) call pass_var(CS%MLD_filtered, G%domain)
 
@@ -899,7 +924,7 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
   type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
-  type(MOM_restart_CS),        pointer       :: restart_CS !< Restart structure
+  type(MOM_restart_CS),        pointer       :: restart_CS !< A pointer to the restart control structure
   ! Local variables
   type(vardesc) :: vd
   logical :: mixedlayer_restrat_init
