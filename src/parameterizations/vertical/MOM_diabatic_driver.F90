@@ -325,7 +325,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
     Kd_heat,  & ! diapycnal diffusivity of heat (Z^2/s)
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (Z^2/s)
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (m^2/s)
+    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (Z^2/s)
     eta, &      ! Interface heights before diapycnal mixing, in m.
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K m/s)
     Tadv_flx, & ! advective diapycnal heat flux across interfaces (K m/s)
@@ -741,11 +741,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     do K=2,nz ; do j=js,je ; do i=is,ie
       !### These expressesions assume a Prandtl number of 1.
       if (CS%ePBL_is_additive) then
-        Kd_add_here = GV%m_to_Z**2 * Kd_ePBL(i,j,K)
-        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + GV%m_to_Z**2 * Kd_ePBL(i,j,K)
+        Kd_add_here = Kd_ePBL(i,j,K)
+        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
       else
-        Kd_add_here = GV%m_to_Z**2 * max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), GV%m_to_Z**2 * Kd_ePBL(i,j,K))
+        Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
+        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
       endif
 
       Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_add_here
@@ -758,7 +758,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       call hchksum(eb_t, "after ePBL eb_t",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(ea_s, "after ePBL ea_s",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(eb_s, "after ePBL eb_s",G%HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G%HI,haloshift=0)
+      call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=GV%Z_to_m**2)
     endif
 
   else
@@ -1199,7 +1199,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
     Kd_heat,  & ! diapycnal diffusivity of heat (Z^2/s)
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (Z^2/s)
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (m^2/s)
+    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (Z^2/s)
     eta, &      ! Interface heights before diapycnal mixing, in m.
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K m/s)
     Tadv_flx, & ! advective diapycnal heat flux across interfaces (K m/s)
@@ -1715,11 +1715,11 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       do K=2,nz ; do j=js,je ; do i=is,ie
 
         if (CS%ePBL_is_additive) then
-          Kd_add_here = GV%m_to_Z**2 * Kd_ePBL(i,j,K)
-          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + GV%m_to_Z**2 * Kd_ePBL(i,j,K)
+          Kd_add_here = Kd_ePBL(i,j,K)
+          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
         else
-          Kd_add_here = GV%m_to_Z**2 * max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), GV%m_to_Z**2 * Kd_ePBL(i,j,K))
+          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
+          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
         endif
         Ent_int = Kd_add_here * (GV%Z_to_H**2 * dt) / &
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
@@ -1736,7 +1736,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       if (CS%debug) then
         call hchksum(ea, "after ePBL ea",G%HI,haloshift=0, scale=GV%H_to_m)
         call hchksum(eb, "after ePBL eb",G%HI,haloshift=0, scale=GV%H_to_m)
-        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G%HI,haloshift=0)
+        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=GV%Z_to_m**2)
       endif
 
     else
@@ -3046,7 +3046,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       'Total diapycnal diffusivity at interfaces', 'm2 s-1')
   if (CS%use_energetic_PBL) then
       CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
-          'ePBL diapycnal diffusivity at interfaces', 'm2 s-1')
+          'ePBL diapycnal diffusivity at interfaces', 'm2 s-1', conversion=GV%Z_to_m**2)
   endif
 
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &

@@ -101,7 +101,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                                    !! (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
-                                                   !! (not layer!) in m2 s-1.  Initially this is the
+                                                   !! (not layer!) in Z2 s-1.  Initially this is the
                                                    !! value from the previous timestep, which may
                                                    !! accelerate the iteration toward convergence.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
@@ -215,7 +215,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       rho_2d(i,k) = GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do i=is,ie
-      kappa_2d(i,K) = kappa_io(i,j,K)
+      kappa_2d(i,K) = GV%Z_to_m**2*kappa_io(i,j,K)
     enddo ; enddo ; endif
 
 !---------------------------------------
@@ -348,7 +348,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     endif ; enddo ! i-loop
 
     do K=1,nz+1 ; do i=is,ie
-      kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
+      kappa_io(i,j,K) = GV%m_to_Z**2 * G%mask2dT(i,j) * kappa_2d(i,K)
       tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
       kv_io(i,j,K) = GV%m_to_Z**2 * ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
@@ -360,7 +360,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   enddo ! end of j-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI)
+    call hchksum(kappa_io, "kappa", G%HI, scale=GV%Z_to_m**2)
     call hchksum(tke_io, "tke", G%HI)
   endif
 
@@ -396,7 +396,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                                                    !! (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: kappa_io !< The diapycnal diffusivity at each interface
-                                                   !! (not layer!) in m2 s-1.
+                                                   !! (not layer!) in Z2 s-1.
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
                            intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
                                                    !! each interface (not layer!) in m2 s-2.
@@ -686,7 +686,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     enddo ; enddo
     if (J>=G%jsc) then ; do K=1,nz+1 ; do i=G%isc,G%iec
       ! Set the diffusivities in tracer columns from the values at vertices.
-      kappa_io(i,j,K) = G%mask2dT(i,j) * 0.25 * &
+      kappa_io(i,j,K) = GV%m_to_Z**2 * G%mask2dT(i,j) * 0.25 * &
                         ((kappa_2d(I-1,K,J2m1) + kappa_2d(I,K,J2)) + &
                          (kappa_2d(I-1,K,J2)   + kappa_2d(I,K,J2m1)))
     enddo ; enddo ; endif
@@ -694,7 +694,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   enddo ! end of J-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI)
+    call hchksum(kappa_io, "kappa", G%HI, scale=GV%Z_to_m**2)
     call Bchksum(tke_io, "tke", G%HI)
   endif
 
@@ -2098,7 +2098,7 @@ function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',diag%axesTi,Time, &
-      'Shear-driven Diapycnal Diffusivity', 'm2 s-1')
+      'Shear-driven Diapycnal Diffusivity', 'm2 s-1', conversion=GV%Z_to_m**2)
   CS%id_TKE = register_diag_field('ocean_model','TKE_shear',diag%axesTi,Time, &
       'Shear-driven Turbulent Kinetic Energy', 'm2 s-2')
 #ifdef ADD_DIAGNOSTICS
