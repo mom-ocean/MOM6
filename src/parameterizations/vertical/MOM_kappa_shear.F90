@@ -112,7 +112,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                                    !! toward convergence.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface
-                                                   !! (not layer!) in m2 s-1. This discards any
+                                                   !! (not layer!) in Z2 s-1. This discards any
                                                    !! previous value (i.e. it is intent out) and
                                                    !! simply sets Kv = Prandtl * Kd_shear
   real,                    intent(in)    :: dt     !< Time increment, in s.
@@ -350,7 +350,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     do K=1,nz+1 ; do i=is,ie
       kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
       tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
-      kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
+      kv_io(i,j,K) = GV%m_to_Z**2 * ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K)
       dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
@@ -376,7 +376,7 @@ end subroutine Calculate_kappa_shear
 
 !> Subroutine for calculating shear-driven diffusivity and TKE in corner columns
 subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_io, tke_io, &
-                                     kv_io, dt, G, GV, CS, initialize_all)
+                                   kv_io, dt, G, GV, CS, initialize_all)
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   &
@@ -404,7 +404,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                                                    !! timestep, which may accelerate the iteration
                                                    !! toward convergence.
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
-                           intent(inout) :: kv_io  !< The vertical viscosity at each interface in m2 s-1.
+                           intent(inout) :: kv_io  !< The vertical viscosity at each interface in Z2 s-1.
                                                    !! The previous value is used to initialize kappa
                                                    !! in the vertex columes as Kappa = Kv/Prandtl
                                                    !! to accelerate the iteration toward covergence.
@@ -541,7 +541,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       rho_2d(I,k) = GV%Rlay(k)
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do I=IsB,IeB
-      kappa_2d(I,K,J2) = kv_io(I,J,K)*I_Prandtl
+      kappa_2d(I,K,J2) = GV%Z_to_m**2 * kv_io(I,J,K) * I_Prandtl
     enddo ; enddo ; endif
 
 !---------------------------------------
@@ -678,7 +678,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 
     do K=1,nz+1 ; do I=IsB,IeB
       tke_io(I,J,K) = G%mask2dBu(I,J) * tke_2d(I,K)
-      kv_io(I,J,K) = ( G%mask2dBu(I,J) * kappa_2d(I,K,J2) ) * CS%Prandtl_turb
+      kv_io(I,J,K) = GV%m_to_Z**2 * ( G%mask2dBu(I,J) * kappa_2d(I,K,J2) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(I,J,K) = I_Ld2_2d(I,K)
       dz_Int_3d(I,J,K) = dz_Int_2d(I,K)
