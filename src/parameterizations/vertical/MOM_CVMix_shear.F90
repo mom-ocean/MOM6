@@ -59,7 +59,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
-                                                                 !! (not layer!) in m2 s-1.
+                                                                 !! (not layer!) in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The vertical viscosity at each interface
                                                                  !! (not layer!) in Z2 s-1.
   type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous call to
@@ -70,7 +70,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
   real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) :: Ri_Grad !< Gradient Richardson number
-  real, dimension(G%ke+1) :: Kvisc   ! Vertical viscosity at interfaces (m2/s)
+  real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces (m2/s)
+  real, dimension(G%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces (m2/s)
   real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
@@ -148,18 +149,20 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
         if (CS%id_ri_grad_smooth > 0) CS%ri_grad_smooth(i,j,:) = Ri_Grad(:)
       endif
 
-      do k=1,G%ke+1
-        Kvisc(k) = GV%Z_to_m**2 * kv(i,j,k)
+      do K=1,G%ke+1
+        Kvisc(K) = GV%Z_to_m**2 * kv(i,j,K)
+        Kdiff(K) = GV%Z_to_m**2 * kd(i,j,K)
       enddo
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
       call  CVMix_coeffs_shear(Mdiff_out=Kvisc(:), &
-                                   Tdiff_out=kd(i,j,:), &
+                                   Tdiff_out=Kdiff(:), &
                                    RICH=Ri_Grad(:), &
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
-      do k=1,G%ke+1
-        kv(i,j,k) = GV%m_to_Z**2 * Kvisc(k)
+      do K=1,G%ke+1
+        kv(i,j,K) = GV%m_to_Z**2 * Kvisc(K)
+        kd(i,j,K) = GV%m_to_Z**2 * Kdiff(K)
       enddo
     enddo
   enddo
@@ -255,27 +258,31 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
 
   CS%id_N2 = register_diag_field('ocean_model', 'N2_shear', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_CVMix_shear module', '1/s2')
-  if (CS%id_N2 > 0) &
-    allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%N2(:,:,:) = 0.
+  if (CS%id_N2 > 0) then
+    allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) ) ; CS%N2(:,:,:) = 0.
+  endif
 
   CS%id_S2 = register_diag_field('ocean_model', 'S2_shear', diag%axesTi, Time, &
       'Square of vertical shear used by MOM_CVMix_shear module','1/s2')
-  if (CS%id_S2 > 0) &
-    allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%S2(:,:,:) = 0.
+  if (CS%id_S2 > 0) then
+    allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) ) ; CS%S2(:,:,:) = 0.
+  endif
 
   CS%id_ri_grad = register_diag_field('ocean_model', 'ri_grad_shear', diag%axesTi, Time, &
       'Gradient Richarson number used by MOM_CVMix_shear module','nondim')
-  if (CS%id_ri_grad > 0) & !Initialize w/ large Richardson value
-     allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad(:,:,:) = 1.e8
+  if (CS%id_ri_grad > 0) then !Initialize w/ large Richardson value
+    allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 )) ; CS%ri_grad(:,:,:) = 1.e8
+  endif
 
   CS%id_ri_grad_smooth = register_diag_field('ocean_model', 'ri_grad_shear_smooth', &
        diag%axesTi, Time, &
       'Smoothed gradient Richarson number used by MOM_CVMix_shear module','nondim')
-  if (CS%id_ri_grad_smooth > 0) & !Initialize w/ large Richardson value
-     allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad_smooth(:,:,:) = 1.e8
+  if (CS%id_ri_grad_smooth > 0) then !Initialize w/ large Richardson value
+    allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G), SZK_(G)+1 )) ; CS%ri_grad_smooth(:,:,:) = 1.e8
+  endif
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
-      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s')
+      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%Z_to_m**2)
   CS%id_kv = register_diag_field('ocean_model', 'kv_shear_CVMix', diag%axesTi, Time, &
       'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%Z_to_m**2)
 
