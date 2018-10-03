@@ -30,7 +30,7 @@ public calculate_bkgnd_mixing
 public sfc_bkgnd_mixing
 
 !> Control structure including parameters for this module.
-type, public :: bkgnd_mixing_cs
+type, public :: bkgnd_mixing_cs  ! TODO: private
 
   ! Parameters
   real    :: Bryan_Lewis_c1         !< The vertical diffusivity values for  Bryan-Lewis profile
@@ -254,9 +254,9 @@ end subroutine bkgnd_mixing_init
 !> Get surface vertical background diffusivities/viscosities.
 subroutine sfc_bkgnd_mixing(G, CS)
 
-  type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
-  type(bkgnd_mixing_cs),           pointer, intent(inout) :: CS !< The control structure returned by
-                                                                !! a previous call to bkgnd_mixing_init.
+  type(ocean_grid_type),          intent(in)    :: G  !< Grid structure.
+  type(bkgnd_mixing_cs), pointer, intent(inout) :: CS !< The control structure returned by
+                                                      !! a previous call to bkgnd_mixing_init.
   ! local variables
   real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
   real :: deg_to_rad !< factor converting degrees to radians, pi/180.
@@ -305,23 +305,25 @@ end subroutine sfc_bkgnd_mixing
 
 
 !> Calculates the vertical background diffusivities/viscosities
-subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
+subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, CS)
 
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZK_(G)),           intent(in)  :: N2_lay!< squared buoyancy frequency associated
+  real, dimension(SZI_(G),SZK_(G)),           intent(in)  :: N2_lay !< squared buoyancy frequency associated
                                                                  !! with layers (1/s2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay!< Diapycnal diffusivity of each layer m2 s-1.
-  real, dimension(:,:,:),                     pointer     :: kv  !< The "slow" vertical viscosity at each interface
-                                                                 !! (not layer!) in m2 s-1.
-  integer,                                   intent(in)   :: j   !< Meridional grid indice.
-  type(bkgnd_mixing_cs),                          pointer :: CS  !< The control structure returned by
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay !< Diapycnal diffusivity of each layer m2 s-1.
+  real, dimension(:,:,:),                     pointer     :: Kv  !< The "slow" vertical viscosity at each interface
+                                                                 !! (not layer!) in Z2 s-1
+  integer,                                    intent(in)  :: j   !< Meridional grid index
+  type(bkgnd_mixing_cs),                      pointer     :: CS  !< The control structure returned by
                                                                  !! a previous call to bkgnd_mixing_init.
 
   ! local variables
-  real, dimension(SZI_(G), SZK_(G)+1) :: depth_2d  !< distance from surface of an interface (m)
+  real, dimension(SZK_(G)+1) :: depth_int  !< distance from surface of the interfaces (m)
+  real, dimension(SZK_(G)+1) :: Kd_col     !< Diffusivities at the interfaces (m2 s-1)
+  real, dimension(SZK_(G)+1) :: Kv_col     !< Viscosities at the interfaces (m2 s-1)
   real, dimension(SZI_(G)) :: &
         depth        !< distance from surface of an interface (meter)
   real :: depth_c    !< depth of the center of a layer (meter)
@@ -341,31 +343,33 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
   deg_to_rad = atan(1.0)/45.0 ! = PI/180
   epsilon = 1.e-10
 
-  depth_2d(:,:) = 0.0
   ! Set up the background diffusivity.
   if (CS%Bryan_Lewis_diffusivity) then
 
     do i=is,ie
+      depth_int(1) = 0.0
       do k=2,nz+1
-        depth_2d(i,k) = depth_2d(i,k-1) + GV%H_to_m*h(i,j,k-1)
+        depth_int(k) = depth_int(k-1) + GV%H_to_m*h(i,j,k-1)
       enddo
 
       call CVMix_init_bkgnd(max_nlev=nz, &
-                            zw = depth_2d(i,:), &  !< interface depth, must be positive.
+                            zw = depth_int(:), &  !< interface depths relative to the surface in m, must be positive.
                             bl1 = CS%Bryan_Lewis_c1, &
                             bl2 = CS%Bryan_Lewis_c2, &
                             bl3 = CS%Bryan_Lewis_c3, &
                             bl4 = CS%Bryan_Lewis_c4, &
                             prandtl = CS%prandtl_bkgnd)
 
-      call CVMix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
-                              Tdiff_out=CS%kd_bkgnd(i,j,:), &
-                              nlev=nz, &
-                              max_nlev=nz)
+      Kd_col(:) = 0.0 ; Kv_col(:) = 0.0  ! Is this line necessary?
+      call CVMix_coeffs_bkgnd(Mdiff_out=Kv_col, Tdiff_out=Kd_col, nlev=nz, max_nlev=nz)
 
-      ! Update Kd
+      ! Update Kd and Kv.
+      do K=1,nz+1
+        CS%Kv_bkgnd(i,j,K) = Kv_col(K)
+        CS%Kd_bkgnd(i,j,K) = Kd_col(K)
+      enddo
       do k=1,nz
-        kd_lay(i,j,k) = kd_lay(i,j,k) + 0.5*(CS%kd_bkgnd(i,j,K) + CS%kd_bkgnd(i,j,K+1))
+        kd_lay(i,j,k) = kd_lay(i,j,k) + 0.5*(Kd_col(K) + Kd_col(K+1))
       enddo
     enddo ! i loop
 
@@ -413,13 +417,11 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
     enddo
   endif
 
-  ! Update kv
+  ! Update Kv
   if (associated(kv)) then
-    do i=is,ie
-      do k=1,nz+1
-        kv(i,j,k) = kv(i,j,k) + CS%kv_bkgnd(i,j,k)
-      enddo
-    enddo
+    do k=1,nz+1 ; do i=is,ie
+      Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * CS%kv_bkgnd(i,j,k)
+    enddo ; enddo
   endif
 
 end subroutine calculate_bkgnd_mixing

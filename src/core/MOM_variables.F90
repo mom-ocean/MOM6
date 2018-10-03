@@ -243,7 +243,7 @@ type, public :: vertvisc_type
                 !! corner columns, in m2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_slow  => NULL()
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
-                !! background, convection etc), in m2 s-1.
+                !! background, convection etc), in Z2 s-1.
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
                 !< The turbulent kinetic energy per unit mass at the interfaces, in m2 s-2.
                 !! This may be at the tracer or corner points

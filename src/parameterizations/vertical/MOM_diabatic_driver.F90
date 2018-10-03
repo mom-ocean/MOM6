@@ -594,7 +594,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call cpu_clock_begin(id_clock_kpp)
     ! total vertical viscosity in the interior is represented via visc%Kv_shear
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + visc%Kv_slow(i,j,k)
+      visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + GV%Z_to_m**2*visc%Kv_slow(i,j,k)
     enddo ; enddo ; enddo
 
     ! KPP needs the surface buoyancy flux but does not update state variables.
@@ -693,7 +693,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       if (CS%useKPP) then
         visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
       else
-        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
+        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kv_conv(i,j,k)
       endif
     enddo ; enddo ; enddo
 !$OMP end parallel
@@ -1577,12 +1577,13 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   if (CS%use_CVMix_conv) then
     call calculate_CVMix_conv(h, tv, G, GV, CS%CVMix_conv_csp, Hml)
 
-      !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
-        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
-      enddo ; enddo ; enddo
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !### The vertical extent here is more limited that Kv_slow or Kd_int; it might be k=1,nz+1.
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      Kd_int(i,j,k) = Kd_int(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
+      visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kv_conv(i,j,k)
+    enddo ; enddo ; enddo
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   endif
 

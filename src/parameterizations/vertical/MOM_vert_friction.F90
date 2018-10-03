@@ -1196,14 +1196,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0 * m2_to_Z2*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
+        Kv_add(i,K) = Kv_add(i,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1218,9 +1218,9 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * m2_to_Z2*visc%Kv_slow(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1734,7 +1734,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
-     'Slow varying vertical viscosity', 'm2 s-1')
+     'Slow varying vertical viscosity', 'm2 s-1', conversion=GV%Z_to_m**2)
 
   CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
      'Total vertical viscosity at u-points', 'm2 s-1', conversion=GV%Z_to_m**2)
