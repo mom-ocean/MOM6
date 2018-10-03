@@ -114,6 +114,7 @@ use MOM_variables,             only : surface, allocate_surface_state, deallocat
 use MOM_variables,             only : thermo_var_ptrs, vertvisc_type
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
+use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only : wave_parameters_CS, waves_end
 use MOM_wave_interface,        only : Update_Stokes_Drift
@@ -2324,7 +2325,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call thickness_diffuse_init(Time, G, GV, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, param_file, diag, &
-                                                  CS%mixedlayer_restrat_CSp)
+                                                  CS%mixedlayer_restrat_CSp, restart_CSp)
   if (CS%mixedlayer_restrat) then
     if (.not.(bulkmixedlayer .or. CS%use_ALE_algorithm)) &
       call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
@@ -2448,17 +2449,19 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
                       (LEN_TRIM(dirs%input_filename) == 1))
 
-
   if (CS%ensemble_ocean) then
-      call init_oda(Time, G, GV, CS%odaCS)
+    call init_oda(Time, G, GV, CS%odaCS)
   endif
+
+  !### This could perhaps go here instead of in finish_MOM_initialization?
+  ! call fix_restart_scaling(GV)
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
 
 end subroutine initialize_MOM
 
-!> Finishe initializing MOM and writes out the initial conditions.
+!> Finishes initializing MOM and writes out the initial conditions.
 subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
@@ -2477,6 +2480,9 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
 
   ! Pointers for convenience
   G => CS%G ; GV => CS%GV
+
+  !### Move to initialize_MOM?
+  call fix_restart_scaling(GV)
 
   ! Write initial conditions
   if (CS%write_IC) then
@@ -2616,9 +2622,15 @@ subroutine set_restart_fields(GV, param_file, CS, restart_CSp)
   call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., &
                  do_not_log=.true.)
   if (use_ice_shelf .and. associated(CS%Hml)) then
-     call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
-                                 "Mixed layer thickness", "meter")
+    call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
+                                "Mixed layer thickness", "meter")
   endif
+
+  ! Register scalar unit conversion factors.
+  call register_restart_field(GV%m_to_Z_restart, "m_to_Z", .false., restart_CSp, &
+                              "Height unit conversion factor", "Z meter-1")
+  call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, &
+                              "Thickness unit conversion factor", "Z meter-1")
 
 end subroutine set_restart_fields
 

@@ -147,6 +147,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   character(len=200) :: filename2  ! The name of an input files.
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
+  real :: H_rescale ! A rescaling factor for thicknesses from the representation in
+                    ! a restart file to the internal representation in this run.
+  real :: dt        ! The baroclinic dynamics timestep for this run, in s.
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
@@ -159,7 +162,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                          ! by a large surface pressure, such as with an ice sheet.
   logical :: regrid_accelerate
   integer :: regrid_iterations
-  logical :: Analytic_FV_PGF, obsol_test
+!  logical :: Analytic_FV_PGF, obsol_test
   logical :: convert
   logical :: just_read  ! If true, only read the parameters because this
                         ! is a run from a restart file; this option
@@ -173,8 +176,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 #include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
-  real :: dt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -486,6 +487,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
                        G, restart_CS)
     if (present(Time_in)) Time = Time_in
+    if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+      H_rescale = GV%m_to_H / GV%m_to_H_restart
+      do k=1,nz ; do j=js,je ; do i=is,ie ; h(i,j,k) = H_rescale * h(i,j,k) ; enddo ; enddo ; enddo
+    endif
   endif
 
   if ( use_temperature ) then
