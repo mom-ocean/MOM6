@@ -11,7 +11,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public verticalGridInit, verticalGridEnd
-public setVerticalGridAxes
+public setVerticalGridAxes, fix_restart_scaling
 public get_flux_units, get_thickness_units, get_tr_flux_units
 
 !> Describes the vertical ocean grid, including unit conversion factors
@@ -56,6 +56,9 @@ type, public :: verticalGrid_type
   real :: Z_to_m        !< A constant that translates distances in the units of depth to m.
   real :: H_to_Z        !< A constant that translates thickness units to the units of depth.
   real :: Z_to_H        !< A constant that translates depth units to thickness units.
+
+  real :: m_to_Z_restart = 0.0 !< A copy of the m_to_Z that is used in restart files.
+  real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type
 
 contains
@@ -170,6 +173,14 @@ subroutine verticalGridInit( param_file, GV )
   allocate( GV%Rlay(nk+1) )    ; GV%Rlay(:) = 0.0
 
 end subroutine verticalGridInit
+
+!> Set the scaling factors for restart files to the scaling factors for this run.
+subroutine fix_restart_scaling(GV)
+  type(verticalGrid_type), intent(inout) :: GV   !< The ocean's vertical grid structure
+
+  GV%m_to_Z_restart = GV%m_to_Z
+  GV%m_to_H_restart = GV%m_to_H
+end subroutine fix_restart_scaling
 
 !> Returns the model's thickness units, usually m or kg/m^2.
 function get_thickness_units(GV)
