@@ -409,12 +409,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
         if (KS_extra(i,K) > KT_extra(i,K)) then ! salt fingering
           Kd(i,j,k-1) = Kd(i,j,k-1) + 0.5*KT_extra(i,K)
           Kd(i,j,k)   = Kd(i,j,k)   + 0.5*KT_extra(i,K)
-          visc%Kd_extra_S(i,j,k) = KS_extra(i,K)-KT_extra(i,K)
+          visc%Kd_extra_S(i,j,k) = GV%m_to_Z**2 * (KS_extra(i,K) - KT_extra(i,K))
           visc%Kd_extra_T(i,j,k) = 0.0
         elseif (KT_extra(i,K) > 0.0) then ! double-diffusive convection
           Kd(i,j,k-1) = Kd(i,j,k-1) + 0.5*KS_extra(i,K)
           Kd(i,j,k)   = Kd(i,j,k)   + 0.5*KS_extra(i,K)
-          visc%Kd_extra_T(i,j,k) = KT_extra(i,K)-KS_extra(i,K)
+          visc%Kd_extra_T(i,j,k) = GV%m_to_Z**2 * (KT_extra(i,K) - KS_extra(i,K))
           visc%Kd_extra_S(i,j,k) = 0.0
         else ! There is no double diffusion at this interface.
           visc%Kd_extra_T(i,j,k) = 0.0
@@ -534,8 +534,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%useKappaShear) call hchksum(visc%Kd_shear,"Turbulent Kd",G%HI,haloshift=0)
 
     if (CS%use_CVMix_ddiff) then
-      call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T",G%HI,haloshift=0)
-      call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S",G%HI,haloshift=0)
+      call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+      call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, scale=GV%Z_to_m**2)
     endif
 
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
