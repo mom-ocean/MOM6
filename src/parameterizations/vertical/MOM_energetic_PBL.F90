@@ -183,9 +183,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: h_3d   !< Layer thickness, in m or kg m-2.
-                                                   !! (Intent in/out) The units of h are referred
-                                                   !! to as H below.
+                           intent(inout) :: h_3d   !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u_3d   !< Zonal velocities interpolated to h points,
                                                    !! m s-1.
@@ -212,7 +210,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real,                    intent(in)    :: dt     !< Time increment, in s.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces,
-                                                   !! in m2 s-1.
+                                                   !! in Z2 s-1.
   type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to mixedlayer_init.
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -256,33 +254,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !  conv_decay is 1/mu.
 !    For a traditional Kraus-Turner mixed layer, the values are:
 !      mstar = 1.25, nstar = 0.4, TKE_decay = 0.0, conv_decay = 0.0
-
-! Arguments: h_3d - Layer thickness, in m or kg m-2. (Intent in/out)
-!                   The units of h are referred to as H below.
-!  (in)      u_3d - Zonal velocities interpolated to h points, m s-1.
-!  (in)      v_3d - Zonal velocities interpolated to h points, m s-1.
-!  (in/out)  tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - Time increment, in s.
-!  (out)     Kd_int - The diagnosed diffusivities at interfaces, in m2 s-1.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 mixedlayer_init.
-!  (in)      dSV_dT - The partial derivative of in-situ specific volume with
-!                     potential temperature, in m3 kg-1 K-1.
-!  (in)      dSV_dS - The partial derivative of in-situ specific volume with
-!                     salinity, in m3 kg-1 ppt-1.
-!  (in)      TKE_forced - The forcing requirements to homogenize the forcing
-!                 that has been applied to each layer through each layer, in J m-2.
-!  (in)      Buoy_Flux - The surface buoyancy flux. in m2/s3.
-!  (in,opt)  dt_diag - The diagnostic time step, which may be less than dt
-!                      if there are two callse to mixedlayer, in s.
-!  (in,opt)  last_call - if true, this is the last call to mixedlayer in the
-!                        current time step, so diagnostics will be written.
-!                        The default is .true.
 
   real, dimension(SZI_(G),SZK_(GV)) :: &
     h, &            !   The layer thickness, in H (usually m or kg m-2).
@@ -1503,7 +1474,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     endif
 
     do K=1,nz+1 ; do i=is,ie
-      Kd_int(i,j,K) = Kd(i,K)
+      Kd_int(i,j,K) = GV%m_to_Z**2 * Kd(i,K)
     enddo ; enddo
 
   enddo ! j-loop
