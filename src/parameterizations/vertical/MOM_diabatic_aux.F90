@@ -226,22 +226,21 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
     b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S, in H.
     d1_T, d1_S     !  Variables used by the tridiagonal solvers, nondim.
   real, dimension(SZI_(G),SZK_(G)) :: &
-    c1_T, c1_S     !  Variables used by the tridiagonal solvers, in m or kg m-2.
+    c1_T, c1_S     !  Variables used by the tridiagonal solvers, in H.
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    mix_T, mix_S   !  Mixing distances in both directions across each
-                   !  interface, in m or kg m-2.
+    mix_T, mix_S   !  Mixing distances in both directions across each interface, in H.
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness, in m or kg m-2.
+                       ! added to ensure positive definiteness, in H.
   real :: h_neglect    ! A thickness that is so small it is usually lost
-                       ! in roundoff and can be neglected, in m or kg m-2.
+                       ! in roundoff and can be neglected, in H.
   real :: I_h_int      ! The inverse of the thickness associated with an
-                       ! interface, in m-1 or m2 kg-1.
+                       ! interface, in H-1.
   real :: b_denom_T    ! The first term in the denominators for the expressions
-  real :: b_denom_S    ! for b1_T and b1_S, both in m or kg m-2.
-
-  integer :: i, j, k, is, ie, js, je, nz
+  real :: b_denom_S    ! for b1_T and b1_S, both in H.
   real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
-  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL()
+  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities in Z2 s-1.
+  integer :: i, j, k, is, ie, js, je, nz
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   h_neglect = GV%H_subroundoff
 
@@ -262,8 +261,8 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   do j=js,je
     do i=is,ie
       I_h_int = 1.0 / (0.5 * (h(i,j,1) + h(i,j,2)) + h_neglect)
-      mix_T(i,2) = ((dt * Kd_T(i,j,2)) * GV%m_to_H**2) * I_h_int
-      mix_S(i,2) = ((dt * Kd_S(i,j,2)) * GV%m_to_H**2) * I_h_int
+      mix_T(i,2) = ((dt * Kd_T(i,j,2)) * GV%Z_to_H**2) * I_h_int
+      mix_S(i,2) = ((dt * Kd_S(i,j,2)) * GV%Z_to_H**2) * I_h_int
 
       h_tr = h(i,j,1) + h_neglect
       b1_T(i) = 1.0 / (h_tr + mix_T(i,2))
@@ -276,8 +275,8 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
     do k=2,nz-1 ; do i=is,ie
       ! Calculate the mixing across the interface below this layer.
       I_h_int = 1.0 / (0.5 * (h(i,j,k) + h(i,j,k+1)) + h_neglect)
-      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1)) * GV%m_to_H**2) * I_h_int
-      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1)) * GV%m_to_H**2) * I_h_int
+      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1)) * GV%Z_to_H**2) * I_h_int
+      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1)) * GV%Z_to_H**2) * I_h_int
 
       c1_T(i,k) = mix_T(i,K) * b1_T(i)
       c1_S(i,k) = mix_S(i,K) * b1_S(i)
