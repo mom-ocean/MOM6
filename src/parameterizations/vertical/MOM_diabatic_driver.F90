@@ -289,9 +289,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
     eb_t,     &  ! amount of fluid entrained from the layer below within
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-    Kd,     &    ! diapycnal diffusivity of layers (m^2/sec)
+    Kd_lay, &    ! diapycnal diffusivity of layers (Z^2/sec)
     h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
-    h_prebound, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
+    h_prebound, & ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
 !    hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
                  ! (m for Bouss, kg/m^2 for non-Bouss)
@@ -553,9 +553,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   endif ! end CS%use_int_tides
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
+  ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
   ! Also changes: visc%Kd_shear, visc%Kv_slow and visc%TKE_turb (not clear that TKE_turb is used as input ????
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, CS%set_diff_CSp, Kd, Kd_int)
+  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, CS%set_diff_CSp, &
+                       Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
@@ -931,7 +932,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
           ! thicknesses, as this corresponds pretty closely (to within
           ! differences in the density jumps between layers) with what is done
           ! in the calculation of the fluxes in the first place.  Kd_min_tr
-          ! should be much less than the values that have been set in Kd,
+          ! should be much less than the values that have been set in Kd_lay,
           ! perhaps a molecular diffusivity.
           add_ent = ((dt * CS%Kd_min_tr) * GV%m_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
@@ -1163,9 +1164,9 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
     eb,     &    ! amount of fluid entrained from the layer below within
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-    Kd,     &    ! diapycnal diffusivity of layers (m^2/sec)
+    Kd_lay, &    ! diapycnal diffusivity of layers (Z^2/sec)
     h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
-    h_prebound, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
+    h_prebound, &  ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
     hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
                  ! (m for Bouss, kg/m^2 for non-Bouss)
@@ -1472,7 +1473,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
+  ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
   ! Also changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????
   ! And sets visc%Kv_shear
   if ((CS%halo_TS_diff > 0) .and. (CS%ML_mix_first > 0.0)) then
@@ -1480,7 +1481,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     if (associated(tv%T)) call pass_var(tv%S, G%Domain, halo=CS%halo_TS_diff, complete=.false.)
     call pass_var(h, G%domain, halo=CS%halo_TS_diff, complete=.true.)
   endif
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, CS%set_diff_CSp, Kd, Kd_int)
+  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, CS%set_diff_CSp, &
+                       Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
@@ -1488,8 +1490,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd, "after set_diffusivity Kd",G%HI,haloshift=0)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G%HI,haloshift=0)
+    call hchksum(Kd_lay, "after set_diffusivity Kd_lay", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0)
   endif
 
 
@@ -1558,8 +1560,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       call MOM_state_chksum("after KPP", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
-      call hchksum(Kd, "after KPP Kd",G%HI,haloshift=0)
-      call hchksum(Kd_Int, "after KPP Kd_Int",G%HI,haloshift=0)
+      call hchksum(Kd_lay, "after KPP Kd_lay", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+      call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0)
     endif
 
   endif  ! endif for KPP
@@ -1653,7 +1655,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     ! Calculate appropriately limited diapycnal mass fluxes to account
     ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
     call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS%entrain_diffusive_CSp, &
-                               ea, eb, kb, Kd_Lay=Kd, Kd_int=Kd_int)
+                               ea, eb, kb, Kd_Lay=Kd_lay, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
     if (showCallTree) call callTree_waypoint("done with Entrainment_diffusive (diabatic)")
 
@@ -2074,7 +2076,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
           ! thicknesses, as this corresponds pretty closely (to within
           ! differences in the density jumps between layers) with what is done
           ! in the calculation of the fluxes in the first place.  Kd_min_tr
-          ! should be much less than the values that have been set in Kd,
+          ! should be much less than the values that have been set in Kd_lay,
           ! perhaps a molecular diffusivity.
           add_ent = ((dt * CS%Kd_min_tr) * GV%m_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
