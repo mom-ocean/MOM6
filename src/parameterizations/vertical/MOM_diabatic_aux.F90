@@ -663,9 +663,9 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
   real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2     ! Reference pressures in Pa.
   real, dimension(SZI_(G)) :: dK, dKm1, d1          ! Depths in Z.
   real, dimension(SZI_(G)) :: rhoSurf, rhoAtK, rho1 ! Densities used for N2, in kg m-3.
-  real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth, in m.
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth, in Z.
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML, in s-2.
-  real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2, in m2.
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2, in Z2.
   real :: Rho_x_gE         ! The product of density, gravitational acceleartion and a unit
                            ! conversion factor, in kg m-1 Z-1 s-2.
   real :: gE_Rho0          ! The gravitational acceleration divided by a mean density, in m4 s-2 kg-1.
@@ -677,8 +677,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
 
   id_SQ = -1 ; if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
 
-  Rho_x_gE = (GV%g_Earth) * GV%Rho0
-  gE_rho0 = GV%m_to_Z * (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  Rho_x_gE = GV%g_Earth * GV%Rho0
+  gE_rho0 = GV%m_to_Z**2 * GV%g_Earth / GV%Rho0
   dz_subML = 50.*GV%m_to_Z
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -824,7 +824,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
   real                                                  :: hGrounding(maxGroundings)
   real    :: Temp_in, Salin_in
-  real    :: I_G_Earth
+!  real    :: I_G_Earth
   real    :: g_Hconv2
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density, in Z m3 s-2 kg-1
   logical :: calculate_energetics
@@ -845,7 +845,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
-  I_G_Earth = 1.0 / (GV%g_Earth*GV%m_to_Z)
+!  I_G_Earth = 1.0 / GV%g_Earth
   g_Hconv2 = GV%H_to_Pa * GV%H_to_kg_m2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
@@ -912,8 +912,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                  dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
 !        do i=is,ie
-!          dT_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
-!          dS_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
+!          dT_to_dPE(i,k) = I_G_Earth * GV%Z_to_m * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
+!          dS_to_dPE(i,k) = I_G_Earth * GV%Z_to_m * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
 !        enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
