@@ -76,7 +76,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
                                                 !! in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                   optional, intent(in)    :: Kd_int !< The diapycnal diffusivity of interfaces,
-                                                !! in m2 s-1.
+                                                !! in Z2 s-1.
 
 !   This subroutine calculates ea and eb, the rates at which a layer entrains
 ! from the layers above and below.  The entrainment rates are proportional to
@@ -194,7 +194,6 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
   real :: h1         ! The layer thickness after entrainment through the
                      ! interface below is taken into account, in H.
   real :: Idt        ! The inverse of the time step, in s-1.
-  real :: H_to_m, m_to_H  ! Local copies of unit conversion factors.
 
   logical :: do_any
   logical :: do_i(SZI_(G)), did_i(SZI_(G)), reiterate, correct_density
@@ -224,8 +223,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
          &and a linear equation of state to drive the model.")
   endif
 
-  H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
-  tolerance = m_to_H * CS%Tolerance_Ent
+  tolerance = GV%m_to_H * CS%Tolerance_Ent
   g_2dt = 0.5 * (GV%g_Earth*GV%m_to_Z) / dt
   kmb = GV%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
@@ -252,7 +250,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,dt,Kd_int,CS,h,tv, &
 !$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
 !$OMP                                  ea,eb,correct_density,Kd_eff,diff_work,     &
-!$OMP                                  g_2dt, kb_out, m_to_H, H_to_m)              &
+!$OMP                                  g_2dt, kb_out)                              &
 !$OMP                     firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min)             &
 !$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
 !$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &
@@ -274,7 +272,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
       enddo ; enddo
       if (present(Kd_int)) then
         do K=1,nz+1 ; do i=is,ie
-          dtKd_int(i,K) = m_to_H**2 * (dt*Kd_int(i,j,K))
+          dtKd_int(i,K) = GV%Z_to_H**2 * (dt*Kd_int(i,j,K))
         enddo ; enddo
       else
         do K=2,nz ; do i=is,ie
@@ -283,10 +281,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
       endif
     else ! Kd_int must be present, or there already would have been an error.
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = m_to_H**2 * (0.5*dt*(Kd_int(i,j,K)+Kd_int(i,j,K+1)))
+        dtKd(i,k) = GV%Z_to_H**2 * (0.5*dt*(Kd_int(i,j,K)+Kd_int(i,j,K+1)))
       enddo ; enddo
       dO K=1,nz+1 ; do i=is,ie
-        dtKd_int(i,K) = m_to_H**2 * (dt*Kd_int(i,j,K))
+        dtKd_int(i,K) = GV%Z_to_H**2 * (dt*Kd_int(i,j,K))
       enddo ; enddo
     endif
 
@@ -816,11 +814,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
               (eb(i,j,k) - ea(i,j,k+1))) ) / (I2p2dsp1_ds(i,k) * grats(i,k))
         endif
 
-        Kd_eff(i,j,k) = H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
+        Kd_eff(i,j,k) = GV%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
       enddo ; enddo
       do i=is,ie
-        Kd_eff(i,j,1) = H_to_m**2 * (dtKd(i,1)*Idt)
-        Kd_eff(i,j,nz) = H_to_m**2 * (dtKd(i,nz)*Idt)
+        Kd_eff(i,j,1) = GV%H_to_m**2 * (dtKd(i,1)*Idt)
+        Kd_eff(i,j,nz) = GV%H_to_m**2 * (dtKd(i,nz)*Idt)
       enddo
     endif
 
