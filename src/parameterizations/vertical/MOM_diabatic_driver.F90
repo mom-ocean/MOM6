@@ -683,12 +683,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     ! Increment vertical diffusion and viscosity due to convection
     !$OMP parallel do default(shared)
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_heat(i,j,k) = Kd_heat(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kd_conv(i,j,k)
-      Kd_salt(i,j,k) = Kd_salt(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kd_conv(i,j,k)
+      Kd_heat(i,j,k) = Kd_heat(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
+      Kd_salt(i,j,k) = Kd_salt(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
       if (CS%useKPP) then
-        visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kv_conv(i,j,k)
+        visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
       else
-        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kv_conv(i,j,k)
+        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
       endif
     enddo ; enddo ; enddo
   endif
@@ -1571,8 +1571,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !### The vertical extent here is more limited that Kv_slow or Kd_int; it might be k=1,nz+1.
     do k=1,nz ; do j=js,je ; do i=is,ie
-      Kd_int(i,j,k) = Kd_int(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
-      visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + GV%m_to_Z**2 * CS%CVMix_conv_csp%kv_conv(i,j,k)
+      Kd_int(i,j,k) = Kd_int(i,j,k) + GV%Z_to_m**2 * CS%CVMix_conv_csp%kd_conv(i,j,k)
+      visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
     enddo ; enddo ; enddo
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -2979,19 +2979,20 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv",diag%axesTi, &
       Time, "Advective diapycnal salnity flux across interfaces", &
       "psu m s-1")
-  CS%id_MLD_003 = register_diag_field('ocean_model','MLD_003',diag%axesT1,Time,        &
-      'Mixed layer depth (delta rho = 0.03)', 'm', cmor_field_name='mlotst',       &
-      cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', &
+  CS%id_MLD_003 = register_diag_field('ocean_model', 'MLD_003', diag%axesT1, Time, &
+      'Mixed layer depth (delta rho = 0.03)', 'm', conversion=GV%Z_to_m, &
+      cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', &
       cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
-  CS%id_mlotstsq = register_diag_field('ocean_model','mlotstsq',diag%axesT1,Time,      &
-      long_name='Square of Ocean Mixed Layer Thickness Defined by Sigma T',            &
-      standard_name='square_of_ocean_mixed_layer_thickness_defined_by_sigma_t',units='m2')
+  CS%id_mlotstsq = register_diag_field('ocean_model','mlotstsq',diag%axesT1, Time, &
+      long_name='Square of Ocean Mixed Layer Thickness Defined by Sigma T', &
+      standard_name='square_of_ocean_mixed_layer_thickness_defined_by_sigma_t', &
+      units='m2', conversion=GV%Z_to_m**2)
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
-      'Mixed layer depth (delta rho = 0.125)', 'm')
+      'Mixed layer depth (delta rho = 0.125)', 'm', conversion=GV%Z_to_m)
   CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
       'Squared buoyancy frequency below mixed layer', 's-2')
   CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &
-      'Mixed layer depth (used defined)', 'm')
+      'Mixed layer depth (used defined)', 'm', conversion=GV%Z_to_m)
   call get_param(param_file, mdl, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
                  "The density difference used to determine a diagnostic mixed\n"//&
                  "layer depth, MLD_user, following the definition of Levitus 1982. \n"//&
@@ -3008,15 +3009,15 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                   z_grid='z')
     CS%id_Tdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = var_desc("Tflx_dia_adv", "degC m s-1", &
-                  "Advective diapycnal temperature flux across interfaces, interpolated to z",&
+                  "Advective diapycnal temperature flux across interfaces, interpolated to z", &
                   z_grid='z')
     CS%id_Tadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = var_desc("Sflx_dia_diff", "psu m s-1", &
-                  "Diffusive diapycnal salinity flux across interfaces, interpolated to z",&
+                  "Diffusive diapycnal salinity flux across interfaces, interpolated to z", &
                   z_grid='z')
     CS%id_Sdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     vd = var_desc("Sflx_dia_adv", "psu m s-1", &
-                  "Advective diapycnal salinity flux across interfaces, interpolated to z",&
+                  "Advective diapycnal salinity flux across interfaces, interpolated to z", &
                   z_grid='z')
     CS%id_Sadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
   endif
