@@ -50,8 +50,7 @@ character(len=40)  :: mdl = "MOM_CVMix_shear"  !< This module's name.
 contains
 
 !> Subroutine for calculating (internal) vertical diffusivities/viscosities
-subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
-                                 kv, G, GV, CS )
+subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
