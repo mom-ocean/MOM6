@@ -96,7 +96,7 @@ type, public :: tidal_mixing_cs
   real :: Decay_scale_factor_lee !< Scaling factor for the decay scale of lee
                               !! wave energy dissipation (nondimensional)
 
-  real :: min_zbot_itides     !< minimum depth for internal tide conversion (meter)
+  real :: min_zbot_itides     !< minimum depth for internal tide conversion (Z)
   logical :: Lowmode_itidal_dissipation = .false.  !< If true, consider mixing due to breaking low
                               !! modes that have been remotely generated using an internal tidal
                               !! dissipation scheme to specify the vertical profile of the energy
@@ -220,7 +220,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
   character(len=200) :: tidal_energy_file, tideamp_file
   type(vardesc) :: vd
-  real :: utide, zbot, hamp, prandtl_tidal
+  real :: utide, hamp, prandtl_tidal
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -397,7 +397,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  units="nondim", default=0.3333)
     call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
                  "Turn off internal tidal dissipation when the total \n"//&
-                 "ocean depth is less than this value.", units="m", default=0.0)
+                 "ocean depth is less than this value.", units="m", default=0.0, scale=GV%m_to_Z)
   endif
 
   if ( (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) .and. &
@@ -448,22 +448,21 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1)
+    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=GV%m_to_Z**2)
 
     do j=js,je ; do i=is,ie
-      if (G%bathyT(i,j)*G%Zd_to_m < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
+      if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
       CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
       ! Restrict rms topo to 10 percent of column depth.
-      zbot = G%bathyT(i,j)*G%Zd_to_m
-      hamp = sqrt(CS%h2(i,j))
-      hamp = min(0.1*zbot,hamp)
+      !### Note the hard-coded nondimensional constant, and that this could be simplified.
+      hamp = min(0.1*G%bathyT(i,j),sqrt(CS%h2(i,j)))
       CS%h2(i,j) = hamp*hamp
 
       utide = CS%tideamp(i,j)
       ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
       CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*GV%Rho0*&
-           CS%kappa_itides*CS%h2(i,j)*utide*utide
+           CS%kappa_itides*(GV%Z_to_m**2)*CS%h2(i,j)*utide*utide
     enddo ; enddo
 
   endif
@@ -546,7 +545,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                           vertical_decay_scale    = CS%int_tide_decay_scale*GV%Z_to_m,  &
                           max_coefficient         = CS%tidal_max_coef,        &
                           local_mixing_frac       = CS%Gamma_itides,          &
-                          depth_cutoff            = CS%min_zbot_itides)
+                          depth_cutoff            = CS%min_zbot_itides*GV%Z_to_m)
 
     call read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
 
@@ -1057,11 +1056,12 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
+      !### In the code below 1.0e-14 is a dimensional constant.
       if ((CS%tideamp(i,j) > 0.0) .and. &
-          (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14) ) then
+          (CS%kappa_itides**2 * (GV%Z_to_m**2)*CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14) ) then
         z0_polzin(i) = GV%m_to_Z * CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
                        CS%Nbotref_Polzin**2 * CS%tideamp(i,j) / &
-                     ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 )
+                     ( CS%kappa_itides**2 * GV%Z_to_m**2*CS%h2(i,j) * CS%Nb(i,j)**3 )
         if (z0_polzin(i) < CS%Polzin_min_decay_scale) &
           z0_polzin(i) = CS%Polzin_min_decay_scale
         if (N2_meanz(i) > 1.0e-14  ) then
