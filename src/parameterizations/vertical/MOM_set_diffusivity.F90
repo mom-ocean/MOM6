@@ -897,20 +897,21 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
     Temp_int,  &  ! temperature at each interface (degC)
     Salin_int, &  ! salinity at each interface (PPT)
     drho_bot,  &
-    h_amp,     &
-    hb,        &
-    z_from_bot
+    h_amp,     &  ! The topographic roughness amplitude, in Z.
+    hb,        &  ! The thickness of the bottom layer in Z
+    z_from_bot    ! The hieght above the bottom in Z
 
   real :: Rml_base  ! density of the deepest variable density layer
-  real :: dz_int    ! thickness associated with an interface (meter)
-  real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density (m4 s-2 kg-1)
+  real :: dz_int    ! thickness associated with an interface (Z)
+  real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density
+                    ! times some unit conversion factors, in (Z m3 s-2 kg-1)
   real :: H_neglect ! negligibly small thickness, in the same units as h.
 
   logical :: do_i(SZI_(G)), do_any
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  G_Rho0    = (GV%g_Earth*GV%m_to_Z**2) / GV%Rho0
   H_neglect = GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
@@ -948,18 +949,18 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
   ! Set the buoyancy frequencies.
   do k=1,nz ; do i=is,ie
     N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
-                  (GV%H_to_m*(h(i,j,k) + H_neglect))
+                  (GV%H_to_Z*(h(i,j,k) + H_neglect))
   enddo ; enddo
   do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
   do K=2,nz ; do i=is,ie
     N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
-                  (0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k) + H_neglect))
+                  (0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k) + H_neglect))
   enddo ; enddo
 
   ! Find the bottom boundary layer stratification, and use this in the deepest layers.
   do i=is,ie
     hb(i) = 0.0 ; dRho_bot(i) = 0.0
-    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
+    z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
 
     if ( (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation) .and. &
@@ -973,7 +974,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
   do k=nz,2,-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
+      dz_int = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j,k-1))
       z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
       hb(i) = hb(i) + dz_int
@@ -982,7 +983,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
       if (z_from_bot(i) > h_amp(i)) then
         if (k>2) then
           ! Always include at least one full layer.
-          hb(i) = hb(i) + 0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
+          hb(i) = hb(i) + 0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k-2))
           dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
         endif
         do_i(i) = .false.
@@ -997,14 +998,14 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
     if (hb(i) > 0.0) then
       N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
     else ;  N2_bot(i) = 0.0 ; endif
-    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
+    z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
 
   do k=nz,2,-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
+      dz_int = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j,k-1))
       z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
       N2_int(i,K) = N2_bot(i)
