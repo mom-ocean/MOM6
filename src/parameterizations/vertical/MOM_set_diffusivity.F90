@@ -386,7 +386,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! another explicit parameterization of Kd.
 
   ! set surface diffusivities (CS%bkgnd_mixing_csp%Kd_sfc)
-  call sfc_bkgnd_mixing(G, CS%bkgnd_mixing_csp)
+  call sfc_bkgnd_mixing(G, GV, CS%bkgnd_mixing_csp)
 
   !$OMP parallel do default(shared) private(dRho_int, N2_lay, N2_int, N2_bot, KT_extra, &
   !$OMP                                     KS_extra, TKE_to_Kd,maxTKE, dissip, kb)
