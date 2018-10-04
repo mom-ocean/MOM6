@@ -223,7 +223,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
          &and a linear equation of state to drive the model.")
   endif
 
-  tolerance = GV%m_to_H * CS%Tolerance_Ent
+  tolerance = CS%Tolerance_Ent
   g_2dt = 0.5 * (GV%g_Earth*GV%m_to_Z) / dt
   kmb = GV%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
@@ -1509,7 +1509,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   val = dS_kbp1 * F_kb(i)
   err_min = -val
 
-  tolerance = GV%m_to_H * CS%Tolerance_Ent
+  tolerance = CS%Tolerance_Ent
   if (present(tol_in)) tolerance = tol_in
   bisect_next = .true.
 
@@ -1714,7 +1714,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
     call MOM_error(FATAL, "determine_Ea_kb should not be called "//&
                            "unless BULKMIXEDLAYER is defined.")
   endif
-  tolerance = GV%m_to_H * CS%Tolerance_Ent
+  tolerance = CS%Tolerance_Ent
   large_err = GV%m_to_H**2 * 1.0e30
 
   do i=is,ie ; redo_i(i) = do_i(i) ; enddo
@@ -1902,7 +1902,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
   integer :: i, it, is1, ie1
   integer, parameter :: MAXIT = 20
 
-  tolerance = GV%m_to_H * CS%Tolerance_Ent
+  tolerance = CS%Tolerance_Ent
 
   if (present(do_i_in)) then
     do i=is,ie ; do_i(i) = do_i_in(i) ; enddo
@@ -2186,7 +2186,7 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
 ! CS%Tolerance_Ent = MAX(100.0*GV%Angstrom_H,1.0e-4*sqrt(dt*Kd)) !
   call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
-                 units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)))
+                 units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H)
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
       'Diapycnal diffusivity as applied', 'm2 s-1')
