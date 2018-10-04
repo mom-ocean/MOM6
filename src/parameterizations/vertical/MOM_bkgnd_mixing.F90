@@ -122,7 +122,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   ! Local variables
   real :: Kv                    ! The interior vertical viscosity (m2/s) - read to set prandtl
                                 ! number unless it is provided as a parameter
-  real :: prandtl_bkgnd_default ! Default prandtl number computed according to CS%Kd and Kv
+  real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -242,19 +242,17 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                    units="m2 s-1",default = 1.0e-4)
   endif
 
-  prandtl_bkgnd_default = 1.0
-  CS%prandtl_bkgnd = prandtl_bkgnd_default
+  call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
+                 "Turbulent Prandtl number used to convert vertical \n"//&
+                 "background diffusivities into viscosities.", &
+                 units="nondim", default=1.0)
 
   if (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background) then
 
-    if (CS%Kd /= 0.0) prandtl_bkgnd_default = Kv/CS%Kd
+    prandtl_bkgnd_comp = CS%prandtl_bkgnd
+    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv/CS%Kd
 
-    call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
-                   "Turbulent Prandtl number used to convert vertical \n"//&
-                   "background diffusivities into viscosities.", &
-                   units="nondim", default=prandtl_bkgnd_default)
-
-    if ( abs(Kv-CS%Kd*CS%prandtl_bkgnd)>1.e-14) then
+    if ( abs(CS%prandtl_bkgnd - prandtl_bkgnd_comp)>1.e-14) then
       call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
                            "and PRANDTL_BKGND values are incompatible. The following "//&
                            "must hold: KD*PRANDTL_BKGND==KV")
