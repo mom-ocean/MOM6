@@ -307,17 +307,17 @@ end subroutine sfc_bkgnd_mixing
 !> Calculates the vertical background diffusivities/viscosities
 subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, CS)
 
-  type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
-  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
-  type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZK_(G)),           intent(in)  :: N2_lay !< squared buoyancy frequency associated
+  type(ocean_grid_type),                    intent(in)    :: G   !< Grid structure.
+  type(verticalGrid_type),                  intent(in)    :: GV  !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in m or kg m-2.
+  type(thermo_var_ptrs),                    intent(in)    :: tv  !< Thermodynamics structure.
+  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
                                                                  !! with layers (1/s2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay !< Diapycnal diffusivity of each layer m2 s-1.
-  real, dimension(:,:,:),                     pointer     :: Kv  !< The "slow" vertical viscosity at each interface
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay !< Diapycnal diffusivity of each layer Z2 s-1.
+  real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
                                                                  !! (not layer!) in Z2 s-1
-  integer,                                    intent(in)  :: j   !< Meridional grid index
-  type(bkgnd_mixing_cs),                      pointer     :: CS  !< The control structure returned by
+  integer,                                  intent(in)    :: j   !< Meridional grid index
+  type(bkgnd_mixing_cs),                    pointer       :: CS  !< The control structure returned by
                                                                  !! a previous call to bkgnd_mixing_init.
 
   ! local variables
@@ -369,7 +369,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, CS)
         CS%Kd_bkgnd(i,j,K) = Kd_col(K)
       enddo
       do k=1,nz
-        kd_lay(i,j,k) = kd_lay(i,j,k) + 0.5*(Kd_col(K) + Kd_col(K+1))
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*GV%m_to_Z**2*(Kd_col(K) + Kd_col(K+1))
       enddo
     enddo ! i loop
 
@@ -382,8 +382,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, CS)
       if (depth_c <= CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = CS%Kdml
       elseif (depth_c >= 2.0*CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = CS%Kd_sfc(i,j)
       else
-        kd_lay(i,j,k) = ((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
-                    (2.0*CS%Kdml - CS%Kd_sfc(i,j))
+        Kd_lay(i,j,k) = GV%m_to_Z**2*((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
+                        GV%m_to_Z**2*(2.0*CS%Kdml - CS%Kd_sfc(i,j))
       endif
 
       depth(i) = depth(i) + GV%H_to_m*h(i,j,k)
@@ -395,13 +395,13 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, CS)
       abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
       N_2Omega = max(abs_sin,sqrt(N2_lay(i,k))*I_2Omega)
       N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-      kd_lay(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
+      Kd_lay(i,j,k) = max(GV%m_to_Z**2*CS%Kd_min, GV%m_to_Z**2*CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
     enddo ; enddo
 
   else
     do k=1,nz ; do i=is,ie
-      kd_lay(i,j,k) = CS%Kd_sfc(i,j)
+      Kd_lay(i,j,k) = GV%m_to_Z**2*CS%Kd_sfc(i,j)
     enddo ; enddo
   endif
 
@@ -411,7 +411,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, CS)
       CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
       CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
       do k=2,nz
-        CS%kd_bkgnd(i,j,k) = 0.5*(kd_lay(i,j,K-1) + kd_lay(i,j,K))
+        CS%kd_bkgnd(i,j,k) = 0.5*GV%Z_to_m**2*(Kd_lay(i,j,K-1) + Kd_lay(i,j,K))
         CS%kv_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
       enddo
     enddo

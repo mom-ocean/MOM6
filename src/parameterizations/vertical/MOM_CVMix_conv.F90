@@ -226,7 +226,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
                                nlev=G%ke,    &
                                max_nlev=G%ke, &
                                OBL_ind=kOBL)
-    
+
       do K=1,G%ke+1
         CS%kv_conv(i,j,K) = GV%m_to_Z**2 * kv_col(K)
         CS%kd_conv(i,j,K) = GV%m_to_Z**2 * kd_col(K)

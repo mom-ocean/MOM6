@@ -73,7 +73,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
   ! At least one of the two following arguments must be present.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                   optional, intent(in)    :: Kd_Lay !< The diapycnal diffusivity of layers,
-                                                !! in m2 s-1.
+                                                !! in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                   optional, intent(in)    :: Kd_int !< The diapycnal diffusivity of interfaces,
                                                 !! in m2 s-1.
@@ -270,7 +270,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 
     if (present(Kd_Lay)) then
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = m_to_H**2 * (dt*Kd_Lay(i,j,k))
+        dtKd(i,k) = GV%Z_to_H**2 * (dt*Kd_lay(i,j,k))
       enddo ; enddo
       if (present(Kd_int)) then
         do K=1,nz+1 ; do i=is,ie
@@ -278,7 +278,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
         enddo ; enddo
       else
         do K=2,nz ; do i=is,ie
-          dtKd_int(i,K) = m_to_H**2 * (0.5*dt*(Kd_Lay(i,j,k-1) + Kd_Lay(i,j,k)))
+          dtKd_int(i,K) = GV%Z_to_H**2 * (0.5*dt*(Kd_lay(i,j,k-1) + Kd_lay(i,j,k)))
         enddo ; enddo
       endif
     else ! Kd_int must be present, or there already would have been an error.
