@@ -145,11 +145,11 @@ type, public:: diabatic_CS; private
                                      !! operating.
   real    :: Kd_BBL_tr               !< A bottom boundary layer tracer diffusivity that
                                      !! will allow for explicitly specified bottom fluxes
-                                     !! in m2 s-1.  The entrainment at the bottom is at
+                                     !! in Z2 s-1.  The entrainment at the bottom is at
                                      !! least sqrt(Kd_BBL_tr*dt) over the same distance.
   real    :: Kd_min_tr               !< A minimal diffusivity that should always be
                                      !! applied to tracers, especially in massless layers
-                                     !! near the bottom, in m2 s-1.
+                                     !! near the bottom, in Z2 s-1.
   real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
                                            !! fluxes are applied, in m.
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
@@ -319,7 +319,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
              ! These are targets so that the space can be shared with eaml & ebml.
     eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
-             ! near the boundaries (m for Bouss and kg/m^2 for non-Bouss)
+             ! near the boundaries in H (m for Bouss and kg/m^2 for non-Bouss)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
     Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
@@ -334,7 +334,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
-    eaml, &  ! The equivalent of ea and eb due to mixed layer processes,
+    eaml, &  ! The equivalent of ea and eb due to mixed layer processes, in H
     ebml     ! (m for Bouss and kg/m^2 for non-Bouss).  These will be
              ! pointers to eatr and ebtr so as to reuse the memory as
              ! the arrays are not needed at the same time.
@@ -366,7 +366,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
                        ! coupled to the bottom within a timestep (m)
 
-  real :: htot(SZIB_(G))             ! The summed thickness from the bottom, in m.
+  real :: htot(SZIB_(G))             ! The summed thickness from the bottom, in H.
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
@@ -915,7 +915,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   call cpu_clock_begin(id_clock_tracers)
 
   if (CS%mix_boundary_tracers) then
-    Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)
+    Tr_ea_BBL = GV%Z_to_H * sqrt(dt*CS%Kd_BBL_tr)
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
@@ -934,7 +934,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
           ! in the calculation of the fluxes in the first place.  Kd_min_tr
           ! should be much less than the values that have been set in Kd_lay,
           ! perhaps a molecular diffusivity.
-          add_ent = ((dt * CS%Kd_min_tr) * GV%m_to_H**2) * &
+          add_ent = ((dt * CS%Kd_min_tr) * GV%Z_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
                      (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
                     0.5*(ea_s(i,j,k) + eb_s(i,j,k-1))
@@ -2078,7 +2078,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
           ! in the calculation of the fluxes in the first place.  Kd_min_tr
           ! should be much less than the values that have been set in Kd_lay,
           ! perhaps a molecular diffusivity.
-          add_ent = ((dt * CS%Kd_min_tr) * GV%m_to_H**2) * &
+          add_ent = ((dt * CS%Kd_min_tr) * GV%Z_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
                      (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
                     0.5*(ea(i,j,k) + eb(i,j,k-1))
@@ -2909,12 +2909,12 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     call get_param(param_file, mdl, "KD_MIN_TR", CS%Kd_min_tr, &
                  "A minimal diffusivity that should always be applied to \n"//&
                  "tracers, especially in massless layers near the bottom. \n"//&
-                 "The default is 0.1*KD.", units="m2 s-1", default=0.1*Kd) !### This would benefit from rescaling.
+                 "The default is 0.1*KD.", units="m2 s-1", default=0.1*Kd, scale=GV%m_to_Z**2)
     call get_param(param_file, mdl, "KD_BBL_TR", CS%Kd_BBL_tr, &
                  "A bottom boundary layer tracer diffusivity that will \n"//&
                  "allow for explicitly specified bottom fluxes. The \n"//&
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
-                 "over the same distance.", units="m2 s-1", default=0.) !### This needs rescaling?
+                 "over the same distance.", units="m2 s-1", default=0., scale=GV%m_to_Z**2)
   endif
 
   call get_param(param_file, mdl, "TRACER_TRIDIAG", CS%tracer_tridiag, &
@@ -3310,7 +3310,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   if (CS%use_energetic_PBL) &
     call energetic_PBL_init(Time, G, GV, param_file, diag, CS%energetic_PBL_CSp)
 
-  call regularize_layers_init(Time, G, param_file, diag, CS%regularize_layers_CSp)
+  call regularize_layers_init(Time, G, GV, param_file, diag, CS%regularize_layers_CSp)
 
   if (CS%debug_energy_req) &
     call diapyc_energy_req_init(Time, G, param_file, diag, CS%diapyc_en_rec_CSp)
