@@ -564,8 +564,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   !$OMP parallel do default(shared)
   do k=1,nz+1 ; do j=js,je ; do i=is,ie
-    Kd_salt(i,j,k) = GV%m_to_Z**2 * Kd_int(i,j,k)
-    Kd_heat(i,j,k) = GV%m_to_Z**2 * Kd_int(i,j,k)
+    Kd_salt(i,j,k) = Kd_int(i,j,K)
+    Kd_heat(i,j,k) = Kd_int(i,j,K)
   enddo ; enddo ; enddo
   ! Add contribution from double diffusion
   if (associated(visc%Kd_extra_S)) then
@@ -1508,8 +1508,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
       !$OMP parallel do default(shared)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_salt(i,j,k) = GV%m_to_Z**2 * Kd_int(i,j,k)
-        Kd_heat(i,j,k) = GV%m_to_Z**2 * Kd_int(i,j,k)
+        Kd_salt(i,j,k) = Kd_int(i,j,K)
+        Kd_heat(i,j,k) = Kd_int(i,j,K)
       enddo ; enddo ; enddo
     if (associated(visc%Kd_extra_S)) then
       !$OMP parallel do default(shared)
@@ -1538,18 +1538,18 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     if (.not. CS%KPPisPassive) then
       !$OMP parallel do default(shared)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,k) = GV%Z_to_m**2 * min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
+        Kd_int(i,j,K) = min( Kd_salt(i,j,k),  Kd_heat(i,j,k) )
       enddo ; enddo ; enddo
       if (associated(visc%Kd_extra_S)) then
         !$OMP parallel do default(shared)
         do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          visc%Kd_extra_S(i,j,k) = (Kd_salt(i,j,k) - GV%m_to_Z**2 * Kd_int(i,j,k))
+          visc%Kd_extra_S(i,j,k) = (Kd_salt(i,j,k) - Kd_int(i,j,K))
         enddo ; enddo ; enddo
       endif
       if (associated(visc%Kd_extra_T)) then
         !$OMP parallel do default(shared)
         do k=1,nz+1 ; do j=js,je ; do i=is,ie
-          visc%Kd_extra_T(i,j,k) = (Kd_heat(i,j,k) - GV%m_to_Z**2 * Kd_int(i,j,k))
+          visc%Kd_extra_T(i,j,k) = (Kd_heat(i,j,k) - Kd_int(i,j,K))
         enddo ; enddo ; enddo
       endif
     endif ! not passive
@@ -1573,7 +1573,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !### The vertical extent here is more limited that Kv_slow or Kd_int; it might be k=1,nz+1.
     do k=1,nz ; do j=js,je ; do i=is,ie
-      Kd_int(i,j,k) = Kd_int(i,j,k) + GV%Z_to_m**2 * CS%CVMix_conv_csp%kd_conv(i,j,k)
+      Kd_int(i,j,K) = Kd_int(i,j,K) + CS%CVMix_conv_csp%kd_conv(i,j,k)
       visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
     enddo ; enddo ; enddo
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1640,7 +1640,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 !$OMP                          private(hval)
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ea(i,j,k) = (GV%m_to_H**2) * dt * hval * Kd_int(i,j,k)
+      ea(i,j,k) = (GV%Z_to_H**2) * dt * hval * Kd_int(i,j,K)
       eb(i,j,k-1) = ea(i,j,k)
     enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
@@ -1727,11 +1727,11 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
-        Kd_int(i,j,K)  = Kd_int(i,j,K) + GV%Z_to_m**2 * Kd_add_here
+        Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_add_here
 
         ! for diagnostics
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + GV%m_to_Z**2 * Kd_int(i,j,K)
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + GV%m_to_Z**2 * Kd_int(i,j,K)
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_int(i,j,K)
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_int(i,j,K)
 
       enddo ; enddo ; enddo
 
@@ -2909,12 +2909,12 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     call get_param(param_file, mdl, "KD_MIN_TR", CS%Kd_min_tr, &
                  "A minimal diffusivity that should always be applied to \n"//&
                  "tracers, especially in massless layers near the bottom. \n"//&
-                 "The default is 0.1*KD.", units="m2 s-1", default=0.1*Kd)
+                 "The default is 0.1*KD.", units="m2 s-1", default=0.1*Kd) !### This would benefit from rescaling.
     call get_param(param_file, mdl, "KD_BBL_TR", CS%Kd_BBL_tr, &
                  "A bottom boundary layer tracer diffusivity that will \n"//&
                  "allow for explicitly specified bottom fluxes. The \n"//&
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
-                 "over the same distance.", units="m2 s-1", default=0.)
+                 "over the same distance.", units="m2 s-1", default=0.) !### This needs rescaling?
   endif
 
   call get_param(param_file, mdl, "TRACER_TRIDIAG", CS%tracer_tridiag, &

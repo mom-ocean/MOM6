@@ -49,7 +49,7 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
                                                                   !! each layer in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
-                                                                  !! at each interface in m2 s-1.
+                                                                  !! at each interface in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f !< Temperature with massless
                                                                   !! layers filled in vertically.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f !< Salinity with massless
@@ -132,7 +132,7 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
         !   rho_int = 0.5*(Rcv(i,k-1) + Rcv(i,k))
         rho_fn = val_weights( 0.5*(Rcv(i,k-1) + Rcv(i,k)), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) then
-          Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add * rho_fn * lat_fn
+          Kd_int(i,j,K) = Kd_int(i,j,K) + GV%m_to_Z**2 * CS%Kd_add * rho_fn * lat_fn
           if (store_Kd_add) Kd_int_add(i,j,K) = CS%Kd_add * rho_fn * lat_fn
         endif
       enddo ; enddo
