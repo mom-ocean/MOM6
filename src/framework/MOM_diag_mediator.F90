@@ -68,12 +68,8 @@ interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
 end interface post_data
 
-interface zap2_sample
-   module procedure zap2_sample_2d,zap2_sample_3d,zap2_sample_2d0,zap2_sample_3d0
-end interface zap2_sample
-
 interface decimate_sample
-   module procedure decimate_sample_3d_out
+   module procedure decimate_sample_2d_ptr, decimate_sample_3d_ptr, decimate_sample_2d, decimate_sample_3d
 end interface decimate_sample
 
 interface decimate_diag_field_set
@@ -1330,12 +1326,20 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
      isl=1; iel=size(field,1)/dl
      jsl=1; jel=size(field,2)/dl       
      call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
-     allocate(locfield_decim(isl:iel,jsl:jel))  
-     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel)
+!     allocate(locfield_decim(isl:iel,jsl:jel))  
+!     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel)
+     if (present(mask)) then
+        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=locmask)
+     elseif (associated(diag%axes%mask2d)) then
+        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask2d)
+     else
+        call decimate_sample(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
+     endif
      locfield => locfield_decim
      if (present(mask)) then
-        allocate(locmask_decim(isl:iel,jsl:jel))  
-        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel)
+!        allocate(locmask_decim(isl:iel,jsl:jel))  
+!        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel)
+        call decimate_sample(locmask, locmask_decim, dl)
         locmask => locmask_decim
      elseif (associated(diag%axes%decim(dl)%mask2d)) then
         diag_axes_mask2d => diag%axes%decim(dl)%mask2d
@@ -1611,12 +1615,21 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
      isl=1; iel=size(field,1)/dl
      jsl=1; jel=size(field,2)/dl       
      call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
-     allocate(locfield_decim(isl:iel,jsl:jel,ks:ke))  
-     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel,ks,ke)
+!     allocate(locfield_decim(isl:iel,jsl:jel,ks:ke))  
+!     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel,ks,ke)
+     if (present(mask)) then
+        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=locmask)
+     elseif (associated(diag%axes%mask3d)) then
+        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask3d)
+     else
+        !Niki: How are we supposed to aggregate/average without a mask if one or more aggregating cells are on land?
+        call decimate_sample(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
+     endif
      locfield => locfield_decim
      if (present(mask)) then
-        allocate(locmask_decim(isl:iel,jsl:jel,ks:ke))  
-        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel,ks,ke)
+!        allocate(locmask_decim(isl:iel,jsl:jel,ks:ke))  
+!        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel,ks,ke)
+        call decimate_sample(locmask, locmask_decim, dl) ! Niki: What is the correct method for mask? Defaults to subsample
         locmask => locmask_decim
      elseif (associated(diag%axes%decim(dl)%mask3d)) then
         diag_axes_mask3d => diag%axes%decim(dl)%mask3d
@@ -3361,76 +3374,6 @@ subroutine diag_grid_storage_end(grid_storage)
   deallocate(grid_storage%diag_grids)
 end subroutine diag_grid_storage_end
 
-subroutine zap2_sample_3d(field_in, field_out,ks,ke, is,ie,js,je, is2,ie2,js2,je2)
-  integer , intent(in) :: ks,ke, is,ie,js,je, is2,ie2,js2,je2
-  real, dimension(is:,js:,1:) ,intent(in) :: field_in
-  real, dimension(:,:,:) , pointer    :: field_out
-  integer :: k,i,j,ii,jj
-
-  allocate(field_out(is2:ie2,js2:je2,ks:ke))
-  do k= ks,ke ; do j=js2,je2 ; do i=is2,ie2
-     ii = is+2*(i-is2)
-     jj = js+2*(j-js2)
-     field_out(i,j,k)  = field_in(ii,jj,k)
-  enddo; enddo; enddo
-  
-end subroutine zap2_sample_3d
-
-subroutine zap2_sample_2d(field_in, field_out, is,ie,js,je, is2,ie2,js2,je2)
-  integer , intent(in) :: is,ie,js,je, is2,ie2,js2,je2
-  real, dimension(is:,js:) ,intent(in) :: field_in
-  real, dimension(:,:) , pointer    :: field_out
-  integer :: i,j,ii,jj
-
-  allocate(field_out(is2:ie2,js2:je2))
-  do j=js2,je2 ; do i=is2,ie2
-     ii = is+2*(i-is2)
-     jj = js+2*(j-js2)
-     field_out(i,j)  = field_in(ii,jj)
-  enddo; enddo
-  
-end subroutine zap2_sample_2d
-
-subroutine zap2_sample_3d0(field_in, field_out,ks,ke)
-  integer , intent(in) :: ks,ke
-  real, dimension(:,:,:) ,intent(in) :: field_in
-  real, dimension(:,:,:) , pointer    :: field_out
-  integer :: k,i,j,ii,jj, is_in,js_in, is2,ie2,js2,je2
-
-  is_in=1; js_in=1
-  is2=1; ie2=size(field_in,1)/2
-  js2=1; je2=size(field_in,2)/2
-  
-  allocate(field_out(is2:ie2,js2:je2,ks:ke))
-  
-  do k= ks,ke ; do j=js2,je2 ; do i=is2,ie2
-     ii = is_in+2*(i-is2)
-     jj = js_in+2*(j-js2)
-     field_out(i,j,k)  = field_in(ii,jj,k)
-  enddo; enddo; enddo
-  
-end subroutine zap2_sample_3d0
-
-subroutine zap2_sample_2d0(field_in, field_out)
-  real, dimension(:,:) ,intent(in) :: field_in
-  real, dimension(:,:) , pointer    :: field_out
-  integer :: i,j,ii,jj, is_in,js_in, is2,ie2,js2,je2
-
-  is_in=1; js_in=1
-  is2=1; ie2=size(field_in,1)/2
-  js2=1; je2=size(field_in,2)/2
-  
-  allocate(field_out(is2:ie2,js2:je2))
-  
-  do j=js2,je2 ; do i=is2,ie2
-     ii = is_in+2*(i-is2)
-     jj = js_in+2*(j-js2)
-     field_out(i,j)  = field_in(ii,jj)
-  enddo; enddo
-  
-end subroutine zap2_sample_2d0
-
-
 subroutine decimate_diag_masks_set(G, nz, diag_cs)
   type(ocean_grid_type), target, intent(in) :: G  !< The ocean grid type.
   integer,                       intent(in) :: nz !< The number of layers in the model's native grid.
@@ -3450,14 +3393,10 @@ subroutine decimate_diag_masks_set(G, nz, diag_cs)
   
   do dl=2,MAX_DECIM_LEV 
      ! 2d masks
-     allocate(diag_cs%decim(dl)%mask2dT(G%isd_zap2:G%ied_zap2,G%jsd_zap2:G%jed_zap2))
-     allocate(diag_cs%decim(dl)%mask2dBu(G%IsdB_zap2:G%IedB_zap2,G%JsdB_zap2:G%JedB_zap2))
-     allocate(diag_cs%decim(dl)%mask2dCu(G%IsdB_zap2:G%IedB_zap2,G%jsd_zap2:G%jed_zap2))
-     allocate(diag_cs%decim(dl)%mask2dCv(G%isd_zap2:G%ied_zap2,G%JsdB_zap2:G%JedB_zap2))
-     call zap2_sample(G%mask2dT, diag_cs%decim(dl)%mask2dT ,G%isd,G%ied,G%jsd,G%jed,G%isd_zap2,G%ied_zap2,G%jsd_zap2,G%jed_zap2)
-     call zap2_sample(G%mask2dBu,diag_cs%decim(dl)%mask2dBu,G%isd,G%ied,G%jsd,G%jed,G%isd_zap2,G%ied_zap2,G%jsd_zap2,G%jed_zap2)
-     call zap2_sample(G%mask2dCu,diag_cs%decim(dl)%mask2dCu,G%isd,G%ied,G%jsd,G%jed,G%isd_zap2,G%ied_zap2,G%jsd_zap2,G%jed_zap2)
-     call zap2_sample(G%mask2dCv,diag_cs%decim(dl)%mask2dCv,G%isd,G%ied,G%jsd,G%jed,G%isd_zap2,G%ied_zap2,G%jsd_zap2,G%jed_zap2)
+     call decimate_sample(G%mask2dT, diag_cs%decim(dl)%mask2dT, dl)
+     call decimate_sample(G%mask2dBu,diag_cs%decim(dl)%mask2dBu, dl)
+     call decimate_sample(G%mask2dCu,diag_cs%decim(dl)%mask2dCu, dl)
+     call decimate_sample(G%mask2dCv,diag_cs%decim(dl)%mask2dCv, dl)
      ! 3d native masks are needed by diag_manager but the native variables
      ! can only be masked 2d - for ocean points, all layers exists.
      allocate(diag_cs%decim(dl)%mask3dTL(G%isd_zap2:G%ied_zap2,G%jsd_zap2:G%jed_zap2,1:nz))
@@ -3564,7 +3503,7 @@ subroutine decimate_diag_field_set_2d(field_in, field_out, level ,isl,iel,jsl,je
 end subroutine decimate_diag_field_set_2d
 
 
-subroutine decimate_sample_3d_out(field_in, field_out, level)
+subroutine decimate_sample_3d(field_in, field_out, level)
   integer , intent(in) :: level
   real, dimension(:,:,:) , pointer :: field_in, field_out
   integer :: i,j,ii,jj,is,js
@@ -3584,6 +3523,148 @@ subroutine decimate_sample_3d_out(field_in, field_out, level)
      jj = js+level*(j-jsl)
      field_out(i,j,k)  = field_in(ii,jj,k)
   enddo; enddo; enddo
-end subroutine decimate_sample_3d_out
+end subroutine decimate_sample_3d
+
+subroutine decimate_sample_3d_ptr(field_in, field_out, level, method, mask)
+  real, dimension(:,:,:) , pointer :: field_in
+  real, dimension(:,:,:) , allocatable :: field_out
+  integer , intent(in) :: level
+  character(len=4), optional, intent(in) :: method !< sampling method, one of samp,pave,aave,vave
+  real, dimension(:,:,:), optional , pointer :: mask
+  !locals
+  integer :: i,j,ii,jj,is,js,i0,j0
+  integer :: isl,iel,jsl,jel
+  integer :: k,ks,ke
+  real :: ave,tot_non_zero
+  character(len=4) :: samplemethod
+  samplemethod = 'samp' 
+  if(present(method)) samplemethod = method
+
+  !Always start from the first element
+  is=1
+  js=1
+  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
+  isl=1; iel=size(field_in,1)/level
+  jsl=1; jel=size(field_in,2)/level  
+  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+
+  
+  select case (samplemethod)
+  case ('samp') !subsample the SW corner cell
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+level*(i-isl)
+        j0 = js+level*(j-jsl)
+        field_out(i,j,k)  = field_in(i0,j0,k)
+     enddo; enddo; enddo
+  case ('pave') !point average of the cells
+     if(present(mask)) then
+        do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+           i0 = is+level*(i-isl)
+           j0 = js+level*(j-jsl)
+           ave = 0.0
+           tot_non_zero = 0.0
+           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+              tot_non_zero = tot_non_zero + mask(ii,jj,k)
+              ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
+           enddo; enddo
+           field_out(i,j,k)  = ave/max(1.0,tot_non_zero) !Avoid zero mask at all aggregating cells where ave=0.0
+        enddo; enddo; enddo
+     else
+        do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+           i0 = is+level*(i-isl)
+           j0 = js+level*(j-jsl)
+           ave = 0.0
+           tot_non_zero = 0.0
+           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+              tot_non_zero = tot_non_zero + 1
+              ave=ave+field_in(ii,jj,k)
+           enddo; enddo
+           field_out(i,j,k)  = ave/tot_non_zero
+        enddo; enddo; enddo
+     endif
+  case default
+     call MOM_error(FATAL, "decimate_sample_3d_ptr: unknown sampling method "//trim(samplemethod))
+  end select
+
+end subroutine decimate_sample_3d_ptr
+
+subroutine decimate_sample_2d_ptr(field_in, field_out, level, method, mask)
+  real, dimension(:,:) , pointer :: field_in
+  real, dimension(:,:) , allocatable :: field_out
+  integer , intent(in) :: level
+  character(len=4), optional, intent(in) :: method !< sampling method, one of samp,pave,aave,vave
+  real, dimension(:,:), optional , pointer :: mask
+  !locals
+  integer :: i,j,ii,jj,is,js,i0,j0
+  integer :: isl,iel,jsl,jel
+  real :: ave,tot_non_zero
+  character(len=4) :: samplemethod
+  samplemethod = 'samp' 
+  if(present(method)) samplemethod = method
+
+  !Always start from the first element
+  is=1
+  js=1
+  isl=1; iel=size(field_in,1)/level
+  jsl=1; jel=size(field_in,2)/level  
+  allocate(field_out(isl:iel,jsl:jel))
+
+  select case (samplemethod)
+  case ('samp') !subsample the SW corner cell
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+level*(i-isl)
+        j0 = js+level*(j-jsl)
+        field_out(i,j)  = field_in(i0,j0)
+     enddo; enddo
+  case ('pave') !point average of the cells
+     if(present(mask)) then
+        do j=jsl,jel ; do i=isl,iel
+           i0 = is+level*(i-isl)
+           j0 = js+level*(j-jsl)
+           ave = 0.0
+           tot_non_zero = 0.0
+           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+              tot_non_zero = tot_non_zero + mask(ii,jj)
+              ave=ave+field_in(ii,jj)*mask(ii,jj)
+           enddo; enddo
+           field_out(i,j)  = ave/max(1.0,tot_non_zero) !Avoid zero mask at all aggregating cells where ave=0.0
+        enddo; enddo
+     else !Niki: How are we supposed to aggregate/average without a mask? What if field_in is on land at one or more aggregating cells?
+        do j=jsl,jel ; do i=isl,iel
+           i0 = is+level*(i-isl)
+           j0 = js+level*(j-jsl)
+           ave = 0.0
+           tot_non_zero = 0.0
+           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+              tot_non_zero = tot_non_zero + 1
+              ave=ave+field_in(ii,jj)
+           enddo; enddo
+           field_out(i,j)  = ave/tot_non_zero
+        enddo; enddo
+     endif
+  case default
+     call MOM_error(FATAL, "decimate_sample_2d_ptr: unknown sampling method "//trim(samplemethod))
+  end select
+     
+end subroutine decimate_sample_2d_ptr
+
+subroutine decimate_sample_2d(field_in, field_out, level)
+  integer , intent(in) :: level
+  real, dimension(:,:) , intent(in) :: field_in
+  real, dimension(:,:) , pointer :: field_out
+  integer :: i,j,ii,jj,is,js
+  integer :: isl,iel,jsl,jel
+  !Always start from the first element
+  is=1
+  js=1
+  isl=1; iel=size(field_in,1)/level
+  jsl=1; jel=size(field_in,2)/level  
+  allocate(field_out(isl:iel,jsl:jel))  
+  do j=jsl,jel ; do i=isl,iel
+     ii = is+level*(i-isl)
+     jj = js+level*(j-jsl)
+     field_out(i,j)  = field_in(ii,jj)
+  enddo; enddo
+end subroutine decimate_sample_2d
 
 end module MOM_diag_mediator
