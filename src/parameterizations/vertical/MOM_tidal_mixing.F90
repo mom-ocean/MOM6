@@ -647,7 +647,7 @@ end function tidal_mixing_init
 !! tidal dissipation and to add the effect of internal-tide-driven mixing to the layer or interface
 !! diffusivities.
 subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
-                                    N2_lay, N2_int, Kd, Kd_int, Kd_max, Kv)
+                                  N2_lay, N2_int, Kd_lay, Kd_int, Kd_max, Kv)
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -668,7 +668,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                                             !! to its maximum realizable thickness, in m3 s-3
   type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd     !< The diapycnal diffusvity in layers, in m2 s-1.
+                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers, in m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in m2 s-1.
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
@@ -679,10 +679,10 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
-      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
+      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd_lay, Kv)
     else
       call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
-                                    N2_lay, Kd, Kd_int, Kd_max)
+                                    N2_lay, Kd_lay, Kd_int, Kd_max)
     endif
   endif
 end subroutine
@@ -690,7 +690,7 @@ end subroutine
 
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
 !! mixing to the interface diffusivities.
-subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
+subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd_lay, Kv)
   integer,                 intent(in)    :: j     !< The j-index to work on
   type(ocean_grid_type),   intent(in)    :: G     !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
@@ -701,7 +701,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: Kd    !< The diapycnal diffusivities in the layers, in m2 s-1
+                           intent(inout) :: Kd_lay!< The diapycnal diffusivities in the layers, in Z2 s-1
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
                                                   !! (not layer!) in Z2 s-1.
   ! Local variables
@@ -772,8 +772,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
                                CVMix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! Update diffusivity
-      do k=1,G%ke             ! GV%m_to_Z**2 *
-        Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
+      do k=1,G%ke
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*GV%m_to_Z**2*(Kd_tidal(k) + Kd_tidal(k+1) )
       enddo
 
       ! Update viscosity with the proper unit conversion.
@@ -871,8 +871,8 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd, Kv)
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! Update diffusivity
-      do k=1,G%ke             ! GV%m_to_Z**2 *
-        Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
+      do k=1,G%ke
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*GV%m_to_Z**2*(Kd_tidal(k) + Kd_tidal(k+1) )
       enddo
 
       ! Update viscosity
@@ -917,7 +917,7 @@ end subroutine calculate_CVMix_tidal
 !! Will eventually need to add diffusivity due to other wave-breaking processes (e.g. Bottom friction,
 !! Froude-number-depending breaking, PSI, etc.).
 subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
-                                    N2_lay, Kd, Kd_int, Kd_max)
+                                    N2_lay, Kd_lay, Kd_int, Kd_max)
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -936,7 +936,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
                                                             !! to its maximum realizable thickness, in m3 s-3
   type(tidal_mixing_cs),            pointer       :: CS     !< The control structure for this module
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd     !< The diapycnal diffusvity in layers, in m2 s-1.
+                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers, in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in m2 s-1.
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
@@ -1181,7 +1181,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-      Kd(i,j,k) = Kd(i,j,k) + Kd_add
+      Kd_lay(i,j,k) = Kd_lay(i,j,k) + GV%m_to_Z**2*Kd_add
 
       if (present(Kd_int)) then
         Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*Kd_add
@@ -1268,7 +1268,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-      Kd(i,j,k) = Kd(i,j,k) + Kd_add
+      Kd_lay(i,j,k) = Kd_lay(i,j,k) + GV%m_to_Z**2*Kd_add
 
       if (present(Kd_int)) then
         Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*Kd_add
