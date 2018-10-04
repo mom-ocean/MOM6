@@ -42,7 +42,7 @@ type, public :: regularize_layers_CS ; private
   real    :: h_def_tol4      !< The value of the relative thickness deficit at which to do
                              !! detrainment from the buffer layers to the interior at full
                              !! force, now 50% of the way from h_def_tol1 to 1.
-  real    :: Hmix_min        !< The minimum mixed layer thickness in m.
+  real    :: Hmix_min        !< The minimum mixed layer thickness in H.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
@@ -773,7 +773,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   endif
   nkmb = GV%nk_rho_varies
   h_neglect = GV%H_subroundoff
-  Hmix_min = CS%Hmix_min * GV%m_to_H
+  Hmix_min = CS%Hmix_min
 
   ! Determine which zonal faces are problematic.
   do j=js,je ; do I=is-1,ie
@@ -876,9 +876,10 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
 end subroutine find_deficit_ratios
 
 !> Initializes the regularize_layers control structure
-subroutine regularize_layers_init(Time, G, param_file, diag, CS)
+subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for
                                                  !! run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate
@@ -916,7 +917,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
 
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
                  "The minimum mixed layer depth if the mixed layer depth \n"//&
-                 "is determined dynamically.", units="m", default=0.0)
+                 "is determined dynamically.", units="m", default=0.0, scale=GV%m_to_H)
   call get_param(param_file, mdl, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
                  "The value of the relative thickness deficit at which \n"//&
                  "to start modifying the layer structure when \n"//&
