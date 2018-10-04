@@ -1085,7 +1085,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: h_neglect   ! A thickness that is so small it is usually lost
                       ! in roundoff and can be neglected, in H.
   real :: z2      ! A copy of z_i, nondim.
-  real :: m2_to_Z2 ! Unit conversion factors.
   real :: topfn
   real :: a_top
   logical :: do_shelf, do_OBCs
@@ -1099,7 +1098,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   else ; is = G%isc ; ie = G%iec ; endif
   nz = G%ke
   h_neglect = GV%H_subroundoff
-  m2_to_Z2 = GV%m_to_Z*GV%m_to_Z
 
   !   The maximum coupling coefficent was originally introduced to avoid
   ! truncation error problems in the tridiagonal solver. Effectively, the 1e-10
@@ -1212,7 +1210,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0*m2_to_Z2*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
+        Kv_add(i,K) = Kv_add(i,K) + 1.0*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
       endif ; enddo ; enddo
       !### I am pretty sure that this is double counting here! - RWH
       if (do_OBCs) then
