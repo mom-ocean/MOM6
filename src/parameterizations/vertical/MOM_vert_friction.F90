@@ -1069,15 +1069,15 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 !      h_ml, &     ! The mixed layer depth, in m or kg m-2.
     nk_visc, &  ! The (real) interface index of the base of mixed layer.
     z_t, &      ! The distance from the top, sometimes normalized
-                ! by Hmix, in m or nondimensional.
+                ! by Hmix, in H or nondimensional.
     kv_tbl, &   ! The viscosity in a top boundary layer under ice, in Z2 s-1.
     tbl_thick
   real, dimension(SZIB_(G),SZK_(GV)) :: &
     Kv_add      ! A viscosity to add, in Z2 s-1.
-  real :: h_shear ! The distance over which shears occur, m or kg m-2.
-  real :: r       ! A thickness to compare with Hbbl, in m or kg m-2.
-  real :: visc_ml ! The mixed layer viscosity, in m2 s-1.
-  real :: I_Hmix  ! The inverse of the mixed layer thickness, in m-1 or m2 kg-1.
+  real :: h_shear ! The distance over which shears occur, H.
+  real :: r       ! A thickness to compare with Hbbl, in H.
+  real :: visc_ml ! The mixed layer viscosity, in Z2 s-1.
+  real :: I_Hmix  ! The inverse of the mixed layer thickness, in H-1.
   real :: a_ml    ! The layer coupling coefficient across an interface in
                   ! the mixed layer, in m s-1.
   real :: I_amax  ! The inverse of the maximum coupling coefficient, in Z-1.???

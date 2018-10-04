@@ -53,7 +53,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
                                                         !! in s.
   type(diapyc_energy_req_CS),     pointer       :: CS   !< This module's control structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke+1), &
-                        optional, intent(in)    :: Kd_int !< Interface diffusivities.
+                        optional, intent(in)    :: Kd_int !< Interface diffusivities in Z2 s-1.
 
   ! Local variables
   real, dimension(GV%ke) :: &
@@ -75,7 +75,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
 !$OMP do
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
     if (present(Kd_int) .and. .not.CS%use_test_Kh_profile) then
-      do k=1,nz+1 ; Kd(K) = CS%test_Kh_scaling*Kd_int(i,j,K) ; enddo
+      do k=1,nz+1 ; Kd(K) = CS%test_Kh_scaling*GV%Z_to_m**2*Kd_int(i,j,K) ; enddo
     else
       htot = 0.0 ; h_top(1) = 0.0
       do k=1,nz
