@@ -171,7 +171,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
 
   real :: dRHo      ! The change in locally referenced potential density between
                     ! the layers above and below an interface, in kg m-3.
-  real :: g_2dt     ! 0.5 * G_Earth / dt, in m s-3.
+  real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors, in m3 H-2 s-3.
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface, in Pa.
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
@@ -224,7 +224,6 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
   endif
 
   tolerance = CS%Tolerance_Ent
-  g_2dt = 0.5 * (GV%g_Earth*GV%m_to_Z) / dt
   kmb = GV%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
   if (.not. CS%bulkmixedlayer) then
@@ -823,6 +822,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
     endif
 
     if (CS%id_diff_work > 0) then
+      g_2dt = 0.5 * (GV%H_to_Z*GV%H_to_m) * (GV%g_Earth / dt)
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then
         if (associated(fluxes%p_surf)) then
