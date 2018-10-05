@@ -671,7 +671,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in Z2 s-1.
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
-                                                            !! diffusivity due to TKE-based processes, in m2 s-1.
+                                                            !! diffusivity due to TKE-based processes, in Z2 s-1.
                                                             !! Set this to a negative value to have no limit.
   real, dimension(:,:,:),           pointer       :: Kv     !< The "slow" vertical viscosity at each interface
                                                             !! (not layer!) in Z2 s-1.
@@ -684,7 +684,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     N2_lay, Kd_lay, Kd_int, Kd_max)
     endif
   endif
-end subroutine
+end subroutine calculate_tidal_mixing
 
 
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
@@ -939,7 +939,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in Z2 s-1.
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
-                                                            !! diffusivity due to TKE-based processes, in m2 s-1.
+                                                            !! diffusivity due to TKE-based processes, in Z2 s-1.
                                                             !! Set this to a negative value to have no limit.
 
   ! local
@@ -1180,7 +1180,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       ! Convert power to diffusivity
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
-      if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+      if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
       Kd_lay(i,j,k) = Kd_lay(i,j,k) + GV%m_to_Z**2*Kd_add
 
       if (present(Kd_int)) then
@@ -1193,7 +1193,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         ! If at layers, dd%Kd_itidal is just TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
-        if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+        if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
         if (k>1)  dd%Kd_itidal(i,j,K)   = dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
         if (k<nz) dd%Kd_itidal(i,j,K+1) = dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
       endif
@@ -1205,7 +1205,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         ! If at layers, dd%Kd_Niku(i,j,K) is just TKE_to_Kd(i,k) * TKE_Niku_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_Niku_lay
-        if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+        if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
         if (k>1) dd%Kd_Niku(i,j,K)    = dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
         if (k<nz) dd%Kd_Niku(i,j,K+1) = dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
       endif
@@ -1217,7 +1217,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
-        if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+        if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
         if (k>1)  dd%Kd_lowmode(i,j,K)   = dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
         if (k<nz) dd%Kd_lowmode(i,j,K+1) = dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
       endif
@@ -1267,7 +1267,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       ! Convert power to diffusivity
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
-      if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+      if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
       Kd_lay(i,j,k) = Kd_lay(i,j,k) + GV%m_to_Z**2*Kd_add
 
       if (present(Kd_int)) then
@@ -1280,7 +1280,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         ! If at layers, this is just dd%Kd_itidal(i,j,K) = TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
-        if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+        if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
         if (k>1)  dd%Kd_itidal(i,j,K)   = dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
         if (k<nz) dd%Kd_itidal(i,j,K+1) = dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
       endif
@@ -1292,7 +1292,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         ! If at layers, this is just dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_Niku_lay
-        if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+        if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
         if (k>1) dd%Kd_Niku(i,j,K)    = dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
         if (k<nz) dd%Kd_Niku(i,j,K+1) = dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
       endif
@@ -1303,7 +1303,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
-        if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
+        if (Kd_max >= 0.0) Kd_add = min(Kd_add, GV%Z_to_m**2*Kd_max)
         if (k>1)  dd%Kd_lowmode(i,j,K)   = dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
         if (k<nz) dd%Kd_lowmode(i,j,K+1) = dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
       endif
