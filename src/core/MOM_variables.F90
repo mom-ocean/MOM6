@@ -35,10 +35,13 @@ type, public :: surface
     SST, &         !< The sea surface temperature in C.
     SSS, &         !< The sea surface salinity in psu.
     sfc_density, & !< The mixed layer density in kg m-3.
-    Hml, &         !< The mixed layer depth in m.
-    u, &           !< The mixed layer zonal velocity in m s-1.
-    v, &           !< The mixed layer meridional velocity in m s-1.
-    sea_lev, &     !< The sea level in m. If a reduced surface gravity is used, it is compensated in sea_lev.
+    Hml, &      !< The mixed layer depth in m.
+    u, &        !< The mixed layer zonal velocity in m s-1.
+    v, &        !< The mixed layer meridional velocity in m s-1.
+    sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
+                !! used, that is compensated for in sea_lev.
+    melt_potential, & !< instantaneous amount of heat that can be used to melt sea ice,
+                      !! in J m-2. This is computed w.r.t. surface freezing temperature.
     ocean_mass, &  !< The total mass of the ocean in kg m-2.
     ocean_heat, &  !< The total heat content of the ocean in C kg m-2.
     ocean_salt, &  !< The total salt content of the ocean in kgSalt m-2.
@@ -289,20 +292,22 @@ contains
 !> Allocates the fields for the surface (return) properties of
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
-                                  gas_fields_ocn)
-  type(ocean_grid_type), intent(in)    :: G               !< ocean grid structure
-  type(surface),         intent(inout) :: sfc_state       !< ocean surface state type to be allocated.
-  logical,     optional, intent(in)    :: use_temperature !< If true, allocate the space for thermodynamic variables.
-  logical,     optional, intent(in)    :: do_integrals    !< If true, allocate the space for vertically
-                                                          !! integrated fields.
+                                  gas_fields_ocn, use_meltpot)
+  type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
+  type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
+  logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
+  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically
+                                                           !! integrated fields.
   type(coupler_1d_bc_type), &
                optional, intent(in)    :: gas_fields_ocn  !< If present, this type describes the ocean
                                               !! ocean and surface-ice fields that will participate
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
+  logical,     optional, intent(in)    :: use_meltpot      !< If true, allocate the space for melt potential
 
-  logical :: use_temp, alloc_integ
+  ! local variables
+  logical :: use_temp, alloc_integ, use_melt_potential
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -312,6 +317,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 
   use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
+  use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
 
   if (sfc_state%arrays_allocated) return
 
@@ -325,6 +331,10 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   allocate(sfc_state%Hml(isd:ied,jsd:jed)) ; sfc_state%Hml(:,:) = 0.0
   allocate(sfc_state%u(IsdB:IedB,jsd:jed)) ; sfc_state%u(:,:) = 0.0
   allocate(sfc_state%v(isd:ied,JsdB:JedB)) ; sfc_state%v(:,:) = 0.0
+
+  if (use_melt_potential) then
+    allocate(sfc_state%melt_potential(isd:ied,jsd:jed)) ; sfc_state%melt_potential(:,:) = 0.0
+  endif
 
   if (alloc_integ) then
     ! Allocate structures for the vertically integrated ocean_mass, ocean_heat, and ocean_salt.
@@ -350,6 +360,7 @@ subroutine deallocate_surface_state(sfc_state)
 
   if (.not.sfc_state%arrays_allocated) return
 
+  if (allocated(sfc_state%melt_potential)) deallocate(sfc_state%melt_potential)
   if (allocated(sfc_state%SST)) deallocate(sfc_state%SST)
   if (allocated(sfc_state%SSS)) deallocate(sfc_state%SSS)
   if (allocated(sfc_state%sfc_density)) deallocate(sfc_state%sfc_density)
