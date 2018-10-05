@@ -68,7 +68,7 @@ type, public :: set_diffusivity_CS ; private
                              !! by bottom drag drives BBL diffusion (nondim)
   real    :: cdrag           !< quadratic drag coefficient (nondim)
   real    :: IMax_decay      !< inverse of a maximum decay scale for
-                             !! bottom-drag driven turbulence, (1/m)
+                             !! bottom-drag driven turbulence, (1/Z)
   real    :: Kv              !< The interior vertical viscosity (Z2/s)
   real    :: Kd              !< interior diapycnal diffusivity (Z2/s)
   real    :: Kd_min          !< minimum diapycnal diffusivity (Z2/s)
@@ -521,8 +521,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
     if (associated(dd%Kd_work)) then
       do k=1,nz ; do i=is,ie
-        dd%Kd_Work(i,j,k) = GV%Rho0 * GV%Z_to_m**2*Kd_lay(i,j,k) * N2_lay(i,k) * &
-                            GV%H_to_m*h(i,j,k)  ! Watt m-2 s or kg s-3
+        dd%Kd_Work(i,j,k) = GV%Rho0 * GV%Z_to_m**3*Kd_lay(i,j,k) * N2_lay(i,k) * &
+                            GV%H_to_Z*h(i,j,k)  ! Watt m-2 s or kg s-3
       enddo ; enddo
     endif
   enddo ! j-loop
@@ -693,19 +693,19 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
     maxEnt        ! maxEnt is the maximum value of entrainment from below (with
                   ! compensating entrainment from above to keep the layer
                   ! density from changing) that will not deplete all of the
-                  ! layers above or below a layer within a timestep (meter)
+                  ! layers above or below a layer within a timestep (Z)
   real, dimension(SZI_(G)) :: &
     htot,    &    ! total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL (meter)
+                  ! integrated thickness in the BBL (Z)
     mFkb,    &    ! total thickness in the mixed and buffer layers
-                  ! times ds_dsp1 (meter)
+                  ! times ds_dsp1 (Z)
     p_ref,   &    ! array of tv%P_Ref pressures
     Rcv_kmb, &    ! coordinate density in the lowest buffer layer
     p_0           ! An array of 0 pressures
 
   real :: dh_max      ! maximum amount of entrainment a layer could
                       ! undergo before entraining all fluid in the layers
-                      ! above or below (meter)
+                      ! above or below (Z)
   real :: dRho_lay    ! density change across a layer (kg/m3)
   real :: Omega2      ! rotation rate squared (1/s2)
   real :: G_Rho0      ! gravitation accel divided by Bouss ref density (m4 s-2 kg-1)
@@ -727,7 +727,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = GV%Z_to_m**2*( GV%H_to_m * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m3 Z-2 s-2.
+      hN2pO2 = GV%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m3 Z-2 s-2.
       if (hN2pO2>0.) then
         TKE_to_Kd(i,k) = 1.0 / hN2pO2 ! Units of Z2 s2 m-3.
       else; TKE_to_Kd(i,k) = 0.; endif
@@ -782,32 +782,32 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
   if (CS%bulkmixedlayer) then
     kmb = GV%nk_rho_varies
     do i=is,ie
-      htot(i) = GV%H_to_m*h(i,j,kmb)
+      htot(i) = GV%H_to_Z*h(i,j,kmb)
       mFkb(i) = 0.0
       if (kb(i) < nz) &
-        mFkb(i) = ds_dsp1(i,kb(i)) * (GV%H_to_m*(h(i,j,kmb) - GV%Angstrom_H))
+        mFkb(i) = ds_dsp1(i,kb(i)) * (GV%H_to_Z*(h(i,j,kmb) - GV%Angstrom_H))
     enddo
     do k=1,kmb-1 ; do i=is,ie
-      htot(i) = htot(i) + GV%H_to_m*h(i,j,k)
-      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(GV%H_to_m*(h(i,j,k) - GV%Angstrom_H))
+      htot(i) = htot(i) + GV%H_to_Z*h(i,j,k)
+      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(GV%H_to_Z*(h(i,j,k) - GV%Angstrom_H))
     enddo ; enddo
   else
     do i=is,i
-      maxEnt(i,1) = 0.0 ; htot(i) = GV%H_to_m*(h(i,j,1) - GV%Angstrom_H)
+      maxEnt(i,1) = 0.0 ; htot(i) = GV%H_to_Z*(h(i,j,1) - GV%Angstrom_H)
     enddo
   endif
   do k=kb_min,nz-1 ; do i=is,ie
     if (k == kb(i)) then
-      maxEnt(i,kb(i))= mFkb(i)
+      maxEnt(i,kb(i)) = mFkb(i)
     elseif (k > kb(i)) then
       maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
 !        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i)) ! BITWISE CHG
-      htot(i) = htot(i) + GV%H_to_m*(h(i,j,k) - GV%Angstrom_H)
+      htot(i) = htot(i) + GV%H_to_Z*(h(i,j,k) - GV%Angstrom_H)
     endif
   enddo ; enddo
 
   do i=is,ie
-    htot(i) = GV%H_to_m*(h(i,j,nz) - GV%Angstrom_H) ; maxEnt(i,nz) = 0.0
+    htot(i) = GV%H_to_Z*(h(i,j,nz) - GV%Angstrom_H) ; maxEnt(i,nz) = 0.0
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
   do k=nz-1,kb_min,-1
@@ -816,7 +816,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
       if (k<kb(i)) then ; do_i(i) = .false. ; cycle ; endif
       i_rem = i_rem + 1  ! Count the i-rows that are still being worked on.
       maxEnt(i,k) = MIN(maxEnt(i,k),dsp1_ds(i,k+1)*maxEnt(i,k+1) + htot(i))
-      htot(i) = htot(i) + GV%H_to_m*(h(i,j,k) - GV%Angstrom_H)
+      htot(i) = htot(i) + GV%H_to_Z*(h(i,j,k) - GV%Angstrom_H)
     endif ; enddo
     if (i_rem == 0) exit
   enddo ! k-loop
@@ -828,8 +828,8 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
   enddo
   do k=2,kmb ; do i=is,ie
     maxTKE(i,k) = 0.0
-    TKE_to_Kd(i,k) = GV%m_to_Z**2 / ((N2_lay(i,k) + Omega2) * &
-                            (GV%H_to_m*(h(i,j,k) + H_neglect)))
+    TKE_to_Kd(i,k) = GV%m_to_Z**3 / ((N2_lay(i,k) + Omega2) * &
+                            (GV%H_to_Z*(h(i,j,k) + H_neglect)))
   enddo ; enddo
   do k=kmb+1,kb_min-1 ; do i=is,ie
     !   These are the properties in the deeper mixed and buffer layers, and
@@ -849,9 +849,9 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
       ! dRho_int should already be non-negative, so the max is redundant?
       dh_max = maxEnt(i,k) * (1.0 + dsp1_ds(i,k))
       dRho_lay = 0.5 * max(dRho_int(i,K) + dRho_int(i,K+1), 0.0)
-      maxTKE(i,k) = I_dt * (((GV%g_Earth*GV%m_to_Z) * I_Rho0) * &
-          (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K),0.0))) * &
-                   ((GV%H_to_m*h(i,j,k) + dh_max) * maxEnt(i,k))
+      maxTKE(i,k) = I_dt*GV%Z_to_m * ((GV%g_Earth * I_Rho0) * &
+          (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K), 0.0))) * &
+                   ((GV%H_to_Z*h(i,j,k) + dh_max) * maxEnt(i,k))
       TKE_to_Kd(i,k) = GV%m_to_Z**3 / (G_Rho0 * dRho_lay + &
                               CS%Omega**2 * GV%H_to_Z*(h(i,j,k) + H_neglect))
     endif
@@ -1161,23 +1161,23 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
     Rint          ! coordinate density of an interface (kg/m3)
   real, dimension(SZI_(G)) :: &
     htot, &       ! total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL (meter)
-    rho_htot, &   ! running integral with depth of density (kg/m2)
+                  ! integrated thickness in the BBL (Z)
+    rho_htot, &   ! running integral with depth of density (Z kg/m3)
     gh_sum_top, & ! BBL value of g'h that can be supported by
                   ! the local ustar, times R0_g (kg/m2)
     Rho_top, &    ! density at top of the BBL (kg/m3)
     TKE, &        ! turbulent kinetic energy available to drive
                   ! bottom-boundary layer mixing in a layer (m3/s3)
-    I2decay       ! inverse of twice the TKE decay scale (1/m)
+    I2decay       ! inverse of twice the TKE decay scale (1/Z)
 
   real    :: TKE_to_layer   ! TKE used to drive mixing in a layer (m3/s3)
   real    :: TKE_Ray        ! TKE from layer Rayleigh drag used to drive mixing in layer (m3/s3)
   real    :: TKE_here       ! TKE that goes into mixing in this layer (m3/s3)
   real    :: dRl, dRbot     ! temporaries holding density differences (kg/m3)
   real    :: cdrag_sqrt     ! square root of the drag coefficient (nondimensional)
-  real    :: ustar_h        ! value of ustar at a thickness point (m/s)
+  real    :: ustar_h        ! value of ustar at a thickness point (Z/s)
   real    :: absf           ! average absolute Coriolis parameter around a thickness point (1/s)
-  real    :: R0_g           ! Rho0 / G_Earth (kg s2 m-2)
+  real    :: R0_g           ! Rho0 / G_Earth (kg s2 Z-1 m-4)
   real    :: I_rho0         ! 1 / RHO0
   real    :: delta_Kd       ! increment to Kd from the bottom boundary layer mixing (Z2/s)
   logical :: Rayleigh_drag  ! Set to true if Rayleigh drag velocities
@@ -1199,7 +1199,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
 
   I_Rho0 = 1.0/GV%Rho0
-  R0_g = GV%Rho0/(GV%g_Earth*GV%m_to_Z)
+  R0_g = GV%Rho0 / (GV%m_to_Z**2*GV%g_Earth)
 
   do K=2,nz ; Rint(K) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
 
@@ -1209,9 +1209,9 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   ! Any turbulence that makes it into the mixed layers is assumed
   ! to be relatively small and is discarded.
   do i=is,ie
-    ustar_h = visc%ustar_BBL(i,j)
+    ustar_h = GV%m_to_Z*visc%ustar_BBL(i,j)
     if (associated(fluxes%ustar_tidal)) &
-      ustar_h = ustar_h + fluxes%ustar_tidal(i,j)
+      ustar_h = ustar_h + GV%m_to_Z*fluxes%ustar_tidal(i,j)
     absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                  (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))))
     if ((ustar_h > 0.0) .and. (absf > 0.5*CS%IMax_decay*ustar_h))  then
@@ -1222,12 +1222,12 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
       I2decay(i) = 0.5*CS%IMax_decay
     endif
     TKE(i) = ((CS%BBL_effic * cdrag_sqrt) * &
-              exp(-I2decay(i)*(GV%H_to_m*h(i,j,nz))) ) * &
+              exp(-I2decay(i)*(GV%H_to_Z*h(i,j,nz))) ) * &
              visc%TKE_BBL(i,j)
 
     if (associated(fluxes%TKE_tidal)) &
       TKE(i) = TKE(i) + fluxes%TKE_tidal(i,j) * I_Rho0 * &
-           (CS%BBL_effic * exp(-I2decay(i)*(GV%H_to_m*h(i,j,nz))))
+           (CS%BBL_effic * exp(-I2decay(i)*(GV%H_to_Z*h(i,j,nz))))
 
     ! Distribute the work over a BBL of depth 20^2 ustar^2 / g' following
     ! Killworth & Edwards (1999) and Zilitikevich & Mironov (1996).
@@ -1237,16 +1237,16 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
     gh_sum_top(i) = R0_g * 400.0 * ustar_h**2
 
     do_i(i) = (G%mask2dT(i,j) > 0.5)
-    htot(i) = GV%H_to_m*h(i,j,nz)
-    rho_htot(i) = GV%Rlay(nz)*(GV%H_to_m*h(i,j,nz))
+    htot(i) = GV%H_to_Z*h(i,j,nz)
+    rho_htot(i) = GV%Rlay(nz)*(GV%H_to_Z*h(i,j,nz))
     Rho_top(i) = GV%Rlay(1)
     if (CS%bulkmixedlayer .and. do_i(i)) Rho_top(i) = GV%Rlay(kb(i)-1)
   enddo
 
   do k=nz-1,2,-1 ; domore = .false.
     do i=is,ie ; if (do_i(i)) then
-      htot(i) = htot(i) + GV%H_to_m*h(i,j,k)
-      rho_htot(i) = rho_htot(i) + GV%Rlay(k)*(GV%H_to_m*h(i,j,k))
+      htot(i) = htot(i) + GV%H_to_Z*h(i,j,k)
+      rho_htot(i) = rho_htot(i) + GV%Rlay(k)*(GV%H_to_Z*h(i,j,k))
       if (htot(i)*GV%Rlay(k-1) <= (rho_htot(i) - gh_sum_top(i))) then
         ! The top of the mixing is in the interface atop the current layer.
         Rho_top(i) = (rho_htot(i) - gh_sum_top(i)) / htot(i)
@@ -1265,7 +1265,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
       i_rem = i_rem + 1  ! Count the i-rows that are still being worked on.
       !   Apply vertical decay of the turbulent energy.  This energy is
       ! simply lost.
-      TKE(i) = TKE(i) * exp(-I2decay(i) * (GV%H_to_m*(h(i,j,k) + h(i,j,k+1))))
+      TKE(i) = TKE(i) * exp(-I2decay(i) * (GV%H_to_Z*(h(i,j,k) + h(i,j,k+1))))
 
 !      if (maxEnt(i,k) <= 0.0) cycle
       if (maxTKE(i,k) <= 0.0) cycle
@@ -1390,17 +1390,17 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   real :: TKE_consumed     ! TKE used for mixing in this layer (m3 s-3)
   real :: TKE_Kd_wall      ! TKE associated with unlimited law of the wall mixing (m3 s-3)
   real :: cdrag_sqrt       ! square root of the drag coefficient (nondimensional)
-  real :: ustar            ! value of ustar at a thickness point (m/s)
+  real :: ustar            ! value of ustar at a thickness point (Z/s)
   real :: ustar2           ! square of ustar, for convenience (Z2/s2)
   real :: absf             ! average absolute value of Coriolis parameter around a thickness point (1/sec)
-  real :: dh, dhm1         ! thickness of layers k and k-1, respecitvely (meter)
-  real :: z                ! distance to interface k from bottom (meter)
-  real :: D_minus_z        ! distance to interface k from surface (meter)
-  real :: total_thickness  ! total thickness of water column (meter)
-  real :: Idecay           ! inverse of decay scale used for "Joule heating" loss of TKE with height (1/m)
+  real :: dh, dhm1         ! thickness of layers k and k-1, respecitvely (Z)
+  real :: z_bot            ! distance to interface k from bottom (Z)
+  real :: D_minus_z        ! distance to interface k from surface (Z)
+  real :: total_thickness  ! total thickness of water column (Z)
+  real :: Idecay           ! inverse of decay scale used for "Joule heating" loss of TKE with height (1/Z)
   real :: Kd_wall          ! Law of the wall diffusivity (Z2/s)
   real :: Kd_lower         ! diffusivity for lower interface (Z2/sec)
-  real :: ustar_D          ! u* x D  (m2/s)
+  real :: ustar_D          ! u* x D  (Z2/s)
   real :: I_Rho0           ! 1 / rho0
   real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall (1/s2)
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
@@ -1429,11 +1429,11 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
                  (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
 
     ! u* at the bottom, in m s-1.
-    ustar = visc%ustar_BBL(i,j)
-    ustar2 = GV%m_to_Z**2*ustar**2
+    ustar = GV%m_to_Z*visc%ustar_BBL(i,j)
+    ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
     ! since ustar_BBL should already include all contributions to u*? -AJA
-    if (associated(fluxes%ustar_tidal)) ustar = ustar + fluxes%ustar_tidal(i,j)
+    if (associated(fluxes%ustar_tidal)) ustar = ustar + GV%m_to_Z*fluxes%ustar_tidal(i,j)
 
     ! The maximum decay scale should be something of order 200 m. We use the smaller of u*/f and
     ! (IMax_decay)^-1 as the decay scale. If ustar = 0, this is land so this value doesn't matter.
@@ -1450,17 +1450,17 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column
-    total_thickness = ( sum(h(i,j,:)) + GV%H_subroundoff )* GV%H_to_m ! Total column thickness, in m.
+    total_thickness = ( sum(h(i,j,:)) + GV%H_subroundoff )* GV%H_to_Z ! Total column thickness, in m.
     ustar_D = ustar * total_thickness
-    z = 0.
+    z_bot = 0.
     Kd_lower = 0. ! Diffusivity on bottom boundary.
 
     ! Work upwards from the bottom, accumulating work used until it exceeds the available TKE input
     ! at the bottom.
     do k=G%ke,2,-1
-      dh = GV%H_to_m * h(i,j,k) ! Thickness of this level in m.
+      dh = GV%H_to_Z * h(i,j,k) ! Thickness of this level in Z.
       km1 = max(k-1, 1)
-      dhm1 = GV%H_to_m * h(i,j,km1) ! Thickness of level above in m.
+      dhm1 = GV%H_to_Z * h(i,j,km1) ! Thickness of level above in Z.
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
@@ -1474,20 +1474,21 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
       TKE_remaining = exp(-Idecay*dh) * TKE_remaining
 
-      z = z + h(i,j,k)*GV%H_to_m ! Distance between upper interface of layer and the bottom, in m.
-      D_minus_z = max(total_thickness - z, 0.) ! Thickness above layer, m.
+      z_bot = z_bot + h(i,j,k)*GV%H_to_Z ! Distance between upper interface of layer and the bottom, in Z.
+      D_minus_z = max(total_thickness - z_bot, 0.) ! Thickness above layer, Z.
 
       ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.
       ! This calculation is at the upper interface of the layer
-      if ( ustar_D + absf * ( z * D_minus_z ) == 0.) then
+      if ( ustar_D + absf * ( z_bot * D_minus_z ) == 0.) then
         Kd_wall = 0.
       else
-        Kd_wall = ( ( von_karm * ustar2 ) * ( z * D_minus_z ) )/( ustar_D + absf * ( z * D_minus_z ) )
+        Kd_wall = ( ( von_karm * ustar2 ) * ( z_bot * D_minus_z ) ) / &
+                  ( ustar_D + absf * ( z_bot * D_minus_z ) )
       endif
 
       ! TKE associated with Kd_wall, in m3 s-2.
       ! This calculation if for the volume spanning the interface.
-      TKE_Kd_wall = GV%Z_to_m**2*Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
+      TKE_Kd_wall = GV%Z_to_m**3*Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
 
       ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
       if (TKE_Kd_wall > 0.) then
@@ -1537,9 +1538,9 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
 
 ! This routine adds effects of mixed layer radiation to the layer diffusivities.
 
-  real, dimension(SZI_(G)) :: h_ml
+  real, dimension(SZI_(G)) :: h_ml  ! Mixed layer thickness, in Z.
   real, dimension(SZI_(G)) :: TKE_ml_flux
-  real, dimension(SZI_(G)) :: I_decay
+  real, dimension(SZI_(G)) :: I_decay ! A decay rate in Z-1.
   real, dimension(SZI_(G)) :: Kd_mlr_ml ! Diffusivities associated with mixed layer radiation, in Z2 s-1.
 
   real :: f_sq, h_ml_sq, ustar_sq
@@ -1547,10 +1548,10 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
   real :: C1_6              ! 1/6
   real :: Omega2            ! rotation rate squared (1/s2)
   real :: z1                ! layer thickness times I_decay (nondim)
-  real :: dzL               ! thickness converted to meter
+  real :: dzL               ! thickness converted to Z
   real :: I_decay_len2_TKE  ! squared inverse decay lengthscale for
-                            ! TKE, as used in the mixed layer code (1/m2)
-  real :: h_neglect         ! negligibly small thickness (meter)
+                            ! TKE, as used in the mixed layer code (1/Z2)
+  real :: h_neglect         ! negligibly small thickness (Z)
 
   logical :: do_any, do_i(SZI_(G))
   integer :: i, k, is, ie, nz, kml
@@ -1559,12 +1560,12 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
   Omega2    = CS%Omega**2
   C1_6      = 1.0 / 6.0
   kml       = GV%nkml
-  h_neglect = GV%H_subroundoff*GV%H_to_m
+  h_neglect = GV%H_subroundoff*GV%H_to_Z
 
   if (.not.CS%ML_radiation) return
 
   do i=is,ie ; h_ml(i) = 0.0 ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
-  do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + GV%H_to_m*h(i,j,k) ; enddo ; enddo
+  do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + GV%H_to_Z*h(i,j,k) ; enddo ; enddo
 
   do i=is,ie ; if (do_i(i)) then
     if (CS%ML_omega_frac >= 1.0) then
@@ -1579,7 +1580,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
     ustar_sq = max(fluxes%ustar(i,j), CS%ustar_min)**2
 
     TKE_ml_flux(i) = (CS%mstar*CS%ML_rad_coeff)*(ustar_sq*fluxes%ustar(i,j))
-    I_decay_len2_TKE = CS%TKE_decay**2 * (f_sq / ustar_sq)
+    I_decay_len2_TKE = CS%TKE_decay**2 * (f_sq / (GV%m_to_Z**2*ustar_sq))
 
     if (CS%ML_rad_TKE_decay) &
       TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-h_ml(i) * sqrt(I_decay_len2_TKE))
@@ -1590,7 +1591,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
 
     ! Average the dissipation layer kml+1, using
     ! a more accurate Taylor series approximations for very thin layers.
-    z1 = (GV%H_to_m*h(i,j,kml+1)) * I_decay(i)
+    z1 = (GV%H_to_Z*h(i,j,kml+1)) * I_decay(i)
     if (z1 > 1e-5) then
       Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,kml+1)) * &
                (1.0 - exp(-z1))
@@ -1617,13 +1618,13 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
   do k=kml+2,nz-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dzL = GV%H_to_m*h(i,j,k) ;  z1 = dzL*I_decay(i)
+      dzL = GV%H_to_Z*h(i,j,k) ;  z1 = dzL*I_decay(i)
       if (z1 > 1e-5) then
         Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * &
-                 ((1.0 - exp(-z1)) / dzL)
+                 GV%m_to_Z * ((1.0 - exp(-z1)) / dzL)
       else
         Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * &
-                 (I_decay(i) * (1.0 - z1 * (0.5 - C1_6*z1)))
+                 GV%m_to_Z * (I_decay(i) * (1.0 - z1 * (0.5 - C1_6*z1)))
       endif
       Kd_mlr = min(Kd_mlr, CS%ML_rad_kd_max)
       Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr
@@ -1633,7 +1634,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
       endif
 
       TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-z1)
-      if (TKE_ml_flux(i) * I_decay(i) < 0.1*CS%Kd_min*GV%Z_to_m**2*Omega2) then
+      if (TKE_ml_flux(i) * I_decay(i) < 0.1*CS%Kd_min*GV%Z_to_m**3*Omega2) then
         do_i(i) = .false.
       else ; do_any = .true. ; endif
     endif ; enddo
@@ -2035,10 +2036,10 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "The maximum decay scale for the BBL diffusion, or 0 \n"//&
                  "to allow the mixing to penetrate as far as \n"//&
                  "stratification and rotation permit.  The default is 0. \n"//&
-                 "This is only used if BOTTOMDRAGLAW is true.", units="m", &
-                 default=0.0)
+                 "This is only used if BOTTOMDRAGLAW is true.", &
+                 units="m", default=0.0, scale=GV%m_to_Z)
 
-    CS%IMax_decay = 1.0/200.0
+    CS%IMax_decay = 1.0 / (200.0*GV%m_to_Z)  !### This is inconsistent with the description above.
     if (decay_length > 0.0) CS%IMax_decay = 1.0/decay_length
     call get_param(param_file, mdl, "BBL_MIXING_AS_MAX", CS%BBL_mixing_as_max, &
                  "If true, take the maximum of the diffusivity from the \n"//&
