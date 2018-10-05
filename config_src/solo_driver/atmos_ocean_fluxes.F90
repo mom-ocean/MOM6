@@ -22,7 +22,7 @@ function aof_set_coupler_flux(name, flux_type, implementation, atm_tr_index,    
   integer,               optional, intent(in) :: atm_tr_index !< An unused argument
   real,    dimension(:), optional, intent(in) :: param !< An unused argument
   logical, dimension(:), optional, intent(in) :: flag !< An unused argument
-  real, intent(in), optional                  :: mol_wt !< An unused argument
+  real,                  optional, intent(in) :: mol_wt !< An unused argument
   character(len=*),      optional, intent(in) :: ice_restart_file !< An unused argument
   character(len=*),      optional, intent(in) :: ocean_restart_file !< An unused argument
   character(len=*),      optional, intent(in) :: units !< An unused argument
