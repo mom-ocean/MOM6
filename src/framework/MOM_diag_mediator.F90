@@ -68,13 +68,17 @@ interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
 end interface post_data
 
-interface decimate_sample
-   module procedure decimate_sample_2d_ptr, decimate_sample_3d_ptr, decimate_sample_2d, decimate_sample_3d
-end interface decimate_sample
+interface decimate_field
+   module procedure decimate_field_2d, decimate_field_3d
+end interface decimate_field
 
-interface decimate_diag_field_set
-   module procedure decimate_diag_field_set_2d,decimate_diag_field_set_3d
-end interface decimate_diag_field_set
+interface decimate_mask
+   module procedure decimate_mask_2d_p, decimate_mask_3d_p, decimate_mask_2d_a, decimate_mask_3d_a
+end interface decimate_mask
+
+interface decimate_diag_field
+   module procedure decimate_diag_field_2d, decimate_diag_field_3d
+end interface decimate_diag_field
 
 type, private :: diag_decim 
   real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
@@ -769,28 +773,28 @@ subroutine set_masks_for_axes_decim(G, diag_cs)
      do c=1, diag_cs%num_diag_coords
         ! Level/layer h-points in diagnostic coordinate
         axes => diag_cs%remap_axesTL(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTL(c)%decim(dl)%mask3d, dl)
         ! Level/layer u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCuL(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCuL(c)%decim(dl)%mask3d, dl)
         ! Level/layer v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvL(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvL(c)%decim(dl)%mask3d, dl)
         ! Level/layer q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBL(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBL(c)%decim(dl)%mask3d, dl)
         ! Interface h-points in diagnostic coordinate (w-point)
         axes => diag_cs%remap_axesTi(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTi(c)%decim(dl)%mask3d, dl)
         ! Interface u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCui(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCui(c)%decim(dl)%mask3d, dl)
         ! Interface v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvi(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvi(c)%decim(dl)%mask3d, dl)
         ! Interface q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBi(c)
-        call decimate_sample(axes%mask3d, axes%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBi(c)%decim(dl)%mask3d, dl)
      enddo
   enddo
 end subroutine set_masks_for_axes_decim
@@ -1232,16 +1236,16 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   ! Local variables
   real, dimension(:,:), pointer :: locfield => NULL()
-  real, dimension(:,:), pointer :: locmask => NULL()
+  real, dimension(:,:), pointer :: locmask
   character(len=300) :: mesg
   logical :: used, is_stat
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, i, j, chksum
-  real, dimension(:,:), pointer :: diag_axes_mask2d => NULL()
   real, dimension(:,:), allocatable, target :: locfield_decim
   real, dimension(:,:), allocatable, target :: locmask_decim
-  integer :: isl,iel,jsl,jel,dl
+  integer :: dl
 
+  locmask => NULL()
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
   ! Determine the propery array indices, noting that because of the (:,:)
@@ -1295,11 +1299,6 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
     locfield => field
   endif
 
-  if (present(mask)) then
-     call assert(size(locfield) == size(mask), &
-              'post_data_2d_low: mask size mismatch: '//diag%debug_str)
-     locmask => mask
-  endif   
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
     do j=jsv,jev ; do i=isv,iev
@@ -1315,35 +1314,21 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-     call assert(size(locfield) == size(mask), &
-              'post_data_2d_low: mask size mismatch: '//diag%debug_str)
      locmask => mask
+  elseif(associated(diag%axes%mask2d)) then
+     locmask => diag%axes%mask2d 
   endif   
 
-  diag_axes_mask2d => diag%axes%mask2d
   dl = diag%axes%decimation_level
   if (dl > 1) then
-     isl=1; iel=size(field,1)/dl
-     jsl=1; jel=size(field,2)/dl       
-     call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
-!     allocate(locfield_decim(isl:iel,jsl:jel))  
-!     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel)
-     if (present(mask)) then
-        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=locmask)
-     elseif (associated(diag%axes%mask2d)) then
-        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask2d)
-     else
-        call decimate_sample(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
-     endif
+     call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      locfield => locfield_decim
      if (present(mask)) then
-!        allocate(locmask_decim(isl:iel,jsl:jel))  
-!        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel)
-        call decimate_sample(locmask, locmask_decim, dl)
+        call decimate_mask(locmask, locmask_decim, dl)
         locmask => locmask_decim
-     elseif (associated(diag%axes%decim(dl)%mask2d)) then
-        diag_axes_mask2d => diag%axes%decim(dl)%mask2d
-     endif        
+     elseif(associated(diag%axes%decim(dl)%mask2d)) then
+        locmask => diag%axes%decim(dl)%mask2d 
+     endif
   endif
 
   if (diag_cs%diag_as_chksum) then
@@ -1366,18 +1351,12 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
       endif
     elseif (diag_cs%ave_enabled) then
-      if (present(mask)) then
+      if (associated(locmask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_2d_low: mask size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=locmask)
-      elseif (associated(diag_axes_mask2d)) then
-        call assert(size(locfield) == size(diag_axes_mask2d), &
-              'post_data_2d_low: mask2d size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=diag_axes_mask2d)
       else
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -1520,7 +1499,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 
   ! Local variables
   real, dimension(:,:,:), pointer :: locfield => NULL()
-  real, dimension(:,:,:), pointer :: locmask => NULL()
+  real, dimension(:,:,:), pointer :: locmask
   character(len=300) :: mesg
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: staggered_in_x, staggered_in_y
@@ -1528,11 +1507,11 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
   integer :: chksum
-  real, dimension(:,:,:), pointer :: diag_axes_mask3d => NULL()
   real, dimension(:,:,:), allocatable, target :: locfield_decim
   real, dimension(:,:,:), allocatable, target :: locmask_decim
   integer :: isl,iel,jsl,jel,dl
 
+  locmask => NULL()
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
   ! Determine the proper array indices, noting that because of the (:,:)
@@ -1604,36 +1583,21 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-     call assert(size(locfield) == size(mask), &
-              'post_data_3d_low: mask size mismatch: '//diag%debug_str)
      locmask => mask
+  elseif(associated(diag%axes%mask3d)) then
+     locmask => diag%axes%mask3d 
   endif
-  
-  diag_axes_mask3d => diag%axes%mask3d
+
   dl = diag%axes%decimation_level
   if (dl > 1) then
-     isl=1; iel=size(field,1)/dl
-     jsl=1; jel=size(field,2)/dl       
-     call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
-!     allocate(locfield_decim(isl:iel,jsl:jel,ks:ke))  
-!     call decimate_diag_field_set(locfield, locfield_decim, dl,isl,iel,jsl,jel,ks,ke)
-     if (present(mask)) then
-        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=locmask)
-     elseif (associated(diag%axes%mask3d)) then
-        call decimate_sample(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask3d)
-     else
-        !Niki: How are we supposed to aggregate/average without a mask if one or more aggregating cells are on land?
-        call decimate_sample(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
-     endif
+     call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      locfield => locfield_decim
      if (present(mask)) then
-!        allocate(locmask_decim(isl:iel,jsl:jel,ks:ke))  
-!        call decimate_diag_field_set(locmask, locmask_decim, dl,isl,iel,jsl,jel,ks,ke)
-        call decimate_sample(locmask, locmask_decim, dl) ! Niki: What is the correct method for mask? Defaults to subsample
+        call decimate_mask(locmask, locmask_decim, dl)
         locmask => locmask_decim
-     elseif (associated(diag%axes%decim(dl)%mask3d)) then
-        diag_axes_mask3d => diag%axes%decim(dl)%mask3d
-     endif        
+      elseif(associated(diag%axes%decim(dl)%mask3d)) then
+        locmask => diag%axes%decim(dl)%mask3d 
+     endif
   endif
 
   if (diag_cs%diag_as_chksum) then
@@ -1656,18 +1620,12 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
       endif
     elseif (diag_cs%ave_enabled) then
-      if (present(mask)) then
+      if (associated(locmask)) then
         call assert(size(locfield) == size(locmask), &
             'post_data_3d_low: mask size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=locmask)
-     elseif (associated(diag_axes_mask3d)) then
-        call assert(size(locfield) == size(diag_axes_mask3d), &
-              'post_data_3d_low: mask3d size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=diag_axes_mask3d)
       else
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -3393,10 +3351,10 @@ subroutine decimate_diag_masks_set(G, nz, diag_cs)
   
   do dl=2,MAX_DECIM_LEV 
      ! 2d masks
-     call decimate_sample(G%mask2dT, diag_cs%decim(dl)%mask2dT, dl)
-     call decimate_sample(G%mask2dBu,diag_cs%decim(dl)%mask2dBu, dl)
-     call decimate_sample(G%mask2dCu,diag_cs%decim(dl)%mask2dCu, dl)
-     call decimate_sample(G%mask2dCv,diag_cs%decim(dl)%mask2dCv, dl)
+     call decimate_mask(G%mask2dT, diag_cs%decim(dl)%mask2dT, dl)
+     call decimate_mask(G%mask2dBu,diag_cs%decim(dl)%mask2dBu, dl)
+     call decimate_mask(G%mask2dCu,diag_cs%decim(dl)%mask2dCu, dl)
+     call decimate_mask(G%mask2dCv,diag_cs%decim(dl)%mask2dCv, dl)
      ! 3d native masks are needed by diag_manager but the native variables
      ! can only be masked 2d - for ocean points, all layers exists.
      allocate(diag_cs%decim(dl)%mask3dTL(G%isd_zap2:G%ied_zap2,G%jsd_zap2:G%jed_zap2,1:nz))
@@ -3426,7 +3384,7 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   integer,           intent(in) :: f1,f2
   integer,           intent(in) :: dl         !< integer decimation level
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  integer,           intent(inout) ::isv,iev,jsv,jev
+  integer,           intent(out) ::isv,iev,jsv,jev
   ! Local variables
   integer :: dszi,cszi,dszj,cszj
   character(len=300) :: mesg
@@ -3467,65 +3425,58 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
 end subroutine decimate_diag_indices_get
  
 
-subroutine decimate_diag_field_set_3d(field_in, field_out, level ,isl,iel,jsl,jel,ks,ke) 
-  real, dimension(:,:,:) , pointer :: field_in
-  real, dimension(:,:,:) , intent(inout)  ::  field_out
-  integer , intent(in) :: level, iel,jel,ks,ke
-  integer , intent(inout) :: isl,jsl
-  integer :: i,j,ii,jj,is,js
-  integer :: k
 
-  !Always start from the first element
-  is=1; isl=1
-  js=1; jsl=1
-  do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-     ii = is+level*(i-isl)
-     jj = js+level*(j-jsl)
-     field_out(i,j,k)  = field_in(ii,jj,k)
-  enddo; enddo; enddo
-end subroutine decimate_diag_field_set_3d
-
-subroutine decimate_diag_field_set_2d(field_in, field_out, level ,isl,iel,jsl,jel) 
-  real, dimension(:,:) , pointer :: field_in
-  real, dimension(:,:), intent(inout)  ::  field_out
-  integer , intent(in) :: level, iel,jel
-  integer , intent(inout) :: isl,jsl
-  integer :: i,j,ii,jj,is,js
-
-  !Always start from the first element
-  is=1; isl=1
-  js=1; jsl=1
-  do j=jsl,jel ; do i=isl,iel
-     ii = is+level*(i-isl)
-     jj = js+level*(j-jsl)
-     field_out(i,j)  = field_in(ii,jj)
-  enddo; enddo
-end subroutine decimate_diag_field_set_2d
-
-
-subroutine decimate_sample_3d(field_in, field_out, level)
-  integer , intent(in) :: level
-  real, dimension(:,:,:) , pointer :: field_in, field_out
-  integer :: i,j,ii,jj,is,js
+subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+  real, dimension(:,:,:), pointer :: locfield
+  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_decim
+  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
+  integer, intent(in) :: dl
+  integer, intent(out):: isv,iev,jsv,jev
+  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
+  !locals
+  real, dimension(:,:,:), pointer :: locmask => NULL()  
   integer :: isl,iel,jsl,jel
-  integer :: k,ks,ke
-  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
-  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
-  !Always start from the first element
-  is=1
-  js=1
-  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
-  do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-     ii = is+level*(i-isl)
-     jj = js+level*(j-jsl)
-     field_out(i,j,k)  = field_in(ii,jj,k)
-  enddo; enddo; enddo
-end subroutine decimate_sample_3d
+  isl=1; iel=size(locfield,1)/dl
+  jsl=1; jel=size(locfield,2)/dl       
+  call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+  if (present(mask)) then
+     locmask => mask
+     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=locmask)
+  elseif (associated(diag%axes%mask3d)) then
+     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask3d)
+  else
+     call decimate_field(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
+  endif
 
-subroutine decimate_sample_3d_ptr(field_in, field_out, level, method, mask)
+end subroutine decimate_diag_field_3d
+
+subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+  real, dimension(:,:), pointer :: locfield
+  real, dimension(:,:), allocatable, intent(inout) :: locfield_decim
+  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
+  integer, intent(in) :: dl
+  integer, intent(out):: isv,iev,jsv,jev
+  real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
+  !locals
+  real, dimension(:,:), pointer :: locmask => NULL()  
+  integer :: isl,iel,jsl,jel
+  isl=1; iel=size(locfield,1)/dl
+  jsl=1; jel=size(locfield,2)/dl       
+  call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+  if (present(mask)) then
+     locmask => mask
+     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=locmask)
+  elseif (associated(diag%axes%mask2d)) then
+     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask2d)
+  else
+     call decimate_field(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
+  endif
+
+end subroutine decimate_diag_field_2d
+
+subroutine decimate_field_3d(field_in, field_out, level, method, mask)
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
   integer , intent(in) :: level
@@ -3583,12 +3534,12 @@ subroutine decimate_sample_3d_ptr(field_in, field_out, level, method, mask)
         enddo; enddo; enddo
      endif
   case default
-     call MOM_error(FATAL, "decimate_sample_3d_ptr: unknown sampling method "//trim(samplemethod))
+     call MOM_error(FATAL, "decimate_field_3d: unknown sampling method "//trim(samplemethod))
   end select
 
-end subroutine decimate_sample_3d_ptr
+end subroutine decimate_field_3d
 
-subroutine decimate_sample_2d_ptr(field_in, field_out, level, method, mask)
+subroutine decimate_field_2d(field_in, field_out, level, method, mask)
   real, dimension(:,:) , pointer :: field_in
   real, dimension(:,:) , allocatable :: field_out
   integer , intent(in) :: level
@@ -3629,7 +3580,7 @@ subroutine decimate_sample_2d_ptr(field_in, field_out, level, method, mask)
            enddo; enddo
            field_out(i,j)  = ave/max(1.0,tot_non_zero) !Avoid zero mask at all aggregating cells where ave=0.0
         enddo; enddo
-     else !Niki: How are we supposed to aggregate/average without a mask? What if field_in is on land at one or more aggregating cells?
+     else !Niki: How are we supposed to decimate/average without a mask? What if field_in is on land at one or more aggregating cells?
         do j=jsl,jel ; do i=isl,iel
            i0 = is+level*(i-isl)
            j0 = js+level*(j-jsl)
@@ -3643,12 +3594,34 @@ subroutine decimate_sample_2d_ptr(field_in, field_out, level, method, mask)
         enddo; enddo
      endif
   case default
-     call MOM_error(FATAL, "decimate_sample_2d_ptr: unknown sampling method "//trim(samplemethod))
+     call MOM_error(FATAL, "decimate_field_2d: unknown sampling method "//trim(samplemethod))
   end select
      
-end subroutine decimate_sample_2d_ptr
+end subroutine decimate_field_2d
 
-subroutine decimate_sample_2d(field_in, field_out, level)
+subroutine decimate_mask_3d_p(field_in, field_out, level)
+  integer , intent(in) :: level
+  real, dimension(:,:,:) , pointer :: field_in, field_out
+  integer :: i,j,ii,jj,is,js
+  integer :: isl,iel,jsl,jel
+  integer :: k,ks,ke
+  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
+  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
+  !Always start from the first element
+  is=1
+  js=1
+  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
+  isl=1; iel=size(field_in,1)/level
+  jsl=1; jel=size(field_in,2)/level  
+  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+  do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+     ii = is+level*(i-isl)
+     jj = js+level*(j-jsl)
+     field_out(i,j,k)  = field_in(ii,jj,k)
+  enddo; enddo; enddo
+end subroutine decimate_mask_3d_p
+
+subroutine decimate_mask_2d_p(field_in, field_out, level)
   integer , intent(in) :: level
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , pointer :: field_out
@@ -3665,6 +3638,49 @@ subroutine decimate_sample_2d(field_in, field_out, level)
      jj = js+level*(j-jsl)
      field_out(i,j)  = field_in(ii,jj)
   enddo; enddo
-end subroutine decimate_sample_2d
+end subroutine decimate_mask_2d_p
+
+subroutine decimate_mask_3d_a(field_in, field_out, level)
+  integer , intent(in) :: level
+  real, dimension(:,:,:), pointer :: field_in
+  real, dimension(:,:,:), allocatable :: field_out
+  integer :: i,j,ii,jj,is,js
+  integer :: isl,iel,jsl,jel
+  integer :: k,ks,ke
+  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
+  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
+  !Always start from the first element
+  is=1
+  js=1
+  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
+  isl=1; iel=size(field_in,1)/level
+  jsl=1; jel=size(field_in,2)/level  
+  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+  do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+     ii = is+level*(i-isl)
+     jj = js+level*(j-jsl)
+     field_out(i,j,k)  = field_in(ii,jj,k)
+  enddo; enddo; enddo
+end subroutine decimate_mask_3d_a
+
+subroutine decimate_mask_2d_a(field_in, field_out, level)
+  integer , intent(in) :: level
+  real, dimension(:,:) , intent(in) :: field_in
+  real, dimension(:,:) , allocatable :: field_out
+  integer :: i,j,ii,jj,is,js
+  integer :: isl,iel,jsl,jel
+  !Always start from the first element
+  is=1
+  js=1
+  isl=1; iel=size(field_in,1)/level
+  jsl=1; jel=size(field_in,2)/level  
+  allocate(field_out(isl:iel,jsl:jel))  
+  do j=jsl,jel ; do i=isl,iel
+     ii = is+level*(i-isl)
+     jj = js+level*(j-jsl)
+     field_out(i,j)  = field_in(ii,jj)
+  enddo; enddo
+end subroutine decimate_mask_2d_a
+
 
 end module MOM_diag_mediator
