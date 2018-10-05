@@ -115,7 +115,7 @@ function global_z_mean(var,G,CS,tracer)
 
     weight(i,j,k) = depth_weight * ( (valid_point * (G%areaT(i,j) * G%mask2dT(i,j))) )
 
-    ! If the point is flagged, set the variable itsef to zero to avoid NaNs
+    ! If the point is flagged, set the variable itself to zero to avoid NaNs
     if (valid_point == 0.) then
       tmpForSumming(i,j,k) = 0.0
     else
@@ -1291,12 +1291,13 @@ function register_Z_diag(var_desc, CS, day, missing)
 end function register_Z_diag
 
 !> Register a diagnostic to be output at depth space interfaces
-function register_Zint_diag(var_desc, CS, day)
+function register_Zint_diag(var_desc, CS, day, conversion)
   integer                        :: register_Zint_diag !< The returned z-interface diagnostic index
   type(vardesc),      intent(in) :: var_desc !< A type with metadata for this diagnostic
   type(diag_to_Z_CS), pointer    :: CS   !< Control structure returned by
                                          !! previous call to diag_to_Z_init.
   type(time_type),    intent(in) :: day  !< The current model time
+  real,     optional, intent(in) :: conversion !< A value to multiply data by before writing to file
   ! Local variables
   character(len=64) :: var_name         ! A variable's name.
   character(len=48) :: units            ! A variable's units.
@@ -1327,8 +1328,9 @@ function register_Zint_diag(var_desc, CS, day)
         "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model_zold", trim(var_name),&
-        axes, day, trim(longname), trim(units), missing_value=CS%missing_value)
+  register_Zint_diag = register_diag_field("ocean_model_zold", trim(var_name), &
+        axes, day, trim(longname), trim(units), missing_value=CS%missing_value, &
+        conversion=conversion)
 
 end function register_Zint_diag
 
