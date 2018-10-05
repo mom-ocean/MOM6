@@ -175,7 +175,7 @@ type diffusivity_diags
   real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
                           !< conversion rate (~1.0 / (G_Earth + dRho_lay))
                           !! between TKE dissipated within a layer and Kd
-                          !! in that layer, in m2 s-1 / m3 s-3 = s2 m-1
+                          !! in that layer, in Z2 s-1 / m3 s-3 = Z2 s2 m-3
 
 end type diffusivity_diags
 
@@ -676,7 +676,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
                                                           !! TKE dissipated within  a layer and the
                                                           !! diapycnal diffusivity witin that layer,
                                                           !! usually (~Rho_0 / (G_Earth * dRho_lay)),
-                                                          !! in m2 s-1 / m3 s-3 = s2 m-1
+                                                          !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3
   real, dimension(SZI_(G),SZK_(G)), intent(out)   :: maxTKE !< The energy required to for a layer to entrain
                                                           !! to its maximum realizable thickness, in m3 s-3
   integer, dimension(SZI_(G)),      intent(out)   :: kb   !< Index of lightest layer denser than the buffer
@@ -712,7 +712,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
   real :: I_Rho0      ! inverse of Boussinesq reference density (m3/kg)
   real :: I_dt        ! 1/dt (1/sec)
   real :: H_neglect   ! negligibly small thickness (units as h)
-  real :: hN2pO2      ! h * (N^2 + Omega^2), in m s-2.
+  real :: hN2pO2      ! h * (N^2 + Omega^2), in m3 s-2 Z-2.
   logical :: do_i(SZI_(G))
 
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
@@ -720,20 +720,20 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
 
   I_dt      = 1.0/dt
   Omega2    = CS%Omega**2
-  G_Rho0    = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  G_Rho0    = (GV%g_Earth*GV%m_to_Z**2) / GV%Rho0
   H_neglect = GV%H_subroundoff
   I_Rho0    = 1.0/GV%Rho0
 
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = ( GV%H_to_m * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m s-2.
+      hN2pO2 = GV%Z_to_m**2*( GV%H_to_m * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m3 Z-2 s-2.
       if (hN2pO2>0.) then
-        TKE_to_Kd(i,k) = 1./ hN2pO2 ! Units of s2 m-1.
+        TKE_to_Kd(i,k) = 1.0 / hN2pO2 ! Units of Z2 s2 m-3.
       else; TKE_to_Kd(i,k) = 0.; endif
       ! The maximum TKE conversion we allow is really a statement
       ! about the upper diffusivity we allow. Kd_max must be set.
-      maxTKE(i,k) = hN2pO2 * GV%Z_to_m**2*CS%Kd_max ! Units of m3 s-3.
+      maxTKE(i,k) = hN2pO2 * CS%Kd_max ! Units of m3 s-3.
     enddo ; enddo
     kb(is:ie) = -1 ! kb should not be used by any code in non-layered mode -AJA
     return
@@ -828,7 +828,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
   enddo
   do k=2,kmb ; do i=is,ie
     maxTKE(i,k) = 0.0
-    TKE_to_Kd(i,k) = 1.0 / ((N2_lay(i,k) + Omega2) * &
+    TKE_to_Kd(i,k) = GV%m_to_Z**2 / ((N2_lay(i,k) + Omega2) * &
                             (GV%H_to_m*(h(i,j,k) + H_neglect)))
   enddo ; enddo
   do k=kmb+1,kb_min-1 ; do i=is,ie
@@ -852,8 +852,8 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
       maxTKE(i,k) = I_dt * (((GV%g_Earth*GV%m_to_Z) * I_Rho0) * &
           (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K),0.0))) * &
                    ((GV%H_to_m*h(i,j,k) + dh_max) * maxEnt(i,k))
-      TKE_to_Kd(i,k) = 1.0 / (G_Rho0 * dRho_lay + &
-                              CS%Omega**2 * GV%H_to_m*(h(i,j,k) + H_neglect))
+      TKE_to_Kd(i,k) = GV%m_to_Z**3 / (G_Rho0 * dRho_lay + &
+                              CS%Omega**2 * GV%H_to_Z*(h(i,j,k) + H_neglect))
     endif
   enddo ; enddo
 
@@ -1143,7 +1143,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                                                           !! TKE dissipated within  a layer and the
                                                           !! diapycnal diffusivity witin that layer,
                                                           !! usually (~Rho_0 / (G_Earth * dRho_lay)),
-                                                          !! in m2 s-1 / m3 s-3 = s2 m-1
+                                                          !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: maxTKE !< The energy required to for a layer to entrain
                                                           !! to its maximum realizable thickness, in m3 s-3
   integer, dimension(SZI_(G)),      intent(in)    :: kb   !< Index of lightest layer denser than the buffer
@@ -1296,13 +1296,13 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
           TKE(i) = TKE(i) - TKE_to_layer
 
-          if (Kd_lay(i,j,k) < (TKE_to_layer+TKE_Ray)*GV%m_to_Z**2*TKE_to_Kd(i,k)) then
-            delta_Kd = (TKE_to_layer+TKE_Ray)*GV%m_to_Z**2*TKE_to_Kd(i,k) - Kd_lay(i,j,k)
+          if (Kd_lay(i,j,k) < (TKE_to_layer+TKE_Ray)*TKE_to_Kd(i,k)) then
+            delta_Kd = (TKE_to_layer+TKE_Ray)*TKE_to_Kd(i,k) - Kd_lay(i,j,k)
             if ((CS%Kd_max >= 0.0) .and. (delta_Kd > CS%Kd_max)) then
               delta_Kd = CS%Kd_max
               Kd_lay(i,j,k) = Kd_lay(i,j,k) + delta_Kd
             else
-              Kd_lay(i,j,k) = (TKE_to_layer+TKE_Ray)*GV%m_to_Z**2*TKE_to_Kd(i,k)
+              Kd_lay(i,j,k) = (TKE_to_layer+TKE_Ray)*TKE_to_Kd(i,k)
             endif
             Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*delta_Kd
             Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*delta_Kd
@@ -1312,12 +1312,12 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
             endif
           endif
         else
-          if (Kd_lay(i,j,k) >= maxTKE(i,k)*GV%m_to_Z**2*TKE_to_Kd(i,k)) then
+          if (Kd_lay(i,j,k) >= maxTKE(i,k)*TKE_to_Kd(i,k)) then
             TKE_here = 0.0
             TKE(i) = TKE(i) + TKE_Ray
-          elseif (Kd_lay(i,j,k) + (TKE_to_layer+TKE_Ray)*GV%m_to_Z**2*TKE_to_Kd(i,k) > &
-                  maxTKE(i,k)*GV%m_to_Z**2*TKE_to_Kd(i,k)) then
-            TKE_here = ( (TKE_to_layer+TKE_Ray) + Kd_lay(i,j,k)/(GV%m_to_Z**2*TKE_to_Kd(i,k)) ) - &
+          elseif (Kd_lay(i,j,k) + (TKE_to_layer+TKE_Ray)*TKE_to_Kd(i,k) > &
+                  maxTKE(i,k)*TKE_to_Kd(i,k)) then
+            TKE_here = ( (TKE_to_layer+TKE_Ray) + Kd_lay(i,j,k)/TKE_to_Kd(i,k) ) - &
                        maxTKE(i,k)
             TKE(i) = TKE(i) - TKE_here + TKE_Ray
           else
@@ -1327,7 +1327,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
           if (TKE(i) < 0.0) TKE(i) = 0.0 ! This should be unnecessary?
 
           if (TKE_here > 0.0) then
-            delta_Kd = TKE_here * GV%m_to_Z**2*TKE_to_Kd(i,k)
+            delta_Kd = TKE_here * TKE_to_Kd(i,k)
             if (CS%Kd_max >= 0.0) delta_Kd = min(delta_Kd, CS%Kd_max)
             Kd_lay(i,j,k) = Kd_lay(i,j,k) + delta_Kd
             Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*delta_Kd
@@ -1531,7 +1531,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
                                                             !! TKE dissipated within  a layer and the
                                                             !! diapycnal diffusivity witin that layer,
                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay)),
-                                                            !! in m2 s-1 / m3 s-3 = s2 m-1
+                                                            !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in Z2 s-1.
 
@@ -1592,10 +1592,10 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
     ! a more accurate Taylor series approximations for very thin layers.
     z1 = (GV%H_to_m*h(i,j,kml+1)) * I_decay(i)
     if (z1 > 1e-5) then
-      Kd_mlr = (TKE_ml_flux(i) * GV%m_to_Z**2*TKE_to_Kd(i,kml+1)) * &
+      Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,kml+1)) * &
                (1.0 - exp(-z1))
     else
-      Kd_mlr = (TKE_ml_flux(i) * GV%m_to_Z**2*TKE_to_Kd(i,kml+1)) * &
+      Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,kml+1)) * &
                (z1 * (1.0 - z1 * (0.5 - C1_6*z1)))
     endif
     Kd_mlr_ml(i) = min(Kd_mlr, CS%ML_rad_kd_max)
@@ -1619,10 +1619,10 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd_lay, TKE_to_Kd, Kd_
     do i=is,ie ; if (do_i(i)) then
       dzL = GV%H_to_m*h(i,j,k) ;  z1 = dzL*I_decay(i)
       if (z1 > 1e-5) then
-        Kd_mlr = (TKE_ml_flux(i) * GV%m_to_Z**2*TKE_to_Kd(i,k)) * &
+        Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * &
                  ((1.0 - exp(-z1)) / dzL)
       else
-        Kd_mlr = (TKE_ml_flux(i) * GV%m_to_Z**2*TKE_to_Kd(i,k)) * &
+        Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * &
                  (I_decay(i) * (1.0 - z1 * (0.5 - C1_6*z1)))
       endif
       Kd_mlr = min(Kd_mlr, CS%ML_rad_kd_max)
@@ -2157,7 +2157,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',diag%axesTL,Time, &
            'Maximum layer TKE', 'm3 s-3')
     CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',diag%axesTL,Time, &
-           'Convert TKE to Kd', 's2 m')
+           'Convert TKE to Kd', 's2 m', conversion=GV%Z_to_m**2)
     CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time,            &
          'Buoyancy frequency squared', 's-2', cmor_field_name='obvfsq',          &
           cmor_long_name='Square of seawater buoyancy frequency',&
