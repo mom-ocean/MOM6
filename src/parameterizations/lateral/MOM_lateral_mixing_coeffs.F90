@@ -804,7 +804,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
   call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
                  default=.false., do_not_log=.true.)
-  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE               
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE
   CS%calculate_Eady_growth_rate = CS%calculate_Eady_growth_rate .or. use_MEKE
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
                  default=0., do_not_log=.true.)
