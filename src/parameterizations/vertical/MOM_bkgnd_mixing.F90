@@ -122,7 +122,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   ! Local variables
   real :: Kv                    ! The interior vertical viscosity (m2/s) - read to set prandtl
                                 ! number unless it is provided as a parameter
-  real :: prandtl_bkgnd_default ! Default prandtl number computed according to CS%Kd and Kv
+  real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -178,18 +178,6 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   endif
 
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
-
-  prandtl_bkgnd_default = Kv/CS%Kd
-  call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
-                 "Turbulent Prandtl number used to convert vertical \n"//&
-                 "background diffusivities into viscosities.", &
-                 units="nondim", default=prandtl_bkgnd_default)
-
-  if ( abs(Kv-CS%Kd*CS%prandtl_bkgnd)>1.e-14) then
-    call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
-                         "and PRANDTL_BKGND values are incompatible. The following "//&
-                         "must hold: KD*PRANDTL_BKGND==KV")
-  endif
 
 !  call openParameterBlock(param_file,'MOM_BACKGROUND_MIXING')
 
@@ -254,6 +242,24 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                    units="m2 s-1",default = 1.0e-4)
   endif
 
+  call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
+                 "Turbulent Prandtl number used to convert vertical \n"//&
+                 "background diffusivities into viscosities.", &
+                 units="nondim", default=1.0)
+
+  if (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background) then
+
+    prandtl_bkgnd_comp = CS%prandtl_bkgnd
+    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv/CS%Kd
+
+    if ( abs(CS%prandtl_bkgnd - prandtl_bkgnd_comp)>1.e-14) then
+      call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
+                           "and PRANDTL_BKGND values are incompatible. The following "//&
+                           "must hold: KD*PRANDTL_BKGND==KV")
+    endif
+
+  endif
+
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", &
                                 CS%Henyey_IGW_background, &
                  "If true, use a latitude-dependent scaling for the near \n"//&
@@ -269,7 +275,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
   if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
 
-  if (CS%Kd>1.e-14 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
+  if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
     call MOM_error(WARNING, "set_diffusivity_init: a nonzero constant background "//&
          "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
