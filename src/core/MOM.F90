@@ -5,6 +5,7 @@ module MOM
 
 ! Infrastructure modules
 use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
+use MOM_debugging,            only : check_redundant
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum
 use MOM_checksum_packages,    only : MOM_accel_chksum, MOM_surface_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -71,8 +72,7 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_debugging,             only : check_redundant
-use MOM_EOS,                   only : EOS_init, calculate_density
+use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
@@ -193,7 +193,6 @@ type, public :: MOM_control_struct ; private
                     !! bottom drag viscosities, and related fields
   type(MEKE_type), pointer :: MEKE => NULL() !<  structure containing fields
                     !! related to the Mesoscale Eddy Kinetic Energy
-
   logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
                     !! to routines to calculate or apply diapycnal fluxes.
   logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the diabatic
@@ -276,6 +275,10 @@ type, public :: MOM_control_struct ; private
                                 !! average surface tracer properties (in meter) when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
+  real :: HFrz                  !< If HFrz > 0, melt potential will be computed.
+                                !! The actual depth over which melt potential is computed will
+                                !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
+                                !! If HFrz <= 0 (default), melt potential will not be computed.
   real :: Hmix_UV               !< Depth scale over which to average surface flow to
                                 !! feedback to the coupler/driver (m) when
                                 !! bulk mixed layer is not used, or a negative value
@@ -1757,6 +1760,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "SSU, SSV. A non-positive value indicates no averaging.", &
                  units="m", default=0.)
   endif
+  call get_param(param_file, "MOM", "HFREEZE", CS%HFrz, &
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&
+                 "melt potential will not be computed.", units="m", default=-1.0)
   call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
                  "The minimum amount of time in seconds between \n"//&
                  "calculations of depth-space diagnostics. Making this \n"//&
@@ -2660,20 +2668,21 @@ subroutine extract_surface_state(CS, sfc_state)
 
   ! local
   real :: hu, hv
-  type(ocean_grid_type), pointer :: G => NULL() ! pointer to a structure containing
-                                      ! metrics and related information
+  type(ocean_grid_type), pointer :: G => NULL() !< pointer to a structure containing
+                                      !! metrics and related information
   type(verticalGrid_type), pointer :: GV => NULL()
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & ! u : zonal velocity component (m/s)
-    v => NULL(), & ! v : meridional velocity component (m/s)
-    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))           ! distance from the surface (meter)
-  real :: depth_ml                    ! depth over which to average to
-                                      ! determine mixed layer properties (meter)
-  real :: dh                          ! thickness of a layer within mixed layer (meter)
-  real :: mass                        ! mass per unit area of a layer (kg/m2)
-
-  logical :: use_temperature   ! If true, temp and saln used as state variables.
+    u => NULL(), & !< u : zonal velocity component (m/s)
+    v => NULL(), & !< v : meridional velocity component (m/s)
+    h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  real :: depth(SZI_(CS%G))           !< distance from the surface (meter)
+  real :: depth_ml                    !< depth over which to average to
+                                      !< determine mixed layer properties (meter)
+  real :: dh                          !< thickness of a layer within mixed layer (meter)
+  real :: mass                        !< mass per unit area of a layer (kg/m2)
+  real :: T_freeze                    !< freezing temperature (oC)
+  real :: delT(SZI_(CS%G))            !< T-T_freeze (oC)
+  logical :: use_temperature   !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -2707,6 +2716,13 @@ subroutine extract_surface_state(CS, sfc_state)
     sfc_state%sea_lev(i,j) = CS%ave_ssh_ibc(i,j)
   enddo ; enddo
 
+  ! copy Hml into sfc_state, so that caps can access it
+  if (associated(CS%Hml)) then
+    do j=js,je ; do i=is,ie
+      sfc_state%Hml(i,j) = CS%Hml(i,j)
+    enddo ; enddo
+  endif
+
   if (CS%Hmix < 0.0) then  ! A bulk mixed layer is in use, so layer 1 has the properties
     if (use_temperature) then ; do j=js,je ; do i=is,ie
       sfc_state%SST(i,j) = CS%tv%T(i,j,1)
@@ -2719,9 +2735,6 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%v(i,J) = v(i,J,1)
     enddo ; enddo
 
-    if (associated(CS%Hml)) then ; do j=js,je ; do i=is,ie
-      sfc_state%Hml(i,j) = CS%Hml(i,j)
-    enddo ; enddo ; endif
   else  ! (CS%Hmix >= 0.0)
 
     depth_ml = CS%Hmix
@@ -2763,7 +2776,6 @@ subroutine extract_surface_state(CS, sfc_state)
         else
           sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
         endif
-        sfc_state%Hml(i,j) = depth(i)
       enddo
     enddo ! end of j loop
 
@@ -2830,6 +2842,43 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
     endif
   endif  ! (CS%Hmix >= 0.0)
+
+
+  if (allocated(sfc_state%melt_potential)) then
+  !$OMP parallel do default(shared)
+    do j=js,je
+      do i=is,ie
+        depth(i) = 0.0
+        delT(i) = 0.0
+      enddo
+
+      do k=1,nz ; do i=is,ie
+        depth_ml = min(CS%HFrz,CS%visc%MLD(i,j))
+        if (depth(i) + h(i,j,k)*GV%H_to_m < depth_ml) then
+          dh = h(i,j,k)*GV%H_to_m
+        elseif (depth(i) < depth_ml) then
+          dh = depth_ml - depth(i)
+        else
+          dh = 0.0
+        endif
+
+        ! p=0 OK, HFrz ~ 10 to 20m
+        call calculate_TFreeze(CS%tv%S(i,j,k), 0.0, T_freeze, CS%tv%eqn_of_state)
+        depth(i) = depth(i) + dh
+        delT(i) =  delT(i) + dh * (CS%tv%T(i,j,k) - T_freeze)
+      enddo ; enddo
+
+      do i=is,ie
+       ! set melt_potential to zero to avoid passing previous values
+       sfc_state%melt_potential(i,j) = 0.0
+
+       if (G%mask2dT(i,j)>0.) then
+         ! instantaneous melt_potential, in J/m^2
+         sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * delT(i)
+       endif
+      enddo
+    enddo ! end of j loop
+  endif   ! melt_potential
 
   if (allocated(sfc_state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
     !$OMP parallel do default(shared)
