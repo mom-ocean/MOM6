@@ -196,7 +196,7 @@ type, public :: vertvisc_type
     bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points, in Z.
     kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in Z2 s-1.
     kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in Z2 s-1.
-    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in m s-1.
+    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in Z s-1.
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
                              !! energy, currently in units of m3 s-3, but will later be changed to W m-2.
