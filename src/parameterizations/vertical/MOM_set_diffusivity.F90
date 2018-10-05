@@ -84,11 +84,11 @@ type, public :: set_diffusivity_CS ; private
 
   logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
                                !! than the following:
-  real :: dissip_min    !< Minimum dissipation (W/m3)
-  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N (W/m3)
-  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N (J/m3)
-  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 (W m-3 s2)
-  real :: dissip_Kd_min !< Minimum Kd (m2/s) with dissipatio Rho0*Kd_min*N^2
+  real :: dissip_min    !< Minimum dissipation (Z2 m-2 W m-3)
+  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N (Z2 m-2 W m-3)
+  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N (Z2 m-2 W m-3 s)
+  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 (Z2 m-2 W m-3 s2)
+  real :: dissip_Kd_min !< Minimum Kd (Z2/s) with dissipation Rho0*Kd_min*N^2
 
   real :: TKE_itide_max !< maximum internal tide conversion (W m-2)
                         !! available to mix above the BBL
@@ -250,7 +250,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     KS_extra      !< double difusion diffusivity of salinity (Z2/sec)
 
   real :: I_Rho0        ! inverse of Boussinesq density (m3/kg)
-  real :: dissip        ! local variable for dissipation calculations (W/m3)
+  real :: dissip        ! local variable for dissipation calculations (Z2 W/m5)
   real :: Omega2        ! squared absolute rotation rate (1/s2)
 
   logical   :: use_EOS      ! If true, compute density from T/S using equation of state.
@@ -502,7 +502,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_lay(i,k)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_lay(i,k) ) ! Floor of Kd_min*rho0/F_Ri
         Kd_lay(i,j,k) = max( Kd_lay(i,j,k) , &  ! Apply floor to Kd
-           GV%m_to_Z**2*dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_lay(i,k) + Omega2))) )
+                            dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_lay(i,k) + Omega2))) )
       enddo ; enddo
 
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
@@ -515,7 +515,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_int(i,K)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_int(i,K) ) ! Floor of Kd_min*rho0/F_Ri
         Kd_int(i,j,K) = max( Kd_int(i,j,K) , &  ! Apply floor to Kd
-           GV%m_to_Z**2*dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_int(i,K) + Omega2))) )
+                             dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_int(i,K) + Omega2))) )
       enddo ; enddo ; endif
     endif
 
@@ -1209,7 +1209,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   ! Any turbulence that makes it into the mixed layers is assumed
   ! to be relatively small and is discarded.
   do i=is,ie
-    ustar_h = GV%m_to_Z*visc%ustar_BBL(i,j)
+    ustar_h = visc%ustar_BBL(i,j)
     if (associated(fluxes%ustar_tidal)) &
       ustar_h = ustar_h + GV%m_to_Z*fluxes%ustar_tidal(i,j)
     absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
@@ -1429,7 +1429,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
                  (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
 
     ! u* at the bottom, in m s-1.
-    ustar = GV%m_to_Z*visc%ustar_BBL(i,j)
+    ustar = visc%ustar_BBL(i,j)
     ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
     ! since ustar_BBL should already include all contributions to u*? -AJA
@@ -1668,13 +1668,13 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
 
   real, dimension(SZIB_(G)) :: &
     uhtot, &      ! running integral of u in the BBL (Z m/s)
-    ustar, &      ! bottom boundary layer turbulence speed (m/s)
+    ustar, &      ! bottom boundary layer turbulence speed (Z/s)
     u2_bbl        ! square of the mean zonal velocity in the BBL (m2/s2)
 
   real :: vhtot(SZI_(G)) ! running integral of v in the BBL (Z m/sec)
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vstar, & ! ustar at at v-points in 2 j-rows (m/s)
+    vstar, & ! ustar at at v-points (Z/s)
     v2_bbl   ! square of average meridional velocity in BBL (m2/s2)
 
   real :: cdrag_sqrt  ! square root of the drag coefficient (nondim)
@@ -1709,7 +1709,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
     ! vertical decay scale.
     do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_v(i,J) > 0.0)) then
       do_i(i) = .true. ; vhtot(i) = 0.0 ; htot(i) = 0.0
-      vstar(i,J) = GV%Z_to_m*visc%kv_bbl_v(i,J)/(cdrag_sqrt*visc%bbl_thick_v(i,J))
+      vstar(i,J) = visc%kv_bbl_v(i,J) / (cdrag_sqrt*visc%bbl_thick_v(i,J))
     else
       do_i(i) = .false. ; vstar(i,J) = 0.0 ; htot(i) = 0.0
     endif ; enddo
@@ -1739,7 +1739,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
   do j=js,je
     do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
-      ustar(I) = GV%Z_to_m*visc%kv_bbl_u(I,j)/(cdrag_sqrt*visc%bbl_thick_u(I,j))
+      ustar(I) = visc%kv_bbl_u(I,j) / (cdrag_sqrt*visc%bbl_thick_u(I,j))
     else
       do_i(I) = .false. ; ustar(I) = 0.0 ; htot(I) = 0.0
     endif ; enddo
@@ -1770,10 +1770,11 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
                   G%areaCu(I,j)*(ustar(I)*ustar(I))) + &
                  (G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
                   G%areaCv(i,J)*(vstar(i,J)*vstar(i,J))) ) )
-      visc%TKE_BBL(i,j) = (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
+      visc%TKE_BBL(i,j) = GV%Z_to_m * &
+                 (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
                     G%areaCu(I,j) * (ustar(I)*u2_bbl(I))) + &
                    (G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
-                    G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))))*G%IareaT(i,j))
+                    G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))) )*G%IareaT(i,j))
     enddo
   enddo
 !$OMP end parallel
@@ -2125,20 +2126,20 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   call get_param(param_file, mdl, "DISSIPATION_MIN", CS%dissip_min, &
                  "The minimum dissipation by which to determine a lower \n"//&
-                 "bound of Kd (a floor).", units="W m-3", default=0.0)
+                 "bound of Kd (a floor).", units="W m-3", default=0.0, scale=GV%m_to_Z**2)
   call get_param(param_file, mdl, "DISSIPATION_N0", CS%dissip_N0, &
                  "The intercept when N=0 of the N-dependent expression \n"//&
                  "used to set a minimum dissipation by which to determine \n"//&
                  "a lower bound of Kd (a floor): A in eps_min = A + B*N.", &
-                 units="W m-3", default=0.0)
+                 units="W m-3", default=0.0, scale=GV%m_to_Z**2)
   call get_param(param_file, mdl, "DISSIPATION_N1", CS%dissip_N1, &
                  "The coefficient multiplying N, following Gargett, used to \n"//&
                  "set a minimum dissipation by which to determine a lower \n"//&
                  "bound of Kd (a floor): B in eps_min = A + B*N", &
-                 units="J m-3", default=0.0)
+                 units="J m-3", default=0.0, scale=GV%m_to_Z**2)
   call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
-                 units="m2 s-1", default=0.0)
+                 units="m2 s-1", default=0.0, scale=GV%m_to_Z**2)
 
   CS%limit_dissipation = (CS%dissip_min>0.) .or. (CS%dissip_N1>0.) .or. &
                          (CS%dissip_N0>0.) .or. (CS%dissip_Kd_min>0.)
