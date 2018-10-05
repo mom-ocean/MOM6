@@ -46,8 +46,8 @@ type, public :: CVMix_ddiff_cs
   !!@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (m2/s)
-  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (m2/s)
+!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (Z2/s)
+!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (Z2/s)
   real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio (nondim)
 
 end type CVMix_ddiff_cs
