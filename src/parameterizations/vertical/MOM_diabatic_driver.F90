@@ -733,7 +733,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
     ! If visc%MLD exists, copy the ePBL's MLD into it
     if (associated(visc%MLD)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, GV)
       call pass_var(visc%MLD, G%domain, halo=1)
       Hml(:,:) = visc%MLD(:,:)
     endif
@@ -1708,7 +1708,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
       if (associated(visc%MLD)) then
-        call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
+        call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, GV)
         call pass_var(visc%MLD, G%domain, halo=1)
         Hml(:,:) = visc%MLD(:,:)
       endif
