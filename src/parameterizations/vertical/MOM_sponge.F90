@@ -54,7 +54,6 @@ type, public :: sponge_CS ; private
                              !! coordinate-density is being damped, in kg m-3.
   real, pointer :: Ref_eta(:,:) => NULL() !< The value toward which the interface
                              !! heights are being damped, in depth units (Z).
-  real   :: eta_Z_to_m       !< The conversion factor between the units for depths (Z) and m.
   type(p3d) :: var(MAX_FIELDS_) !< Pointers to the fields that are being damped.
   type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
 
@@ -90,8 +89,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),         pointer    :: CS         !< A pointer that is set to point to the control
                                                     !! structure for this module
-  type(verticalGrid_type), &
-                 optional, intent(in) :: GV         !< The ocean's vertical grid structure
+  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure
   real, dimension(SZJ_(G)), &
                  optional, intent(in) :: Iresttime_i_mean !< The inverse of the restoring time for
                                                           !! the zonal mean properties, in s-1.
@@ -134,8 +132,6 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 !  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
   ! CS%bulkmixedlayer may be set later via a call to set_up_sponge_ML_density.
   CS%bulkmixedlayer = .false.
-
-  CS%eta_Z_to_m = 1.0 ; if (present(GV)) CS%eta_Z_to_m = GV%Z_to_m
 
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -384,9 +380,6 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   if (CS%bulkmixedlayer .and. (.not.present(Rcv_ml))) &
     call MOM_error(FATAL, "Rml must be provided to apply_sponge when using "//&
                            "a bulk mixed layer.")
-
-  if (CS%eta_Z_to_m /= GV%Z_to_m) call MOM_error(FATAL, &
-    "There are inconsistent depth units between calls to set_up_sponge and apply_sponge.")
 
   if ((CS%id_w_sponge > 0) .or. CS%do_i_mean_sponge) then
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
