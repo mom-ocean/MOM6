@@ -52,8 +52,8 @@ type, public :: energetic_PBL_CS ; private
                              !! energy is converted to a turbulent velocity, relative to
                              !! mechanically forced turbulent kinetic energy, nondim.
                              !! Making this larger increases the diffusivity.
-  real    :: vstar_scale_fac !< An overall nondimensional scaling factor for vstar.
-                             !! Making this larger increases the diffusivity.
+  real    :: vstar_scale_fac !< An overall nondimensional scaling factor for vstar times a unit
+                             !! conversion factor.  Making this larger increases the diffusivity.
   real    :: Ekman_scale_coef !< A nondimensional scaling factor controlling the inhibition of the
                              !!  diffusive length scale by rotation.  Making this larger decreases
                              !! the diffusivity in the planetary boundary layer.
@@ -63,7 +63,7 @@ type, public :: energetic_PBL_CS ; private
                              !! value of 0.1 might be better justified by observations.
   real    :: MLD_tol         !< A tolerance for determining the boundary layer thickness when
                              !! Use_MLD_iteration is true, in m.
-  real    :: min_mix_len     !< The minimum mixing length scale that will be used by ePBL, in m.
+  real    :: min_mix_len     !< The minimum mixing length scale that will be used by ePBL, in Z.
                              !! The default (0) does not set a minimum.
   real    :: N2_Dissipation_Scale_Neg !< A nondimensional scaling factor controlling the loss of TKE
                              !! due to enhanced dissipation in the presence of negative (unstable)
@@ -354,7 +354,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: LA        ! The Langmuir number (non-dim)
   real :: LAmod     ! A modified Langmuir number accounting for other parameters.
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
-                    ! conversion factor from H to M, in m H-1.
+                    ! conversion factor from H to Z, in Z H-1.
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing, nondim.
   real :: TKE_reduc ! The fraction by which TKE and other energy fields are
                     ! reduced to support mixing, nondim. between 0 and 1.
@@ -373,7 +373,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: dPE_conv  ! The convective change in column potential energy, in J m-2.
   real :: MKE_src   ! The mean kinetic energy source of TKE due to Kddt_h(K), in J m-2.
   real :: dMKE_src_dK  ! The partial derivative of MKE_src with Kddt_h(K), in J m-2 H-1.
-  real :: Kd_guess0, PE_chg_g0, dPEa_dKd_g0, Kddt_h_g0
+  real :: Kd_guess0    ! A first guess of the diapycnal diffusivity, in Z2 s-1.
+  real :: PE_chg_g0    ! The potential energy change when Kd is Kd_guess0
+  real :: dPEa_dKd_g0
+  real :: Kddt_h_g0    ! The first guess diapycnal diffusivity times a timestep divided
+                       ! by the average thicknesses around a layer, in H (m or kg m-2).
   real :: PE_chg_max   ! The maximum PE change for very large values of Kddt_h(K).
   real :: dPEc_dKd_Kd0 ! The partial derivative of PE change with Kddt_h(K)
                        ! for very small values of Kddt_h(K), in J m-2 H-1.
@@ -663,7 +667,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       pres(i,1) = 0.0
       do k=1,nz
         dMass = GV%H_to_kg_m2 * h(i,k)
-        dPres = (GV%g_Earth*GV%m_to_Z) * dMass
+        dPres = (GV%g_Earth*GV%m_to_Z) * dMass  ! This is equivalent to GV%H_to_Pa * h(i,k)
         dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
         dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
         dT_to_dColHt(i,k) = dMass * dSV_dT(i,j,k)
@@ -955,7 +959,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               dSe_t2 = Kddt_h(K-1) * ((S0(k-2) - S0(k-1)) + dSe(k-2))
             endif
           endif
-          dt_h = (GV%m_to_H**2*dt) / max(0.5*(h(i,k-1)+h(i,k)), 1e-15*h_sum(i))
+          dt_h = (GV%Z_to_H**2*dt) / max(0.5*(h(i,k-1)+h(i,k)), 1e-15*h_sum(i))
 
           !   This tests whether the layers above and below this interface are in
           ! a convetively stable configuration, without considering any effects of
@@ -1045,13 +1049,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)
             if (TKE_here > 0.0) then
               vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
-              hbs_here = GV%H_to_m * min(hb_hs(i,K), MixLen_shape(K))
+              hbs_here = GV%H_to_Z * min(hb_hs(i,K), MixLen_shape(K))
               Mixing_Length_Used(k) = MAX(CS%min_mix_len,((h_tt*hbs_here)*vstar) / &
                   ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar))
               !Note setting Kd_guess0 to Mixing_Length_Used(K) here will
               ! change the answers.  Therefore, skipping that.
               if (.not.CS%Use_MLD_Iteration) then
-                 Kd_guess0 = vstar * vonKar *  ((h_tt*hbs_here)*vstar) / &
+                 Kd_guess0 = vstar * vonKar * ((h_tt*hbs_here)*vstar) / &
                   ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar)
               else
                  Kd_guess0 = vstar * vonKar * Mixing_Length_Used(k)
@@ -1097,16 +1101,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*(conv_PErel(i)-PE_chg_max)
                 if (TKE_here > 0.0) then
                   vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
-                  hbs_here = GV%H_to_m * min(hb_hs(i,K), MixLen_shape(K))
+                  hbs_here = GV%H_to_Z * min(hb_hs(i,K), MixLen_shape(K))
                   Mixing_Length_Used(k) = max(CS%min_mix_len,((h_tt*hbs_here)*vstar) / &
                       ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar))
                   if (.not.CS%Use_MLD_Iteration) then
                   ! Note again (as prev) that using Mixing_Length_Used here
                   !  instead of redoing the computation will change answers...
-                     Kd(i,k) = vstar * vonKar *  ((h_tt*hbs_here)*vstar) / &
+                    Kd(i,k) = vstar * vonKar *  ((h_tt*hbs_here)*vstar) / &
                           ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar)
                   else
-                     Kd(i,k) = vstar * vonKar * Mixing_Length_Used(k)
+                    Kd(i,k) = vstar * vonKar * Mixing_Length_Used(k)
                   endif
                 else
                   vstar = 0.0 ; Kd(i,k) = 0.0
@@ -1362,7 +1366,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           !This is how the iteration was original conducted
           do k=2,nz
             if (FIRST_OBL) then !Breaks when OBL found
-              if (Vstar_Used(k) > 1.e-10 .and. k < nz) then
+              if (Vstar_Used(k) > 1.e-10*GV%m_to_Z .and. k < nz) then
                 MLD_FOUND = MLD_FOUND + h(i,k-1)*GV%H_to_m
               else
                 FIRST_OBL = .false.
@@ -1474,7 +1478,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     endif
 
     do K=1,nz+1 ; do i=is,ie
-      Kd_int(i,j,K) = GV%m_to_Z**2 * Kd(i,K)
+      Kd_int(i,j,K) = Kd(i,K)
     enddo ; enddo
 
   enddo ! j-loop
@@ -1923,18 +1927,17 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
     call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
     ! surface Stokes drift
     us = us_to_u10*u10
-    !
-    ! significant wave height from Pierson-Moskowitz
-    ! spectrum (Bouws, 1998)
+
+    ! significant wave height from Pierson-Moskowitz spectrum (Bouws, 1998)
     hm0 = 0.0246 *u10**2
-    !
+
     ! peak frequency (PM, Bouws, 1998)
     tmp = 2.0 * PI * u19p5_to_u10 * u10
     fp = 0.877 * (GV%g_Earth*GV%m_to_Z) / tmp
-    !
+
     ! mean frequency
     fm = fm_to_fp * fp
-    !
+
     ! total Stokes transport (a factor r_loss is applied to account
     !  for the effect of directional spreading, multidirectional waves
     !  and the use of PM peak frequency and PM significant wave height
@@ -2100,7 +2103,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "VSTAR_SCALE_FACTOR", CS%vstar_scale_fac, &
                  "An overall nondimensional scaling factor for v*. \n"//    &
                  "Making this larger decreases the PBL diffusivity.",       &
-                 units="nondim", default=1.0)
+                 units="nondim", default=1.0, scale=GV%m_to_Z)
   call get_param(param_file, mdl, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef,           &
                  "A nondimensional scaling factor controlling the inhibition \n"//   &
                  "of the diffusive length scale by rotation. Making this larger \n"//&
@@ -2124,7 +2127,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "EPBL_MIN_MIX_LEN", CS%min_mix_len,    &
                  "The minimum mixing length scale that will be used \n"//&
                  "by ePBL.  The default (0) does not set a minimum.",    &
-                 units="meter", default=0.0)
+                 units="meter", default=0.0, scale=GV%m_to_Z)
   call get_param(param_file, mdl, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc,         &
                  "If true, the ePBL code uses the original form of the \n"//        &
                  "potential energy change code.  Otherwise, the newer \n"//         &
@@ -2224,9 +2227,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'ePBL_Hs_used', diag%axesT1, &
       Time, 'Surface region thickness that is used', 'm')
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
-      Time, 'Mixing Length that is used', 'm')
+      Time, 'Mixing Length that is used', 'm', conversion=GV%Z_to_m)
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'm s-1')
+      Time, 'Velocity Scale that is used.', 'm s-1', conversion=GV%Z_to_m)
   CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
       Time, 'LT enhancement that is used.', 'nondim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
