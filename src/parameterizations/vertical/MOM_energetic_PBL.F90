@@ -214,7 +214,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to mixedlayer_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in)    :: Buoy_Flux !< The surface buoyancy flux. in m2/s3.
+                           intent(in)    :: Buoy_Flux !< The surface buoyancy flux in Z2/s3.
   real,          optional, intent(in)    :: dt_diag   !< The diagnostic time step, which may be less
                                                    !! than dt if there are two callse to
                                                    !! mixedlayer, in s.
@@ -609,8 +609,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
       ! Computing Bf w/ limiters.
-      Bf_Stable = max(0.0, GV%m_to_Z**2 * buoy_Flux(i,j)) ! Positive for stable
-      Bf_Unstable = min(0.0, GV%m_to_Z**2 * buoy_flux(i,j)) ! Negative for unstable
+      Bf_Stable = max(0.0, buoy_Flux(i,j)) ! Positive for stable
+      Bf_Unstable = min(0.0, buoy_flux(i,j)) ! Negative for unstable
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -623,7 +623,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       Stab_Scale = U_star**2 / ( VonKar * ( C_MO * BF_Stable / U_star -  C_EK * U_star * absf(i)))
       ! Inverse of Ekman and Obukhov
       iL_Ekman   = absf(i) / U_star
-      iL_Obukhov = GV%m_to_Z**2 * buoy_flux(i,j)*vonkar / (U_star**3)
+      iL_Obukhov = buoy_flux(i,j)*vonkar / (U_star**3)
 
       if (CS%Mstar_Mode == CS%CONST_MSTAR) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0) * GV%Z_to_m**3 * U_star**3
