@@ -790,7 +790,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
                                                !! salinity, in m3 kg-1 / (g kg-1).
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface in m2 s-3
+                   optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface in Z2 s-3
 
   ! Local variables
   integer, parameter :: maxGroundings = 5
@@ -1256,7 +1256,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
       do i=is,ie
-        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * ( &
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * GV%m_to_Z**2 * ( &
             dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
       enddo

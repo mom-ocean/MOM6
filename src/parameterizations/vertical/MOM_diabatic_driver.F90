@@ -300,13 +300,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     cTKE,   &    ! convective TKE requirements for each layer in J/m^2.
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment (m/s)
-
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
-    cn       ! baroclinic gravity wave speeds (formerly cg1 - BDM)
-
+    cn       ! baroclinic gravity wave speeds
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
-    SkinBuoyFlux! 2d surface buoyancy flux (m2/s3), used by ePBL
+    SkinBuoyFlux! 2d surface buoyancy flux (Z2/s3), used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
