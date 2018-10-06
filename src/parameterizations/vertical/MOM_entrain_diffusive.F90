@@ -806,23 +806,23 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
     endif   ! correct_density
 
     if (CS%id_Kd > 0) then
-      Idt = 1.0 / dt
+      Idt = GV%H_to_Z**2 / dt
       do k=2,nz-1 ; do i=is,ie
         if (k<kb(i)) then ; Kd_here = 0.0 ; else
           Kd_here = F(i,k) * ( h(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
               (eb(i,j,k) - ea(i,j,k+1))) ) / (I2p2dsp1_ds(i,k) * grats(i,k))
         endif
 
-        Kd_eff(i,j,k) = GV%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
+        Kd_eff(i,j,k) = MAX(dtKd(i,k), Kd_here)*Idt
       enddo ; enddo
       do i=is,ie
-        Kd_eff(i,j,1) = GV%H_to_m**2 * (dtKd(i,1)*Idt)
-        Kd_eff(i,j,nz) = GV%H_to_m**2 * (dtKd(i,nz)*Idt)
+        Kd_eff(i,j,1) = dtKd(i,1)*Idt
+        Kd_eff(i,j,nz) = dtKd(i,nz)*Idt
       enddo
     endif
 
     if (CS%id_diff_work > 0) then
-      g_2dt = 0.5 * (GV%H_to_Z*GV%H_to_m) * (GV%g_Earth / dt)
+      g_2dt = 0.5 * GV%H_to_Z**2 * (GV%g_Earth / dt)
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then
         if (associated(fluxes%p_surf)) then
@@ -2189,9 +2189,9 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H)
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
-      'Diapycnal diffusivity as applied', 'm2 s-1')
+      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=GV%Z_to_m**2)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
-      'Work actually done by diapycnal diffusion across each interface', 'W m-2')
+      'Work actually done by diapycnal diffusion across each interface', 'W m-2', conversion=GV%Z_to_m)
 
 end subroutine entrain_diffusive_init
 
