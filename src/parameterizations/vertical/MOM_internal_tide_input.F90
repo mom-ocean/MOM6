@@ -46,7 +46,7 @@ end type int_tide_input_CS
 type, public :: int_tide_input_type
   real, allocatable, dimension(:,:) :: &
     TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean, in W m-2.
-    h2, &               !< The squared topographic roughness height, in m2.
+    h2, &               !< The squared topographic roughness height, in Z2.
     tideamp, &          !< The amplitude of the tidal velocities, in m s-1.
     Nb                  !< The bottom stratification, in s-1.
 end type int_tide_input_type
@@ -128,7 +128,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
                                                                 !! smooth out the values in thin layers, in degC.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_f  !< Salinity after vertical filtering to
                                                                 !! smooth out the values in thin layers, in PSU.
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness, in m2
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness, in Z2
   type(forcing),                            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
   real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: N2_bot !< The squared buoyancy freqency at the
@@ -141,19 +141,19 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
     Temp_int, &   ! The temperature at each interface, in degC.
     Salin_int, &  ! The salinity at each interface, in PSU.
     drho_bot, &
-    h_amp, &
-    hb, &
-    z_from_bot, &
+    h_amp, &      ! The amplitude of topographic roughness, in Z.
+    hb, &         ! The depth below a layer, in Z.
+    z_from_bot, & ! The height of a layer center above the bottom, in Z.
     dRho_dT, &    ! The partial derivatives of density with temperature and
     dRho_dS       ! salinity, in kg m-3 degC-1 and kg m-3 PSU-1.
 
-  real :: dz_int  ! The thickness associated with an interface, in m.
+  real :: dz_int  ! The thickness associated with an interface, in Z.
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
-                  ! density, in m4 s-2 kg-1.
+                  ! density, in Z m3 s-2 kg-1.
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  G_Rho0 = (GV%g_Earth*GV%m_to_Z**2) / GV%Rho0
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -194,7 +194,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
     ! Find the bottom boundary layer stratification.
     do i=is,ie
       hb(i) = 0.0 ; dRho_bot(i) = 0.0
-      z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
+      z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
       do_i(i) = (G%mask2dT(i,j) > 0.5)
       h_amp(i) = sqrt(h2(i,j))
     enddo
@@ -202,7 +202,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
     do k=nz,2,-1
       do_any = .false.
       do i=is,ie ; if (do_i(i)) then
-        dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
+        dz_int = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j,k-1))
         z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
         hb(i) = hb(i) + dz_int
@@ -211,7 +211,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
         if (z_from_bot(i) > h_amp(i)) then
           if (k>2) then
             ! Always include at least one full layer.
-            hb(i) = hb(i) + 0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
+            hb(i) = hb(i) + 0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k-2))
             dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
           endif
           do_i(i) = .false.
