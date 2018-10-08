@@ -82,8 +82,8 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
       ! surface pressure
       ice_ocean_boundary%p(i,j) = x2o(ind%x2o_Sa_pslv,k) * GRID%mask2dT(ig,jg)
 
-      ! salt flux
-      ice_ocean_boundary%salt_flux(i,j) = x2o(ind%x2o_Fioi_salt,k) * GRID%mask2dT(ig,jg)
+      ! salt flux (minus sign needed here -GMM)
+      ice_ocean_boundary%salt_flux(i,j) = -x2o(ind%x2o_Fioi_salt,k) * GRID%mask2dT(ig,jg)
 
       ! 1) visible, direct shortwave  (W/m2)
       ! 2) visible, diffuse shortwave (W/m2)
