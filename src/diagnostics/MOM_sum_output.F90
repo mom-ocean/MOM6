@@ -498,7 +498,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-      call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, eta)
+      call find_eta(h, tv, G, GV, eta, eta_to_m=1.0)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo

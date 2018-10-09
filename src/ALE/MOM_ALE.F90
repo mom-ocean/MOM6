@@ -329,7 +329,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
   if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
   if (CS%id_e_preale > 0) then
-    call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, eta_preale)
+    call find_eta(h, tv, G, GV, eta_preale, eta_to_m=1.0)
     call post_data(CS%id_e_preale, eta_preale, CS%diag)
   endif
 
