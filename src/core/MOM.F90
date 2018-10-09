@@ -750,7 +750,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
       CS%time_in_cycle = CS%time_in_cycle + dt
-      call find_eta(h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, ssh, CS%eta_av_bc)
+      call find_eta(h, CS%tv, G, GV, ssh, CS%eta_av_bc, eta_to_m=1.0)
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
       enddo ; enddo
@@ -2432,9 +2432,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (.not.query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%ave_ssh_ibc, eta)
+      call find_eta(CS%h, CS%tv, G, GV, CS%ave_ssh_ibc, eta, eta_to_m=1.0)
     else
-      call find_eta(CS%h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%ave_ssh_ibc)
+      call find_eta(CS%h, CS%tv, G, GV, CS%ave_ssh_ibc, eta_to_m=1.0)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2489,7 +2489,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
-    call find_eta(CS%h, CS%tv, (GV%g_Earth*GV%m_to_Z), G, GV, z_interface)
+    call find_eta(CS%h, CS%tv, G, GV, z_interface, eta_to_m=1.0)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
 

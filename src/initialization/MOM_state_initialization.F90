@@ -1031,7 +1031,7 @@ subroutine depress_surface(h, G, GV, param_file, tv, just_read_params)
   call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, eta)
+  call find_eta(h, tv, G, GV, eta, eta_to_m=1.0)
 
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
