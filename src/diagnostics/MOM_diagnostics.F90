@@ -284,7 +284,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%e, eta_bt)
+    call find_eta(h, tv, G, GV, CS%e, eta_bt, eta_to_m=1.0)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
@@ -294,7 +294,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         CS%e_D(i,j,k) = CS%e(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, CS%e_D, eta_bt)
+      call find_eta(h, tv, G, GV, CS%e_D, eta_bt, eta_to_m=1.0)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
@@ -815,7 +815,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
   endif
 
   if (CS%id_col_ht > 0) then
-    call find_eta(h, tv, (GV%g_Earth*GV%m_to_Z), G, GV, z_top)
+    call find_eta(h, tv, G, GV, z_top, eta_to_m=1.0)
     do j=js,je ; do i=is,ie
       z_bot(i,j) = z_top(i,j) + G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
