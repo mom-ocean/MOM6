@@ -322,7 +322,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
                                 ALE_sponge_CSp, diag_to_Z_CSp)
   if (CS%use_Elizabeth_tracer) &
     call initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, &
-                  CS%Elizabeth_tracer_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
+                  CS%Elizabeth_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ideal_age) &
     call initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS%ideal_age_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)

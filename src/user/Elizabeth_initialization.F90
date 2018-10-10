@@ -218,10 +218,10 @@ subroutine Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
     if (sponge_uv) then
        U1(:,:,:) = 0.0; V1(:,:,:) = 0.0
        call set_up_ALE_sponge_vel_field(U1,V1,G,u,v,ACSp)
-
     endif
+    
 
-  else ! layer mode
+   else ! layer mode
 
        !read eta
        call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)

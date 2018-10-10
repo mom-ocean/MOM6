@@ -177,7 +177,7 @@ end function register_Elizabeth_tracer
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                    sponge_CSp, diag_to_Z_CSp)
+                                    layer_CSp, sponge_CSp, diag_to_Z_CSp)
 
   type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
@@ -186,8 +186,9 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness, in m or kg m-2.
   type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies whether, where, and what open boundary conditions are used. This is not being used for now.
-  type(Elizabeth_tracer_CS),                pointer    :: CS !< The control structure returned by a previous call to Elizabeth_register_tracer.
-  type(ALE_sponge_CS),                       pointer    :: sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
+  type(Elizabeth_tracer_CS),             pointer    :: CS !< The control structure returned by a previous call to Elizabeth_register_tracer.
+  type(sponge_CS),                       pointer    :: layer_CSp    !< A pointer to the control structure
+  type(ALE_sponge_CS),                   pointer    :: sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure for diagnostics in depth space.
 
   real, allocatable :: temp(:,:,:)
@@ -253,27 +254,45 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !   If sponges are used, this damps values to zero in the offshore boundary. 
 !  For any tracers that are not damped in the sponge, the call
 ! to set_up_sponge_field can simply be omitted.
-    if (.not.associated(sponge_CSp)) &
+    if (associated(sponge_CSp)) then !ALE mode
+      nzdata = get_ALE_sponge_nz_data(sponge_CSp)
+      if (nzdata>0) then
+        allocate(temp(G%isd:G%ied,G%jsd:G%jed,nzdata))
+        do k=1,nzdata ; do j=js,je ; do i=is,ie
+          if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
+            temp(i,j,k) = 0.0
+          endif
+        enddo ; enddo; enddo
+        do m=1,1
+        ! This is needed to force the compiler not to do a copy in the sponge
+        ! calls.  Curses on the designers and implementers of Fortran90.
+          tr_ptr => CS%tr(:,:,:,m)
+          call set_up_ALE_sponge_field(temp, G, tr_ptr, sponge_CSp)
+        enddo
+        deallocate(temp)
+      endif
+!    endif !ALE mode
+
+    elseif (associated(layer_CSp)) then !layer mode
+      if (nz>0) then
+        allocate(temp(G%isd:G%ied,G%jsd:G%jed,nz))
+        do k=1,nz ; do j=js,je ; do i=is,ie
+          if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
+            temp(i,j,k) = 0.0
+          endif
+        enddo ; enddo; enddo
+        do m=1,1
+          tr_ptr => CS%tr(:,:,:,m)
+          call set_up_sponge_field(temp, tr_ptr, G, nz, layer_CSp)
+        enddo
+        deallocate(temp)
+      endif
+!    endif !Layer mode
+    else
       call MOM_error(FATAL, "Elizabeth_initialize_tracer: "// &
         "The pointer to sponge_CSp must be associated if SPONGE is defined.")
-    nzdata = get_ALE_sponge_nz_data(sponge_CSp)
-    if (nzdata>0) then
-      allocate(temp(G%isd:G%ied,G%jsd:G%jed,nzdata))
-      do k=1,nzdata ; do j=js,je ; do i=is,ie
-        if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
-          temp(i,j,k) = 0.0
-        endif
-      enddo ; enddo; enddo
-!   do m=1,NTR
-      do m=1,1
-      ! This is needed to force the compiler not to do a copy in the sponge
-      ! calls.  Curses on the designers and implementers of Fortran90.
-        tr_ptr => CS%tr(:,:,:,m)
-        call set_up_ALE_sponge_field(temp, G, tr_ptr, sponge_CSp)
-      enddo
-      deallocate(temp)
-    endif
-  endif
+    endif !selecting mode/calling error if no pointer
+  endif !using sponge
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
