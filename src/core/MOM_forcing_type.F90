@@ -65,6 +65,7 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     latent     => NULL(), & !< latent (W/m^2)   (typically < 0)
     sens       => NULL(), & !< sensible (W/m^2) (typically negative)
+    melth      => NULL(), & !< sea ice and snow melt (W/m^2) (typically negative)
     heat_added => NULL()    !< additional heat flux from SST restoring or flux adjustments (W/m^2)
 
   ! components of latent heat fluxes used for diagnostic purposes
@@ -261,6 +262,7 @@ type, public :: forcing_diags
   integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1
   integer :: id_heat_added          = -1, id_heat_content_massin   = -1
   integer :: id_hfrainds            = -1, id_hfrunoffds            = -1
+  integer :: id_melth               = -1
 
   ! global area integrated heat flux diagnostic handles
   integer :: id_total_net_heat_coupler    = -1, id_total_net_heat_surface      = -1
@@ -486,20 +488,22 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     endif
 
     ! net volume/mass of liquid and solid passing through surface boundary fluxes
-    netMassInOut(i) = dt * (scale * ((((( fluxes%lprec(i,j)      &
-                                        + fluxes%fprec(i,j)   )  &
-                                        + fluxes%evap(i,j)    )  &
-                                        + fluxes%lrunoff(i,j) )  &
-                                        + fluxes%vprec(i,j)   )  &
-                                        + fluxes%frunoff(i,j) ) )
+    netMassInOut(i) = dt * (scale * (((((( fluxes%lprec(i,j)        &
+                                        + fluxes%fprec(i,j)      )  &
+                                        + fluxes%evap(i,j)       )  &
+                                        + fluxes%lrunoff(i,j)    )  &
+                                        + fluxes%vprec(i,j)      )  &
+                                        + fluxes%seaice_melt(i,j))  &
+                                        + fluxes%frunoff(i,j)   ))
 
     if (do_NMIOr) then  ! Repeat the above code w/ dt=1s for legacy reasons
-      netMassInOut_rate(i) = (scale * ((((( fluxes%lprec(i,j)      &
-                                        + fluxes%fprec(i,j)   )  &
-                                        + fluxes%evap(i,j)    )  &
-                                        + fluxes%lrunoff(i,j) )  &
-                                        + fluxes%vprec(i,j)   )  &
-                                        + fluxes%frunoff(i,j) ) )
+      netMassInOut_rate(i) = (scale * (((((( fluxes%lprec(i,j)      &
+                                        + fluxes%fprec(i,j)      )  &
+                                        + fluxes%evap(i,j)       )  &
+                                        + fluxes%lrunoff(i,j)    )  &
+                                        + fluxes%vprec(i,j)      )  &
+                                        + fluxes%seaice_melt(i,j))  &
+                                        + fluxes%frunoff(i,j)   ))
     endif
 
     ! smg:
@@ -544,11 +548,24 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
     ! surface heat fluxes from radiation and turbulent fluxes (K * H)
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
-    net_heat(i) = scale * dt * J_m2_to_H * &
-                  ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
-    !Repeats above code w/ dt=1. for legacy reason
-    if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
-         ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
+
+    ! CIME provides heat flux from snow&ice melt (melth), so this should be added here
+    if (associated(fluxes%melth)) then
+      net_heat(i) = scale * dt * J_m2_to_H * &
+                    ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
+                      fluxes%melth(i,j)) )
+      !Repeats above code w/ dt=1. for legacy reason
+      if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
+           ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
+             fluxes%melth(i,j)))
+    else
+      net_heat(i) = scale * dt * J_m2_to_H * &
+                    ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
+      !Repeats above code w/ dt=1. for legacy reason
+      if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
+           ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
+    endif
+
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
     if (associated(fluxes%heat_added)) then
        net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_added(i,j)
@@ -1201,13 +1218,14 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model
-  !handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
-  !   diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
-  !   'kg m-2 s-1',                                                                 &
-  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
-  !    cmor_field_name='fsitherm',                                                  &
-  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
-  !    cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
+  ! gmm: MCT provides this field
+  handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
+     diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
+     'kg m-2 s-1',                                                                 &
+      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
+      cmor_field_name='fsitherm',                                                  &
+      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
+      cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kg m-2 s-1')
@@ -1269,12 +1287,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Integrated')
 
   ! seaice_melt field requires updates to the sea ice model
-  !handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
-  !    long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg s-1',                      &
-  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
-  !    cmor_field_name='total_fsitherm',                                                                &
-  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
-  !    cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
+  ! gmm: MCT provides this field
+  handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
+      long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg s-1',                      &
+      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
+      cmor_field_name='total_fsitherm',                                                                &
+      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
+      cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
 
   handles%id_total_precip = register_scalar_field('ocean_model', 'total_precip', Time, diag, &
       long_name='Area integrated liquid+frozen precip into ocean', units='kg s-1')
@@ -1404,11 +1423,11 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
         'W m-2')
 
   handles%id_net_heat_coupler = register_diag_field('ocean_model', 'net_heat_coupler',          &
-        diag%axesT1,Time,'Surface ocean heat flux from SW+LW+latent+sensible (via the coupler)',&
+        diag%axesT1,Time,'Surface ocean heat flux from SW+LW+latent+sensible+melth (via the coupler)',&
         'W m-2')
 
   handles%id_net_heat_surface = register_diag_field('ocean_model', 'net_heat_surface',diag%axesT1,  &
-        Time,'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore or flux adjustments', 'W m-2',&
+        Time,'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore+melth or flux adjustments', 'W m-2',&
         standard_name='surface_downward_heat_flux_in_sea_water', cmor_field_name='hfds',            &
         cmor_standard_name='surface_downward_heat_flux_in_sea_water',           &
         cmor_long_name='Surface ocean heat flux from SW+LW+latent+sensible+masstransfer+frazil')
@@ -1463,6 +1482,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
         cmor_field_name='hfsso',                                                     &
         cmor_standard_name='surface_downward_sensible_heat_flux',                    &
         cmor_long_name='Surface Downward Sensible Heat Flux')
+
+  handles%id_melth = register_diag_field('ocean_model', 'melth', diag%axesT1, Time,&
+        'Heat flux into ocean from snow and sea ice melt', 'W m-2',      &
+        standard_name='snow_ice_melt_heat_flux',                         &
+  !GMM? cmor_field_name='hfsso',                                                     &
+        cmor_standard_name='snow_ice_melt_heat_flux',                    &
+        cmor_long_name='Heat flux into ocean from snow and sea ice melt')
 
   handles%id_heat_added = register_diag_field('ocean_model', 'heat_added', diag%axesT1, Time, &
         'Flux Adjustment or restoring surface heat flux into ocean', 'W m-2')
@@ -1534,7 +1560,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
   handles%id_total_net_heat_coupler = register_scalar_field('ocean_model',                       &
       'total_net_heat_coupler', Time, diag,                                                      &
-      long_name='Area integrated surface heat flux from SW+LW+latent+sensible (via the coupler)',&
+      long_name='Area integrated surface heat flux from SW+LW+latent+sensible+melth (via the coupler)',&
       units='W')
 
   handles%id_total_net_heat_surface = register_scalar_field('ocean_model',                      &
@@ -1621,12 +1647,12 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
   handles%id_net_heat_coupler_ga = register_scalar_field('ocean_model',                       &
       'net_heat_coupler_ga', Time, diag,                                                      &
-      long_name='Area averaged surface heat flux from SW+LW+latent+sensible (via the coupler)',&
+      long_name='Area averaged surface heat flux from SW+LW+latent+sensible+melth (via the coupler)',&
       units='W m-2')
 
   handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                       &
       'net_heat_surface_ga', Time, diag,                                                      &
-      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments', &
+      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore+melth or flux adjustments', &
       units='W m-2',                                                                          &
       cmor_field_name='ave_hfds',                                                             &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_averaged',             &
@@ -1790,8 +1816,7 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
     fluxes%vprec(i,j) = wt1*fluxes%vprec(i,j) + wt2*flux_tmp%vprec(i,j)
     fluxes%lrunoff(i,j) = wt1*fluxes%lrunoff(i,j) + wt2*flux_tmp%lrunoff(i,j)
     fluxes%frunoff(i,j) = wt1*fluxes%frunoff(i,j) + wt2*flux_tmp%frunoff(i,j)
- ! ### ADD LATER fluxes%seaice_melt(i,j) = wt1*fluxes%seaice_melt(i,j) + wt2*flux_tmp%seaice_melt(i,j)
-
+    fluxes%seaice_melt(i,j) = wt1*fluxes%seaice_melt(i,j) + wt2*flux_tmp%seaice_melt(i,j)
     fluxes%sw(i,j) = wt1*fluxes%sw(i,j) + wt2*flux_tmp%sw(i,j)
     fluxes%sw_vis_dir(i,j) = wt1*fluxes%sw_vis_dir(i,j) + wt2*flux_tmp%sw_vis_dir(i,j)
     fluxes%sw_vis_dif(i,j) = wt1*fluxes%sw_vis_dif(i,j) + wt2*flux_tmp%sw_vis_dif(i,j)
@@ -2269,6 +2294,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       if (associated(fluxes%latent))     res(i,j) = res(i,j) + fluxes%latent(i,j)
       if (associated(fluxes%sens))       res(i,j) = res(i,j) + fluxes%sens(i,j)
       if (associated(fluxes%SW))         res(i,j) = res(i,j) + fluxes%SW(i,j)
+      if (associated(fluxes%melth))      res(i,j) = res(i,j) + fluxes%melth(i,j)
       enddo ; enddo
       call post_data(handles%id_net_heat_coupler, res, diag)
       if (handles%id_total_net_heat_coupler > 0) then
@@ -2289,6 +2315,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         if (associated(fluxes%latent))               res(i,j) = res(i,j) + fluxes%latent(i,j)
         if (associated(fluxes%sens))                 res(i,j) = res(i,j) + fluxes%sens(i,j)
         if (associated(fluxes%SW))                   res(i,j) = res(i,j) + fluxes%SW(i,j)
+        if (associated(fluxes%melth))                res(i,j) = res(i,j) + fluxes%melth(i,j)
         if (associated(sfc_state%frazil))            res(i,j) = res(i,j) + sfc_state%frazil(i,j) * I_dt
       ! if (associated(sfc_state%TempXpme)) then
       !    res(i,j) = res(i,j) + sfc_state%TempXpme(i,j) * fluxes%C_p * I_dt
@@ -2455,6 +2482,11 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
     if ((handles%id_sens > 0) .and. associated(fluxes%sens)) then
       call post_data(handles%id_sens, fluxes%sens, diag)
     endif
+
+    if ((handles%id_melth > 0) .and. associated(fluxes%melth)) then
+      call post_data(handles%id_melth, fluxes%melth, diag)
+    endif
+
     if ((handles%id_total_sens > 0) .and. associated(fluxes%sens)) then
       total_transport = global_area_integral(fluxes%sens,G)
       call post_data(handles%id_total_sens, total_transport, diag)
@@ -2562,6 +2594,7 @@ subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, ic
   call myAlloc(fluxes%netMassIn,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%netSalt,isd,ied,jsd,jed, water)
 
+  call myAlloc(fluxes%melth,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%sw,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%lw,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%latent,isd,ied,jsd,jed, heat)
@@ -2656,6 +2689,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%ustar_gustless))       deallocate(fluxes%ustar_gustless)
   if (associated(fluxes%buoy))                 deallocate(fluxes%buoy)
   if (associated(fluxes%sw))                   deallocate(fluxes%sw)
+  if (associated(fluxes%melth))                deallocate(fluxes%melth)
   if (associated(fluxes%sw_vis_dir))           deallocate(fluxes%sw_vis_dir)
   if (associated(fluxes%sw_vis_dif))           deallocate(fluxes%sw_vis_dif)
   if (associated(fluxes%sw_nir_dir))           deallocate(fluxes%sw_nir_dir)
@@ -2818,7 +2852,7 @@ end subroutine deallocate_mech_forcing
 !!  * non-penetrative = non-downwelling shortwave; portion of SW
 !!                      totally absorbed in the k=1 cell.
 !!                      The non-penetrative SW is combined with
-!!                      LW+LAT+SENS in net_heat inside routine
+!!                      LW+LAT+SENS+MELTH in net_heat inside routine
 !!                      extractFluxes1d. Notably, for many cases,
 !!                      non-penetrative SW = 0.
 !!  * penetrative     = that portion of shortwave penetrating below

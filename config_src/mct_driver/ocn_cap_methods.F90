@@ -73,6 +73,9 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
       ! latent heat flux (W/m^2)
       ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k) !???TODO: should this be a minus sign
 
+      ! snow&ice melt heat flux  (W/m^2)
+      ice_ocean_boundary%melth(i,j) = x2o(ind%x2o_Fioi_melth,k)
+
       ! liquid runoff
       ice_ocean_boundary%rofl_flux(i,j) = x2o(ind%x2o_Foxx_rofl,k) * GRID%mask2dT(ig,jg)
 
@@ -116,6 +119,7 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
         write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i,j)
+        write(logunit,F01)'import: day, secs, j, i, melth           = ',day,secs,j,i,ice_ocean_boundary%melth(i,j)
         write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',&
                           day,secs,j,i,ice_ocean_boundary%latent_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, runoff          = ',&
