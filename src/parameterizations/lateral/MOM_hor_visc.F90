@@ -238,6 +238,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
   real :: AhLth      ! 2D Leith biharmonic viscosity (m4/s)
   real :: KhLth      ! 2D Leith Laplacian viscosity  (m2/s)
+  real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
+                     ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
+                     ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag  ! magnitude of the shear (1/s)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
@@ -468,15 +471,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
     ! Calculate horizontal divergence (not from continuity) if needed.
     ! h_u and h_v include modifications at OBCs from above.
-    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        div_xx(i,j) = ((G%dyCu(I  ,j) * u(I  ,j,k) * h_u(I  ,j) - &
-                        G%dyCu(I-1,j) * u(I-1,j,k) * h_u(I-1,j) ) + &
-                       (G%dxCv(i,J  ) * v(i,J  ,k) * h_v(i,J  ) - &
-                        G%dxCv(i,J-1) * v(i,J-1,k) * h_v(i,J-1) ) )*G%IareaT(i,j)/ &
-                                  (h(i,j,k) + h_neglect)
-      enddo ; enddo
-    endif
+!    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+!      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+!        div_xx(i,j) = ((G%dyCu(I  ,j) * u(I  ,j,k) * h_u(I  ,j) - &
+!                        G%dyCu(I-1,j) * u(I-1,j,k) * h_u(I-1,j) ) + &
+!                       (G%dxCv(i,J  ) * v(i,J  ,k) * h_v(i,J  ) - &
+!                        G%dxCv(i,J-1) * v(i,J-1,k) * h_v(i,J-1) ) )*G%IareaT(i,j)/ &
+!                                  (h(i,j,k) + h_neglect)
+!      enddo ; enddo
+!    endif
 
     ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
     ! dudy and dvdx include modifications at OBCs from above.
@@ -490,37 +493,37 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
     endif
 
-    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-      ! Calculate relative vorticity (including no-slip boundary conditions at the 2-D land-sea mask).
-      ! dudy and dvdx include modifications at OBCs from above.
-      if (CS%no_slip) then
-        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-        enddo ; enddo
-      else
-        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-        enddo ; enddo
-      endif
-
-      ! Vorticity gradient
-      do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
-        vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
-      enddo ; enddo
-
-      do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
-        vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
-      enddo ; enddo
-
+!    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+!      ! Calculate relative vorticity (including no-slip boundary conditions at the 2-D land-sea mask).
+!      ! dudy and dvdx include modifications at OBCs from above.
+!      if (CS%no_slip) then
+!        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+!          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+!        enddo ; enddo
+!      else
+!        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+!          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+!        enddo ; enddo
+!      endif
+!
+!      ! Vorticity gradient
+!      do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+!        vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
+!      enddo ; enddo
+!
+!      do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+!        vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
+!      enddo ; enddo
+!
       ! Divergence gradient
-      do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
-      enddo ; enddo
-
-      do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
-        div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
-      enddo ; enddo
-    endif
+!      do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
+!        div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+!      enddo ; enddo
+!
+!      do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
+!        div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+!      enddo ; enddo
+!    endif
 
     !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
@@ -569,7 +572,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xx(i,j) * Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xx(i,j) * Vort_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, Leith_Kh_h(i,j))
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
         ! Older method of bounding for stability
@@ -722,7 +725,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xy(I,J) * Vort_mag)
+        if (CS%Leith_Kh) Kh = max( Kh, Leith_Kh_q(I,J))
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
         ! Older method of bounding for stability
