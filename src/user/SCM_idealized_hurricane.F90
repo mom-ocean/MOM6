@@ -395,6 +395,7 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   ! Wind profile terms
   real :: U10
   real :: radius
+  real :: radius10
   real :: radius_km
   real :: radiusB
   real :: fcor
@@ -439,18 +440,19 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
     U10 = sqrt(CS%Holland_AxBxDP*exp(-CS%Holland_A/radiusB)/(CS%rho_A*radiusB)&
                 +0.25*(radius_km*absf)**2) - 0.5*radius_km*absf
   elseif ( (radius/CS%rad_max_wind .gt. 10.) .and. &
-           (radius/CS%rad_max_wind .lt. 12.) ) then
-    radius = CS%rad_max_wind*10.
+           (radius/CS%rad_max_wind .lt. 15.) ) then
+
+    radius10 = CS%rad_max_wind*10.
     if (CS%BR_Bench) then
-      radius_km = radius/1000.
+      radius_km = radius10/1000.
     else
-      radius_km = radius
+      radius_km = radius10
     endif
-    radiusB=radius**CS%Holland_B
+    radiusB=radius10**CS%Holland_B
 
     U10 = (sqrt(CS%Holland_AxBxDp*exp(-CS%Holland_A/radiusB)/(CS%rho_A*radiusB)&
                   +0.25*(radius_km*absf)**2)-0.5*radius_km*absf) &
-           * (12.-radius/CS%rad_max_wind)/2.
+           * (15.-radius/CS%rad_max_wind)/5.
   else
     U10 = 0.
   endif
@@ -465,9 +467,9 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   P1 = (6.88*RSTR - 9.60*CS%Hurr_translation_spd + 85.31) * CS%Deg2Rad
   ALPH = A0 - A1*cos(CS%hurr_translation_dir-Adir-P1)
   if ( (radius/CS%rad_max_wind.gt.10.) .and.&
-       (radius/CS%rad_max_wind.lt.12.) ) then
-     ALPH = ALPH*(12.0-radius/CS%rad_max_wind)/2.
-  elseif (radius/CS%rad_max_wind.gt.12.) then
+       (radius/CS%rad_max_wind.lt.15.) ) then
+     ALPH = ALPH*(15.0-radius/CS%rad_max_wind)/5.
+  elseif (radius/CS%rad_max_wind.gt.15.) then
      ALPH = 0.0
   endif
   ALPH = ALPH * CS%Deg2Rad
