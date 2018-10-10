@@ -397,7 +397,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
-      call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
+      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
@@ -417,11 +417,10 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
 end subroutine calc_slope_functions
 
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al.
-subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
+subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e  !< Interface position (m)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points (1/s2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
@@ -620,20 +619,11 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   h_neglect = GV%H_subroundoff
   H_cutoff = real(2*nz) * (GV%Angstrom_H + h_neglect)
 
-!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h,H_cutoff,h_neglect, &
-!$OMP                               one_meter,SN_u_local,SN_v_local,calculate_slopes)   &
-!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
-!$OMP do
-  do j=js-1,je+1 ; do i=is-1,ie+1
-    CS%SN_u(i,j) = 0.0
-    CS%SN_v(i,j) = 0.0
-  enddo ; enddo
-
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-!$OMP do
+  !$OMP parallel do default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
   do k=nz,CS%VarMix_Ktop,-1
 
     if (calculate_slopes) then
@@ -669,7 +659,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       N2 = GV%g_prime(k)*GV%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
-      SN_u_local(I,j,k) = (H_geom * GV%H_to_m) * S2 * N2
+      SN_u_local(I,j,k) = (H_geom * GV%H_to_Z) * S2 * N2
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       S2 = ( E_y(i,J)**2  + 0.25*( &
@@ -680,44 +670,45 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       N2 = GV%g_prime(k)*GV%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
-      SN_v_local(i,J,k) = (H_geom * GV%H_to_m) * S2 * N2
+      SN_v_local(i,J,k) = (H_geom * GV%H_to_Z) * S2 * N2
     enddo ; enddo
 
   enddo ! k
-!$OMP do
-  do j = js,je
+  !$OMP parallel do default(shared)
+  do j=js,je
+    do I=is-1,ie ; CS%SN_u(I,j) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
-      !SN_u(I,j) = sqrt( SN_u(I,j) / (G%Zd_to_m*( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
+      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
         CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / &
-                                               (G%Zd_to_m*max(G%bathyT(I,j), G%bathyT(I+1,j))) )
+                                               (max(G%bathyT(I,j), G%bathyT(I+1,j))) )
       else
         CS%SN_u(I,j) = 0.0
       endif
     enddo
   enddo
-!$OMP do
+  !$OMP parallel do default(shared)
   do J=js-1,je
-    do k=nz,CS%VarMix_Ktop,-1 ; do I=is,ie
+    do i=is,ie ; CS%SN_v(i,J) = 0.0 ; enddo
+    do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
       CS%SN_v(i,J) = CS%SN_v(i,J) + SN_v_local(i,J,k)
     enddo ; enddo
     do i=is,ie
-      !SN_v(i,J) = sqrt( SN_v(i,J) / (G%Zd_to_m*( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
+      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
         CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / &
-                                               (G%Zd_to_m*max(G%bathyT(i,J), G%bathyT(i,J+1))) )
+                                               (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
       else
         CS%SN_v(I,j) = 0.0
       endif
     enddo
   enddo
-!$OMP end parallel
 
 end subroutine calc_slope_functions_using_just_e
 
