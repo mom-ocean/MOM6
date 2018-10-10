@@ -768,33 +768,44 @@ subroutine set_masks_for_axes_decim(G, diag_cs)
   integer :: dl
   type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
 
+  !Each decimated axis needs both decimated and non-decimated mask
+  !The decimated mask is needed for sending out the diagnostics output via diag_manager
+  !The non-decimated mask is needed for decimating the diagnostics field 
   do dl=2,MAX_DECIM_LEV
      if(dl .ne. 2) call MOM_error(FATAL, "Decimation level other than 2 is not supported yet!")
      do c=1, diag_cs%num_diag_coords
         ! Level/layer h-points in diagnostic coordinate
         axes => diag_cs%remap_axesTL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTL(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTL(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesTL(c)%mask3d => axes%mask3d !set non-decimated mask
         ! Level/layer u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCuL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCuL(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCuL(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesCul(c)%mask3d => axes%mask3d !set non-decimated mask
         ! Level/layer v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvL(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvL(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesCvL(c)%mask3d => axes%mask3d !set non-decimated mask
         ! Level/layer q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBL(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBL(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesBL(c)%mask3d => axes%mask3d !set non-decimated mask
         ! Interface h-points in diagnostic coordinate (w-point)
         axes => diag_cs%remap_axesTi(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTi(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTi(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesTi(c)%mask3d => axes%mask3d !set non-decimated mask
         ! Interface u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCui(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCui(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCui(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesCui(c)%mask3d => axes%mask3d !set non-decimated mask
         ! Interface v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvi(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvi(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvi(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesCvi(c)%mask3d => axes%mask3d !set non-decimated mask
         ! Interface q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBi(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBi(c)%decim(dl)%mask3d, dl)
+        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBi(c)%decim(dl)%mask3d, dl)!set decimated mask
+        diag_cs%decim(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-decimated mask
      enddo
   enddo
 end subroutine set_masks_for_axes_decim
@@ -3442,11 +3453,11 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
   call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
   if (present(mask)) then
      locmask => mask
-     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=locmask)
+     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=locmask, area=diag_cs%G%areaT)
   elseif (associated(diag%axes%mask3d)) then
-     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask3d)
+     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask3d, area=diag_cs%G%areaT)
   else
-     call decimate_field(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
+     call MOM_error(FATAL, "decimate_diag_field_3d: Cannot decimate without a mask!!! ")
   endif
 
 end subroutine decimate_diag_field_3d
@@ -3471,22 +3482,23 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
   elseif (associated(diag%axes%mask2d)) then
      call decimate_field(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask2d)
   else
-     call decimate_field(locfield, locfield_decim, dl, method='pave') !decimate without a mask, how ??
+     call MOM_error(FATAL, "decimate_diag_field_2d: Cannot decimate without a mask!!! ")
   endif
 
 end subroutine decimate_diag_field_2d
 
-subroutine decimate_field_3d(field_in, field_out, level, method, mask)
+subroutine decimate_field_3d(field_in, field_out, level, method, mask, area)
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
   integer , intent(in) :: level
   character(len=4), optional, intent(in) :: method !< sampling method, one of samp,pave,aave,vave
   real, dimension(:,:,:), optional , pointer :: mask
-  !locals
+  real, dimension(:,:), optional , intent(in) :: area
+ !locals
   integer :: i,j,ii,jj,is,js,i0,j0
   integer :: isl,iel,jsl,jel
   integer :: k,ks,ke
-  real :: ave,tot_non_zero
+  real :: ave,tot_non_zero,a1
   character(len=4) :: samplemethod
   samplemethod = 'samp' 
   if(present(method)) samplemethod = method
@@ -3533,6 +3545,20 @@ subroutine decimate_field_3d(field_in, field_out, level, method, mask)
            field_out(i,j,k)  = ave/tot_non_zero
         enddo; enddo; enddo
      endif
+  case ('aave') !area average of the cells
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        field_out(i,j,k)  = 0.0
+        i0 = is+level*(i-isl)
+        j0 = js+level*(j-jsl)
+        ave = 0.0
+        tot_non_zero = 0.0
+        do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+           a1 = area(ii,jj)*mask(ii,jj,k)
+           tot_non_zero = tot_non_zero + a1
+           ave=ave + field_in(ii,jj,k) * a1
+        enddo; enddo
+        if(tot_non_zero .gt. 0.0) field_out(i,j,k)  = ave/tot_non_zero
+     enddo; enddo; enddo
   case default
      call MOM_error(FATAL, "decimate_field_3d: unknown sampling method "//trim(samplemethod))
   end select
@@ -3602,22 +3628,25 @@ end subroutine decimate_field_2d
 subroutine decimate_mask_3d_p(field_in, field_out, level)
   integer , intent(in) :: level
   real, dimension(:,:,:) , pointer :: field_in, field_out
-  integer :: i,j,ii,jj,is,js
+  integer :: i,j,ii,jj,is,js,i0,j0
   integer :: isl,iel,jsl,jel
   integer :: k,ks,ke
-  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
-  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
-  !Always start from the first element
+  real    :: tot_non_zero
+  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
   is=1
   js=1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
   isl=1; iel=size(field_in,1)/level
   jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+  allocate(field_out(isl:iel,jsl:jel,ks:ke)); field_out(:,:,:) = 0.0  
   do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-     ii = is+level*(i-isl)
-     jj = js+level*(j-jsl)
-     field_out(i,j,k)  = field_in(ii,jj,k)
+     i0 = is+level*(i-isl)
+     j0 = js+level*(j-jsl)
+     tot_non_zero = 0.0
+     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+        tot_non_zero = tot_non_zero + field_in(ii,jj,k)
+     enddo;enddo
+     if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo; enddo; enddo
 end subroutine decimate_mask_3d_p
 
@@ -3625,18 +3654,23 @@ subroutine decimate_mask_2d_p(field_in, field_out, level)
   integer , intent(in) :: level
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , pointer :: field_out
-  integer :: i,j,ii,jj,is,js
+  integer :: i,j,ii,jj,is,js,i0,j0
   integer :: isl,iel,jsl,jel
-  !Always start from the first element
+  real    :: tot_non_zero
+  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
   is=1
   js=1
   isl=1; iel=size(field_in,1)/level
   jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel))  
+  allocate(field_out(isl:iel,jsl:jel)); field_out(:,:) = 0.0  
   do j=jsl,jel ; do i=isl,iel
-     ii = is+level*(i-isl)
-     jj = js+level*(j-jsl)
-     field_out(i,j)  = field_in(ii,jj)
+     i0 = is+level*(i-isl)
+     j0 = js+level*(j-jsl)
+     tot_non_zero = 0.0
+     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+        tot_non_zero = tot_non_zero + field_in(ii,jj)
+     enddo;enddo
+     if(tot_non_zero > 0.0) field_out(i,j)=1.0
   enddo; enddo
 end subroutine decimate_mask_2d_p
 
@@ -3644,22 +3678,25 @@ subroutine decimate_mask_3d_a(field_in, field_out, level)
   integer , intent(in) :: level
   real, dimension(:,:,:), pointer :: field_in
   real, dimension(:,:,:), allocatable :: field_out
-  integer :: i,j,ii,jj,is,js
+  integer :: i,j,ii,jj,is,js,i0,j0
   integer :: isl,iel,jsl,jel
   integer :: k,ks,ke
-  !  is = lbound(field_in,1) ; ie = ubound(field_in,1)
-  !  js = lbound(field_in,2) ; je = ubound(field_in,2)
-  !Always start from the first element
+  real    :: tot_non_zero
+  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
   is=1
   js=1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
   isl=1; iel=size(field_in,1)/level
   jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+  allocate(field_out(isl:iel,jsl:jel,ks:ke)); field_out(:,:,:) = 0.0  
   do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-     ii = is+level*(i-isl)
-     jj = js+level*(j-jsl)
-     field_out(i,j,k)  = field_in(ii,jj,k)
+     i0 = is+level*(i-isl)
+     j0 = js+level*(j-jsl)
+     tot_non_zero = 0.0
+     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+        tot_non_zero = tot_non_zero + field_in(ii,jj,k)
+     enddo;enddo
+     if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo; enddo; enddo
 end subroutine decimate_mask_3d_a
 
@@ -3667,18 +3704,23 @@ subroutine decimate_mask_2d_a(field_in, field_out, level)
   integer , intent(in) :: level
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , allocatable :: field_out
-  integer :: i,j,ii,jj,is,js
+  integer :: i,j,ii,jj,is,js,i0,j0
   integer :: isl,iel,jsl,jel
-  !Always start from the first element
+  real    :: tot_non_zero
+  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
   is=1
   js=1
   isl=1; iel=size(field_in,1)/level
   jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel))  
+  allocate(field_out(isl:iel,jsl:jel)); field_out(:,:) = 0.0   
   do j=jsl,jel ; do i=isl,iel
-     ii = is+level*(i-isl)
-     jj = js+level*(j-jsl)
-     field_out(i,j)  = field_in(ii,jj)
+     i0 = is+level*(i-isl)
+     j0 = js+level*(j-jsl)
+     tot_non_zero = 0.0
+     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+        tot_non_zero = tot_non_zero + field_in(ii,jj)
+     enddo;enddo
+     if(tot_non_zero > 0.0) field_out(i,j)=1.0
   enddo; enddo
 end subroutine decimate_mask_2d_a
 
