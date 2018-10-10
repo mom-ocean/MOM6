@@ -15,11 +15,9 @@ use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
-use MOM_EOS, only : int_density_dz_generic_plm_analytic
-use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm
-use MOM_ALE, only : usePressureReconstruction, pressureReconstructionScheme
-use MOM_ALE, only : ALE_CS
-use regrid_defs, only: PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
+use MOM_EOS, only : int_spec_vol_dp_generic_plm
+use MOM_EOS, only : int_density_dz_generic, int_spec_vol_dp_generic
+use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm, ALE_CS
 
 implicit none ; private
 
@@ -39,6 +37,18 @@ type, public :: PressureForce_AFV_CS ; private
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                             !! timing of diagnostic output.
   logical :: useMassWghtInterp !< Use mass weighting in T/S interpolation
+  logical :: boundary_extrap !< Indicate whether high-order boundary
+                            !! extrapolation should be used within boundary cells
+
+  logical :: reconstruct    !< If true, polynomial profiles of T & S will be
+                            !! reconstructed and used in the integrals for the
+                            !! finite volume pressure gradient calculation.
+                            !! The default depends on whether regridding is being used.
+
+  integer :: Recon_Scheme   !< Order of the polynomial of the reconstruction of T & S
+                            !! for the finite volume pressure gradient calculation.
+                            !! By the default (1) is for a piecewise linear method
+
   integer :: id_e_tidal = -1 !< Diagnostic identifier
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_AFV_CS
@@ -68,7 +78,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, e
   if (GV%Boussinesq) then
     call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   else
-    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
+    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   endif
 
 end subroutine PressureForce_AFV
@@ -83,14 +93,15 @@ end subroutine PressureForce_AFV
 !! ie to ie, je to je range before this subroutine is called:
 !!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
 !!  T[je+1], and S[je+1].
-subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness (kg/m2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration (m/s2)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration (m/s2)
-  type(PressureForce_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
+subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+  type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
+  type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration (m/s2)
+  type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
+  type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
@@ -106,6 +117,9 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
                 ! than the mixed layer have the mixed layer's properties, in C.
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties, in psu.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
+                       ! of salinity and temperature within each layer.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer, in m2 s-2.
@@ -120,21 +134,17 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
                 ! account for a reduced gravity model, in m2 s-2.
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
                 ! interface atop a layer, in m2 s-2.
-  real, dimension(SZDI_(G%Block(1)),SZDJ_(G%Block(1))) :: & ! on block indices
-    dp_bk, &    ! The (positive) change in pressure across a layer, in Pa.
-    za_bk       ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
-                ! interface atop a layer, in m2 s-2.
 
   real, dimension(SZI_(G)) :: Rho_cv_BL !  The coordinate potential density in the deepest variable
                 ! density near-surface layer, in kg m-3.
-  real, dimension(SZDIB_(G%Block(1)),SZDJ_(G%Block(1))) :: & ! on block indices
-    intx_za_bk ! The zonal integral of the geopotential anomaly along the
-               ! interface below a layer, divided by the grid spacing, m2 s-2.
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    intx_za     ! The zonal integral of the geopotential anomaly along the
+                ! interface below a layer, divided by the grid spacing, m2 s-2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     intx_dza    ! The change in intx_za through a layer, in m2 s-2.
-  real, dimension(SZDI_(G%Block(1)),SZDJB_(G%Block(1))) :: & ! on block indices
-    inty_za_bk ! The meridional integral of the geopotential anomaly along the
-               ! interface below a layer, divided by the grid spacing, m2 s-2.
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    inty_za     ! The meridional integral of the geopotential anomaly along the
+                ! interface below a layer, divided by the grid spacing, m2 s-2.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     inty_dza    ! The change in inty_za through a layer, in m2 s-2.
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
@@ -145,6 +155,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref, in m3 kg-1.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
+  logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
@@ -157,40 +168,39 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   real :: I_gEarth
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
-  integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk
-  integer :: i, j, k, n, ib, jb, ioff_bk, joff_bk
+  integer :: i, j, k
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  if (.not.associated(CS)) call MOM_error(FATAL, &
+       "MOM_PressureForce_AFV_nonBouss: Module must be initialized before it is used.")
+
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
   use_EOS = associated(tv%eqn_of_state)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce: Module must be initialized before it is used.")
+  use_ALE = .false.
+  if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
 
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,use_p_atm,p,p_atm,GV,h)
   if (use_p_atm) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       p(i,j,1) = p_atm(i,j)
     enddo ; enddo
   else
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       p(i,j,1) = 0.0 ! or oneatm
     enddo ; enddo
   endif
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1 ; do k=2,nz+1 ; do i=Isq,Ieq+1
     p(i,j,K) = p(i,j,K-1) + GV%H_to_Pa * h(i,j,k-1)
   enddo ; enddo ; enddo
-!$OMP end parallel
 
   I_gEarth = 1.0 / GV%g_Earth
 
@@ -203,8 +213,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
       tv_tmp%T => T_tmp ; tv_tmp%S => S_tmp
       tv_tmp%eqn_of_state => tv%eqn_of_state
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,nkmb,tv_tmp,tv,p_ref,GV) &
-!$OMP                          private(Rho_cv_BL)
+      !$OMP parallel do default(shared) private(Rho_cv_BL)
       do j=Jsq,Jeq+1
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -225,17 +234,47 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
     endif
   endif
 
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,is,ie,js,je,tv_tmp,alpha_ref, &
-!$OMP                                  p,h,G,GV,tv,dza,intp_dza,intx_dza,inty_dza,use_EOS) &
-!$OMP                          private(alpha_anom,dp)
+  ! If regridding is activated, do a linear reconstruction of salinity
+  ! and temperature across each layer. The subscripts 't' and 'b' refer
+  ! to top and bottom values within each layer (these are the only degrees
+  ! of freedeom needed to know the linear profile).
+  if ( use_ALE ) then
+    if ( CS%Recon_Scheme == 1 ) then
+      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+    elseif ( CS%Recon_Scheme == 2) then
+      call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+    endif
+  endif
+
+  !$OMP parallel do default(shared) private(alpha_anom,dp)
   do k=1,nz
     ! Calculate 4 integrals through the layer that are required in the
     ! subsequent calculation.
     if (use_EOS) then
-      call int_specific_vol_dp(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), p(:,:,K), &
+      if ( use_ALE ) then
+        if ( CS%Recon_Scheme == 1 ) then
+          call int_spec_vol_dp_generic_plm( T_t(:,:,k), T_b(:,:,k), &
+                    S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
+                    alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
+                    tv%eqn_of_state, dza(:,:,k), intp_dza(:,:,k), &
+                    intx_dza(:,:,k), inty_dza(:,:,k), &
+                    useMassWghtInterp = CS%useMassWghtInterp)
+          i=k
+        elseif ( CS%Recon_Scheme == 2 ) then
+          call MOM_error(FATAL, "PressureForce_AFV_nonBouss: "//&
+                         "int_spec_vol_dp_generic_ppm does not exist yet.")
+        !  call int_spec_vol_dp_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
+        !            tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
+        !            alpha_ref, G%HI, tv%eqn_of_state, dza(:,:,k), intp_dza(:,:,k), &
+        !            intx_dza(:,:,k), inty_dza(:,:,k))
+        endif
+      else
+        call int_specific_vol_dp(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), p(:,:,K), &
                                p(:,:,K+1), alpha_ref, G%HI, tv%eqn_of_state, &
                                dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
-                               inty_dza(:,:,k))
+                               inty_dza(:,:,k), bathyP=p(:,:,nz+1), dP_tiny=dp_neglect, &
+                               useMassWghtInterp = CS%useMassWghtInterp)
+      endif
     else
       alpha_anom = 1.0/GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -260,24 +299,24 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   ! inty_dza to be 3-D arrays.
 
   ! Sum vertically to determine the surface geopotential anomaly.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,za,alpha_ref,p,G,GV,dza)
+  !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1
     do i=Isq,Ieq+1
       za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*G%bathyT(i,j)
     enddo
     do k=nz,1,-1 ; do i=Isq,Ieq+1
-    za(i,j) = za(i,j) + dza(i,j,k)
+      za(i,j) = za(i,j) + dza(i,j,k)
     enddo ; enddo
   enddo
 
   if (CS%tides) then
     ! Find and add the tidal geopotential anomaly.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,SSH,za,alpha_ref,p,I_gEarth)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth
     enddo ; enddo
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,za,G,GV,e_tidal)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) - GV%g_Earth*e_tidal(i,j)
     enddo ; enddo
@@ -286,8 +325,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
     if (use_EOS) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,tv_tmp,p,tv,dM,CS,alpha_ref,za) &
-!$OMP                          private(rho_in_situ)
+      !$OMP parallel do default(shared) private(rho_in_situ)
       do j=Jsq,Jeq+1
         call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p(:,j,1), &
                                rho_in_situ, Isq, Ieq-Isq+2, tv%eqn_of_state)
@@ -298,7 +336,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
         enddo
       enddo
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,dM,CS,p,GV,alpha_ref,za)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * &
           (p(i,j,1)*(1.0/GV%Rlay(1) - alpha_ref) + za(i,j))
@@ -313,69 +351,54 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   ! linearly between the values at thickness points, but the bottom
   ! geopotentials will not now be linear at the sub-grid-scale.  Doing this
   ! ensures no motion with flat isopycnals, even with a nonlinear equation of state.
-!$OMP parallel do default(none) shared(nz,za,G,GV,dza,intx_dza,h,PFu, &
-!$OMP                                  intp_dza,p,dp_neglect,inty_dza,PFv,CS,dM) &
-!$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk, &
-!$OMP                                  Jeq_bk,ioff_bk,joff_bk,i,j,za_bk,intx_za_bk,  &
-!$OMP                                  inty_za_bk,dp_bk)
-  do n = 1, G%nblocks
-    is_bk=G%block(n)%isc      ; ie_bk=G%block(n)%iec
-    js_bk=G%block(n)%jsc      ; je_bk=G%block(n)%jec
-    Isq_bk=G%block(n)%IscB    ; Ieq_bk=G%block(n)%IecB
-    Jsq_bk=G%block(n)%JscB    ; Jeq_bk=G%block(n)%JecB
-    ioff_bk = G%Block(n)%idg_offset - G%HI%idg_offset
-    joff_bk = G%Block(n)%jdg_offset - G%HI%jdg_offset
-    do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
-      i = ib+ioff_bk ; j = jb+joff_bk
-      za_bk(ib,jb) = za(i,j)
+  !$OMP parallel do default(shared)
+  do j=js,je ; do I=Isq,Ieq
+    intx_za(I,j) = 0.5*(za(i,j) + za(i+1,j))
+  enddo ; enddo
+  !$OMP parallel do default(shared)
+  do J=Jsq,Jeq ; do i=is,ie
+    inty_za(i,J) = 0.5*(za(i,j) + za(i,j+1))
+  enddo ; enddo
+  do k=1,nz
+    ! These expressions for the acceleration have been carefully checked in
+    ! a set of idealized cases, and should be bug-free.
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      dp(i,j) = GV%H_to_Pa*h(i,j,k)
+      za(i,j) = za(i,j) - dza(i,j,k)
     enddo ; enddo
-    do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
-      I = Ib+ioff_bk ; j = jb+joff_bk
-      intx_za_bk(Ib,jb) = 0.5*(za_bk(ib,jb) + za_bk(ib+1,jb))
+    !$OMP parallel do default(shared)
+    do j=js,je ; do I=Isq,Ieq
+      intx_za(I,j) = intx_za(I,j) - intx_dza(I,j,k)
+      PFu(I,j,k) = (((za(i,j)*dp(i,j) + intp_dza(i,j,k)) - &
+                   (za(i+1,j)*dp(i+1,j) + intp_dza(i+1,j,k))) + &
+                   ((dp(i+1,j) - dp(i,j)) * intx_za(I,j) - &
+                   (p(i+1,j,K) - p(i,j,K)) * intx_dza(I,j,k))) * &
+                   (2.0*G%IdxCu(I,j) / ((dp(i,j) + dp(i+1,j)) + &
+                   dp_neglect))
     enddo ; enddo
-    do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
-      i = ib+ioff_bk ; J = Jb+joff_bk
-      inty_za_bk(ib,Jb) = 0.5*(za_bk(ib,jb) + za_bk(ib,jb+1))
+    !$OMP parallel do default(shared)
+    do J=Jsq,Jeq ; do i=is,ie
+      inty_za(i,J) = inty_za(i,J) - inty_dza(i,J,k)
+      PFv(i,J,k) = (((za(i,j)*dp(i,j) + intp_dza(i,j,k)) - &
+                   (za(i,j+1)*dp(i,j+1) + intp_dza(i,j+1,k))) + &
+                   ((dp(i,j+1) - dp(i,j)) * inty_za(i,J) - &
+                   (p(i,j+1,K) - p(i,j,K)) * inty_dza(i,J,k))) * &
+                   (2.0*G%IdyCv(i,J) / ((dp(i,j) + dp(i,j+1)) + &
+                   dp_neglect))
     enddo ; enddo
-    do k=1,nz
-      ! These expressions for the acceleration have been carefully checked in
-      ! a set of idealized cases, and should be bug-free.
-      do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
-        i = ib+ioff_bk ; j = jb+joff_bk
-        dp_bk(ib,jb) = GV%H_to_Pa*h(i,j,k)
-        za_bk(ib,jb) = za_bk(ib,jb) - dza(i,j,k)
-      enddo ; enddo
-      do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
-        I = Ib+ioff_bk ; j = jb+joff_bk
-        intx_za_bk(Ib,jb) = intx_za_bk(Ib,jb) - intx_dza(I,j,k)
-        PFu(I,j,k) = (((za_bk(ib,jb)*dp_bk(ib,jb) + intp_dza(i,j,k)) - &
-                     (za_bk(ib+1,jb)*dp_bk(ib+1,jb) + intp_dza(i+1,j,k))) + &
-                     ((dp_bk(ib+1,jb) - dp_bk(ib,jb)) * intx_za_bk(Ib,jb) - &
-                     (p(i+1,j,K) - p(i,j,K)) * intx_dza(I,j,k))) * &
-                     (2.0*G%IdxCu(I,j) / ((dp_bk(ib,jb) + dp_bk(ib+1,jb)) + &
-                     dp_neglect))
-      enddo ; enddo
-      do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
-        i = ib+ioff_bk ; J = Jb+joff_bk
-        inty_za_bk(ib,Jb) = inty_za_bk(ib,Jb) - inty_dza(i,J,k)
-        PFv(i,J,k) = (((za_bk(ib,jb)*dp_bk(ib,jb) + intp_dza(i,j,k)) - &
-                     (za_bk(ib,jb+1)*dp_bk(ib,jb+1) + intp_dza(i,j+1,k))) + &
-                     ((dp_bk(ib,jb+1) - dp_bk(ib,jb)) * inty_za_bk(ib,Jb) - &
-                     (p(i,j+1,K) - p(i,j,K)) * inty_dza(i,J,k))) * &
-                     (2.0*G%IdyCv(i,J) / ((dp_bk(ib,jb) + dp_bk(ib,jb+1)) + &
-                     dp_neglect))
-      enddo ; enddo
 
-      if (CS%GFS_scale < 1.0) then
-        ! Adjust the Montgomery potential to make this a reduced gravity model.
-        do j=js_bk+joff_bk,je_bk+joff_bk ; do I=Isq_bk+ioff_bk,Ieq_bk+ioff_bk
-          PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
-        enddo ; enddo
-        do J=Jsq_bk+joff_bk,Jeq_bk+joff_bk ; do i=is_bk+ioff_bk,ie_bk+ioff_bk
-          PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
-        enddo ; enddo
-      endif
-    enddo
+    if (CS%GFS_scale < 1.0) then
+      ! Adjust the Montgomery potential to make this a reduced gravity model.
+      !$OMP parallel do default(shared)
+      do j=js,je ; do I=Isq,Ieq
+        PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
+      enddo ; enddo
+      !$OMP parallel do default(shared)
+      do J=Jsq,Jeq ; do i=is,ie
+        PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
+      enddo ; enddo
+    endif
   enddo
 
   if (present(pbce)) then
@@ -385,12 +408,12 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   if (present(eta)) then
     Pa_to_H = 1.0 / GV%H_to_Pa
     if (use_p_atm) then
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,p_atm,Pa_to_H)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = (p(i,j,nz+1) - p_atm(i,j))*Pa_to_H ! eta has the same units as h.
       enddo ; enddo
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,Pa_to_H)
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = p(i,j,nz+1)*Pa_to_H ! eta has the same units as h.
       enddo ; enddo
@@ -437,22 +460,22 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   real, dimension(SZI_(G)) :: &
     Rho_cv_BL   !   The coordinate potential density in the deepest variable
                 ! density near-surface layer, in kg m-3.
-  real, dimension(SZDI_(G%Block(1)),SZDJ_(G%Block(1))) :: &  ! on block indices
-    dz_bk, &     ! The change in geopotential thickness through a layer, m2 s-2.
-    pa_bk, &     ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
-                 ! the interface atop a layer, in Pa.
-    dpa_bk, &    ! The change in pressure anomaly between the top and bottom
-                 ! of a layer, in Pa.
-    intz_dpa_bk  ! The vertical integral in depth of the pressure anomaly less
-                 ! the pressure anomaly at the top of the layer, in H Pa (m Pa).
-  real, dimension(SZDIB_(G%Block(1)),SZDJ_(G%Block(1))) :: & ! on block indices
-    intx_pa_bk, & ! The zonal integral of the pressure anomaly along the interface
-                  ! atop a layer, divided by the grid spacing, in Pa.
-    intx_dpa_bk   ! The change in intx_pa through a layer, in Pa.
-  real, dimension(SZDI_(G%Block(1)),SZDJB_(G%Block(1))) :: & ! on block indices
-    inty_pa_bk, & ! The meridional integral of the pressure anomaly along the
-                  ! interface atop a layer, divided by the grid spacing, in Pa.
-    inty_dpa_bk   ! The change in inty_pa through a layer, in Pa.
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    dz, &       ! The change in geopotential thickness through a layer, m2 s-2.
+    pa, &       ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
+                ! the interface atop a layer, in Pa.
+    dpa, &      ! The change in pressure anomaly between the top and bottom
+                ! of a layer, in Pa.
+    intz_dpa    ! The vertical integral in depth of the pressure anomaly less
+                ! the pressure anomaly at the top of the layer, in H Pa (m Pa).
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    intx_pa, &  ! The zonal integral of the pressure anomaly along the interface
+                ! atop a layer, divided by the grid spacing, in Pa.
+    intx_dpa    ! The change in intx_pa through a layer, in Pa.
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    inty_pa, &  ! The meridional integral of the pressure anomaly along the
+                ! interface atop a layer, divided by the grid spacing, in Pa.
+    inty_dpa    ! The change in inty_pa through a layer, in Pa.
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
@@ -480,26 +503,22 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
 
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
-  integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk
-  integer :: ioff_bk, joff_bk
-  integer :: i, j, k, n, ib, jb
-  integer :: PRScheme
+  integer :: i, j, k
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce: Module must be initialized before it is used.")
+       "MOM_PressureForce_AFV_Bouss: Module must be initialized before it is used.")
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
   use_EOS = associated(tv%eqn_of_state)
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
   use_ALE = .false.
-  if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
+  if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
-  PRScheme = pressureReconstructionScheme(ALE_CSp)
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_m
   I_Rho0 = 1.0/GV%Rho0
@@ -511,7 +530,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     ! and loading.  This should really be based on bottom pressure anomalies,
     ! but that is not yet implemented, and the current form is correct for
     ! barotropic tides.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,GV,h)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         e(i,j,1) = -1.0*G%bathyT(i,j)
@@ -524,23 +543,21 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   endif
 
 !    Here layer interface heights, e, are calculated.
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,GV,h,CS,e_tidal)
   if (CS%tides) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e(i,j,nz+1) = -1.0*G%bathyT(i,j) - e_tidal(i,j)
     enddo ; enddo
   else
-!$OM do
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e(i,j,nz+1) = -1.0*G%bathyT(i,j)
     enddo ; enddo
   endif
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1; do k=nz,1,-1 ; do i=Isq,Ieq+1
     e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_m
   enddo ; enddo ; enddo
-!$OMP end parallel
 
 
   if (use_EOS) then
@@ -554,8 +571,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
       tv_tmp%eqn_of_state => tv%eqn_of_state
 
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nkmb,nz,GV,tv_tmp,tv,p_ref) &
-!$OMP                          private(Rho_cv_BL)
+     !$OMP parallel do default(shared) private(Rho_cv_BL)
       do j=Jsq,Jeq+1
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -577,13 +593,10 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     endif
   endif
 
-!$OMP parallel default(none) shared(Jsq,Jeq,Isq,Ieq,tv_tmp,p_atm,rho_in_situ,tv, &
-!$OMP                               p0,dM,CS,G_Rho0,e,use_p_atm,use_EOS,GV,    &
-!$OMP                               rho_ref,js,je,is,ie)
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
     if (use_EOS) then
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1
         if (use_p_atm) then
           call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), &
@@ -597,151 +610,142 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
         enddo
       enddo
     else
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * e(i,j,1)
       enddo ; enddo
     endif
   endif
-!$OMP end parallel
-
-! Have checked that rho_0 drops out and that the 1-layer case is right. RWH.
+  ! I have checked that rho_0 drops out and that the 1-layer case is right. RWH.
 
   ! If regridding is activated, do a linear reconstruction of salinity
   ! and temperature across each layer. The subscripts 't' and 'b' refer
   ! to top and bottom values within each layer (these are the only degrees
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
-    if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
-    elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+    if ( CS%Recon_Scheme == 1 ) then
+      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+    elseif ( CS%Recon_Scheme == 2 ) then
+      call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     endif
   endif
 
-!$OMP parallel do default(none) shared(use_p_atm,rho_ref,G,GV,e,p_atm,nz,use_EOS,&
-!$OMP                                  use_ALE,PRScheme,T_t,T_b,S_t,S_b,CS,tv,tv_tmp, &
-!$OMP                                  h,PFu,I_Rho0,h_neglect,dz_neglect,PFv,dM)&
-!$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk,  &
-!$OMP                                  Jeq_bk,ioff_bk,joff_bk,pa_bk,  &
-!$OMP                                  intx_pa_bk,inty_pa_bk,dpa_bk,intz_dpa_bk,      &
-!$OMP                                  intx_dpa_bk,inty_dpa_bk,dz_bk,i,j)
-  do n = 1, G%nblocks
-    is_bk=G%Block(n)%isc      ; ie_bk=G%Block(n)%iec
-    js_bk=G%Block(n)%jsc      ; je_bk=G%Block(n)%jec
-    Isq_bk=G%Block(n)%IscB    ; Ieq_bk=G%Block(n)%IecB
-    Jsq_bk=G%Block(n)%JscB    ; Jeq_bk=G%Block(n)%JecB
-    ioff_bk = G%Block(n)%idg_offset - G%HI%idg_offset
-    joff_bk = G%Block(n)%jdg_offset - G%HI%jdg_offset
+  ! Set the surface boundary conditions on pressure anomaly and its horizontal
+  ! integrals, assuming that the surface pressure anomaly varies linearly
+  ! in x and y.
+  if (use_p_atm) then
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      pa(i,j) = (rho_ref*GV%g_Earth)*e(i,j,1) + p_atm(i,j)
+    enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      pa(i,j) = (rho_ref*GV%g_Earth)*e(i,j,1)
+    enddo ; enddo
+  endif
+  !$OMP parallel do default(shared)
+  do j=js,je ; do I=Isq,Ieq
+    intx_pa(I,j) = 0.5*(pa(i,j) + pa(i+1,j))
+  enddo ; enddo
+  !$OMP parallel do default(shared)
+  do J=Jsq,Jeq ; do i=is,ie
+    inty_pa(i,J) = 0.5*(pa(i,j) + pa(i,j+1))
+  enddo ; enddo
 
-    ! Set the surface boundary conditions on pressure anomaly and its horizontal
-    ! integrals, assuming that the surface pressure anomaly varies linearly
-    ! in x and y.
-    if (use_p_atm) then
-      do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
-        i = ib+ioff_bk ; j = jb+joff_bk
-        pa_bk(ib,jb) = (rho_ref*GV%g_Earth)*e(i,j,1) + p_atm(i,j)
+  do k=1,nz
+    ! Calculate 4 integrals through the layer that are required in the
+    ! subsequent calculation.
+
+    if (use_EOS) then
+      ! The following routine computes the integrals that are needed to
+      ! calculate the pressure gradient force. Linear profiles for T and S are
+      ! assumed when regridding is activated. Otherwise, the previous version
+      ! is used, whereby densities within each layer are constant no matter
+      ! where the layers are located.
+      if ( use_ALE ) then
+        if ( CS%Recon_Scheme == 1 ) then
+          call int_density_dz_generic_plm( T_t(:,:,k), T_b(:,:,k), &
+                    S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
+                    rho_ref, CS%Rho0, GV%g_Earth,    &
+                    dz_neglect, G%bathyT, G%HI, G%HI, &
+                    tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
+                    useMassWghtInterp = CS%useMassWghtInterp)
+        elseif ( CS%Recon_Scheme == 2 ) then
+          call int_density_dz_generic_ppm( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
+                    tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
+                    rho_ref, CS%Rho0, GV%g_Earth, &
+                    G%HI, G%HI, tv%eqn_of_state, dpa, intz_dpa,    &
+                    intx_dpa, inty_dpa)
+        endif
+      else
+        call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), &
+                  e(:,:,K), e(:,:,K+1),             &
+                  rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%HI, tv%eqn_of_state, &
+                  dpa, intz_dpa, intx_dpa, inty_dpa, &
+                  G%bathyT, dz_neglect, CS%useMassWghtInterp)
+      endif
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        intz_dpa(i,j) = intz_dpa(i,j)*GV%m_to_H
       enddo ; enddo
     else
-      do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
-        i = ib+ioff_bk ; j = jb+joff_bk
-        pa_bk(ib,jb) = (rho_ref*GV%g_Earth)*e(i,j,1)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        dz(i,j) = GV%g_Earth*GV%H_to_m*h(i,j,k)
+        dpa(i,j) = (GV%Rlay(k) - rho_ref)*dz(i,j)
+        intz_dpa(i,j) = 0.5*(GV%Rlay(k) - rho_ref)*dz(i,j)*h(i,j,k)
+      enddo ; enddo
+      !$OMP parallel do default(shared)
+      do j=js,je ; do I=Isq,Ieq
+        intx_dpa(I,j) = 0.5*(GV%Rlay(k) - rho_ref) * (dz(i,j)+dz(i+1,j))
+      enddo ; enddo
+      !$OMP parallel do default(shared)
+      do J=Jsq,Jeq ; do i=is,ie
+        inty_dpa(i,J) = 0.5*(GV%Rlay(k) - rho_ref) * (dz(i,j)+dz(i,j+1))
       enddo ; enddo
     endif
-    do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
-      intx_pa_bk(Ib,jb) = 0.5*(pa_bk(ib,jb) + pa_bk(ib+1,jb))
-    enddo ; enddo
-    do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
-      inty_pa_bk(ib,Jb) = 0.5*(pa_bk(ib,jb) + pa_bk(ib,jb+1))
-    enddo ; enddo
 
+    ! Compute pressure gradient in x direction
+    !$OMP parallel do default(shared)
+    do j=js,je ; do I=Isq,Ieq
+      PFu(I,j,k) = (((pa(i,j)*h(i,j,k) + intz_dpa(i,j)) - &
+                   (pa(i+1,j)*h(i+1,j,k) + intz_dpa(i+1,j))) + &
+                   ((h(i+1,j,k) - h(i,j,k)) * intx_pa(I,j) - &
+                   (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa(I,j) * GV%m_to_H)) * &
+                   ((2.0*I_Rho0*G%IdxCu(I,j)) / &
+                   ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
+      intx_pa(I,j) = intx_pa(I,j) + intx_dpa(I,j)
+    enddo ; enddo
+    ! Compute pressure gradient in y direction
+    !$OMP parallel do default(shared)
+    do J=Jsq,Jeq ; do i=is,ie
+      PFv(i,J,k) = (((pa(i,j)*h(i,j,k) + intz_dpa(i,j)) - &
+                   (pa(i,j+1)*h(i,j+1,k) + intz_dpa(i,j+1))) + &
+                   ((h(i,j+1,k) - h(i,j,k)) * inty_pa(i,J) - &
+                   (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa(i,J) * GV%m_to_H)) * &
+                   ((2.0*I_Rho0*G%IdyCv(i,J)) / &
+                   ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
+      inty_pa(i,J) = inty_pa(i,J) + inty_dpa(i,J)
+    enddo ; enddo
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      pa(i,j) = pa(i,j) + dpa(i,j)
+    enddo ; enddo
+  enddo
+
+  if (CS%GFS_scale < 1.0) then
     do k=1,nz
-      ! Calculate 4 integrals through the layer that are required in the
-      ! subsequent calculation.
-
-      if (use_EOS) then
-        ! The following routine computes the integrals that are needed to
-        ! calculate the pressure gradient force. Linear profiles for T and S are
-        ! assumed when regridding is activated. Otherwise, the previous version
-        ! is used, whereby densities within each layer are constant no matter
-        ! where the layers are located.
-        if ( use_ALE ) then
-          if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-            call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
-                      S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                      rho_ref, CS%Rho0, GV%g_Earth,    &
-                      dz_neglect, G%bathyT, G%HI, G%Block(n), &
-                      tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
-                      useMassWghtInterp = CS%useMassWghtInterp)
-          elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-            call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
-                      tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                      rho_ref, CS%Rho0, GV%g_Earth, &
-                      G%HI, G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk,    &
-                      intx_dpa_bk, inty_dpa_bk)
-          endif
-        else
-          call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), &
-                    e(:,:,K), e(:,:,K+1),             &
-                    rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
-                    dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
-        endif
-        do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
-          intz_dpa_bk(ib,jb) = intz_dpa_bk(ib,jb)*GV%m_to_H
-        enddo ; enddo
-      else
-        do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
-          i = ib+ioff_bk ; j = jb+joff_bk
-          dz_bk(ib,jb) = GV%g_Earth*GV%H_to_m*h(i,j,k)
-          dpa_bk(ib,jb) = (GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)
-          intz_dpa_bk(ib,jb) = 0.5*(GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
-        enddo ; enddo
-        do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
-          intx_dpa_bk(Ib,jb) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib+1,jb))
-        enddo ; enddo
-        do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
-          inty_dpa_bk(ib,Jb) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib,jb+1))
-        enddo ; enddo
-      endif
-
-      ! Compute pressure gradient in x direction
-      do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
-        I = Ib+ioff_bk ; j = jb+joff_bk
-        PFu(I,j,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
-                     (pa_bk(ib+1,jb)*h(i+1,j,k) + intz_dpa_bk(ib+1,jb))) + &
-                     ((h(i+1,j,k) - h(i,j,k)) * intx_pa_bk(Ib,jb) - &
-                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb) * GV%m_to_H)) * &
-                     ((2.0*I_Rho0*G%IdxCu(I,j)) / &
-                     ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
-        intx_pa_bk(Ib,jb) = intx_pa_bk(Ib,jb) + intx_dpa_bk(Ib,jb)
+      !$OMP parallel do default(shared)
+      do j=js,je ; do I=Isq,Ieq
+        PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
       enddo ; enddo
-      ! Compute pressure gradient in y direction
-      do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
-        i = ib+ioff_bk ; J = Jb+joff_bk
-        PFv(i,J,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
-                     (pa_bk(ib,jb+1)*h(i,j+1,k) + intz_dpa_bk(ib,jb+1))) + &
-                     ((h(i,j+1,k) - h(i,j,k)) * inty_pa_bk(ib,Jb) - &
-                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb) * GV%m_to_H)) * &
-                     ((2.0*I_Rho0*G%IdyCv(i,J)) / &
-                     ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
-        inty_pa_bk(ib,Jb) = inty_pa_bk(ib,Jb) + inty_dpa_bk(ib,Jb)
-      enddo ; enddo
-      do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
-        pa_bk(ib,jb) = pa_bk(ib,jb) + dpa_bk(ib,jb)
+      !$OMP parallel do default(shared)
+      do J=Jsq,Jeq ; do i=is,ie
+        PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
-
-    if (CS%GFS_scale < 1.0) then
-      do k=1,nz
-        do j=js_bk+joff_bk,je_bk+joff_bk ; do I=Isq_bk+ioff_bk,Ieq_bk+ioff_bk
-          PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
-        enddo ; enddo
-        do J=Jsq_bk+joff_bk,Jeq_bk+joff_bk ; do i=is_bk+ioff_bk,ie_bk+ioff_bk
-          PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
-        enddo ; enddo
-      enddo
-    endif
-  enddo
+  endif
 
   if (present(pbce)) then
     call set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce)
@@ -752,12 +756,12 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     ! eta is the sea surface height relative to a time-invariant geoid, for
     ! comparison with what is used for eta in btstep.  See how e was calculated
     ! about 200 lines above.
-!$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,e_tidal)
+    !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = e(i,j,1)*GV%m_to_H + e_tidal(i,j)*GV%m_to_H
       enddo ; enddo
     else
-!$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e)
+    !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = e(i,j,1)*GV%m_to_H
       enddo ; enddo
@@ -780,6 +784,7 @@ subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
+  logical :: use_ALE
 
   if (associated(CS)) then
     call MOM_error(WARNING, "PressureForce_init called with an associated "// &
@@ -802,9 +807,30 @@ subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &
+                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", CS%useMassWghtInterp, &
-                 "If true, use mass weighting when interpolation T/S for\n"//&
-                 "top/bottom integrals in AFV pressure gradient calculation.", default=.false.)
+                 "If true, use mass weighting when interpolating T/S for\n"//&
+                 "integrals near the bathymetry in AFV pressure gradient\n"//&
+                 "calculations.", default=.false.)
+  call get_param(param_file, mdl, "RECONSTRUCT_FOR_PRESSURE", CS%reconstruct, &
+                 "If True, use vertical reconstruction of T & S within\n"//&
+                 "the integrals of the FV pressure gradient calculation.\n"//&
+                 "If False, use the constant-by-layer algorithm.\n"//&
+                 "The default is set by USE_REGRIDDING.", &
+                 default=use_ALE )
+  call get_param(param_file, mdl, "PRESSURE_RECONSTRUCTION_SCHEME", CS%Recon_Scheme, &
+                 "Order of vertical reconstruction of T/S to use in the\n"//&
+                 "integrals within the FV pressure gradient calculation."//&
+                 " 0: PCM or no reconstruction.\n"//&
+                 " 1: PLM reconstruction.\n"//&
+                 " 2: PPM reconstruction.", default=1)
+  call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION_PRESSURE", CS%boundary_extrap, &
+                 "If true, the reconstruction of T & S for pressure in \n"//&
+                 "boundary cells is extrapolated, rather than using PCM \n"//&
+                 "in these cells. If true, the same order polynomial is \n"//&
+                 "used as is used for the interior cells.", default=.true.)
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
@@ -820,7 +846,8 @@ end subroutine PressureForce_AFV_init
 
 !> Deallocates the finite volume pressure gradient control structure
 subroutine PressureForce_AFV_end(CS)
-  type(PressureForce_AFV_CS), pointer :: CS
+  type(PressureForce_AFV_CS), pointer :: CS !< Finite volume pressure control structure that
+                                            !! will be deallocated in this subroutine.
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_AFV_end
 

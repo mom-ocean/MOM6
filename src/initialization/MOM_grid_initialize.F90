@@ -1,53 +1,7 @@
+!> Initializes horizontal grid
 module MOM_grid_initialize
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, November 1998 - June 2002                      *
-!*                                                                     *
-!*    This program contains 2 externally callable subroutines.         *
-!*  set_grid_metrics calculates the various metric terms that are used *
-!*  by MOM.  This routine is intended to be modified by the user to    *
-!*  enable the use of any general orthogonal grid.  initialize_masks   *
-!*  initializes the land masks; it is in this file because it a key    *
-!*  part of the physical grid description.                             *
-!*                                                                     *
-!*    This subroutine is also used by MOM-related preprocessing and    *
-!*  postprocessing codes.                                              *
-!*                                                                     *
-!*    The metric terms have the form Dzp, IDzp, or DXDYp, where z can  *
-!*  be X or Y, and p can be q, u, v, or h.  z describes the direction  *
-!*  of the metric, while p describes the location.  IDzp is the        *
-!*  inverse of Dzp, while DXDYp is the product of DXp and DYp except   *
-!*  that areaT is calculated analytically from the latitudes and       *
-!*  longitudes of the surrounding q points.                            *
-!*                                                                     *
-!*    On a sphere, a variety of grids can be implemented by defining   *
-!*  analytic expressions for dx_di, dy_dj (where x and y are latitude  *
-!*  and longitude, and i and j are grid indices) and the expressions   *
-!*  for the integrals of their inverses in the four subroutines        *
-!*  dy_dj, Int_dj_dy, dx_di, and Int_di_dx.                            *
-!*                                                                     *
-!*    initialize_masks sets up land masks based on the depth field.    *
-!*  The one argument is the minimum ocean depth.  Depths that are      *
-!*  less than this are interpreted as land points.                     *
-!*                                                                     *
-!*    Macros written all in capital letters are from MOM_memory.h.     *
-!*                                                                     *
-!*     A small fragment of the C-grid is shown below:                  *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, dxBu, IdxBu, dyBu, IdyBu, etc.        *
-!*    j+1  > o > o >   At ^:  v, dxCv, IdxCv, dyCv, IdyCv, etc.        *
-!*    j    x ^ x ^ x   At >:  u, dxCu, IdxCu, dyCu, IdyCu, etc.        *
-!*    j    > o > o >   At o:  h, dxT, IdxT, dyT, IdyT, areaT, etc.     *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_checksums, only : hchksum, Bchksum
 use MOM_checksums, only : uvchksum, hchksum_pair, Bchksum_pair
@@ -69,39 +23,40 @@ implicit none ; private
 
 public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 
+!> Global positioning system (aka container for information to describe the grid)
 type, public :: GPS ; private
-  real :: len_lon
-  real :: len_lat
-  real :: west_lon
-  real :: south_lat
-  real :: Rad_Earth
-  real :: Lat_enhance_factor
-  real :: Lat_eq_enhance
-  logical :: isotropic
-  logical :: equator_reference
-  integer :: niglobal, njglobal         ! Duplicates of niglobal and njglobal from MOM_dom
+  real :: len_lon  !< The longitudinal or x-direction length of the domain.
+  real :: len_lat  !< The latitudinal or y-direction length of the domain.
+  real :: west_lon !< The western longitude of the domain or the equivalent
+                   !! starting value for the x-axis.
+  real :: south_lat  !< The southern latitude of the domain or the equivalent
+                   !! starting value for the y-axis.
+  real :: Rad_Earth !< The radius of the Earth, in m.
+  real :: Lat_enhance_factor  !< The amount by which the meridional resolution
+                   !! is enhanced within LAT_EQ_ENHANCE of the equator.
+  real :: Lat_eq_enhance !< The latitude range to the north and south of the equator
+                   !! over which the resolution is enhanced, in degrees.
+  logical :: isotropic !< If true, an isotropic grid on a sphere (also known as a Mercator grid)
+                   !! is used. With an isotropic grid, the meridional extent of the domain
+                   !! (LENLAT), the zonal extent (LENLON), and the number of grid points in each
+                   !! direction are _not_ independent. In MOM the meridional extent is determined
+                   !! to fit the zonal extent and the number of grid points, while grid is
+                   !! perfectly isotropic.
+  logical :: equator_reference !< If true, the grid is defined to have the equator at the
+                   !!  nearest q- or h- grid point to (-LOWLAT*NJGLOBAL/LENLAT).
+  integer :: niglobal !< The number of i-points in the global grid computational domain
+  integer :: njglobal !< The number of j-points in the global grid computational domain
 end type GPS
 
 contains
 
-
 !> set_grid_metrics is used to set the primary values in the model's horizontal
-!!   grid.  The bathymetry, land-sea mask and any restricted channel widths are
-!!   not known yet, so these are set later.
+!! grid.  The bathymetry, land-sea mask and any restricted channel widths are
+!! not known yet, so these are set later.
 subroutine set_grid_metrics(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
   type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
-! Arguments:
-!  (inout)   G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!    Calculate the values of the metric terms that might be used
-!  and save them in arrays.
-!    Within this subroutine, the x- and y- grid spacings and their
-!  inverses and the cell areas centered on h, q, u, and v points are
-!  calculated, as are the geographic locations of each of these 4
-!  sets of points.
+  ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   logical :: debug
@@ -119,7 +74,8 @@ subroutine set_grid_metrics(G, param_file)
                  " \t mercator - use a Mercator spherical grid.", &
                  fail_if_missing=.true.)
   call get_param(param_file, "MOM_grid_init", "DEBUG", debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
@@ -135,7 +91,7 @@ subroutine set_grid_metrics(G, param_file)
            "Unrecognized grid configuration "//trim(config))
   end select
 
-! Calculate derived metrics (i.e. reciprocals and products)
+  ! Calculate derived metrics (i.e. reciprocals and products)
   call callTree_enter("set_derived_metrics(), MOM_grid_initialize.F90")
   call set_derived_dyn_horgrid(G)
   call callTree_leave("set_derived_metrics()")
@@ -148,7 +104,7 @@ end subroutine set_grid_metrics
 ! ------------------------------------------------------------------------------
 
 !> grid_metrics_chksum performs a set of checksums on metrics on the grid for
-!!   debugging.
+!! debugging.
 subroutine grid_metrics_chksum(parent, G)
   character(len=*),      intent(in) :: parent  !< A string identifying the caller
   type(dyn_horgrid_type), intent(in) :: G      !< The dynamic horizontal grid type
@@ -202,17 +158,11 @@ end subroutine grid_metrics_chksum
 
 ! ------------------------------------------------------------------------------
 
-!>  set_grid_metrics_from_mosaic sets the grid metrics from a mosaic file.
+!> Sets the grid metrics from a mosaic file.
 subroutine set_grid_metrics_from_mosaic(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-!   This subroutine sets the grid metrics from a mosaic file.
-!
-! Arguments:
-!  (inout)   G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
+  ! Local variables
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: tempH1, tempH2, tempH3, tempH4
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: tempQ1, tempQ2, tempQ3, tempQ4
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: tempE1, tempE2
@@ -233,6 +183,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
   integer :: err=0, ni, nj, global_indices(4)
   type(MOM_domain_type) :: SGdom ! Supergrid domain
+  logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
   integer :: i, j, i2, j2
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
@@ -243,6 +194,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   call get_param(param_file, mdl, "GRID_FILE", grid_file, &
                  "Name of the file from which to read horizontal grid data.", &
                  fail_if_missing=.true.)
+  call get_param(param_file, mdl, "USE_TRIPOLAR_GEOLONB_BUG", lon_bug, &
+                 "If true, use older code that incorrectly sets the longitude \n"//&
+                 "in some points along the tripolar fold to be off by 360 degrees.", &
+                 default=.true.)
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(adjustl(inputdir)) // trim(adjustl(grid_file))
@@ -251,16 +206,16 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
     call MOM_error(FATAL," set_grid_metrics_from_mosaic: Unable to open "//&
                            trim(filename))
 
-! Initialize everything to 0.
+  ! Initialize everything to 0.
   dxCu(:,:) = 0.0 ; dyCu(:,:) = 0.0
   dxCv(:,:) = 0.0 ; dyCv(:,:) = 0.0
   dxBu(:,:) = 0.0 ; dyBu(:,:) = 0.0 ; areaBu(:,:) = 0.0
 
-!<MISSING CODE TO READ REFINEMENT LEVEL>
+  !<MISSING CODE TO READ REFINEMENT LEVEL>
   ni = 2*(G%iec-G%isc+1) ! i size of supergrid
   nj = 2*(G%jec-G%jsc+1) ! j size of supergrid
 
-! Define a domain for the supergrid (SGdom)
+  ! Define a domain for the supergrid (SGdom)
   npei = G%domain%layout(1) ; npej = G%domain%layout(2)
   allocate(exni(npei)) ; allocate(exnj(npej))
   call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
@@ -270,14 +225,13 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   SGdom%niglobal = 2*G%domain%niglobal
   SGdom%njglobal = 2*G%domain%njglobal
   SGdom%layout(:) = G%domain%layout(:)
-  SGdom%use_io_layout = G%domain%use_io_layout
   SGdom%io_layout(:) = G%domain%io_layout(:)
   global_indices(1) = 1+SGdom%nihalo
   global_indices(2) = SGdom%niglobal+SGdom%nihalo
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-  if(ASSOCIATED(G%domain%maskmap)) then
+  if (associated(G%domain%maskmap)) then
      call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
             xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
@@ -291,16 +245,19 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
             symmetry=.true., name="MOM_MOSAIC")
   endif
 
-  if (SGdom%use_io_layout) &
-    call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
+  call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
   deallocate(exni)
   deallocate(exnj)
 
-! Read X from the supergrid
+  ! Read X from the supergrid
   tmpZ(:,:) = 999.
   call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
 
-  call pass_var(tmpZ, SGdom, position=CORNER)
+  if (lon_bug) then
+    call pass_var(tmpZ, SGdom, position=CORNER)
+  else
+    call pass_var(tmpZ, SGdom, position=CORNER, inner_halo=0)
+  endif
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
@@ -314,10 +271,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*J
     G%geoLonCv(i,J) = tmpZ(i2-1,j2)
   enddo ; enddo
- ! For some reason, this messes up the solution...
- !   call pass_var(G%geoLonBu, G%domain, position=CORNER)
+  ! For some reason, this messes up the solution...
+  !   call pass_var(G%geoLonBu, G%domain, position=CORNER)
 
-! Read Y from the supergrid
+  ! Read Y from the supergrid
   tmpZ(:,:) = 999.
   call MOM_read_data(filename, 'y', tmpZ, SGdom, position=CORNER)
 
@@ -336,7 +293,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
     G%geoLatCv(i,J) = tmpZ(i2-1,j2)
   enddo ; enddo
 
-! Read DX,DY from the supergrid
+  ! Read DX,DY from the supergrid
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
   call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
   call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
@@ -364,7 +321,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
     dyBu(I,J) = tmpU(i2,j2) + tmpU(i2,j2+1)
   enddo ; enddo
 
-! Read AREA from the supergrid
+  ! Read AREA from the supergrid
   tmpT(:,:) = 0.
   call MOM_read_data(filename, 'area', tmpT, SGdom)
   call pass_var(tmpT, SGdom)
@@ -444,21 +401,17 @@ end subroutine set_grid_metrics_from_mosaic
 
 ! ------------------------------------------------------------------------------
 
+!> Calculate the values of the metric terms for a Cartesian grid that
+!! might be used and save them in arrays.
+!!
+!! Within this subroutine, the x- and y- grid spacings and their
+!! inverses and the cell areas centered on h, q, u, and v points are
+!! calculated, as are the geographic locations of each of these 4
+!! sets of points.
 subroutine set_grid_metrics_cartesian(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-
-! Arguments:
-!  (inout)   G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!    Calculate the values of the metric terms for a Cartesian grid that
-!  might be used and save them in arrays.
-!    Within this subroutine, the x- and y- grid spacings and their
-!  inverses and the cell areas centered on h, q, u, and v points are
-!  calculated, as are the geographic locations of each of these 4
-!  sets of points.
+  ! Local variables
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, I1off, J1off
   integer :: niglobal, njglobal
   real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
@@ -476,7 +429,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
 
-  PI = 4.0*atan(1.0) ;
+  PI = 4.0*atan(1.0)
 
   call get_param(param_file, mdl, "AXIS_UNITS", units_temp, &
                  "The units for the Cartesian axes. Valid entries are: \n"//&
@@ -537,7 +490,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   if (units_temp(1:1) == 'k') then ! Axes are measured in km.
     dx_everywhere = 1000.0 * G%len_lon / (REAL(niglobal))
     dy_everywhere = 1000.0 * G%len_lat / (REAL(njglobal))
-  else if (units_temp(1:1) == 'm') then ! Axes are measured in m.
+  elseif (units_temp(1:1) == 'm') then ! Axes are measured in m.
     dx_everywhere = G%len_lon / (REAL(niglobal))
     dy_everywhere = G%len_lat / (REAL(njglobal))
   else ! Axes are measured in degrees of latitude and longitude.
@@ -581,21 +534,17 @@ end subroutine set_grid_metrics_cartesian
 
 ! ------------------------------------------------------------------------------
 
+!> Calculate the values of the metric terms that might be used
+!! and save them in arrays.
+!!
+!! Within this subroutine, the x- and y- grid spacings and their
+!! inverses and the cell areas centered on h, q, u, and v points are
+!! calculated, as are the geographic locations of each of these 4
+!! sets of points.
 subroutine set_grid_metrics_spherical(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-
-! Arguments:
-!  (inout)   G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!    Calculate the values of the metric terms that might be used
-!  and save them in arrays.
-!    Within this subroutine, the x- and y- grid spacings and their
-!  inverses and the cell areas centered on h, q, u, and v points are
-!  calculated, as are the geographic locations of each of these 4
-!  sets of points.
+  ! Local variables
   real :: PI, PI_180! PI = 3.1415926... as 4*atan(1)
   integer :: i, j, isd, ied, jsd, jed
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
@@ -672,42 +621,42 @@ subroutine set_grid_metrics_spherical(G, param_file)
     G%geoLonBu(I,J) = grid_lonB(I)
     G%geoLatBu(I,J) = grid_latB(J)
 
-! The following line is needed to reproduce the solution from
-! set_grid_metrics_mercator when used to generate a simple spherical grid.
+    ! The following line is needed to reproduce the solution from
+    ! set_grid_metrics_mercator when used to generate a simple spherical grid.
     G%dxBu(I,J) = G%Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
 !   G%dxBu(I,J) = G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
     G%dyBu(I,J) = G%Rad_Earth * dLat*PI_180
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = grid_LonT(i)
     G%geoLatCv(i,J) = grid_latB(J)
 
-! The following line is needed to reproduce the solution from
-! set_grid_metrics_mercator when used to generate a simple spherical grid.
+    ! The following line is needed to reproduce the solution from
+    ! set_grid_metrics_mercator when used to generate a simple spherical grid.
     G%dxCv(i,J) = G%Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
 !   G%dxCv(i,J) = G%Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
     G%dyCv(i,J) = G%Rad_Earth * dLat*PI_180
-  enddo; enddo
+  enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
     G%geoLonCu(I,j) = grid_lonB(I)
     G%geoLatCu(I,j) = grid_LatT(j)
 
-! The following line is needed to reproduce the solution from
-! set_grid_metrics_mercator when used to generate a simple spherical grid.
+    ! The following line is needed to reproduce the solution from
+    ! set_grid_metrics_mercator when used to generate a simple spherical grid.
     G%dxCu(I,j) = G%Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
 !   G%dxCu(I,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
     G%dyCu(I,j) = G%Rad_Earth * dLat*PI_180
-  enddo; enddo
+  enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_LonT(i)
     G%geoLatT(i,j) = grid_LatT(j)
 
-! The following line is needed to reproduce the solution from
-! set_grid_metrics_mercator when used to generate a simple spherical grid.
+    ! The following line is needed to reproduce the solution from
+    ! set_grid_metrics_mercator when used to generate a simple spherical grid.
     G%dxT(i,j) = G%Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
 !   G%dxT(i,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
     G%dyT(i,j) = G%Rad_Earth * dLat*PI_180
@@ -716,41 +665,28 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
 !   G%areaT(i,j) = Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
     G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   call callTree_leave("set_grid_metrics_spherical()")
 end subroutine set_grid_metrics_spherical
 
-! ------------------------------------------------------------------------------
-
+!> Calculate the values of the metric terms that might be used
+!! and save them in arrays.
+!!
+!! Within this subroutine, the x- and y- grid spacings and their
+!! inverses and the cell areas centered on h, q, u, and v points are
+!! calculated, as are the geographic locations of each of these 4
+!! sets of points.
 subroutine set_grid_metrics_mercator(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-
-! Arguments:
-!  (inout)   G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!    Calculate the values of the metric terms that might be used
-!  and save them in arrays.
-!    Within this subroutine, the x- and y- grid spacings and their
-!  inverses and the cell areas centered on h, q, u, and v points are
-!  calculated, as are the geographic locations of each of these 4
-!  sets of points.
+  ! Local variables
   integer :: i, j, isd, ied, jsd, jed
   integer :: I_off, J_off
   type(GPS) :: GP
   character(len=128) :: warnmesg
   character(len=48)  :: mdl = "MOM_grid_init set_grid_metrics_mercator"
   real :: PI, PI_2! PI = 3.1415926... as 4*atan(1), PI_2 = (PI) /2.0
-
-
-!   All of the metric terms should be defined over the domain from
-! isd to ied.  Outside of the physical domain, both the metrics
-! and their inverses may be set to zero.
-
-!  The metric terms within the computational domain are set here.
   real :: y_q, y_h, jd, x_q, x_h, id
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: &
     xh, yh ! Latitude and longitude of h points in radians.
@@ -767,6 +703,9 @@ subroutine set_grid_metrics_mercator(G, param_file)
   logical :: debug = .FALSE., simple_area = .true.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
 
+  !   All of the metric terms should be defined over the domain from
+  ! isd to ied.  Outside of the physical domain, both the metrics
+  ! and their inverses may be set to zero.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -778,8 +717,8 @@ subroutine set_grid_metrics_mercator(G, param_file)
 
   call callTree_enter("set_grid_metrics_mercator(), MOM_grid_initialize.F90")
 
-!    Calculate the values of the metric terms that might be used
-!  and save them in arrays.
+  !   Calculate the values of the metric terms that might be used
+  ! and save them in arrays.
   PI = 4.0*atan(1.0) ; PI_2 = 0.5*PI
 
   call get_param(param_file, mdl, "SOUTHLAT", GP%south_lat, &
@@ -821,19 +760,19 @@ subroutine set_grid_metrics_mercator(G, param_file)
                  "over which the resolution is enhanced.", units="degrees", &
                  default=0.0)
 
-!    With an isotropic grid, the north-south extent of the domain,
-!  the east-west extent, and the number of grid points in each
-!  direction are _not_ independent.  Here the north-south extent
-!  will be determined to fit the east-west extent and the number of
-!  grid points.  The grid is perfectly isotropic.
+  !   With an isotropic grid, the north-south extent of the domain,
+  ! the east-west extent, and the number of grid points in each
+  ! direction are _not_ independent.  Here the north-south extent
+  ! will be determined to fit the east-west extent and the number of
+  ! grid points.  The grid is perfectly isotropic.
   if (GP%equator_reference) then
-! With the following expression, the equator will always be placed
-! on either h or q points, in a position consistent with the ratio
-! GP%south_lat to GP%len_lat.
+    ! With the following expression, the equator will always be placed
+    ! on either h or q points, in a position consistent with the ratio
+    ! GP%south_lat to GP%len_lat.
     jRef =  (G%jsg-1) + 0.5*FLOOR(GP%njglobal*((-1.0*GP%south_lat*2.0)/GP%len_lat)+0.5)
     fnRef = Int_dj_dy(0.0, GP)
   else
-!  The following line sets the reference latitude GP%south_lat at j=js-1 (or -2?)
+    ! The following line sets the reference latitude GP%south_lat at j=js-1 (or -2?)
     jRef = (G%jsg-1)
     fnRef = Int_dj_dy((GP%south_lat*PI/180.0), GP)
   endif
@@ -872,9 +811,9 @@ subroutine set_grid_metrics_mercator(G, param_file)
     endif
   enddo
 
-! Determine the longitudes of the various points.
+  ! Determine the longitudes of the various points.
 
-! These two lines place the western edge of the domain at GP%west_lon.
+  ! These two lines place the western edge of the domain at GP%west_lon.
   iRef = (G%isg-1) + GP%niglobal
   fnRef = Int_di_dx(((GP%west_lon+GP%len_lon)*PI/180.0), GP)
 
@@ -965,44 +904,44 @@ subroutine set_grid_metrics_mercator(G, param_file)
 end subroutine set_grid_metrics_mercator
 
 
+!> This function returns the grid spacing in the logical x direction.
 function ds_di(x, y, GP)
-  real, intent(in) :: x, y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: ds_di
-! This function returns the grid spacing in the logical x direction.
-! Arguments: x - The latitude in question.
-!  (in)      y - The longitude in question.
+  ! Local variables
+
   ds_di = GP%Rad_Earth * cos(y) * dx_di(x,GP)
-! In general, this might be...
-! ds_di = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_di(x,y,GP)*dx_di(x,y,GP) + &
-!                           dy_di(x,y,GP)*dy_di(x,y,GP))
+  ! In general, this might be...
+  ! ds_di = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_di(x,y,GP)*dx_di(x,y,GP) + &
+  !                           dy_di(x,y,GP)*dy_di(x,y,GP))
 end function ds_di
 
+!> This function returns the grid spacing in the logical y direction.
 function ds_dj(x, y, GP)
-  real, intent(in) :: x, y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
+  ! Local variables
   real :: ds_dj
-! This function returns the grid spacing in the logical y direction.
-! Arguments: x - The latitude in question.
-!  (in)      y - The longitude in question.
+
   ds_dj = GP%Rad_Earth * dy_dj(y,GP)
-! In general, this might be...
-! ds_dj = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_dj(x,y,GP)*dx_dj(x,y,GP) + &
-!                           dy_dj(x,y,GP)*dy_dj(x,y,GP))
+  ! In general, this might be...
+  ! ds_dj = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_dj(x,y,GP)*dx_dj(x,y,GP) + &
+  !                           dy_dj(x,y,GP)*dy_dj(x,y,GP))
 end function ds_dj
 
-
+!> This function returns the contribution from the line integral along one of the four sides of a
+!! cell face to the area of a cell, assuming that the sides follow a linear path in latitude and
+!! longitude (i.e., on a Mercator grid).
 function  dL(x1, x2, y1, y2)
-  real, intent(in) :: x1, x2, y1, y2
+  real, intent(in) :: x1 !< Segment starting longitude, in degrees E.
+  real, intent(in) :: x2 !< Segment ending longitude, in degrees E.
+  real, intent(in) :: y1 !< Segment ending latitude, in degrees N.
+  real, intent(in) :: y2 !< Segment ending latitude, in degrees N.
+  ! Local variables
   real :: dL
-!  This subroutine calculates the contribution from the line integral
-! along one of the four sides of a cell face to the area of a cell,
-! assuming that the sides follow a linear path in latitude and long-
-! itude (i.e., on a Mercator grid).
-! Argumnts: x1 - Segment starting longitude.
-!  (in)     x2 - Segment ending longitude.
-!  (in)     y1 - Segment ending latitude.
-!  (in)     y2 - Segment ending latitude.
   real :: r, dy
 
   dy = y2 - y1
@@ -1016,17 +955,21 @@ function  dL(x1, x2, y1, y2)
 
 end function  dL
 
+!> This subroutine finds and returns the value of y at which the monotonically increasing
+!! function fn takes the value fnval, also returning in ittmax the number of iterations of
+!! Newton's method that were used to polish the root.
 function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
-  real :: find_root
-  real, external :: fn, dy_df
-  type(GPS), intent(in) :: GP
-  real, intent(in) :: fnval, y1, ymin, ymax
-  integer, intent(out) :: ittmax
+  real :: find_root !< The value of y where fn(y) = fnval that will be returned
+  real,      external    :: fn    !< The external function whose root is being sought
+  real,      external    :: dy_df !< The inverse of the derivative of that function
+  type(GPS), intent(in)  :: GP  !< A structure of grid parameters
+  real,      intent(in)  :: fnval !< The value of fn being sought
+  real,      intent(in)  :: y1    !< A first guess for y
+  real,      intent(in)  :: ymin  !< The minimum permitted value of y
+  real,      intent(in)  :: ymax  !< The maximum permitted value of y
+  integer,   intent(out) :: ittmax !< The number of iterations used to polish the root
+  ! Local variables
   real :: y, y_next
-! This subroutine finds and returns the value of y at which the
-! monotonically increasing function fn takes the value fnval, also returning
-! in ittmax the number of iterations of Newton's method that were
-! used to polish the root.
   real :: ybot, ytop, fnbot, fntop
   integer :: itt
   character(len=256) :: warnmesg
@@ -1125,36 +1068,35 @@ function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
   find_root = y
 end function find_root
 
+!> This function calculates and returns the value of dx/di, where x is the
+!! longitude in Radians, and i is the integral north-south grid index.
 function dx_di(x, GP)
-  real, intent(in) :: x
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: dx_di
-! This subroutine calculates and returns the value of dx/di, where
-! x is the longitude in Radians, and i is the integral north-south
-! grid index.
 
   dx_di = (GP%len_lon * 4.0*atan(1.0)) / (180.0 * GP%niglobal)
 
 end function dx_di
 
+!> This function calculates and returns the integral of the inverse
+!! of dx/di to the point x, in radians.
 function Int_di_dx(x, GP)
-  real, intent(in) :: x
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: x  !< The longitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: Int_di_dx
-! This subroutine calculates and returns the integral of the inverse
-! of dx/di to the point x, in radians.
 
   Int_di_dx = x * ((180.0 * GP%niglobal) / (GP%len_lon * 4.0*atan(1.0)))
 
 end function Int_di_dx
 
+!> This subroutine calculates and returns the value of dy/dj, where y is the
+!! latitude in Radians, and j is the integral north-south grid index.
 function dy_dj(y, GP)
-  real, intent(in) :: y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: dy_dj
-! This subroutine calculates and returns the value of dy/dj, where
-! y is the latitude in Radians, and j is the integral north-south
-! grid index.
+  ! Local variables
   real :: PI            ! 3.1415926... calculated as 4*atan(1)
   real :: C0            ! The constant that converts the nominal y-spacing in
                         ! gridpoints to the nominal spacing in Radians.
@@ -1177,12 +1119,13 @@ function dy_dj(y, GP)
 
 end function dy_dj
 
+!> This subroutine calculates and returns the integral of the inverse
+!! of dy/dj to the point y, in radians.
 function Int_dj_dy(y, GP)
-  real, intent(in) :: y
-  type(GPS), intent(in) :: GP
+  real, intent(in) :: y  !< The latitude in question
+  type(GPS), intent(in) :: GP  !< A structure of grid parameters
   real :: Int_dj_dy
-! This subroutine calculates and returns the integral of the inverse
-! of dy/dj to the point y, in radians.
+  ! Local variables
   real :: I_C0 = 0.0       !   The inverse of the constant that converts the
                            ! nominal spacing in gridpoints to the nominal
                            ! spacing in Radians.
@@ -1206,7 +1149,7 @@ function Int_dj_dy(y, GP)
 
     if (y >= y_eq_enhance) then
       r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
-    else if (y <= -y_eq_enhance) then
+    elseif (y <= -y_eq_enhance) then
       r = r - I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
     else
       r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0) * &
@@ -1220,15 +1163,12 @@ function Int_dj_dy(y, GP)
   Int_dj_dy = r
 end function Int_dj_dy
 
-! ------------------------------------------------------------------------------
-
-! ------------------------------------------------------------------------------
-
-!> extrapolate_metric extrapolates missing metric data into all the halo regions.
+!> Extrapolates missing metric data into all the halo regions.
 subroutine extrapolate_metric(var, jh, missing)
   real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos
   integer,              intent(in)    :: jh      !< The size of the halos to be filled
   real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default.
+  ! Local variables
   real :: badval
   integer :: i,j
 
@@ -1266,19 +1206,18 @@ function Adcroft_reciprocal(val) result(I_val)
   if (val /= 0.0) I_val = 1.0/val
 end function Adcroft_reciprocal
 
-!> initialize_masks initializes the grid masks and any metrics that come
-!!    with masks already applied.
+!> Initializes the grid masks and any metrics that come with masks already applied.
+!!
+!!    Initialize_masks sets mask2dT, mask2dCu, mask2dCv, and mask2dBu to mask out
+!! flow over any points which are shallower than Dmin and permit an
+!! appropriate treatment of the boundary conditions.  mask2dCu and mask2dCv
+!! are 0.0 at any points adjacent to a land point.  mask2dBu is 0.0 at
+!! any land or boundary point.  For points in the interior, mask2dCu,
+!! mask2dCv, and mask2dBu are all 1.0.
 subroutine initialize_masks(G, PF)
   type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: PF  !< Parameter file structure
-
-!    Initialize_masks sets mask2dT, mask2dCu, mask2dCv, and mask2dBu to mask out
-! flow over any points which are shallower than Dmin and permit an
-! appropriate treatment of the boundary conditions.  mask2dCu and mask2dCv
-! are 0.0 at any points adjacent to a land point.  mask2dBu is 0.0 at
-! any land or boundary point.  For points in the interior, mask2dCu,
-! mask2dCv, and mask2dBu are all 1.0.
-
+  ! Local variables
   real :: Dmin, min_depth, mask_depth
   character(len=40)  :: mdl = "MOM_grid_init initialize_masks"
   integer :: i, j
@@ -1339,19 +1278,36 @@ subroutine initialize_masks(G, PF)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
-    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
-    G%dx_Cv_obc(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo
 
   call callTree_leave("initialize_masks()")
 end subroutine initialize_masks
+
+!> \namespace mom_grid_initialize
+!!
+!!  The metric terms have the form Dzp, IDzp, or DXDYp, where z can
+!!  be X or Y, and p can be q, u, v, or h.  z describes the direction
+!!  of the metric, while p describes the location.  IDzp is the
+!!  inverse of Dzp, while DXDYp is the product of DXp and DYp except
+!!  that areaT is calculated analytically from the latitudes and
+!!  longitudes of the surrounding q points.
+!!
+!!    On a sphere, a variety of grids can be implemented by defining
+!!  analytic expressions for dx_di, dy_dj (where x and y are latitude
+!!  and longitude, and i and j are grid indices) and the expressions
+!!  for the integrals of their inverses in the four subroutines
+!!  dy_dj, Int_dj_dy, dx_di, and Int_di_dx.
+!!
+!!    initialize_masks sets up land masks based on the depth field.
+!!  The one argument is the minimum ocean depth.  Depths that are
+!!  less than this are interpreted as land points.
 
 end module MOM_grid_initialize

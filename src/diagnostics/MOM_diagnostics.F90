@@ -1,28 +1,9 @@
+!> Calculates any requested diagnostic quantities
+!! that are not calculated in the various subroutines.
+!! Diagnostic quantities are requested by allocating them memory.
 module MOM_diagnostics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, February 2001                                  *
-!*                                                                     *
-!*    This subroutine calculates any requested diagnostic quantities   *
-!*  that are not calculated in the various subroutines.  Diagnostic    *
-!*  quantities are requested by allocating them memory.                *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, bathyT                                *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms,              only : reproducing_sum
 use MOM_diag_mediator,     only : post_data, post_data_1d_k, get_diag_time_end
@@ -39,7 +20,6 @@ use MOM_EOS,               only : calculate_density, int_density_dz
 use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
-use MOM_forcing_type,      only : forcing
 use MOM_grid,              only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean
@@ -57,64 +37,70 @@ implicit none ; private
 
 public calculate_diagnostic_fields, register_time_deriv, write_static_fields
 public find_eta
-public MOM_diagnostics_init, MOM_diagnostics_end
-public register_surface_diags, post_surface_diagnostics
+public register_surface_diags, post_surface_dyn_diags, post_surface_thermo_diags
 public register_transport_diags, post_transport_diagnostics
+public MOM_diagnostics_init, MOM_diagnostics_end
 
+!> The control structure for the MOM_diagnostics module
 type, public :: diagnostics_CS ; private
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
-                                       !! monotonic for the purposes of calculating the equivalent barotropic wave speed.
+                                       !! monotonic for the purposes of calculating the equivalent
+                                       !! barotropic wave speed.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
                                        !! calculating the equivalent barotropic wave speed. (m)
 
-  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostics timing
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                       !! regulate the timing of diagnostic output.
 
   ! following arrays store diagnostics calculated here and unavailable outside.
 
   ! following fields have nz+1 levels.
   real, pointer, dimension(:,:,:) :: &
-    e => NULL(), &   ! interface height (metre)
-    e_D => NULL()    ! interface height above bottom (metre)
+    e => NULL(), &   !< interface height (metre)
+    e_D => NULL()    !< interface height above bottom (metre)
 
   ! following fields have nz layers.
   real, pointer, dimension(:,:,:) :: &
-    du_dt => NULL(), &    ! net i-acceleration in m/s2
-    dv_dt => NULL(), &    ! net j-acceleration in m/s2
-    dh_dt => NULL(), &    ! thickness rate of change in (m/s) or kg/(m2*s)
+    du_dt => NULL(), & !< net i-acceleration in m/s2
+    dv_dt => NULL(), & !< net j-acceleration in m/s2
+    dh_dt => NULL(), & !< thickness rate of change in (m/s) or kg/(m2*s)
+    p_ebt => NULL()    !< Equivalent barotropic modal structure
 
-    h_Rlay => NULL(),    & ! layer thicknesses in layered potential density
-                           ! coordinates, in m (Bouss) or kg/m2 (non-Bouss)
-    uh_Rlay   => NULL(), & ! zonal and meridional transports in layered
-    vh_Rlay   => NULL(), & ! potential rho coordinates: m3/s(Bouss) kg/s(non-Bouss)
-    uhGM_Rlay => NULL(), & ! zonal and meridional Gent-McWilliams transports in layered
-    vhGM_Rlay => NULL(), & ! potential density coordinates, m3/s (Bouss) kg/s(non-Bouss)
-    p_ebt     => NULL()    ! Equivalent barotropic modal structure
+  real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
+                                              !! coordinates, in m (Bouss) or kg/m2 (non-Bouss)
+  real, pointer, dimension(:,:,:) :: uh_Rlay => NULL() !< Zonal transports in potential density
+                                              !! coordinates in m3/s (Bouss) or kg/s (non-Bouss)
+  real, pointer, dimension(:,:,:) :: vh_Rlay => NULL() !< Meridional transports in potential density
+                                              !! coordinates in m3/s (Bouss) or kg/s (non-Bouss)
+  real, pointer, dimension(:,:,:) :: uhGM_Rlay => NULL() !< Zonal Gent-McWilliams transports in potential density
+                                              !! coordinates, in m3/s (Bouss) or kg/s (non-Bouss)
+  real, pointer, dimension(:,:,:) :: vhGM_Rlay => NULL() !< Meridional Gent-McWilliams transports in potential density
+                                              !! coordinates, in m3/s (Bouss) or kg/s (non-Bouss)
 
   ! following fields are 2-D.
   real, pointer, dimension(:,:) :: &
-    cg1 => NULL(),       & ! first baroclinic gravity wave speed, in m s-1
-    Rd1 => NULL(),       & ! first baroclinic deformation radius, in m
-    cfl_cg1 => NULL(),   & ! CFL for first baroclinic gravity wave speed, nondim
-    cfl_cg1_x => NULL(), & ! i-component of CFL for first baroclinic gravity wave speed, nondim
-    cfl_cg1_y => NULL()    ! j-component of CFL for first baroclinic gravity wave speed, nondim
+    cg1 => NULL(),       & !< First baroclinic gravity wave speed, in m s-1
+    Rd1 => NULL(),       & !< First baroclinic deformation radius, in m
+    cfl_cg1 => NULL(),   & !< CFL for first baroclinic gravity wave speed, nondim
+    cfl_cg1_x => NULL(), & !< i-component of CFL for first baroclinic gravity wave speed, nondim
+    cfl_cg1_y => NULL()    !< j-component of CFL for first baroclinic gravity wave speed, nondim
 
   ! arrays to hold diagnostics in the layer-integrated energy budget.
   ! all except KE have units of m3 s-3 (when Boussinesq).
   real, pointer, dimension(:,:,:) :: &
-    KE        => NULL(), &  ! KE per unit mass, in m2 s-2
-    dKE_dt    => NULL(), &  ! time derivative of the layer KE
-    PE_to_KE  => NULL(), &  ! potential energy to KE term
-    KE_CorAdv => NULL(), &  ! KE source from the combined Coriolis and
-                            ! advection terms.  The Coriolis source should be
-                            ! zero, but is not due to truncation errors.  There
-                            ! should be near-cancellation of the global integral
-                            ! of this spurious Coriolis source.
-    KE_adv     => NULL(),&  ! KE source from along-layer advection
-    KE_visc    => NULL(),&  ! KE source from vertical viscosity
-    KE_horvisc => NULL(),&  ! KE source from horizontal viscosity
-    KE_dia     => NULL()    ! KE source from diapycnal diffusion
+    KE        => NULL(), &  !< KE per unit mass, in m2 s-2
+    dKE_dt    => NULL(), &  !< time derivative of the layer KE
+    PE_to_KE  => NULL(), &  !< potential energy to KE term
+    KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and advection terms.
+                            !! The Coriolis source should be zero, but is not due to truncation
+                            !! errors.  There should be near-cancellation of the global integral
+                            !! of this spurious Coriolis source.
+    KE_adv     => NULL(),&  !< KE source from along-layer advection
+    KE_visc    => NULL(),&  !< KE source from vertical viscosity
+    KE_horvisc => NULL(),&  !< KE source from horizontal viscosity
+    KE_dia     => NULL()    !< KE source from diapycnal diffusion
 
-  ! diagnostic IDs
+  !>@{ Diagnostic IDs
   integer :: id_u = -1,   id_v = -1, id_h = -1
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
@@ -143,25 +129,28 @@ type, public :: diagnostics_CS ; private
   integer :: id_pbo            = -1
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
-  integer :: id_h_pre_sync     = -1
+  integer :: id_h_pre_sync     = -1   !!@}
+  !> The control structure for calculating wave speed.
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()
 
-  ! pointers used in calculation of time derivatives
-  type(p3d) :: var_ptr(MAX_FIELDS_)
-  type(p3d) :: deriv(MAX_FIELDS_)
-  type(p3d) :: prev_val(MAX_FIELDS_)
-  integer   :: nlay(MAX_FIELDS_)
-  integer   :: num_time_deriv = 0
+  type(p3d) :: var_ptr(MAX_FIELDS_)  !< pointers to variables used in the calculation
+                                     !! of time derivatives
+  type(p3d) :: deriv(MAX_FIELDS_)    !< Time derivatives of various fields
+  type(p3d) :: prev_val(MAX_FIELDS_) !< Previous values of variables used in the calculation
+                                     !! of time derivatives
+  !< previous values of variables used in calculation of time derivatives
+  integer   :: nlay(MAX_FIELDS_) !< The number of layers in each diagnostics
+  integer   :: num_time_deriv = 0 !< The number of time derivative diagnostics
 
-  ! for group halo pass
-  type(group_pass_type) :: pass_KE_uv
+  type(group_pass_type) :: pass_KE_uv !< A handle used for group halo passes
 
 end type diagnostics_CS
 
 
 !> A structure with diagnostic IDs of the surface and integrated variables
 type, public :: surface_diag_IDs ; private
-  ! 2-d surface and bottom fields
+  !>@{ Diagnostic IDs for 2-d surface and bottom flux and state fields
+  !Diagnostic IDs for 2-d surface and bottom fields
   integer :: id_zos  = -1, id_zossq  = -1
   integer :: id_volo = -1, id_speed  = -1
   integer :: id_ssh  = -1, id_ssh_ga = -1
@@ -169,63 +158,58 @@ type, public :: surface_diag_IDs ; private
   integer :: id_sss  = -1, id_sss_sq = -1, id_sssabs = -1
   integer :: id_ssu  = -1, id_ssv    = -1
 
-  ! heat and salt flux fields
+  ! Diagnostic IDs for  heat and salt flux fields
   integer :: id_fraz         = -1
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
+  !!@}
 end type surface_diag_IDs
 
 
 !> A structure with diagnostic IDs of mass transport related diagnostics
 type, public :: transport_diag_IDs ; private
-  ! Diagnostics for tracer horizontal transport
+  !>@{  Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
-  integer :: id_dynamics_h = -1, id_dynamics_h_tendency = -1
-
+  integer :: id_dynamics_h = -1, id_dynamics_h_tendency = -1   !!@}
 end type transport_diag_IDs
 
 
 contains
 !> Diagnostics not more naturally calculated elsewhere are computed here.
-subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
+subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                                        dt, diag_pre_sync, G, GV, CS, eta_bt)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
-                                                                   !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity,
-                                                                   !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H
-                                                                   !! (usually m or kg m-2).
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh   !< Transport through zonal faces
-                                                                   !! = u*h*dy, m3/s(Bouss)
-                                                                   !! kg/s(non-Bouss).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh   !< transport through meridional
-                                                                   !! faces = v*h*dx, m3/s(Bouss)
-                                                                   !! kg/s(non-Bouss).
-  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to
-                                                                   !! various thermodynamic
-                                                                   !! variables.
-  type(accel_diag_ptrs),                     intent(in)    :: ADp  !< structure with pointers to
-                                                                   !! accelerations in momentum
-                                                                   !! equation.
-  type(cont_diag_ptrs),                      intent(in)    :: CDp  !< structure with pointers to
-                                                                   !! terms in continuity equation.
-  type(forcing),                             intent(in)    :: fluxes !< A structure containing the
-                                                                   !! surface fluxes.
-  real,                                      intent(in)    :: dt   !< The time difference in s since
-                                                                   !! the last call to this
-                                                                   !! subroutine.
-
-  type(diag_grid_storage),                   intent(in)    ::  diag_pre_sync
-                                                                   !< Target grids from previous
-                                                                   !! timestep
-  type(diagnostics_CS),                      intent(inout) :: CS   !< Control structure returned by
-                                                                   !! a previous call to
-                                                                   !! diagnostics_init.
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)   :: eta_bt !< An optional barotropic
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: uh   !< Transport through zonal faces = u*h*dy, in H m2 s-1.
+                                                 !! I.e. units are m3/s(Bouss) or kg/s(non-Bouss).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: vh   !< Transport through meridional faces = v*h*dx, in H m2 s-1.
+                                                 !! I.e. units are m3/s(Bouss) or kg/s(non-Bouss).
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
+                                                 !! thermodynamic variables.
+  type(accel_diag_ptrs),   intent(in)    :: ADp  !< structure with pointers to
+                                                 !! accelerations in momentum equation.
+  type(cont_diag_ptrs),    intent(in)    :: CDp  !< structure with pointers to
+                                                 !! terms in continuity equation.
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure, in Pa.
+                                                 !! If p_surf is not associated, it is the same
+                                                 !! as setting the surface pressure to 0.
+  real,                    intent(in)    :: dt   !< The time difference in s since the last
+                                                 !! call to this subroutine.
+  type(diag_grid_storage), intent(in)    :: diag_pre_sync !< Target grids from previous timestep
+  type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
+                                                 !! previous call to diagnostics_init.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                  optional, intent(in)   :: eta_bt !< An optional barotropic
     !! variable that gives the "correct" free surface height (Boussinesq) or total water column
     !! mass per unit area (non-Boussinesq).  This is used to dilate the layer thicknesses when
     !! calculating interface heights, in m or kg m-2.
@@ -299,13 +283,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
-  if (ASSOCIATED(CS%e)) then
+  if (associated(CS%e)) then
     call find_eta(h, tv, GV%g_Earth, G, GV, CS%e, eta_bt)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
-  if (ASSOCIATED(CS%e_D)) then
-    if (ASSOCIATED(CS%e)) then
+  if (associated(CS%e_D)) then
+    if (associated(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
@@ -349,9 +333,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       endif
     else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
-        if(ASSOCIATED(fluxes%p_surf)) then ! Pressure loading at top of surface layer (Pa)
+        if (associated(p_surf)) then ! Pressure loading at top of surface layer (Pa)
           do i=is,ie
-            pressure_1d(i) = fluxes%p_surf(i,j)
+            pressure_1d(i) = p_surf(i,j)
           enddo
         else
           do i=is,ie
@@ -391,7 +375,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = gsw_pt_from_ct(tv%S(i,j,k),tv%T(i,j,k))
-      enddo; enddo ; enddo
+      enddo ; enddo ; enddo
       if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
     endif
@@ -408,7 +392,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
-      enddo; enddo ; enddo
+      enddo ; enddo ; enddo
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
       if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
     endif
@@ -459,11 +443,11 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
-  call calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
+  call calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
 
-  if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. ASSOCIATED(CS%h_Rlay) .or. &
-      ASSOCIATED(CS%uh_Rlay) .or. ASSOCIATED(CS%vh_Rlay) .or. &
-      ASSOCIATED(CS%uhGM_Rlay) .or. ASSOCIATED(CS%vhGM_Rlay)) then
+  if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. associated(CS%h_Rlay) .or. &
+      associated(CS%uh_Rlay) .or. associated(CS%vh_Rlay) .or. &
+      associated(CS%uhGM_Rlay) .or. associated(CS%vhGM_Rlay)) then
 
     if (associated(tv%eqn_of_state)) then
       pressure_1d(:) = tv%P_Ref
@@ -480,7 +464,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
     if (CS%id_Rcv > 0) call post_data(CS%id_Rcv, Rcv, CS%diag)
 
-    if (ASSOCIATED(CS%h_Rlay)) then
+    if (associated(CS%h_Rlay)) then
       k_list = nz/2
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,CS,Rcv,h,GV) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
@@ -501,7 +485,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       if (CS%id_h_Rlay > 0) call post_data(CS%id_h_Rlay, CS%h_Rlay, CS%diag)
     endif
 
-    if (ASSOCIATED(CS%uh_Rlay)) then
+    if (associated(CS%uh_Rlay)) then
       k_list = nz/2
 !$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CS,GV,uh) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
@@ -523,7 +507,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       if (CS%id_uh_Rlay > 0) call post_data(CS%id_uh_Rlay, CS%uh_Rlay, CS%diag)
     endif
 
-    if (ASSOCIATED(CS%vh_Rlay)) then
+    if (associated(CS%vh_Rlay)) then
       k_list = nz/2
 !$OMP parallel do default(none)  shared(Jsq,Jeq,is,ie,nz,nkmb,Rcv,CS,GV,vh) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
@@ -544,7 +528,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       if (CS%id_vh_Rlay > 0) call post_data(CS%id_vh_Rlay, CS%vh_Rlay, CS%diag)
     endif
 
-    if (ASSOCIATED(CS%uhGM_Rlay) .and. ASSOCIATED(CDp%uhGM)) then
+    if (associated(CS%uhGM_Rlay) .and. associated(CDp%uhGM)) then
       k_list = nz/2
 !$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CDP,CS,GV) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
@@ -565,7 +549,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       if (CS%id_uh_Rlay > 0) call post_data(CS%id_uhGM_Rlay, CS%uhGM_Rlay, CS%diag)
     endif
 
-    if (ASSOCIATED(CS%vhGM_Rlay) .and. ASSOCIATED(CDp%vhGM)) then
+    if (associated(CS%vhGM_Rlay) .and. associated(CDp%vhGM)) then
       k_list = nz/2
 !$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,nkmb,CS,CDp,Rcv,GV) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
@@ -696,15 +680,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
 end subroutine calculate_diagnostic_fields
 
-!> This subroutine finds location of R_in in an increasing ordered
+!> This subroutine finds the location of R_in in an increasing ordered
 !! list, Rlist, returning as k the element such that
 !! Rlist(k) <= R_in < Rlist(k+1), and where wt and wt_p are the linear
 !! weights that should be assigned to elements k and k+1.
 subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
-  real,     intent(in)    :: Rlist(:), R_in
-  integer,  intent(inout) :: k
-  integer,  intent(in)    :: nz
-  real,     intent(out)   :: wt, wt_p
+  real, dimension(:), &
+            intent(in)    :: Rlist !< The list of target densities, in kg m-3
+  real,     intent(in)    :: R_in !< The density being inserted into Rlist, in kg m-3
+  integer,  intent(inout) :: k    !< The value of k such that Rlist(k) <= R_in < Rlist(k+1)
+                                  !! The input value is a first guess
+  integer,  intent(in)    :: nz   !< The number of layers in Rlist
+  real,     intent(out)   :: wt   !< The weight of layer k for interpolation, nondim
+  real,     intent(out)   :: wt_p !< The weight of layer k+1 for interpolation, nondim
 
   ! This subroutine finds location of R_in in an increasing ordered
   ! list, Rlist, returning as k the element such that
@@ -723,19 +711,19 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
       if ((k_lower == 1) .or. (R_in >= Rlist(k_lower))) exit
       k_upper = k_lower
       inc = inc*2
-    end do
+    enddo
   else
     do
       k_upper = min(k_upper+inc, nz)
       if ((k_upper == nz) .or. (R_in < Rlist(k_upper))) exit
       k_lower = k_upper
       inc = inc*2
-    end do
+    enddo
   endif
 
   if ((k_lower == 1) .and. (R_in <= Rlist(k_lower))) then
     k = 1 ; wt = 1.0 ; wt_p = 0.0
-  else if ((k_upper == nz) .and. (R_in >= Rlist(k_upper))) then
+  elseif ((k_upper == nz) .and. (R_in >= Rlist(k_upper))) then
     k = nz-1 ; wt = 0.0 ; wt_p = 1.0
   else
     do
@@ -746,7 +734,7 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
       else
         k_lower = k_new
       endif
-    end do
+    enddo
 
 !   Uncomment this as a code check
 !    if ((R_in < Rlist(k_lower)) .or. (R_in >= Rlist(k_upper)) .or. (k_upper-k_lower /= 1)) &
@@ -760,34 +748,21 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 
 end subroutine find_weights
 
-!> Subroutine calculates vertical integrals of several tracers, along
+!> This subroutine calculates vertical integrals of several tracers, along
 !! with the mass-weight of these tracers, the total column mass, and the
 !! carefully calculated column height.
-subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid
-                                                                  !! structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H
-                                                                  !! (usually m or kg m-2).
-  type(thermo_var_ptrs),                    intent(in)    :: tv   !< A structure pointing to various
-                                                                  !! thermodynamic variables.
-  type(forcing),                            intent(in)    :: fluxes !< A structure containing the
-                                                                  !! surface fluxes.
-  type(diagnostics_CS),                     intent(inout) :: CS   !< A control structure returned
-                                                                  !! by a previous call to
-                                                                  !! diagnostics_init.
-
-! Subroutine calculates vertical integrals of several tracers, along
-! with the mass-weight of these tracers, the total column mass, and the
-! carefully calculated column height.
-
-! Arguments:
-!  (in)      h  - layer thickness: metre (Bouss) or kg/ m2 (non-Bouss)
-!  (in)      tv - structure pointing to thermodynamic variables
-!  (in)      fluxes - a structure containing the surface fluxes.
-!  (in)      G  - ocean grid structure
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - control structure returned by a previous call to diagnostics_init
+subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
+                                                 !! thermodynamic variables.
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure, in Pa.
+                                                 !! If p_surf is not associated, it is the same
+                                                 !! as setting the surface pressure to 0.
+  type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
+                                                 !! previous call to diagnostics_init.
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
     z_top, &  ! Height of the top of a layer or the ocean, in m.
@@ -875,13 +850,12 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
     if (CS%id_pbo > 0) then
       do j=js,je ; do i=is,ie ; btm_pres(i,j) = 0.0 ; enddo ; enddo
       ! 'pbo' is defined as the sea water pressure at the sea floor
-      !     pbo = (mass * g) + pso
-      ! where pso is the sea water pressure at sea water surface
-      ! note that pso is equivalent to fluxes%p_surf
+      !     pbo = (mass * g) + p_surf
+      ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
         btm_pres(i,j) = mass(i,j) * GV%g_Earth
-        if (ASSOCIATED(fluxes%p_surf)) then
-          btm_pres(i,j) = btm_pres(i,j) + fluxes%p_surf(i,j)
+        if (associated(p_surf)) then
+          btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif
       enddo ; enddo
       call post_data(CS%id_pbo, btm_pres, CS%diag)
@@ -892,42 +866,28 @@ end subroutine calculate_vertical_integrals
 
 !> This subroutine calculates terms in the mechanical energy budget.
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
-                                                                   !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity,
-                                                                   !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H
-                                                                   !! (usually m or kg m-2).
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh   !< Transport through zonal
-                                                                   !! faces=u*h*dy: m3/s (Bouss)
-                                                                   !! kg/s(non-Bouss).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh   !< Transport through merid
-                                                                   !! faces=v*h*dx: m3/s (Bouss)
-                                                                   !! kg/s(non-Bouss).
-  type(accel_diag_ptrs),                     intent(in)    :: ADp  !< Structure pointing to
-                                                                   !! accelerations in momentum
-                                                                   !! equation.
-  type(cont_diag_ptrs),                      intent(in)    :: CDp  !< Structure pointing to terms
-                                                                   !! in continuity equations.
-  type(diagnostics_CS),                      intent(inout) :: CS   !< Control structure returned by
-                                                                   !! a previous call to
-                                                                   !! diagnostics_init.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: uh   !< Transport through zonal faces=u*h*dy, in H m2 s-1.
+                                                 !! I.e. units are m3/s (Bouss) or kg/s(non-Bouss).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: vh   !< Transport through merid faces=v*h*dx, in H m2 s-1.
+                                                 !! I.e. units are m3/s (Bouss) or kg/s(non-Bouss).
+  type(accel_diag_ptrs),   intent(in)    :: ADp  !< Structure pointing to accelerations in momentum equation.
+  type(cont_diag_ptrs),    intent(in)    :: CDp  !< Structure pointing to terms in continuity equations.
+  type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a previous call to
+                                                 !! diagnostics_init.
 
 ! This subroutine calculates terms in the mechanical energy budget.
 
-! Arguments:
-!  (in)      u   - zonal velocity component (m/s)
-!  (in)      v   - meridional velocity componnent (m/s)
-!  (in)      h   - layer thickness: metre(Bouss) of kg/m2(non-Bouss)
-!  (in)      uh  - transport through zonal faces=u*h*dy: m3/s (Bouss) kg/s(non-Bouss)
-!  (in)      vh  - transport through merid faces=v*h*dx: m3/s (Bouss) kg/s(non-Bouss)
-!  (in)      ADp - structure pointing to accelerations in momentum equation
-!  (in)      CDp - structure pointing to terms in continuity equations
-!  (in)      G   - ocean grid structure
-!  (in)      CS  - control structure returned by a previous call to diagnostics_init
-
+  ! Local variables
   real :: KE_u(SZIB_(G),SZJ_(G))
   real :: KE_v(SZI_(G),SZJB_(G))
   real :: KE_h(SZI_(G),SZJ_(G))
@@ -940,7 +900,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     KE_u(I,j) = 0.0 ; KE_v(i,J) = 0.0
   enddo ; enddo
 
-  if (ASSOCIATED(CS%KE)) then
+  if (associated(CS%KE)) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%KE(i,j,k) = ((u(I,j,k)*u(I,j,k) + u(I-1,j,k)*u(I-1,j,k)) + &
           (v(i,J,k)*v(i,J,k) + v(i,J-1,k)*v(i,J-1,k)))*0.25
@@ -951,15 +911,15 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_KE > 0) call post_data(CS%id_KE, CS%KE, CS%diag)
   endif
 
-  if(.not.G%symmetric) then
-    if(ASSOCIATED(CS%dKE_dt) .OR. ASSOCIATED(CS%PE_to_KE) .OR. ASSOCIATED(CS%KE_CorAdv) .OR. &
-       ASSOCIATED(CS%KE_adv) .OR. ASSOCIATED(CS%KE_visc)  .OR. ASSOCIATED(CS%KE_horvisc).OR. &
-       ASSOCIATED(CS%KE_dia) ) then
+  if (.not.G%symmetric) then
+    if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_CorAdv) .OR. &
+       associated(CS%KE_adv) .OR. associated(CS%KE_visc)  .OR. associated(CS%KE_horvisc).OR. &
+       associated(CS%KE_dia) ) then
         call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
     endif
   endif
 
-  if (ASSOCIATED(CS%dKE_dt)) then
+  if (associated(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
@@ -980,7 +940,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_dKEdt > 0) call post_data(CS%id_dKEdt, CS%dKE_dt, CS%diag)
   endif
 
-  if (ASSOCIATED(CS%PE_to_KE)) then
+  if (associated(CS%PE_to_KE)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%PFu(I,j,k)
@@ -998,7 +958,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_PE_to_KE > 0) call post_data(CS%id_PE_to_KE, CS%PE_to_KE, CS%diag)
   endif
 
-  if (ASSOCIATED(CS%KE_CorAdv)) then
+  if (associated(CS%KE_CorAdv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%CAu(I,j,k)
@@ -1020,7 +980,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_KE_Coradv > 0) call post_data(CS%id_KE_Coradv, CS%KE_Coradv, CS%diag)
   endif
 
-  if (ASSOCIATED(CS%KE_adv)) then
+  if (associated(CS%KE_adv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
@@ -1042,7 +1002,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_KE_adv > 0) call post_data(CS%id_KE_adv, CS%KE_adv, CS%diag)
   endif
 
-  if (ASSOCIATED(CS%KE_visc)) then
+  if (associated(CS%KE_visc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_visc(I,j,k)
@@ -1060,7 +1020,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_KE_visc > 0) call post_data(CS%id_KE_visc, CS%KE_visc, CS%diag)
   endif
 
-  if (ASSOCIATED(CS%KE_horvisc)) then
+  if (associated(CS%KE_horvisc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%diffu(I,j,k)
@@ -1078,7 +1038,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
     if (CS%id_KE_horvisc > 0) call post_data(CS%id_KE_horvisc, CS%KE_horvisc, CS%diag)
   endif
 
-  if (ASSOCIATED(CS%KE_dia)) then
+  if (associated(CS%KE_dia)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
@@ -1106,16 +1066,11 @@ end subroutine calculate_energy_diagnostics
 subroutine register_time_deriv(f_ptr, deriv_ptr, CS)
   real, dimension(:,:,:), target :: f_ptr     !< Field whose derivative is taken.
   real, dimension(:,:,:), target :: deriv_ptr !< Field in which the calculated time derivatives
-                                              !! placed.
+                                              !! will be placed.
   type(diagnostics_CS),  pointer :: CS        !< Control structure returned by previous call to
                                               !! diagnostics_init.
 
-! This subroutine registers fields to calculate a diagnostic time derivative.
-! Arguments:
-!  (target)  f_ptr     - field whose derivative is taken
-!  (in)      deriv_ptr - field in which the calculated time derivatives placed
-!  (in)      num_lay   - number of layers in this field
-!  (in)      CS        - control structure returned by previous call to diagnostics_init
+  ! This subroutine registers fields to calculate a diagnostic time derivative.
 
   integer :: m
 
@@ -1141,18 +1096,12 @@ end subroutine register_time_deriv
 
 !> This subroutine calculates all registered time derivatives.
 subroutine calculate_derivs(dt, G, CS)
-  real,                  intent(in)    :: dt   !< The time interval over which differences occur,
-                                               !! in s.
+  real,                  intent(in)    :: dt   !< The time interval over which differences occur, in s.
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   type(diagnostics_CS),  intent(inout) :: CS   !< Control structure returned by previous call to
                                                !! diagnostics_init.
 
 ! This subroutine calculates all registered time derivatives.
-! Arguments:
-!  (in)      dt - time interval in s over which differences occur
-!  (in)      G  - ocean grid structure.
-!  (in)      CS - control structure returned by previous call to diagnostics_init
-
   integer i, j, k, m
   real Idt
 
@@ -1168,9 +1117,46 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
+!> This routine posts diagnostics of various dynamic ocean surface quantities,
+!! including velocities, speed and sea surface height, at the time the ocean
+!! state is reported back to the caller
+subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
+  type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
+  type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+  type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement (m)
+
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
+  integer :: i, j, is, ie, js, je
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (IDs%id_ssh > 0) &
+    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
+
+  if (IDs%id_ssu > 0) &
+    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
+
+  if (IDs%id_ssv > 0) &
+    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
+
+  if (IDs%id_speed > 0) then
+    do j=js,je ; do i=is,ie
+      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
+                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
+    enddo ; enddo
+    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
+  endif
+
+end subroutine post_surface_dyn_diags
+
+
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
-subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
+subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
                                     ssh, ssh_ibc)
   type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
@@ -1180,11 +1166,9 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for
-                                              !! ice displacement (m)
-  real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh_ibc !< Time mean surface height with corrections for
-                                              !! ice displacement and the inverse barometer (m)
+                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement (m)
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh_ibc !< Time mean surface height with corrections
+                                                  !! for ice displacement and the inverse barometer (m)
 
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -1200,10 +1184,6 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     ssh_ga = global_area_mean(ssh, G)
     call post_data(IDs%id_ssh_ga, ssh_ga, diag)
   endif
-
-  I_time_int = 1.0 / dt_int
-  if (IDs%id_ssh > 0) &
-    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
 
   ! post the dynamic sea level, zos, and zossq.
   ! zos is ave_ssh with sea ice inverse barometer removed,
@@ -1235,8 +1215,11 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_volo, volo, diag)
   endif
 
+  ! Use Adcroft's rule of reciprocals; it does the right thing here.
+  I_time_int = 0.0 ; if (dt_int > 0.0) I_time_int = 1.0 / dt_int
+
   ! post time-averaged rate of frazil formation
-  if (ASSOCIATED(tv%frazil) .and. (IDs%id_fraz > 0)) then
+  if (associated(tv%frazil) .and. (IDs%id_fraz > 0)) then
     do j=js,je ; do i=is,ie
       work_2d(i,j) = tv%frazil(i,j) * I_time_int
     enddo ; enddo
@@ -1244,7 +1227,7 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   endif
 
   ! post time-averaged salt deficit
-  if (ASSOCIATED(tv%salt_deficit) .and. (IDs%id_salt_deficit > 0)) then
+  if (associated(tv%salt_deficit) .and. (IDs%id_salt_deficit > 0)) then
     do j=js,je ; do i=is,ie
       work_2d(i,j) = tv%salt_deficit(i,j) * I_time_int
     enddo ; enddo
@@ -1252,7 +1235,7 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   endif
 
   ! post temperature of P-E+R
-  if (ASSOCIATED(tv%TempxPmE) .and. (IDs%id_Heat_PmE > 0)) then
+  if (associated(tv%TempxPmE) .and. (IDs%id_Heat_PmE > 0)) then
     do j=js,je ; do i=is,ie
       work_2d(i,j) = tv%TempxPmE(i,j) * (tv%C_p * I_time_int)
     enddo ; enddo
@@ -1260,7 +1243,7 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   endif
 
   ! post geothermal heating or internal heat source/sinks
-  if (ASSOCIATED(tv%internal_heat) .and. (IDs%id_intern_heat > 0)) then
+  if (associated(tv%internal_heat) .and. (IDs%id_intern_heat > 0)) then
     do j=js,je ; do i=is,ie
       work_2d(i,j) = tv%internal_heat(i,j) * (tv%C_p * I_time_int)
     enddo ; enddo
@@ -1308,34 +1291,21 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
     call post_data(IDs%id_sss_sq, work_2d, diag, mask=G%mask2dT)
   endif
 
-  if (IDs%id_ssu > 0) &
-    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
-  if (IDs%id_ssv > 0) &
-    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
-
-  if (IDs%id_speed > 0) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
-                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
-    enddo ; enddo
-    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
-  endif
-
   call coupler_type_send_data(sfc_state%tr_fields, get_diag_time_end(diag))
 
-end subroutine post_surface_diagnostics
+end subroutine post_surface_thermo_diags
+
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, diag, dt_trans, diag_to_Z_CSp, Reg)
+subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, diag, dt_trans, &
+                                      diag_to_Z_CSp, Reg)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: uhtr !< Accumulated zonal thickness fluxes used
-                                                  !! to advect tracers (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: vhtr !< Accumulated meridional thickness fluxes
-                                                  !! used to advect tracers (m3 or kg)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhtr !< Accumulated zonal thickness fluxes
+                                                 !! used to advect tracers (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vhtr !< Accumulated meridional thickness fluxes
+                                                 !! used to advect tracers (m3 or kg)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h   !< The updated layer thicknesses, in H
   type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
@@ -1372,7 +1342,7 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
     call post_data(IDs%id_umo_2d, umo2d, diag)
   endif
   if (IDs%id_umo > 0) then
-    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+    ! Convert to kg/s.
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       umo(I,j,k) = uhtr(I,j,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
@@ -1386,7 +1356,7 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
     call post_data(IDs%id_vmo_2d, vmo2d, diag)
   endif
   if (IDs%id_vmo > 0) then
-    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+    ! Convert to kg/s.
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       vmo(i,J,k) = vhtr(i,J,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
@@ -1395,7 +1365,8 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
 
   if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h = diag_pre_dyn%h_state)
   if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h = diag_pre_dyn%h_state)
-  if (IDs%id_dynamics_h > 0 ) call post_data(IDs%id_dynamics_h, diag_pre_dyn%h_state, diag, alt_h = diag_pre_dyn%h_state)
+  if (IDs%id_dynamics_h > 0) call post_data(IDs%id_dynamics_h, diag_pre_dyn%h_state, diag, &
+                                            alt_h = diag_pre_dyn%h_state)
   ! Post the change in thicknesses
   if (IDs%id_dynamics_h_tendency > 0) then
     h_tend(:,:,:) = 0.
@@ -1469,7 +1440,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   allocate(CS)
 
   CS%diag => diag
-  use_temperature = ASSOCIATED(tv%T)
+  use_temperature = associated(tv%T)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version)
@@ -1578,21 +1549,21 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
       'Zonal Acceleration', 'm s-2')
-  if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
+  if ((CS%id_du_dt>0) .and. .not.associated(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
     call register_time_deriv(MIS%u, CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', diag%axesCvL, Time, &
       'Meridional Acceleration', 'm s-2')
-  if ((CS%id_dv_dt>0) .and. .not.ASSOCIATED(CS%dv_dt)) then
+  if ((CS%id_dv_dt>0) .and. .not.associated(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
     call register_time_deriv(MIS%v, CS%dv_dt, CS)
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', diag%axesTL, Time, &
       'Thickness tendency', trim(thickness_units)//" s-1", v_extensive = .true.)
-  if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
+  if ((CS%id_dh_dt>0) .and. .not.associated(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
     call register_time_deriv(MIS%h, CS%dh_dt, CS)
   endif
@@ -1777,7 +1748,7 @@ subroutine register_surface_diags(Time, G, IDs, diag, tv)
       IDs%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
           'Sea Surface Absolute Salinity', 'g kg-1')
     endif
-    if (ASSOCIATED(tv%frazil)) then
+    if (associated(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
             'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil', &
             cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
@@ -1846,6 +1817,7 @@ subroutine write_static_fields(G, GV, tv, diag)
   type(verticalGrid_type), intent(in)    :: GV   !< ocean vertical grid structure
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
+
   ! Local variables
   real    :: tmp_h(SZI_(G),SZJ_(G))
   integer :: id, i, j
@@ -1980,6 +1952,14 @@ subroutine write_static_fields(G, GV, tv, diag)
         'Open zonal grid spacing at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dx_Cv, diag, .true.)
 
+  id = register_static_field('ocean_model', 'sin_rot', diag%axesT1, &
+        'sine of the clockwise angle of the ocean grid north to true north', 'none')
+  if (id > 0) call post_data(id, G%sin_rot, diag, .true.)
+
+  id = register_static_field('ocean_model', 'cos_rot', diag%axesT1, &
+        'cosine of the clockwise angle of the ocean grid north to true north', 'none')
+  if (id > 0) call post_data(id, G%cos_rot, diag, .true.)
+
 
   ! This static diagnostic is from CF 1.8, and is the fraction of a cell
   ! covered by ocean, given as a percentage (poorly named).
@@ -2024,91 +2004,86 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
                                                    !! module.
 
 ! This subroutine sets up diagnostics upon which other diagnostics depend.
-! Arguments:
-!  (in)      MIS - For "MOM Internal State" a set of pointers to the fields and
-!                  accelerations making up ocean internal physical state.
-!  (inout)   ADp - structure pointing to accelerations in momentum equation
-!  (inout)   CDp - structure pointing to terms in continuity equation
-!  (in)      G   - ocean grid structure
-!  (in)      CS -  pointer to the control structure for this module
-
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (ASSOCIATED(CS%dKE_dt) .or. ASSOCIATED(CS%PE_to_KE) .or. &
-      ASSOCIATED(CS%KE_CorAdv) .or. ASSOCIATED(CS%KE_adv) .or. &
-      ASSOCIATED(CS%KE_visc) .or. ASSOCIATED(CS%KE_horvisc) .or. &
-      ASSOCIATED(CS%KE_dia)) &
+  if (associated(CS%dKE_dt) .or. associated(CS%PE_to_KE) .or. &
+      associated(CS%KE_CorAdv) .or. associated(CS%KE_adv) .or. &
+      associated(CS%KE_visc) .or. associated(CS%KE_horvisc) .or. &
+      associated(CS%KE_dia)) &
     call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
-  if (ASSOCIATED(CS%dKE_dt)) then
-    if (.not.ASSOCIATED(CS%du_dt)) then
+  if (associated(CS%dKE_dt)) then
+    if (.not.associated(CS%du_dt)) then
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
       call register_time_deriv(MIS%u, CS%du_dt, CS)
     endif
-    if (.not.ASSOCIATED(CS%dv_dt)) then
+    if (.not.associated(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
       call register_time_deriv(MIS%v, CS%dv_dt, CS)
     endif
-    if (.not.ASSOCIATED(CS%dh_dt)) then
+    if (.not.associated(CS%dh_dt)) then
       call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
       call register_time_deriv(MIS%h, CS%dh_dt, CS)
     endif
   endif
 
-  if (ASSOCIATED(CS%KE_adv)) then
+  if (associated(CS%KE_adv)) then
     call safe_alloc_ptr(ADp%gradKEu,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%gradKEv,isd,ied,JsdB,JedB,nz)
   endif
 
-  if (ASSOCIATED(CS%KE_visc)) then
+  if (associated(CS%KE_visc)) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
   endif
 
-  if (ASSOCIATED(CS%KE_dia)) then
+  if (associated(CS%KE_dia)) then
     call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   endif
 
-  if (ASSOCIATED(CS%uhGM_Rlay)) call safe_alloc_ptr(CDp%uhGM,IsdB,IedB,jsd,jed,nz)
-  if (ASSOCIATED(CS%vhGM_Rlay)) call safe_alloc_ptr(CDp%vhGM,isd,ied,JsdB,JedB,nz)
+  if (associated(CS%uhGM_Rlay)) call safe_alloc_ptr(CDp%uhGM,IsdB,IedB,jsd,jed,nz)
+  if (associated(CS%vhGM_Rlay)) call safe_alloc_ptr(CDp%vhGM,isd,ied,JsdB,JedB,nz)
 
 end subroutine set_dependent_diagnostics
 
+!> Deallocate memory associated with the diagnostics module
 subroutine MOM_diagnostics_end(CS, ADp)
-  type(diagnostics_CS),   pointer       :: CS
-  type(accel_diag_ptrs),  intent(inout) :: ADp
+  type(diagnostics_CS),   pointer       :: CS  !< Control structure returned by a
+                                               !! previous call to diagnostics_init.
+  type(accel_diag_ptrs),  intent(inout) :: ADp !< structure with pointers to
+                                               !! accelerations in momentum equation.
   integer :: m
 
-  if (ASSOCIATED(CS%e))          deallocate(CS%e)
-  if (ASSOCIATED(CS%e_D))        deallocate(CS%e_D)
-  if (ASSOCIATED(CS%KE))         deallocate(CS%KE)
-  if (ASSOCIATED(CS%dKE_dt))     deallocate(CS%dKE_dt)
-  if (ASSOCIATED(CS%PE_to_KE))   deallocate(CS%PE_to_KE)
-  if (ASSOCIATED(CS%KE_Coradv))  deallocate(CS%KE_Coradv)
-  if (ASSOCIATED(CS%KE_adv))     deallocate(CS%KE_adv)
-  if (ASSOCIATED(CS%KE_visc))    deallocate(CS%KE_visc)
-  if (ASSOCIATED(CS%KE_horvisc)) deallocate(CS%KE_horvisc)
-  if (ASSOCIATED(CS%KE_dia))     deallocate(CS%KE_dia)
-  if (ASSOCIATED(CS%dv_dt))      deallocate(CS%dv_dt)
-  if (ASSOCIATED(CS%dh_dt))      deallocate(CS%dh_dt)
-  if (ASSOCIATED(CS%du_dt))      deallocate(CS%du_dt)
-  if (ASSOCIATED(CS%h_Rlay))     deallocate(CS%h_Rlay)
-  if (ASSOCIATED(CS%uh_Rlay))    deallocate(CS%uh_Rlay)
-  if (ASSOCIATED(CS%vh_Rlay))    deallocate(CS%vh_Rlay)
-  if (ASSOCIATED(CS%uhGM_Rlay))  deallocate(CS%uhGM_Rlay)
-  if (ASSOCIATED(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
+  if (associated(CS%e))          deallocate(CS%e)
+  if (associated(CS%e_D))        deallocate(CS%e_D)
+  if (associated(CS%KE))         deallocate(CS%KE)
+  if (associated(CS%dKE_dt))     deallocate(CS%dKE_dt)
+  if (associated(CS%PE_to_KE))   deallocate(CS%PE_to_KE)
+  if (associated(CS%KE_Coradv))  deallocate(CS%KE_Coradv)
+  if (associated(CS%KE_adv))     deallocate(CS%KE_adv)
+  if (associated(CS%KE_visc))    deallocate(CS%KE_visc)
+  if (associated(CS%KE_horvisc)) deallocate(CS%KE_horvisc)
+  if (associated(CS%KE_dia))     deallocate(CS%KE_dia)
+  if (associated(CS%dv_dt))      deallocate(CS%dv_dt)
+  if (associated(CS%dh_dt))      deallocate(CS%dh_dt)
+  if (associated(CS%du_dt))      deallocate(CS%du_dt)
+  if (associated(CS%h_Rlay))     deallocate(CS%h_Rlay)
+  if (associated(CS%uh_Rlay))    deallocate(CS%uh_Rlay)
+  if (associated(CS%vh_Rlay))    deallocate(CS%vh_Rlay)
+  if (associated(CS%uhGM_Rlay))  deallocate(CS%uhGM_Rlay)
+  if (associated(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
 
-  if (ASSOCIATED(ADp%gradKEu))    deallocate(ADp%gradKEu)
-  if (ASSOCIATED(ADp%gradKEu))    deallocate(ADp%gradKEu)
-  if (ASSOCIATED(ADp%du_dt_visc)) deallocate(ADp%du_dt_visc)
-  if (ASSOCIATED(ADp%dv_dt_visc)) deallocate(ADp%dv_dt_visc)
-  if (ASSOCIATED(ADp%du_dt_dia))  deallocate(ADp%du_dt_dia)
-  if (ASSOCIATED(ADp%dv_dt_dia))  deallocate(ADp%dv_dt_dia)
-  if (ASSOCIATED(ADp%du_other))   deallocate(ADp%du_other)
-  if (ASSOCIATED(ADp%dv_other))   deallocate(ADp%dv_other)
+  if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
+  if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
+  if (associated(ADp%du_dt_visc)) deallocate(ADp%du_dt_visc)
+  if (associated(ADp%dv_dt_visc)) deallocate(ADp%dv_dt_visc)
+  if (associated(ADp%du_dt_dia))  deallocate(ADp%du_dt_dia)
+  if (associated(ADp%dv_dt_dia))  deallocate(ADp%dv_dt_dia)
+  if (associated(ADp%du_other))   deallocate(ADp%du_other)
+  if (associated(ADp%dv_other))   deallocate(ADp%dv_other)
 
   do m=1,CS%num_time_deriv ; deallocate(CS%prev_val(m)%p) ; enddo
 

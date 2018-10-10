@@ -1,3 +1,4 @@
+!> Configures the model for the geostrophic adjustment test case.
 module adjustment_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -6,9 +7,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -18,27 +16,17 @@ use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 
-character(len=40) :: mdl = "adjustment_initialization" ! This module's name.
+character(len=40) :: mdl = "adjustment_initialization" !< This module's name.
 
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
-! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public adjustment_initialize_thickness
 public adjustment_initialize_temperature_salinity
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-!> Initialization of thicknesses.
-!! This subroutine initializes the layer thicknesses to be uniform.
-!------------------------------------------------------------------------------
+!> Initializes the layer thicknesses in the adjustment test case
 subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_params)
-
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -47,7 +35,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
+  ! Local variables
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -60,7 +48,6 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
   character(len=20) :: verticalCoordinate
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "adjustment_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -113,7 +100,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
   select case ( coordinateMode(verticalCoordinate) )
 
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
-      if (delta_S_strat.ne.0.) then
+      if (delta_S_strat /= 0.) then
         adjustment_delta = adjustment_deltaS / delta_S_strat * G%max_depth
         do k=1,nz+1
           e0(k) = adjustment_delta-(G%max_depth+2*adjustment_delta) * (real(k-1) / real(nz))
@@ -128,10 +115,10 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
       target_values(nz+1) = GV%Rlay(nz)+0.5*(GV%Rlay(nz)-GV%Rlay(nz-1))
       do k = 2,nz
         target_values(k) = target_values(k-1) + ( GV%Rlay(nz) - GV%Rlay(1) ) / (nz-1)
-      end do
+      enddo
       target_values = target_values - 1000.
       do j=js,je ; do i=is,ie
-        if (front_wave_length.ne.0.) then
+        if (front_wave_length /= 0.) then
           y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
           yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / adjustment_width
           yy = min(1.0, yy); yy = max(-1.0, yy)
@@ -145,7 +132,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
         x = x * acos( 0. )
         delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
         do k=2,nz
-          if (dSdz.ne.0.) then
+          if (dSdz /= 0.) then
             eta1D(k) = ( target_values(k) - ( S_ref + delta_S ) ) / dSdz
           else
             eta1D(k) = e0(k) - (0.5*adjustment_delta) * sin( x )
@@ -186,10 +173,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
 
 end subroutine adjustment_initialize_thickness
 
-
-!------------------------------------------------------------------------------
-!> Initialization of temperature and salinity.
-!------------------------------------------------------------------------------
+!> Initialization of temperature and salinity in the adjustment test case
 subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                     eqn_of_state, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
@@ -261,7 +245,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_fi
         do k=nz,1,-1
           eta1d(k) = eta1d(k+1) + h(i,j,k)*GV%H_to_m
         enddo
-        if (front_wave_length.ne.0.) then
+        if (front_wave_length /= 0.) then
           y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
           yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / front_wave_length
           yy = min(1.0, yy); yy = max(-1.0, yy)
@@ -290,7 +274,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_fi
    !    x = abs(S(1,1,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
    !    x = 1.-min(1., x)
    !    T(:,:,k) = x
-      end do
+      enddo
 
     case default
       call MOM_error(FATAL,"adjustment_initialize_temperature_salinity: "// &
@@ -300,8 +284,4 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_fi
 
 end subroutine adjustment_initialize_temperature_salinity
 
-!> \namespace adjustment_initialization
-!!
-!! The module configures the model for the geostrophic adjustment
-!! test case.
 end module adjustment_initialization

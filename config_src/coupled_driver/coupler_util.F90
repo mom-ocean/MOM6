@@ -1,9 +1,9 @@
+!> Provides a couple of interfaces to allow more transparent and
+!! robust extraction of the various fields in the coupler types.
 module coupler_util
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!   This code provides a couple of interfaces to allow more transparent and
-! robust extraction of the various fields in the coupler types.
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use coupler_types_mod, only : coupler_2d_bc_type, ind_flux, ind_alpha
 use coupler_types_mod, only : ind_csurf
@@ -15,24 +15,20 @@ public :: ind_flux, ind_alpha, ind_csurf
 
 contains
 
+!> Extract an array of values in a coupler bc type
 subroutine extract_coupler_values(BC_struc, BC_index, BC_element, array_out, &
                                   is, ie, js, je, conversion)
-  type(coupler_2d_bc_type), intent(in)  :: BC_struc
-  integer,                  intent(in)  :: BC_index, BC_element
-  real, dimension(:,:),     intent(out) :: array_out
-  integer,        optional, intent(in)  :: is, ie, js, je
-  real,           optional, intent(in)  :: conversion
-! Arguments: BC_struc - The type from which the data is being extracted.
-!  (in)      BC_index - The boundary condition number being extracted.
-!  (in)      BC_element - The element of the boundary condition being extracted.
-!            This could be ind_csurf, ind_alpha, ind_flux or ind_deposition.
-!  (out)     array_out - The array being filled with the input values.
-!  (in, opt) is, ie, js, je - The i- and j- limits of array_out to be filled.
-!            These must match the size of the corresponding value array or an
-!            error message is issued.
-!  (in, opt) conversion - A number that every element is multiplied by, to
-!                         permit sign convention or unit conversion.
-
+  type(coupler_2d_bc_type), intent(in)  :: BC_struc !< The type from which the data is being extracted.
+  integer,                  intent(in)  :: BC_index !< The boundary condition number being extracted.
+  integer,                  intent(in)  :: BC_element !< The element of the boundary condition being extracted.
+  real, dimension(:,:),     intent(out) :: array_out !< The array being filled with the input values.
+  integer,        optional, intent(in)  :: is !< Start i-index
+  integer,        optional, intent(in)  :: ie !< End i-index
+  integer,        optional, intent(in)  :: js !< Start j-index
+  integer,        optional, intent(in)  :: je !< End j-index
+  real,           optional, intent(in)  :: conversion !< A number that every element is multiplied by, to
+                                           !! permit sign convention or unit conversion.
+  ! Local variables
   real, pointer, dimension(:,:) :: Array_in
   real :: conv
   integer :: i, j, is0, ie0, js0, je0, i_offset, j_offset
@@ -78,24 +74,21 @@ subroutine extract_coupler_values(BC_struc, BC_index, BC_element, array_out, &
 
 end subroutine extract_coupler_values
 
+!> Set an array of values in a coupler bc type
 subroutine set_coupler_values(array_in, BC_struc, BC_index, BC_element, &
                               is, ie, js, je, conversion)
-  real, dimension(:,:),     intent(in)    :: array_in
-  type(coupler_2d_bc_type), intent(inout) :: BC_struc
-  integer,                  intent(in)    :: BC_index, BC_element
-  integer,        optional, intent(in)    :: is, ie, js, je
-  real,           optional, intent(in)    :: conversion
-! Arguments: array_in - The array containing the values to load into the BC.
-!  (out)     BC_struc - The type into which the data is being loaded.
-!  (in)      BC_index - The boundary condition number being extracted.
-!  (in)      BC_element - The element of the boundary condition being extracted.
-!            This could be ind_csurf, ind_alpha, ind_flux or ind_deposition.
-!  (in, opt) is, ie, js, je - The i- and j- limits of array_out to be filled.
-!            These must match the size of the corresponding value array or an
-!            error message is issued.
-!  (in, opt) conversion - A number that every element is multiplied by, to
-!                         permit sign convention or unit conversion.
-
+  real, dimension(:,:),     intent(in)    :: array_in !< The array containing the values to load into the BC.
+  type(coupler_2d_bc_type), intent(inout) :: BC_struc !< The type from which the data is being extracted.
+  integer,                  intent(in)    :: BC_index !< The boundary condition number being extracted.
+  integer,                  intent(in)    :: BC_element !< The element of the boundary condition being extracted.
+                                             !! This could be ind_csurf, ind_alpha, ind_flux or ind_deposition.
+  integer,        optional, intent(in)    :: is !< Start i-index
+  integer,        optional, intent(in)    :: ie !< End i-index
+  integer,        optional, intent(in)    :: js !< Start j-index
+  integer,        optional, intent(in)    :: je !< End j-index
+  real,           optional, intent(in)    :: conversion !< A number that every element is multiplied by, to
+                                             !! permit sign convention or unit conversion.
+  ! Local variables
   real, pointer, dimension(:,:) :: Array_out
   real :: conv
   integer :: i, j, is0, ie0, js0, je0, i_offset, j_offset

@@ -1,3 +1,4 @@
+!> A template of a user to code up customized initial conditions.
 module user_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -7,9 +8,6 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N
 use MOM_open_boundary, only : OBC_DIRECTION_S
@@ -26,6 +24,8 @@ public USER_set_coord, USER_initialize_topography, USER_initialize_thickness
 public USER_initialize_velocity, USER_init_temperature_salinity
 public USER_initialize_sponges, USER_set_OBC_data, USER_set_rotation
 
+!> A module variable that should not be used.
+!! \todo Move this module variable into a control structure.
 logical :: first_call = .true.
 
 contains
@@ -231,61 +231,44 @@ end subroutine write_user_log
 
 !> \namespace user_initialization
 !!
-!!  By Robert Hallberg, April 1994 - June 2002                         *
-!!                                                                     *
-!!    This subroutine initializes the fields for the simulations.      *
-!!  The one argument passed to initialize, Time, is set to the         *
-!!  current time of the simulation.  The fields which are initialized  *
-!!  here are:                                                          *
-!!    u - Zonal velocity in m s-1.                                     *
-!!    v - Meridional velocity in m s-1.                                *
-!!    h - Layer thickness in m.  (Must be positive.)                   *
-!!    G%bathyT - Basin depth in m.  (Must be positive.)                *
-!!    G%CoriolisBu - The Coriolis parameter, in s-1.                   *
-!!    GV%g_prime - The reduced gravity at each interface, in m s-2.    *
-!!    GV%Rlay - Layer potential density (coordinate variable), kg m-3. *
-!!  If ENABLE_THERMODYNAMICS is defined:                               *
-!!    T - Temperature in C.                                            *
-!!    S - Salinity in psu.                                             *
-!!  If BULKMIXEDLAYER is defined:                                      *
-!!    Rml - Mixed layer and buffer layer potential densities in        *
-!!          units of kg m-3.                                           *
-!!  If SPONGE is defined:                                              *
-!!    A series of subroutine calls are made to set up the damping      *
-!!    rates and reference profiles for all variables that are damped   *
-!!    in the sponge.                                                   *
-!!  Any user provided tracer code is also first linked through this    *
-!!  subroutine.                                                        *
-!!                                                                     *
-!!    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
-!!  in MOM_surface_forcing.F90.                                        *
-!!                                                                     *
-!!    These variables are all set in the set of subroutines (in this   *
-!!  file) USER_initialize_bottom_depth, USER_initialize_thickness,     *
-!!  USER_initialize_velocity,  USER_initialize_temperature_salinity,   *
-!!  USER_initialize_mixed_layer_density, USER_initialize_sponges,      *
-!!  USER_set_coord, and USER_set_ref_profile.                          *
-!!                                                                     *
-!!    The names of these subroutines should be self-explanatory. They  *
-!!  start with "USER_" to indicate that they will likely have to be    *
-!!  modified for each simulation to set the initial conditions and     *
-!!  boundary conditions.  Most of these take two arguments: an integer *
-!!  argument specifying whether the fields are to be calculated        *
-!!  internally or read from a NetCDF file; and a string giving the     *
-!!  path to that file.  If the field is initialized internally, the    *
-!!  path is ignored.                                                   *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!!    j+1  > o > o >   At ^:  v, tauy                                  *
-!!    j    x ^ x ^ x   At >:  u, taux                                  *
-!!    j    > o > o >   At o:  h, bathyT, buoy, tr, T, S, Rml, ustar    *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
+!!  This subroutine initializes the fields for the simulations.
+!!  The one argument passed to initialize, Time, is set to the
+!!  current time of the simulation.  The fields which are initialized
+!!  here are:
+!!  - u - Zonal velocity in m s-1.
+!!  - v - Meridional velocity in m s-1.
+!!  - h - Layer thickness in m.  (Must be positive.)
+!!  - G%bathyT - Basin depth in m.  (Must be positive.)
+!!  - G%CoriolisBu - The Coriolis parameter, in s-1.
+!!  - GV%g_prime - The reduced gravity at each interface, in m s-2.
+!!  - GV%Rlay - Layer potential density (coordinate variable), kg m-3.
+!!  If ENABLE_THERMODYNAMICS is defined:
+!!  - T - Temperature in C.
+!!  - S - Salinity in psu.
+!!  If BULKMIXEDLAYER is defined:
+!!  - Rml - Mixed layer and buffer layer potential densities in
+!!          units of kg m-3.
+!!  If SPONGE is defined:
+!!  - A series of subroutine calls are made to set up the damping
+!!    rates and reference profiles for all variables that are damped
+!!    in the sponge.
+!!
+!!  Any user provided tracer code is also first linked through this
+!!  subroutine.
+!!
+!!  These variables are all set in the set of subroutines (in this
+!!  file) USER_initialize_bottom_depth, USER_initialize_thickness,
+!!  USER_initialize_velocity,  USER_initialize_temperature_salinity,
+!!  USER_initialize_mixed_layer_density, USER_initialize_sponges,
+!!  USER_set_coord, and USER_set_ref_profile.
+!!
+!!  The names of these subroutines should be self-explanatory. They
+!!  start with "USER_" to indicate that they will likely have to be
+!!  modified for each simulation to set the initial conditions and
+!!  boundary conditions.  Most of these take two arguments: an integer
+!!  argument specifying whether the fields are to be calculated
+!!  internally or read from a NetCDF file; and a string giving the
+!!  path to that file.  If the field is initialized internally, the
+!!  path is ignored.
+
 end module user_initialization

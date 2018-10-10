@@ -22,7 +22,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 !> Variable mixing coefficients
-type, public :: VarMix_CS ;
+type, public :: VarMix_CS
   logical :: use_variable_mixing  !< If true, use the variable mixing.
   logical :: Resoln_scaled_Kh     !< If true, scale away the Laplacian viscosity
                                   !! when the deformation radius is well resolved.
@@ -146,13 +146,13 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
          "Module must be initialized before it is used.")
   if (CS%calculate_cg1) then
-    if (.not. ASSOCIATED(CS%cg1)) call MOM_error(FATAL, &
+    if (.not. associated(CS%cg1)) call MOM_error(FATAL, &
       "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
     if (CS%khth_use_ebt_struct) then
-      if (.not. ASSOCIATED(CS%ebt_struct)) call MOM_error(FATAL, &
+      if (.not. associated(CS%ebt_struct)) call MOM_error(FATAL, &
         "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
       if (CS%Resoln_use_ebt) then
         ! Both resolution fn and vertical structure are using EBT
@@ -174,7 +174,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
   ! Calculate and store the ratio between deformation radius and grid-spacing
   ! at h-points (non-dimensional).
   if (CS%calculate_rd_dx) then
-    if (.not. ASSOCIATED(CS%Rd_dx_h)) call MOM_error(FATAL, &
+    if (.not. associated(CS%Rd_dx_h)) call MOM_error(FATAL, &
       "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
 !$OMP parallel default(none) shared(is,ie,js,je,CS)
 !$OMP do
@@ -190,29 +190,29 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
 
   if (.not. CS%calculate_res_fns) return
 
-  if (.not. ASSOCIATED(CS%Res_fn_h)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_h is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%Res_fn_q)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_q is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%Res_fn_u)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_u is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%Res_fn_v)) call MOM_error(FATAL, &
+  if (.not. associated(CS%Res_fn_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_v is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_h)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_h is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_q)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_q is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_u)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_u is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%f2_dx2_v)) call MOM_error(FATAL, &
+  if (.not. associated(CS%f2_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_v is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_h)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_h is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_q)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_q is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_u)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_u is not associated with Resoln_scaled_Kh.")
-  if (.not. ASSOCIATED(CS%beta_dx2_v)) call MOM_error(FATAL, &
+  if (.not. associated(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
 
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
@@ -389,7 +389,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at u-points
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
@@ -444,12 +444,12 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. ASSOCIATED(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. ASSOCIATED(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -606,12 +606,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   real    :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
   real    :: SN_v_local(SZI_(G), SZJB_(G),SZK_(G))
 
-  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. ASSOCIATED(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. ASSOCIATED(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. associated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -685,7 +685,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
   enddo ! k
 !$OMP do
-  do j = js,je;
+  do j = js,je
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
     enddo ; enddo
@@ -804,6 +804,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
   call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
                  default=.false., do_not_log=.true.)
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE
   CS%calculate_Eady_growth_rate = CS%calculate_Eady_growth_rate .or. use_MEKE
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
                  default=0., do_not_log=.true.)
@@ -934,10 +935,10 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "used which introduced potential restart issues.  This flag will be \n"//&
                  "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
-      if (CS%Res_coef_visc .ne. CS%Res_coef_khth) call MOM_error(FATAL, &
+      if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_SCALE_COEF.")
-      if (CS%Res_fn_power_visc .ne. CS%Res_fn_power_khth) call MOM_error(FATAL, &
+      if (CS%Res_fn_power_visc /= CS%Res_fn_power_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
@@ -1053,8 +1054,8 @@ end subroutine VarMix_init
 !! r(\Delta,L_d) = \frac{1}{1+(\alpha R)^p}
 !! \f]
 !!
-!! The resolution function can be applied independently to thickness diffusion (module mom_thickness_diffuse), tracer diffusion (mom_tracer_hordiff)
-!! lateral viscosity (mom_hor_visc).
+!! The resolution function can be applied independently to thickness diffusion (module mom_thickness_diffuse),
+!! tracer diffusion (mom_tracer_hordiff) lateral viscosity (mom_hor_visc).
 !!
 !! Robert Hallberg, 2013: Using a resolution function to regulate parameterizations of oceanic mesoscale eddy effects.
 !! Ocean Modelling, 71, pp 92-103.  http://dx.doi.org/10.1016/j.ocemod.2013.08.007
@@ -1075,8 +1076,8 @@ end subroutine VarMix_init
 !!
 !! \section section_Vicbeck Visbeck diffusivity
 !!
-!! This module also calculates factors used in setting the thickness diffusivity similar to a Visbeck et al., 1997, scheme.
-!! The factors are combined in mom_thickness_diffuse::thickness_diffuse() but calculated in this module.
+!! This module also calculates factors used in setting the thickness diffusivity similar to a Visbeck et al., 1997,
+!! scheme.  The factors are combined in mom_thickness_diffuse::thickness_diffuse() but calculated in this module.
 !!
 !! \f[
 !! \kappa_h = \alpha_s L_s^2 S N
@@ -1098,9 +1099,9 @@ end subroutine VarMix_init
 !!
 !! \section section_vertical_structure_khth Vertical structure function for KhTh
 !!
-!! The thickness diffusivity can be prescribed a vertical distribution with the shape of the equivalent barotropic velocity mode.
-!! The structure function is stored in the control structure for thie module (varmix_cs) but is calculated use subroutines in
-!! mom_wave_speed.
+!! The thickness diffusivity can be prescribed a vertical distribution with the shape of the equivalent barotropic
+!! velocity mode.  The structure function is stored in the control structure for thie module (varmix_cs) but is
+!! calculated using subroutines in mom_wave_speed.
 !!
 !! | Symbol                | Module parameter |
 !! | ------                | --------------- |

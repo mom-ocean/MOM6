@@ -10,10 +10,9 @@ use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid
 implicit none ; private
 
 !> Control structure containing required parameters for the HyCOM coordinate
-type, public :: hycom_CS
-  private
+type, public :: hycom_CS ; private
 
-  !> Number of layers/levels
+  !> Number of layers/levels in generated grid
   integer :: nk
 
   !> Nominal near-surface resolution
@@ -40,8 +39,8 @@ contains
 subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS)
   type(hycom_CS),       pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in generated grid
-  real, dimension(:),   intent(in) :: coordinateResolution !< Z-space thicknesses (m)
-  real, dimension(:),   intent(in) :: target_density !< Interface target densities (kg/m3)
+  real, dimension(nk),  intent(in) :: coordinateResolution !< Nominal near-surface resolution (m)
+  real, dimension(nk+1),intent(in) :: target_density !< Interface target densities (kg/m3)
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_hycom: CS already associated!")
@@ -55,8 +54,9 @@ subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp
   CS%interp_CS               = interp_CS
 end subroutine init_coord_hycom
 
+!> This subroutine deallocates memory in the control structure for the coord_hycom module
 subroutine end_coord_hycom(CS)
-  type(hycom_CS), pointer :: CS
+  type(hycom_CS), pointer :: CS !< Coordinate control structure
 
   ! nothing to do
   if (.not. associated(CS)) return
@@ -67,11 +67,12 @@ subroutine end_coord_hycom(CS)
   deallocate(CS)
 end subroutine end_coord_hycom
 
+!> This subroutine can be used to set the parameters for the coord_hycom module
 subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, interp_CS)
-  type(hycom_CS),                 pointer    :: CS
-  real, optional, dimension(:),   intent(in) :: max_interface_depths
-  real, optional, dimension(:),   intent(in) :: max_layer_thickness
-  type(interp_CS_type), optional, intent(in) :: interp_CS
+  type(hycom_CS),                 pointer    :: CS !< Coordinate control structure
+  real, dimension(:),   optional, intent(in) :: max_interface_depths !< Maximum depths of interfaces in m
+  real, dimension(:),   optional, intent(in) :: max_layer_thickness  !< Maximum thicknesses of layers in m
+  type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_hycom_params: CS not associated")
 
@@ -99,11 +100,12 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H)
-  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
+  real, dimension(nz),   intent(in)    :: T !< Temperature of column (degC)
+  real, dimension(nz),   intent(in)    :: S !< Salinity of column (psu)
   real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, (in m or H)
   real, dimension(nz),   intent(in)    :: p_col !< Layer pressure in Pa
-  real, dimension(nz+1), intent(in)    :: z_col ! Interface positions relative to the surface in H units (m or kg m-2)
-  real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
+  real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(CS%nk+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
   real, optional,        intent(in)    :: zScale !< Scaling factor from the input thicknesses in m
                                                  !! to desired units for zInterface, perhaps m_to_H.
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
@@ -115,7 +117,8 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
 
   ! Local variables
   integer   :: k
-  real, dimension(nz) :: rho_col, h_col_new ! Layer quantities
+  real, dimension(nz) :: rho_col ! Layer quantities
+  real, dimension(CS%nk) :: h_col_new ! New layer thicknesses
   real :: z_scale
   real :: stretching ! z* stretching, converts z* to z.
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
@@ -139,26 +142,26 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   ! Interpolates for the target interface position with the rho_col profile
   ! Based on global density profile, interpolate to generate a new grid
   call build_and_interpolate_grid(CS%interp_CS, rho_col, nz, h(:), z_col, &
-           CS%target_density, nz, h_col_new, z_col_new, h_neglect, h_neglect_edge)
+           CS%target_density, CS%nk, h_col_new, z_col_new, h_neglect, h_neglect_edge)
 
   ! Sweep down the interfaces and make sure that the interface is at least
   ! as deep as a nominal target z* grid
   nominal_z = 0.
   stretching = z_col(nz+1) / depth ! Stretches z* to z
-  do k = 2, nz+1
+  do k = 2, CS%nk+1
     nominal_z = nominal_z + (z_scale * CS%coordinateResolution(k-1)) * stretching
     z_col_new(k) = max( z_col_new(k), nominal_z )
     z_col_new(k) = min( z_col_new(k), z_col(nz+1) )
   enddo
 
-  if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
+  if (maximum_depths_set .and. maximum_h_set) then ; do k=2,CS%nk
     ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
     ! Recall that z_col_new is positive downward.
     z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
                        z_col_new(K-1) + CS%max_layer_thickness(k-1))
-  enddo ; elseif (maximum_depths_set) then ; do K=2,nz
+  enddo ; elseif (maximum_depths_set) then ; do K=2,CS%nk
     z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
-  enddo ; elseif (maximum_h_set) then ; do k=2,nz
+  enddo ; elseif (maximum_h_set) then ; do k=2,CS%nk
     z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
   enddo ; endif
 end subroutine build_hycom1_column

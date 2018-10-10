@@ -8,9 +8,14 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_PressureForce_AFV, only : PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
-use MOM_PressureForce_AFV, only : PressureForce_AFV_init, PressureForce_AFV_CS
+use MOM_PressureForce_AFV, only : PressureForce_AFV_init, PressureForce_AFV_end
+use MOM_PressureForce_AFV, only : PressureForce_AFV_CS
+use MOM_PressureForce_blk_AFV, only : PressureForce_blk_AFV_Bouss, PressureForce_blk_AFV_nonBouss
+use MOM_PressureForce_blk_AFV, only : PressureForce_blk_AFV_init, PressureForce_blk_AFV_end
+use MOM_PressureForce_blk_AFV, only : PressureForce_blk_AFV_CS
 use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_nonBouss
-use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_CS
+use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_end
+use MOM_PressureForce_Mont, only : PressureForce_Mont_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -21,12 +26,16 @@ implicit none ; private
 
 public PressureForce, PressureForce_init, PressureForce_end
 
-! Pressure force control structure
+!> Pressure force control structure
 type, public :: PressureForce_CS ; private
   logical :: Analytic_FV_PGF !< If true, use the analytic finite volume form
                              !! (Adcroft et al., Ocean Mod. 2008) of the PGF.
+  logical :: blocked_AFV     !< If true, used the blocked version of the ANALYTIC_FV_PGF
+                             !! code.  The value of this parameter should not change answers.
   !> Control structure for the analytically integrated finite volume pressure force
   type(PressureForce_AFV_CS), pointer :: PressureForce_AFV_CSp => NULL()
+  !> Control structure for the analytically integrated finite volume pressure force
+  type(PressureForce_blk_AFV_CS), pointer :: PressureForce_blk_AFV_CSp => NULL()
   !> Control structure for the Montgomery potential form of pressure force
   type(PressureForce_Mont_CS), pointer :: PressureForce_Mont_CSp => NULL()
 end type PressureForce_CS
@@ -35,26 +44,42 @@ contains
 
 !> A thin layer between the model and the Boussinesq and non-Boussinesq pressure force routines.
 subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv
-  type(PressureForce_CS),                    pointer     :: CS
-  type(ALE_CS),                              pointer     :: ALE_CSp
-  real, dimension(:,:),                     optional, pointer     :: p_atm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(out) :: PFu  !< Zonal pressure force acceleration (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(out) :: PFv  !< Meridional pressure force acceleration (m/s2)
+  type(PressureForce_CS),  pointer     :: CS   !< Pressure force control structure
+  type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
+  real, dimension(:,:), &
+                 optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+                                               !! atmosphere-ocean interface in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                 optional, intent(out) :: pbce !< The baroclinic pressure anomaly in each layer
+                                               !! due to eta anomalies, in m2 s-2 H-1.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(out) :: eta  !< The bottom mass used to calculate PFu and PFv,
+                                               !! in H, with any tidal contributions.
 
-
-  if (CS%Analytic_FV_PGF) then
+  if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
+    if (GV%Boussinesq) then
+      call PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, &
+               CS%PressureForce_blk_AFV_CSp, ALE_CSp, p_atm, pbce, eta)
+    else
+      call PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, &
+               CS%PressureForce_blk_AFV_CSp, p_atm, pbce, eta)
+    endif
+  elseif (CS%Analytic_FV_PGF) then
     if (GV%Boussinesq) then
       call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_AFV_CSp, &
                                    ALE_CSp, p_atm, pbce, eta)
     else
       call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_AFV_CSp, &
-                                      p_atm, pbce, eta)
+                                      ALE_CSp, p_atm, pbce, eta)
     endif
   else
     if (GV%Boussinesq) then
@@ -94,8 +119,15 @@ subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
                  "the equations of state in pressure to avoid any \n"//&
                  "possibility of numerical thermobaric instability, as \n"//&
                  "described in Adcroft et al., O. Mod. (2008).", default=.true.)
+  call get_param(param_file, mdl, "BLOCKED_ANALYTIC_FV_PGF", CS%blocked_AFV, &
+                 "If true, used the blocked version of the ANALYTIC_FV_PGF \n"//&
+                 "code.  The value of this parameter should not change answers.", &
+                 default=.false., do_not_log=.true., debuggingParam=.true.)
 
-  if (CS%Analytic_FV_PGF) then
+  if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
+    call PressureForce_blk_AFV_init(Time, G, GV, param_file, diag, &
+             CS%PressureForce_blk_AFV_CSp, tides_CSp)
+  elseif (CS%Analytic_FV_PGF) then
     call PressureForce_AFV_init(Time, G, GV, param_file, diag, &
              CS%PressureForce_AFV_CSp, tides_CSp)
   else
@@ -108,6 +140,15 @@ end subroutine PressureForce_init
 !> Deallocate the pressure force control structure
 subroutine PressureForce_end(CS)
   type(PressureForce_CS), pointer :: CS !< Pressure force control structure
+
+  if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
+    call PressureForce_blk_AFV_end(CS%PressureForce_blk_AFV_CSp)
+  elseif (CS%Analytic_FV_PGF) then
+    call PressureForce_AFV_end(CS%PressureForce_AFV_CSp)
+  else
+    call PressureForce_Mont_end(CS%PressureForce_Mont_CSp)
+  endif
+
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_end
 

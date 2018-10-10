@@ -17,7 +17,7 @@ use fms_mod,              only : write_version_number, open_namelist_file, check
 use fms_io_mod,           only : file_exist, field_size, read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix
-use mpp_domains_mod,      only : domain1d, mpp_get_domain_components
+use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
@@ -30,7 +30,7 @@ use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WR
 use mpp_io_mod,           only : MPP_APPEND, MPP_MULTI, MPP_OVERWR, MPP_NETCDF, MPP_RDONLY
 use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
-use mpp_io_mod,           only : read_field=>mpp_read, io_infra_init=>mpp_io_init
+use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 use netcdf
 
@@ -38,7 +38,7 @@ implicit none ; private
 
 public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, read_data, read_field
+public :: get_file_times, open_file, read_axis_data, read_data
 public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
@@ -63,11 +63,13 @@ type, public :: vardesc
                                            !! convert from intensive to extensive
 end type vardesc
 
+!> Indicate whether a file exists, perhaps with domain decomposition
 interface file_exists
-  module procedure file_exist
+  module procedure FMS_file_exists
   module procedure MOM_file_exists
 end interface
 
+!> Read a data field from a file
 interface MOM_read_data
   module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
@@ -75,6 +77,7 @@ interface MOM_read_data
   module procedure MOM_read_data_1d
 end interface
 
+!> Read a pair of data fields representing the two components of a vector from a file
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
@@ -151,9 +154,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   endif
 
   one_file = .true.
-  if (domain_set) then
-    one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
-  endif
+  if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
@@ -216,7 +217,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
-  end do
+  enddo
 
   if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
     if (.not.domain_set) call MOM_error(FATAL, "create_file: "//&
@@ -227,8 +228,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
     "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
 
-! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense, domain, data, min)
-! Otherwise if optional arguments are added to mpp_write_meta the compiler may (and in case of GNU is) get confused and crash.
+! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense,
+! domain, data, min). Otherwise if optional arguments are added to mpp_write_meta the compiler may
+! (and in case of GNU does) get confused and crash.
   if (use_lath) &
     call mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
                    cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
@@ -259,13 +261,13 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     ! Set appropriate units, depending on the value.
     if (timeunit < 0.0) then
       time_units = "days" ! The default value.
-    else if ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+    elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
       time_units = "seconds"
-    else if ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+    elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
       time_units = "hours"
-    else if ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+    elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
       time_units = "days"
-    else if ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+    elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
       time_units = "years"
     else
       write(time_units,'(es8.2," s")') timeunit
@@ -322,7 +324,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     end select
     pack = 1
 
-    if(present(checksums)) then
+    if (present(checksums)) then
        call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack, checksum=checksums(k,:))
     else
@@ -394,9 +396,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     endif
 
     one_file = .true.
-    if (domain_set) then
-      one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
-    endif
+    if (domain_set) one_file = (thread == SINGLE_FILE)
 
     if (one_file) then
       call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
@@ -425,17 +425,18 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 !      call mpp_get_field_atts(fields(i),name)
 !      !if (trim(name) /= trim(vars%name) then
 !      !write (mesg,'("Reopening file ",a," variable ",a," is called ",a,".")',&
-!      !    filename,vars%name,name);
+!      !    filename,vars%name,name)
 !      !call MOM_error(NOTE,"MOM_io: "//mesg)
 !    enddo
   endif
 
 end subroutine reopen_file
 
-
+!> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename, axis_name
-  real, dimension(:), intent(out) :: var
+  character(len=*),   intent(in)  :: filename  !< Name of the file to read
+  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
+  real, dimension(:), intent(out) :: var       !< The axis location data
 
   integer :: i,len,unit, ndim, nvar, natt, ntime
   logical :: axis_found
@@ -635,19 +636,19 @@ end function var_desc
 !! All arguments are optional, except the vardesc type to be modified.
 subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                  cmor_field_name, cmor_units, cmor_longname, conversion, caller)
-  type(vardesc),              intent(inout) :: vd                 !< vardesc type that is modified
-  character(len=*), optional, intent(in)    :: name               !< name of variable
-  character(len=*), optional, intent(in)    :: units              !< units of variable
-  character(len=*), optional, intent(in)    :: longname           !< long name of variable
-  character(len=*), optional, intent(in)    :: hor_grid           !< horizonal staggering of variable
-  character(len=*), optional, intent(in)    :: z_grid             !< vertical staggering of variable
-  character(len=*), optional, intent(in)    :: t_grid             !< time description: s, p, or 1
-  character(len=*), optional, intent(in)    :: cmor_field_name    !< CMOR name
-  character(len=*), optional, intent(in)    :: cmor_units         !< CMOR physical dimensions of variable
-  character(len=*), optional, intent(in)    :: cmor_longname      !< CMOR long name
-  real            , optional, intent(in)    :: conversion         !< for unit conversions, such as needed to
-                                                                  !! convert from intensive to extensive
-  character(len=*), optional, intent(in)    :: caller             !< calling routine?
+  type(vardesc),              intent(inout) :: vd              !< vardesc type that is modified
+  character(len=*), optional, intent(in)    :: name            !< name of variable
+  character(len=*), optional, intent(in)    :: units           !< units of variable
+  character(len=*), optional, intent(in)    :: longname        !< long name of variable
+  character(len=*), optional, intent(in)    :: hor_grid        !< horizonal staggering of variable
+  character(len=*), optional, intent(in)    :: z_grid          !< vertical staggering of variable
+  character(len=*), optional, intent(in)    :: t_grid          !< time description: s, p, or 1
+  character(len=*), optional, intent(in)    :: cmor_field_name !< CMOR name
+  character(len=*), optional, intent(in)    :: cmor_units      !< CMOR physical dimensions of variable
+  character(len=*), optional, intent(in)    :: cmor_longname   !< CMOR long name
+  real            , optional, intent(in)    :: conversion      !< for unit conversions, such as needed
+                                                               !! to convert from intensive to extensive
+  character(len=*), optional, intent(in)    :: caller          !< calling routine?
 
   character(len=120) :: cllr
   cllr = "mod_vardesc"
@@ -828,6 +829,19 @@ function MOM_file_exists(filename, MOM_Domain)
 
 end function MOM_file_exists
 
+!> Returns true if the named file or its domain-decomposed variant exists.
+function FMS_file_exists(filename, domain, no_domain)
+  character(len=*), intent(in)         :: filename  !< The name of the file being inquired about
+  type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
+  logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
+! This function uses the fms_io function file_exist to determine whether
+! a named file (or its decomposed variant) exists.
+
+  logical :: FMS_file_exists
+
+  FMS_file_exists = file_exist(filename, domain, no_domain)
+
+end function FMS_file_exists
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
@@ -994,7 +1008,7 @@ end subroutine MOM_io_init
 !!
 !!   * write_field: write a field to an open file.
 !!   * write_time: write a value of the time axis to an open file.
-!!   * read_field: read a field from an open file.
+!!   * read_data: read a variable from an open file.
 !!   * read_time: read a time from an open file.
 !!
 !!   * name_output_file: provide a name for an output file based on a

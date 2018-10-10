@@ -70,11 +70,12 @@ type, public :: CoriolisAdv_CS ; private
                              !! SADOURNY75_ENERGY.
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
+  !>@{ Diagnostic IDs
   integer :: id_rv = -1, id_PV = -1, id_gKEu = -1, id_gKEv = -1
-  integer :: id_rvxu = -1, id_rvxv = -1
+  integer :: id_rvxu = -1, id_rvxv = -1   !!@}
 end type CoriolisAdv_CS
 
-! Enumeration values for Coriolis_Scheme
+!>@{ Enumeration values for Coriolis_Scheme
 integer, parameter :: SADOURNY75_ENERGY = 1
 integer, parameter :: ARAKAWA_HSU90     = 2
 integer, parameter :: ROBUST_ENSTRO     = 3
@@ -87,18 +88,21 @@ character*(20), parameter :: ROBUST_ENSTRO_STRING = "ROBUST_ENSTRO"
 character*(20), parameter :: SADOURNY75_ENSTRO_STRING = "SADOURNY75_ENSTRO"
 character*(20), parameter :: ARAKAWA_LAMB_STRING = "ARAKAWA_LAMB81"
 character*(20), parameter :: AL_BLEND_STRING = "ARAKAWA_LAMB_BLEND"
-! Enumeration values for KE_Scheme
+!!@}
+!>@{ Enumeration values for KE_Scheme
 integer, parameter :: KE_ARAKAWA        = 10
 integer, parameter :: KE_SIMPLE_GUDONOV = 11
 integer, parameter :: KE_GUDONOV        = 12
 character*(20), parameter :: KE_ARAKAWA_STRING = "KE_ARAKAWA"
 character*(20), parameter :: KE_SIMPLE_GUDONOV_STRING = "KE_SIMPLE_GUDONOV"
 character*(20), parameter :: KE_GUDONOV_STRING = "KE_GUDONOV"
-! Enumeration values for PV_Adv_Scheme
+!!@}
+!>@{ Enumeration values for PV_Adv_Scheme
 integer, parameter :: PV_ADV_CENTERED   = 21
 integer, parameter :: PV_ADV_UPWIND1    = 22
 character*(20), parameter :: PV_ADV_CENTERED_STRING = "PV_ADV_CENTERED"
 character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
+!!@}
 
 contains
 
@@ -290,6 +294,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         if (OBC%freeslip_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
           dudy(I,J) = 0.
         enddo ; endif
+        if (OBC%computed_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            dudy(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%dxCu(I,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            dudy(I,J) = 2.0*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dxCu(I,j+1)
+          endif
+        enddo ; endif
+        if (OBC%specified_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
+          endif
+        enddo ; endif
 
         ! Project thicknesses across OBC points with a no-gradient condition.
         do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
@@ -315,6 +333,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         enddo ; endif
         if (OBC%freeslip_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
           dvdx(I,J) = 0.
+        enddo ; endif
+        if (OBC%computed_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            dvdx(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%dyCv(i,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            dvdx(I,J) = 2.0*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dyCv(i+1,J)
+          endif
+        enddo ; endif
+        if (OBC%specified_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
+          endif
         enddo ; endif
 
         ! Project thicknesses across OBC points with a no-gradient condition.
@@ -411,7 +443,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
 
       if (CS%id_rv > 0) RV(I,J,k) = relative_vorticity
       if (CS%id_PV > 0) PV(I,J,k) = q(I,J)
-      if (ASSOCIATED(AD%rv_x_v) .or. ASSOCIATED(AD%rv_x_u)) &
+      if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) &
         q2(I,J) = relative_vorticity * Ih
     enddo ; enddo
 
@@ -521,7 +553,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           vhm = 10.0*vhc
         elseif (abs(vhc) > c1*abs(vhm)) then
           if (abs(vhc) < c2*abs(vhm)) then ; vhc = (3.0*vhc+(1.0-c2*3.0)*vhm)
-          else if (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
+          elseif (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
           else ; vhc = slope*vhc+(1.0-c3*slope)*vhm
           endif
         endif
@@ -642,7 +674,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ! Term - d(KE)/dx.
     do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
-      if (ASSOCIATED(AD%gradKEu)) AD%gradKEu(I,j,k) = -KEx(I,j)
+      if (associated(AD%gradKEu)) AD%gradKEu(I,j,k) = -KEx(I,j)
     enddo ; enddo
 
 
@@ -748,13 +780,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ! Term - d(KE)/dy.
     do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
-      if (ASSOCIATED(AD%gradKEv)) AD%gradKEv(i,J,k) = -KEy(i,J)
+      if (associated(AD%gradKEv)) AD%gradKEv(i,J,k) = -KEy(i,J)
     enddo ; enddo
 
-    if (ASSOCIATED(AD%rv_x_u) .or. ASSOCIATED(AD%rv_x_v)) then
+    if (associated(AD%rv_x_u) .or. associated(AD%rv_x_v)) then
       ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
-        if (ASSOCIATED(AD%rv_x_u)) then
+        if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = - 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
@@ -762,7 +794,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           enddo ; enddo
         endif
 
-        if (ASSOCIATED(AD%rv_x_v)) then
+        if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = 0.25 * &
               (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
@@ -770,7 +802,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           enddo ; enddo
         endif
       else
-        if (ASSOCIATED(AD%rv_x_u)) then
+        if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
               ((q2(I,J) + q2(I-1,J) + q2(I-1,J-1)) * uh(I-1,j,k) + &
@@ -780,7 +812,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           enddo ; enddo
         endif
 
-        if (ASSOCIATED(AD%rv_x_v)) then
+        if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
               ((q2(I+1,J) + q2(I,J) + q2(I,J-1)) * vh(i+1,J,k) + &
@@ -832,7 +864,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
 
 
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
-  if (CS%KE_Scheme.eq.KE_ARAKAWA) then
+  if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
@@ -843,7 +875,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
                    +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
                 )*0.25*G%IareaT(i,j)
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_SIMPLE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme which does not take into account any geometric factors
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -853,7 +885,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

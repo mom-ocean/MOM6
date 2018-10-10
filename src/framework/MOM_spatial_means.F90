@@ -1,3 +1,4 @@
+!> Functions and routines to take area, volume, mass-weighted, layerwise, zonal or meridional means
 module MOM_spatial_means
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -23,9 +24,10 @@ public :: adjust_area_mean_to_zero
 
 contains
 
+!> Return the global area mean of a variable. This uses reproducing sums.
 function global_area_mean(var,G)
   type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var  !< The variable to average
   real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
   real :: global_area_mean
 
@@ -40,9 +42,10 @@ function global_area_mean(var,G)
 
 end function global_area_mean
 
+!> Return the global area integral of a variable. This uses reproducing sums.
 function global_area_integral(var,G)
   type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var  !< The variable to integrate
   real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
   real :: global_area_integral
 
@@ -57,10 +60,11 @@ function global_area_integral(var,G)
 
 end function global_area_integral
 
+!> Return the layerwise global thickness-weighted mean of a variable. This uses reproducing sums.
 function global_layer_mean(var, h, G, GV)
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var  !< The variable to average
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZK_(GV))                   :: global_layer_mean
 
@@ -86,7 +90,7 @@ function global_layer_mean(var, h, G, GV)
 
 end function global_layer_mean
 
-!> Find the global thickness-weighted mean of a variable.
+!> Find the global thickness-weighted mean of a variable. This uses reproducing sums.
 function global_volume_mean(var, h, G, GV)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
@@ -114,7 +118,7 @@ function global_volume_mean(var, h, G, GV)
 end function global_volume_mean
 
 
-!> Find the global mass-weighted integral of a variable
+!> Find the global mass-weighted integral of a variable. This uses reproducing sums.
 function global_mass_integral(h, G, GV, var, on_PE_only)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
@@ -158,20 +162,16 @@ function global_mass_integral(h, G, GV, var, on_PE_only)
 end function global_mass_integral
 
 
+!> Determine the global mean of a field along rows of constant i, returning it
+!! in a 1-d array using the local indexing. This uses reproducing sums.
 subroutine global_i_mean(array, i_mean, G, mask)
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array
-  real, dimension(SZJ_(G)),         intent(out)   :: i_mean
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: mask
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array  !< The variable being averaged
+  real, dimension(SZJ_(G)),         intent(out)   :: i_mean !< Global mean of array along its i-axis
+  real, dimension(SZI_(G),SZJ_(G)), &
+                          optional, intent(in)    :: mask !< An array used for weighting the i-mean
 
-!    This subroutine determines the global mean of a field along rows of
-!  constant i, returning it in a 1-d array using the local indexing.
-
-! Arguments: array - The 2-d array whose i-mean is to be taken.
-!  (out)     i_mean - Global mean of array along its i-axis.
-!  (in)      G - The ocean's grid structure.
-!  (in)      mask - An array used for weighting the i-mean.
-
+  ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
@@ -236,20 +236,16 @@ subroutine global_i_mean(array, i_mean, G, mask)
 
 end subroutine global_i_mean
 
+!> Determine the global mean of a field along rows of constant j, returning it
+!! in a 1-d array using the local indexing. This uses reproducing sums.
 subroutine global_j_mean(array, j_mean, G, mask)
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array
-  real, dimension(SZI_(G)),         intent(out)   :: j_mean
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: mask
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array  !< The variable being averaged
+  real, dimension(SZI_(G)),         intent(out)   :: j_mean !<  Global mean of array along its j-axis
+  real, dimension(SZI_(G),SZJ_(G)), &
+                          optional, intent(in)    :: mask !< An array used for weighting the j-mean
 
-!    This subroutine determines the global mean of a field along rows of
-!  constant j, returning it in a 1-d array using the local indexing.
-
-! Arguments: array - The 2-d array whose j-mean is to be taken.
-!  (out)     j_mean - Global mean of array along its j-axis.
-!  (in)      G - The ocean's grid structure.
-!  (in)      mask - An array used for weighting the j-mean.
-
+  ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
@@ -316,7 +312,7 @@ end subroutine global_j_mean
 
 !> Adjust 2d array such that area mean is zero without moving the zero contour
 subroutine adjust_area_mean_to_zero(array, G, scaling)
-  type(ocean_grid_type),            intent(inout) :: G       !< Grid structure
+  type(ocean_grid_type),            intent(in)    :: G       !< Grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: array   !< 2D array to be adjusted
   real, optional,                   intent(out)   :: scaling !< The scaling factor used
   ! Local variables

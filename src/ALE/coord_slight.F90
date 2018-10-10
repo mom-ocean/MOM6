@@ -12,13 +12,12 @@ use regrid_interp,     only : NR_ITERATIONS, NR_TOLERANCE, DEGREE_MAX
 implicit none ; private
 
 !> Control structure containing required parameters for the SLight coordinate
-type, public :: slight_CS
-  private
+type, public :: slight_CS ; private
 
   !> Number of layers/levels
   integer :: nk
 
-  !> Minimum thickness allowed when building the new grid through regridding
+  !> Minimum thickness allowed when building the new grid through regridding (m)
   real :: min_thickness
 
   !> Reference pressure for potential density calculations (Pa)
@@ -35,7 +34,7 @@ type, public :: slight_CS
   !> Number of layers to offset the mixed layer density to find resolved stratification (nondim)
   real :: nlay_ml_offset = 2.0
 
-  !> The number of fixed-thickess layers at the top of the model
+  !> The number of fixed-thickness layers at the top of the model
   integer :: nz_fixed_surface = 2
 
   !> The fixed resolution in the topmost SLight_nkml_min layers (m)
@@ -49,16 +48,16 @@ type, public :: slight_CS
   !! unstable water mass profiles, in m.
   real :: halocline_filter_length = 2.0
 
-  !> A value of the stratification ratio that defines a problematic halocline region.
+  !> A value of the stratification ratio that defines a problematic halocline region (nondim).
   real :: halocline_strat_tol = 0.25
 
-  !> Nominal density of interfaces
+  !> Nominal density of interfaces, in kg m-3.
   real, allocatable, dimension(:) :: target_density
 
-  !> Maximum depths of interfaces
+  !> Maximum depths of interfaces, in m.
   real, allocatable, dimension(:) :: max_interface_depths
 
-  !> Maximum thicknesses of layers
+  !> Maximum thicknesses of layers, in m.
   real, allocatable, dimension(:) :: max_layer_thickness
 
   !> Interpolation control structure
@@ -72,10 +71,10 @@ contains
 !> Initialise a slight_CS with pointers to parameters
 subroutine init_coord_slight(CS, nk, ref_pressure, target_density, interp_CS)
   type(slight_CS),      pointer    :: CS !< Unassociated pointer to hold the control structure
-  integer,              intent(in) :: nk
-  real,                 intent(in) :: ref_pressure
-  real, dimension(:),   intent(in) :: target_density
-  type(interp_CS_type), intent(in) :: interp_CS
+  integer,              intent(in) :: nk !< Number of layers in the grid
+  real,                 intent(in) :: ref_pressure !< Nominal density of interfaces in Pa
+  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces in kg m-3
+  type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_slight: CS already associated!")
   allocate(CS)
@@ -87,8 +86,9 @@ subroutine init_coord_slight(CS, nk, ref_pressure, target_density, interp_CS)
   CS%interp_CS         = interp_CS
 end subroutine init_coord_slight
 
+!> This subroutine deallocates memory in the control structure for the coord_slight module
 subroutine end_coord_slight(CS)
-  type(slight_CS), pointer :: CS
+  type(slight_CS), pointer :: CS !< Coordinate control structure
 
   ! nothing to do
   if (.not. associated(CS)) return
@@ -96,23 +96,37 @@ subroutine end_coord_slight(CS)
   deallocate(CS)
 end subroutine end_coord_slight
 
+!> This subroutine can be used to set the parameters for the coord_slight module
 subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
-     min_thickness, compressibility_fraction, &
-     dz_ml_min, nz_fixed_surface, Rho_ML_avg_depth, nlay_ML_offset, fix_haloclines, &
-     halocline_filter_length, halocline_strat_tol, interp_CS)
-  type(slight_CS),                 pointer    :: CS
-  real,    optional, dimension(:), intent(in) :: max_interface_depths
-  real,    optional, dimension(:), intent(in) :: max_layer_thickness
-  real,    optional,               intent(in) :: min_thickness
-  real,    optional,               intent(in) :: compressibility_fraction
-  real,    optional,               intent(in) :: dz_ml_min
-  integer, optional,               intent(in) :: nz_fixed_surface
-  real,    optional,               intent(in) :: Rho_ML_avg_depth
-  real,    optional,               intent(in) :: nlay_ML_offset
-  logical, optional,               intent(in) :: fix_haloclines
-  real,    optional,               intent(in) :: halocline_filter_length
-  real,    optional,               intent(in) :: halocline_strat_tol
-  type(interp_CS_type), optional,  intent(in) :: interp_CS
+               min_thickness, compressibility_fraction, dz_ml_min, &
+               nz_fixed_surface, Rho_ML_avg_depth, nlay_ML_offset, fix_haloclines, &
+               halocline_filter_length, halocline_strat_tol, interp_CS)
+  type(slight_CS),   pointer    :: CS !< Coordinate control structure
+  real, dimension(:), &
+           optional, intent(in) :: max_interface_depths !< Maximum depths of interfaces in m
+  real, dimension(:), &
+           optional, intent(in) :: max_layer_thickness  !< Maximum thicknesses of layers in m
+  real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the
+                                      !! new grid through regridding, in m
+  real,    optional, intent(in) :: compressibility_fraction !< Fraction (between 0 and 1) of
+                                      !! compressibility to add to potential density profiles when
+                                      !! interpolating for target grid positions. (nondim)
+  real,    optional, intent(in) :: dz_ml_min        !< The fixed resolution in the topmost
+                                      !! SLight_nkml_min layers (m)
+  integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickness layers at the
+                                      !! top of the model
+  real,    optional, intent(in) :: Rho_ML_avg_depth !< Depth over which to average to determine
+                                      !! the mixed layer potential density (m)
+  real,    optional, intent(in) :: nlay_ML_offset   !< Number of layers to offset the mixed layer
+                                      !! density to find resolved stratification (nondim)
+  logical, optional, intent(in) :: fix_haloclines   !< If true, detect regions with much weaker than
+                                      !! based on in-situ density, and use a stretched coordinate there.
+  real,    optional, intent(in) :: halocline_filter_length !< A length scale over which to filter T & S
+                                      !! when looking for spuriously unstable water mass profiles, in m.
+  real,    optional, intent(in) :: halocline_strat_tol !< A value of the stratification ratio that
+                                      !! defines a problematic halocline region (nondim).
+  type(interp_CS_type), &
+           optional, intent(in) :: interp_CS !< Controls for interpolation
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_slight_params: CS not associated")
 
@@ -159,7 +173,8 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff,
   real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz),   intent(in)    :: T_col, S_col !< T and S for column
+  real, dimension(nz),   intent(in)    :: T_col !< T for column
+  real, dimension(nz),   intent(in)    :: S_col !< S for column
   real, dimension(nz),   intent(in)    :: h_col !< Layer thicknesses, in m
   real, dimension(nz),   intent(in)    :: p_col !< Layer quantities
   real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H units (m or kg m-2)
@@ -170,7 +185,6 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff,
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                              !! for the purpose of edge value calculations
                                              !! in the same units as h_col.
-
   ! Local variables
   real, dimension(nz) :: rho_col ! Layer quantities
   real, dimension(nz) :: T_f, S_f  ! Filtered ayer quantities

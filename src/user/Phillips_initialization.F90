@@ -1,3 +1,4 @@
+!> Initialization for the "Phillips" channel configuration
 module Phillips_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -7,9 +8,6 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
@@ -313,62 +311,49 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
        D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2
        if (G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
           D(i,j)=D(i,j)*(1-sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2)
-       end if
-     else if (G%geoLonT(i,j)>x3 .and. G%geoLonT(i,j)<x4 .and. &
+       endif
+     elseif (G%geoLonT(i,j)>x3 .and. G%geoLonT(i,j)<x4 .and. &
               G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
        D(i,j) = 2.0/3.0*Htop*sin(PI*(G%geoLonT(i,j)-x3)/(x4-x3))**2 &
                     *sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2
-     end if
+     endif
      D(i,j)=max_depth-D(i,j)
-  enddo; enddo
+  enddo ; enddo
 
 end subroutine Phillips_initialize_topography
 
 !> \namespace phillips_initialization
 !!
-!!  By Robert Hallberg, April 1994 - June 2002                         *
-!!                                                                     *
-!!    This subroutine initializes the fields for the simulations.      *
-!!  The one argument passed to initialize, Time, is set to the         *
-!!  current time of the simulation.  The fields which are initialized  *
-!!  here are:                                                          *
-!!    u - Zonal velocity in m s-1.                                     *
-!!    v - Meridional velocity in m s-1.                                *
-!!    h - Layer thickness in m.  (Must be positive.)                   *
-!!    D - Basin depth in m.  (Must be positive.)                       *
-!!    f - The Coriolis parameter, in s-1.                              *
-!!    g - The reduced gravity at each interface, in m s-2.             *
-!!    Rlay - Layer potential density (coordinate variable) in kg m-3.  *
-!!  If ENABLE_THERMODYNAMICS is defined:                               *
-!!    T - Temperature in C.                                            *
-!!    S - Salinity in psu.                                             *
-!!  If SPONGE is defined:                                              *
-!!    A series of subroutine calls are made to set up the damping      *
-!!    rates and reference profiles for all variables that are damped   *
-!!    in the sponge.                                                   *
-!!  Any user provided tracer code is also first linked through this    *
-!!  subroutine.                                                        *
-!!                                                                     *
-!!    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
-!!  in MOM_surface_forcing.F90.                                        *
-!!                                                                     *
-!!    These variables are all set in the set of subroutines (in this   *
-!!  file) Phillips_initialize_thickness, Phillips_initialize_velocity, *
-!!  Phillips_initialize_topography and Phillips_initialize_sponges     *
-!!  that seet up fields that are specific to the Phillips instability  *
-!!  test case.                                                         *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q, f                                     *
-!!    j+1  > o > o >   At ^:  v, tauy                                  *
-!!    j    x ^ x ^ x   At >:  u, taux                                  *
-!!    j    > o > o >   At o:  h, D, buoy, tr, T, S, ustar              *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
+!!  By Robert Hallberg, April 1994 - June 2002
+!!
+!!    This subroutine initializes the fields for the simulations.
+!!  The one argument passed to initialize, Time, is set to the
+!!  current time of the simulation.  The fields which are initialized
+!!  here are:
+!!    u - Zonal velocity in m s-1.
+!!    v - Meridional velocity in m s-1.
+!!    h - Layer thickness in m.  (Must be positive.)
+!!    D - Basin depth in m.  (Must be positive.)
+!!    f - The Coriolis parameter, in s-1.
+!!    g - The reduced gravity at each interface, in m s-2.
+!!    Rlay - Layer potential density (coordinate variable) in kg m-3.
+!!  If ENABLE_THERMODYNAMICS is defined:
+!!    T - Temperature in C.
+!!    S - Salinity in psu.
+!!  If SPONGE is defined:
+!!    A series of subroutine calls are made to set up the damping
+!!    rates and reference profiles for all variables that are damped
+!!    in the sponge.
+!!  Any user provided tracer code is also first linked through this
+!!  subroutine.
+!!
+!!    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set
+!!  in MOM_surface_forcing.F90.
+!!
+!!    These variables are all set in the set of subroutines (in this
+!!  file) Phillips_initialize_thickness, Phillips_initialize_velocity,
+!!  Phillips_initialize_topography and Phillips_initialize_sponges
+!!  that seet up fields that are specific to the Phillips instability
+!!  test case.
+
 end module Phillips_initialization

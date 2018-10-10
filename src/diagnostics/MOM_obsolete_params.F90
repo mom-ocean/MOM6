@@ -23,8 +23,9 @@ subroutine find_obsolete_params(param_file)
   character(len=40)  :: mdl = "find_obsolete_params" ! This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  integer :: test_int
+  integer :: test_int, l_seg, nseg
   logical :: test_logic, test_logic2, test_logic3, split
+  character(len=40)  :: temp_string
 
   if (.not.is_root_pe()) return
 
@@ -68,6 +69,13 @@ subroutine find_obsolete_params(param_file)
        hint="Instead use OBC_SEGMENT_XXX_DATA.")
   call obsolete_char(param_file, "EXTEND_OBC_SEGMENTS", &
        hint="This option is no longer needed, nor supported.")
+  nseg = 0
+  call read_param(param_file, "OBC_NUMBER_OF_SEGMENTS", nseg)
+  do l_seg = 1,nseg
+    write(temp_string(1:22),"('OBC_SEGMENT_',i3.3,'_TNUDGE')") l_seg
+    call obsolete_real(param_file, temp_string, &
+         hint="Instead use OBC_SEGMENT_xxx_VELOCITY_NUDGING_TIMESCALES.")
+  enddo
 
   test_logic3 = .true. ; call read_param(param_file,"ENABLE_THERMODYNAMICS",test_logic3)
   test_logic = .true. ; call read_param(param_file,"TEMPERATURE",test_logic)

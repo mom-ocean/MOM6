@@ -1,3 +1,4 @@
+!> Orchestrates the registration and calling of tracer packages
 module MOM_tracer_flow_control
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -70,20 +71,22 @@ public call_tracer_register, tracer_flow_control_init, call_tracer_set_forcing
 public call_tracer_column_fns, call_tracer_surface_state, call_tracer_stocks
 public call_tracer_flux_init, get_chl_from_model, tracer_flow_control_end
 
+!> The control structure for orchestrating the calling of tracer packages
 type, public :: tracer_flow_control_CS ; private
-  logical :: use_USER_tracer_example = .false.
-  logical :: use_DOME_tracer = .false.
-  logical :: use_ISOMIP_tracer = .false.
-  logical :: use_Elizabeth_tracer =.false.
-  logical :: use_ideal_age = .false.
-  logical :: use_regional_dyes = .false.
-  logical :: use_oil = .false.
-  logical :: use_advection_test_tracer = .false.
-  logical :: use_OCMIP2_CFC = .false.
-  logical :: use_MOM_generic_tracer = .false.
-  logical :: use_pseudo_salt_tracer = .false.
-  logical :: use_boundary_impulse_tracer = .false.
-  logical :: use_dyed_obc_tracer = .false.
+  logical :: use_USER_tracer_example = .false.     !< If true, use the USER_tracer_example package
+  logical :: use_DOME_tracer = .false.             !< If true, use the DOME_tracer package
+  logical :: use_ISOMIP_tracer = .false.           !< If true, use the ISOMPE_tracer package
+  logical :: use_Elizabeth_tracer =.false.         !< If true, use the Elizabeth_tracer package
+  logical :: use_ideal_age = .false.               !< If true, use the ideal age tracer package
+  logical :: use_regional_dyes = .false.           !< If true, use the regional dyes tracer package
+  logical :: use_oil = .false.                     !< If true, use the oil tracer package
+  logical :: use_advection_test_tracer = .false.   !< If true, use the advection_test_tracer package
+  logical :: use_OCMIP2_CFC = .false.              !< If true, use the OCMIP2_CFC tracer package
+  logical :: use_MOM_generic_tracer = .false.      !< If true, use the MOM_generic_tracer packages
+  logical :: use_pseudo_salt_tracer = .false.      !< If true, use the psuedo_salt tracer  package
+  logical :: use_boundary_impulse_tracer = .false. !< If true, use the boundary impulse tracer package
+  logical :: use_dyed_obc_tracer = .false.         !< If true, use the dyed OBC tracer package
+  !>@{ Pointers to the control strucures for the tracer packages
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ISOMIP_tracer_CS), pointer :: ISOMIP_tracer_CSp => NULL()
@@ -99,6 +102,7 @@ type, public :: tracer_flow_control_CS ; private
   type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
   type(boundary_impulse_tracer_CS), pointer :: boundary_impulse_tracer_CSp => NULL()
   type(dyed_obc_tracer_CS), pointer :: dyed_obc_tracer_CSp => NULL()
+  !!@}
 end type tracer_flow_control_CS
 
 contains
@@ -355,21 +359,14 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
 
 end subroutine tracer_flow_control_init
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine extracts the chlorophyll concentrations from the model state, if possible
 subroutine get_chl_from_model(Chl_array, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: Chl_array !< The array into which the
-                                                                  !! model's Chlorophyll-A
-                                                                  !! concentrations in mg m-3 are
-                                                                  !! to be read.
-  type(ocean_grid_type),                 intent(in)  :: G         !< The ocean's grid structure.
-  type(tracer_flow_control_CS),          pointer     :: CS        !< The control structure returned
-                                                                  !! by a previous call to
-                                                                  !! call_tracer_register.
-! Arguments: Chl_array - The array into which the model's Chlorophyll-A
-!                        concentrations in mg m-3 are to be read.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), &
+                                intent(out) :: Chl_array !< The array in which to store the model's
+                                                         !! Chlorophyll-A concentrations in mg m-3.
+  type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
+  type(tracer_flow_control_CS), pointer     :: CS        !< The control structure returned by a
+                                                         !! previous call to call_tracer_register.
 
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) then
@@ -457,13 +454,12 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
   type(tracer_flow_control_CS),          pointer    :: CS     !< The control structure returned by
                                                               !! a previous call to
                                                               !! call_tracer_register.
-  logical,                               intent(in) :: debug  !< Calculates checksums
-  real,                         optional,intent(in) :: evap_CFL_limit !< Limits how much water
-                                                              !! can be fluxed out of the top layer
-                                                              !! Stored previously in diabatic] CS.
-  real,                         optional,intent(in) :: minimum_forcing_depth !< The smallest depth
-                                                              !! over which fluxes can be applied
-                                                              !! Stored previously in diabatic CS.
+  logical,                               intent(in) :: debug  !< If true calculate checksums
+  real,                        optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of
+                                                              !! the water that can be fluxed out
+                                                              !! of the top layer in a timestep (nondim)
+  real,                        optional, intent(in) :: minimum_forcing_depth !< The smallest depth over
+                                                              !! which fluxes can be applied, in m
 
 !   This subroutine calls all registered tracer column physics
 ! subroutines.
@@ -618,36 +614,37 @@ end subroutine call_tracer_column_fns
 !> This subroutine calls all registered tracer packages to enable them to
 !! add to the surface state returned to the coupler. These routines are optional.
 subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_units, &
-                              num_stocks, stock_index, got_min_max,global_min,  global_max,xgmin, &
-                              ygmin, zgmin, xgmax, ygmax, zgmax)
+                              num_stocks, stock_index, got_min_max, global_min, global_max, &
+                              xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    &
                                   intent(in)  :: h          !< Layer thicknesses, in H
                                                             !! (usually m or kg m-2).
-  real, dimension(:),             intent(out) :: stock_values
+  real, dimension(:),             intent(out) :: stock_values !< The integrated amounts of a tracer
+                             !! on the current PE, usually in kg x concentration.
   type(ocean_grid_type),          intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(tracer_flow_control_CS),   pointer     :: CS          !< The control structure returned by a
                                                              !! previous call to
                                                              !! call_tracer_register.
-  character(len=*), dimension(:), optional, &
-                                  intent(out) :: stock_names !< Diagnostic names to use for each
-                                                             !! stock.
-  character(len=*), dimension(:), optional, &
-                                  intent(out) :: stock_units !< Units to use in the metadata for
-                                                             !! each stock.
-  integer,                        optional, &
-                                  intent(out) :: num_stocks  !< The number of tracer stocks being
-                                                             !! returned.
-  integer,                        optional, &
-                                  intent(in)  :: stock_index !< The integer stock index from
-                             !! stocks_constans_mod of the stock to be returned.  If this is
+  character(len=*), dimension(:), &
+                        optional, intent(out) :: stock_names !< Diagnostic names to use for each stock.
+  character(len=*), dimension(:), &
+                        optional, intent(out) :: stock_units !< Units to use in the metadata for each stock.
+  integer,              optional, intent(out) :: num_stocks  !< The number of tracer stocks being returned.
+  integer,              optional, intent(in)  :: stock_index !< The integer stock index from
+                             !! stocks_constants_mod of the stock to be returned.  If this is
                              !! present and greater than 0, only a single stock can be returned.
-  logical,  dimension(:),         optional, &
-                                  intent(inout) :: got_min_max
-  real, dimension(:),             optional, &
-                                  intent(out) :: global_min,  global_max
-  real, dimension(:),             optional, &
-                                  intent(out) :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
+  logical, dimension(:), &
+                      optional, intent(inout) :: got_min_max !< Indicates whether the global min and
+                                                             !! max are found for each tracer
+  real, dimension(:), optional, intent(out)   :: global_min  !< The global minimum of each tracer
+  real, dimension(:), optional, intent(out)   :: global_max  !< The global maximum of each tracer
+  real, dimension(:), optional, intent(out)   :: xgmin       !< The x-position of the global minimum
+  real, dimension(:), optional, intent(out)   :: ygmin       !< The y-position of the global minimum
+  real, dimension(:), optional, intent(out)   :: zgmin       !< The z-position of the global minimum
+  real, dimension(:), optional, intent(out)   :: xgmax       !< The x-position of the global maximum
+  real, dimension(:), optional, intent(out)   :: ygmax       !< The y-position of the global maximum
+  real, dimension(:), optional, intent(out)   :: zgmax       !< The z-position of the global maximum
 !   This subroutine calls all registered tracer packages to enable them to
 ! add to the surface state returned to the coupler. These routines are optional.
 
@@ -729,8 +726,9 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
     call store_stocks("MOM_generic_tracer", ns, names, units, values, index, stock_values, &
                        set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
     nn=ns_tot-ns+1
-    nn=MOM_generic_tracer_min_max(nn, got_min_max, global_min,  global_max, xgmin, ygmin, zgmin, xgmax, ygmax, zgmax ,&
-                                     G, CS%MOM_generic_tracer_CSp,names, units)
+    nn=MOM_generic_tracer_min_max(nn, got_min_max, global_min,  global_max, &
+                                  xgmin, ygmin, zgmin, xgmax, ygmax, zgmax ,&
+                                  G, CS%MOM_generic_tracer_CSp,names, units)
 
   endif
 #endif
@@ -757,16 +755,26 @@ end subroutine call_tracer_stocks
 !> This routine stores the stocks and does error handling for call_tracer_stocks.
 subroutine store_stocks(pkg_name, ns, names, units, values, index, stock_values, &
                         set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
-  character(len=*),                         intent(in)    :: pkg_name
-  integer,                                  intent(in)    :: ns
-  character(len=*), dimension(:),           intent(in)    :: names, units
-  real, dimension(:),                       intent(in)    :: values
-  integer,                                  intent(in)    :: index
-  real, dimension(:),                       intent(inout) :: stock_values
-  character(len=*),                         intent(inout) :: set_pkg_name
-  integer,                                  intent(in)    :: max_ns
-  integer,                                  intent(inout) :: ns_tot
-  character(len=*), dimension(:), optional, intent(inout) :: stock_names, stock_units
+  character(len=*),   intent(in)    :: pkg_name !< The tracer package name
+  integer,            intent(in)    :: ns      !< The number of stocks associated with this tracer package
+  character(len=*), dimension(:), &
+                      intent(in)    :: names   !< Diagnostic names to use for each stock.
+  character(len=*), dimension(:), &
+                      intent(in)    :: units   !< Units to use in the metadata for each stock.
+  real, dimension(:), intent(in)    :: values  !< The values of the tracer stocks
+  integer,            intent(in)    :: index   !< The integer stock index from
+                             !! stocks_constants_mod of the stock to be returned.  If this is
+                             !! present and greater than 0, only a single stock can be returned.
+  real, dimension(:), intent(inout) :: stock_values !< The master list of stock values
+  character(len=*),   intent(inout) :: set_pkg_name !< The name of the last tracer package whose
+                                               !! stocks were stored for a specific index.  This is
+                                               !! used to trigger an error if there are redundant stocks.
+  integer,            intent(in)    :: max_ns  !< The maximum size of the master stock list
+  integer,            intent(inout) :: ns_tot  !< The total number of stocks in the master list
+  character(len=*), dimension(:), &
+            optional, intent(inout) :: stock_names !< Diagnostic names to use for each stock in the master list
+  character(len=*), dimension(:), &
+            optional, intent(inout) :: stock_units !< Units to use in the metadata for each stock in the master list
 
 ! This routine stores the stocks and does error handling for call_tracer_stocks.
   character(len=16) :: ind_text, ns_text, max_text
@@ -852,7 +860,8 @@ subroutine call_tracer_surface_state(state, h, G, CS)
 end subroutine call_tracer_surface_state
 
 subroutine tracer_flow_control_end(CS)
-  type(tracer_flow_control_CS), pointer :: CS
+  type(tracer_flow_control_CS), pointer :: CS    !< The control structure returned by a
+                                                 !! previous call to call_tracer_register.
 
   if (CS%use_USER_tracer_example) &
     call USER_tracer_example_end(CS%USER_tracer_example_CSp)

@@ -64,20 +64,24 @@ type, public :: MEKE_CS ; private
   logical :: debug      !< If true, write out checksums of data for debugging
 
   ! Optional storage
-  real, dimension(:,:), allocatable :: del2MEKE ! Laplacian of MEKE, used for bi-harmonic diffusion.
+  real, dimension(:,:), allocatable :: del2MEKE !< Laplacian of MEKE, used for bi-harmonic diffusion.
 
-  ! Diagnostic handles
-  type(diag_ctrl), pointer :: diag !< A pointer to shared diagnostics data
+  type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
+  !>@{ Diagnostic handles
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_Ub = -1, id_Ut = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1
   integer :: id_Le = -1, id_gamma_b = -1, id_gamma_t = -1
   integer :: id_Lrhines = -1, id_Leady = -1
+  !!@}
 
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
-  type(group_pass_type) :: pass_MEKE, pass_Kh, pass_Ku, pass_del2MEKE !< Type for group-halo pass calls
+  type(group_pass_type) :: pass_MEKE !< Type for group halo pass calls
+  type(group_pass_type) :: pass_Kh   !< Type for group halo pass calls
+  type(group_pass_type) :: pass_Ku   !< Type for group halo pass calls
+  type(group_pass_type) :: pass_del2MEKE !< Type for group halo pass calls
 end type MEKE_CS
 
 contains
@@ -89,13 +93,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness in H (m or kg m-2).
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step (s).
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: hu   !< Zonal flux flux (H m2 s-1).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: hv   !< Meridional mass flux (H m2 s-1).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Zonal flux flux (H m2 s-1).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Meridional mass flux (H m2 s-1).
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     mass, &         ! The total mass of the water column, in kg m-2.
@@ -519,8 +524,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 
     ! Calculate viscosity for the main model to use
     if (CS%viscosity_coeff/=0.) then
-!aja: should make range jsq:jeq, isq:ieq
-      do j=js-1,je+1 ; do i=is-1,ie+1
+      do j=js,je ; do i=is,ie
         MEKE%Ku(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)
       enddo ; enddo
       call cpu_clock_begin(CS%id_clock_pass)
@@ -1320,11 +1324,11 @@ end subroutine MEKE_end
 !!
 !! \subsection section_MEKE_references References
 !!
-!! Jansen, M. F., A. J. Adcroft, R. Hallberg, and I. M. Held, 2015: Parameterization of eddy fluxes based on a mesoscale energy
-!! budget. Ocean Modelling, 92, 28--41, http://doi.org/10.1016/j.ocemod.2015.05.007 .
+!! Jansen, M. F., A. J. Adcroft, R. Hallberg, and I. M. Held, 2015: Parameterization of eddy fluxes based on a
+!! mesoscale energy budget. Ocean Modelling, 92, 28--41, http://doi.org/10.1016/j.ocemod.2015.05.007 .
 !!
-!! Marshall, D. P., and A. J. Adcroft, 2010: Parameterization of ocean eddies: Potential vorticity mixing, energetics and Arnold
-!! first stability theorem. Ocean Modelling, 32, 188--204, http://doi.org/10.1016/j.ocemod.2010.02.001 .
+!! Marshall, D. P., and A. J. Adcroft, 2010: Parameterization of ocean eddies: Potential vorticity mixing, energetics
+!! and Arnold first stability theorem. Ocean Modelling, 32, 188--204, http://doi.org/10.1016/j.ocemod.2010.02.001 .
 
 end module MOM_MEKE
 

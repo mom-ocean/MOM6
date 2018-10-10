@@ -1,31 +1,14 @@
+!> Vertical structure functions for first baroclinic mode wave speed
 module MOM_wave_structure
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Benjamin Mater & Robert Hallberg, 2015                          *
-!*                                                                     *
-!*    The subroutine in this module calculates the vertical structure  *
-!*    functions of the first baroclinic mode internal wave speed.      *
-!*    Calculation of interface values is the same as done in           *
-!*    MOM_wave_speed by Hallberg, 2008.                                *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh, vav                               *
-!*    j    x ^ x ^ x   At >:  u, uh, uav                               *
-!*    j    > o > o >   At o:  h                                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+!  By Benjamin Mater & Robert Hallberg, 2015
+
+! The subroutine in this module calculates the vertical structure
+! functions of the first baroclinic mode internal wave speed.
+! Calculation of interface values is the same as done in
+! MOM_wave_speed by Hallberg, 2008.
 
 use MOM_debugging,     only : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
@@ -43,36 +26,62 @@ implicit none ; private
 
 public wave_structure, wave_structure_init
 
+!> The control structure for the MOM_wave_structure module
 type, public :: wave_structure_CS ; !private
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                                   ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
   real, allocatable, dimension(:,:,:) :: w_strct
-                                   ! Vertical structure of vertical velocity (normalized), in m s-1.
+                                   !< Vertical structure of vertical velocity (normalized), in m s-1.
   real, allocatable, dimension(:,:,:) :: u_strct
-                                   ! Vertical structure of horizontal velocity (normalized), in m s-1.
+                                   !< Vertical structure of horizontal velocity (normalized), in m s-1.
   real, allocatable, dimension(:,:,:) :: W_profile
-                                   ! Vertical profile of w_hat(z), where
-                                   ! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
-                                   ! varying vertical velocity with w_hat(z) = W0*w_strct(z), in m s-1.
+                                   !< Vertical profile of w_hat(z), where
+                                   !! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
+                                   !! varying vertical velocity with w_hat(z) = W0*w_strct(z), in m s-1.
   real, allocatable, dimension(:,:,:) :: Uavg_profile
-                                   ! Vertical profile of the magnitude of horizontal velocity,
-                                   ! (u^2+v^2)^0.5, averaged over a period, in m s-1.
+                                   !< Vertical profile of the magnitude of horizontal velocity,
+                                   !! (u^2+v^2)^0.5, averaged over a period, in m s-1.
   real, allocatable, dimension(:,:,:) :: z_depths
-                                   ! Depths of layer interfaces, in m.
+                                   !< Depths of layer interfaces, in m.
   real, allocatable, dimension(:,:,:) :: N2
-                                   ! Squared buoyancy frequency at each interface
+                                   !< Squared buoyancy frequency at each interface
   integer, allocatable, dimension(:,:):: num_intfaces
-                                   ! Number of layer interfaces (including surface and bottom)
-  real    :: int_tide_source_x     ! X Location of generation site
-                                   ! for internal tide for testing (BDM)
-  real    :: int_tide_source_y     ! Y Location of generation site
-                                   ! for internal tide for testing (BDM)
+                                   !< Number of layer interfaces (including surface and bottom)
+  real    :: int_tide_source_x     !< X Location of generation site
+                                   !! for internal tide for testing (BDM)
+  real    :: int_tide_source_y     !< Y Location of generation site
+                                   !! for internal tide for testing (BDM)
 
 end type wave_structure_CS
 
 contains
 
 !>  This subroutine determines the internal wave velocity structure for any mode.
+!!
+!! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with
+!! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the
+!! system d2e/dz2 = -(N2/cn2)e, or (A-lam*I)e = 0, where A = -(1/N2)(d2/dz2), lam = 1/c^2,
+!! and I is the identity matrix. 2nd order discretization in the vertical lets this system
+!! be represented as
+!!
+!!   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
+!!
+!! with rigid lid boundary conditions e(1) = e(nz+1) = 0.0 giving
+!!
+!!   (Igu(2)+Igl(2)-lam)*e(2) - Igl(2)*e(3) = 0.0
+!!   -Igu(nz)*e(nz-1) + (Igu(nz)+Igl(nz)-lam)*e(nz) = 0.0
+!!
+!! where, upon noting N2 = reduced gravity/layer thickness, we get
+!!    Igl(k) = 1.0/(gprime(k)*H(k)) ; Igu(k) = 1.0/(gprime(k)*H(k-1))
+!!
+!! The eigen value for this system is approximated using "wave_speed." This subroutine uses
+!! these eigen values (mode speeds) to estimate the corresponding eigen vectors (velocity
+!! structure) using the "inverse iteration with shift" method. The algorithm is
+!!
+!!   Pick a starting vector reasonably close to mode structure and with unit magnitude, b_guess
+!!   For n=1,2,3,...
+!!     Solve (A-lam*I)e = e_guess for e
+!!     Set e_guess=e/|e| and repeat, with each iteration refining the estimate of e
 subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid
@@ -95,46 +104,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   logical,optional,                         intent(in)  :: full_halos !< If true, do the calculation
                                                                 !! over the entire computational
                                                                 !! domain.
-
-!    This subroutine determines the internal wave velocity structure for any mode.
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing the thermobaric variables.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      cn - The (non-rotational) mode internal gravity wave speed, in m s-1.
-!  (in)      ModeNum - mode number
-!  (in)      freq - intrinsic wave frequency, in s-1
-!  (in)      CS - The control structure returned by a previous call to
-!                 wave_structure_init.
-!  (in,opt)  En - Internal wave energy density, in Jm-2
-!  (in,opt)  full_halos - If true, do the calculation over the entire
-!                         computational domain.
-!
-! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with
-! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the
-! system d2e/dz2 = -(N2/cn2)e, or (A-lam*I)e = 0, where A = -(1/N2)(d2/dz2), lam = 1/c^2,
-! and I is the identity matrix. 2nd order discretization in the vertical lets this system
-! be represented as
-!
-!   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
-!
-! with rigid lid boundary conditions e(1) = e(nz+1) = 0.0 giving
-!
-!   (Igu(2)+Igl(2)-lam)*e(2) - Igl(2)*e(3) = 0.0
-!   -Igu(nz)*e(nz-1) + (Igu(nz)+Igl(nz)-lam)*e(nz) = 0.0
-!
-! where, upon noting N2 = reduced gravity/layer thickness, we get
-!    Igl(k) = 1.0/(gprime(k)*H(k)) ; Igu(k) = 1.0/(gprime(k)*H(k-1))
-!
-! The eigen value for this system is approximated using "wave_speed." This subroutine uses
-! these eigen values (mode speeds) to estimate the corresponding eigen vectors (velocity
-! structure) using the "inverse iteration with shift" method. The algorithm is
-!
-!   Pick a starting vector reasonably close to mode structure and with unit magnitude, b_guess
-!   For n=1,2,3,...
-!     Solve (A-lam*I)e = e_guess for e
-!     Set e_guess=e/|e| and repeat, with each iteration refining the estimate of e
-
+  ! Local variables
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
@@ -160,7 +130,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T, S
+  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
@@ -272,10 +242,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
-    do i=is,ie ; if(cn(i,j)>0.0)then
+    do i=is,ie ; if (cn(i,j)>0.0)then
       !----for debugging, remove later----
       ig = i + G%idg_offset ; jg = j + G%jdg_offset
-      !if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
+      !if (ig == CS%int_tide_source_x .and. jg == CS%int_tide_source_y) then
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
@@ -423,10 +393,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               a_diag(row) = gprime(K)*(-Igu(K))
               b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
               c_diag(row) = gprime(K)*(-Igl(K))
-              if(isnan(lam_z(row)))then  ; print *, "Wave_structure: lam_z(row) is NAN" ; endif
-              if(isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
-              if(isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
-              if(isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
+              if (isnan(lam_z(row)))then  ; print *, "Wave_structure: lam_z(row) is NAN" ; endif
+              if (isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
+              if (isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
+              if (isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
             enddo
             ! Populate top row of tridiagonal matrix
             K=2 ; row = K-1
@@ -457,9 +427,9 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
             ! Check to see if solver worked
             ig_stop = 0 ; jg_stop = 0
-            if(isnan(sum(w_strct(1:kc+1))))then
+            if (isnan(sum(w_strct(1:kc+1))))then
               print *, "Wave_structure: w_strct has a NAN at ig=", ig, ", jg=", jg
-              if(i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
+              if (i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
                 print *, "This is occuring at a halo point."
               endif
               ig_stop = ig ; jg_stop = jg
@@ -534,7 +504,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             CS%num_intfaces(i,j)      = nzm
 
             !----for debugging; delete later----
-            !if(ig .eq. ig_stop .and. jg .eq. jg_stop) then
+            !if (ig == ig_stop .and. jg == jg_stop) then
               !print *, 'cn(ig,jg)=', cn(i,j)
               !print *, "e_guess=", e_guess(1:kc-1)
               !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
@@ -595,10 +565,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
 end subroutine wave_structure
 
-!>    This subroutine solves a tri-diagonal system Ax=y using either the standard
-!! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
+!> Solves a tri-diagonal system Ax=y using either the standard
+!! Thomas algorithm (TDMA_T) or its more stable variant that invokes the
 !! "Hallberg substitution" (TDMA_H).
-subroutine tridiag_solver(a,b,c,h,y,method,x)
+subroutine tridiag_solver(a, b, c, h, y, method, x)
   real, dimension(:), intent(in)  :: a !< lower diagonal with first entry equal to zero.
   real, dimension(:), intent(in)  :: b !< middle diagonal.
   real, dimension(:), intent(in)  :: c !< upper diagonal with last entry equal to zero.
@@ -610,27 +580,9 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
            !! where a(k)=[-alpha(k-1/2)], b(k)=[alpha(k-1/2)+alpha(k+1/2) + h(k)],
            !! and c(k)=[-alpha(k+1/2)]. Only used with TDMA_H method.
   real, dimension(:), intent(in)  :: y !< vector of known values on right hand side.
-  character(len=*),   intent(in)  :: method
+  character(len=*),   intent(in)  :: method !< A string describing the algorithm to use
   real, dimension(:), intent(out) :: x !< vector of unknown values to solve for.
-
-!    This subroutine solves a tri-diagonal system Ax=y using either the standard
-! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
-! "Hallberg substitution" (TDMA_H).
-!
-! Arguments:
-!  (in)      a - lower diagonal with first entry equal to zero
-!  (in)      b - middle diagonal
-!  (in)      c - upper diagonal with last entry equal to zero
-!  (in)      h - vector of values that have already been added to b; used for
-!                systems of the form (e.g. average layer thickness in vertical diffusion case):
-!                [ -alpha(k-1/2) ]                       * e(k-1) +
-!                [  alpha(k-1/2) + alpha(k+1/2) + h(k) ] * e(k)   +
-!                [ -alpha(k+1/2) ]                       * e(k+1) = y(k)
-!                where a(k)=[-alpha(k-1/2)], b(k)=[alpha(k-1/2)+alpha(k+1/2) + h(k)],
-!                and c(k)=[-alpha(k+1/2)]. Only used with TDMA_H method.
-!  (in)      y - vector of known values on right hand side
-!  (out)     x - vector of unknown values to solve for
-
+  ! Local variables
   integer :: nrow                         ! number of rows in A matrix
   real, allocatable, dimension(:,:) :: A_check ! for solution checking
   real, allocatable, dimension(:)   :: y_check ! for solution checking
@@ -673,14 +625,14 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
 
     ! Check results - delete later
     !do j=1,nrow ; do i=1,nrow
-    !  if(i==j)then ;       A_check(i,j) = b(i)
-    !  elseif(i==j+1)then ; A_check(i,j) = a(i)
-    !  elseif(i==j-1)then ; A_check(i,j) = c(i)
+    !  if (i==j)then ;       A_check(i,j) = b(i)
+    !  elseif (i==j+1)then ; A_check(i,j) = a(i)
+    !  elseif (i==j-1)then ; A_check(i,j) = c(i)
     !  endif
     !enddo ; enddo
     !print *, 'A(2,1),A(2,2),A(1,2)=', A_check(2,1), A_check(2,2), A_check(1,2)
     !y_check = matmul(A_check,x)
-    !if(all(y_check .ne. y))then
+    !if (all(y_check /= y))then
     !  print *, "tridiag_solver: Uh oh, something's not right!"
     !  print *, "y=", y
     !  print *, "y_check=", y_check
@@ -713,12 +665,12 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Forward sweep
     do k=2,nrow-1
       beta = 1/(h(k)+alpha(k-1)*Q_prime+alpha(k))
-      if(isnan(beta))then ; print *, "Tridiag_solver: beta is NAN" ; endif
+      if (isnan(beta))then ; print *, "Tridiag_solver: beta is NAN" ; endif
       q(k) = beta*alpha(k)
       y_prime(k) = beta*(y(k)+alpha(k-1)*y_prime(k-1))
       Q_prime = beta*(h(k)+alpha(k-1)*Q_prime)
     enddo
-    if((h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow)) == 0.0)then
+    if ((h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow)) == 0.0)then
       call MOM_error(WARNING, "Tridiag_solver: this system is not stable; overriding beta(nrow).")
       beta = 1/(1e-15) ! place holder for unstable systems - delete later
     else
@@ -738,23 +690,16 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
 
 end subroutine tridiag_solver
 
-
+!> Allocate memory associated with the wave structure module and read parameters.
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
-  type(time_type),             intent(in)    :: Time !< The current model time.
-  type(ocean_grid_type),       intent(in)    :: G    !< The ocean's grid structure.
-  type(param_file_type),       intent(in)    :: param_file !< A structure to parse for run-time
-                                                     !! parameters.
-  type(diag_ctrl), target,     intent(in)    :: diag !< A structure that is used to regulate
-                                                     !! diagnostic output.
-  type(wave_structure_CS),     pointer       :: CS   !< A pointer that is set to point to the
-                                                     !! control structure for this module.
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                  for this module
+  type(time_type),         intent(in) :: Time !< The current model time.
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time
+                                              !! parameters.
+  type(diag_ctrl), target, intent(in) :: diag !< A structure that is used to regulate
+                                              !! diagnostic output.
+  type(wave_structure_CS), pointer    :: CS   !< A pointer that is set to point to the
+                                              !! control structure for this module.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
@@ -789,6 +734,5 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
 
 end subroutine wave_structure_init
-
 
 end module MOM_wave_structure

@@ -1,3 +1,5 @@
+!> Configures the model for the "circle_obcs" experiment which tests
+!! Open Boundary Conditions radiating an SSH anomaly.
 module circle_obcs_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -35,7 +37,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
                            ! negative because it is positive upward.      !
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface !
                            ! positive upward, in m.                       !
-  real :: diskrad, rad, xCenter, xRadius, lonC, latC
+  real :: diskrad, rad, xCenter, xRadius, lonC, latC, xOffset
   logical :: just_read
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -55,6 +57,10 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
                  "The radius of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=G%x_axis_units, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "DISK_X_OFFSET", xOffset, &
+                 "The x-offset of the initially elevated disk in the \n"//&
+                 "circle_obcs test case.", units=G%x_axis_units, &
+                 default = 0.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -79,7 +85,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   ! Perturb base state by circular anomaly in center
   k=nz
   latC = G%south_lat + 0.5*G%len_lat
-  lonC = G%west_lon + 0.5*G%len_lon
+  lonC = G%west_lon + 0.5*G%len_lon + xOffset
   do j=js,je ; do i=is,ie
     rad = sqrt((G%geoLonT(i,j)-lonC)**2+(G%geoLatT(i,j)-latC)**2)/(diskrad)
     ! if (rad <= 6.*diskrad) h(i,j,k) = h(i,j,k)+10.0*exp( -0.5*( rad**2 ) )
@@ -99,8 +105,4 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
 
 end subroutine circle_obcs_initialize_thickness
 
-!> \namespace circle_obcs_initialization
-!!
-!! The module configures the model for the "circle_obcs" experiment.
-!! circle_obcs = Test of Open Boundary Conditions for an SSH anomaly.
 end module circle_obcs_initialization

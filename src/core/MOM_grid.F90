@@ -90,10 +90,8 @@ type, public :: ocean_grid_type
     dyCu, &      !< dyCu is delta y at u points, in m.
     IdyCu, &     !< 1/dyCu in m-1.
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell in m.
-    dy_Cu_obc, & !< The unblocked lengths of the u-faces of the h-cell in m for OBC.
     IareaCu, &   !< The masked inverse areas of u-grid cells in m2.
     areaCu       !< The areas of the u-grid cells in m2.
-  !> \todo dy_Cu_obc is not used?
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
@@ -104,7 +102,6 @@ type, public :: ocean_grid_type
     dyCv, &      !< dyCv is delta y at v points, in m.
     IdyCv, &     !< 1/dyCv in m-1.
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell in m.
-    dx_Cv_obc, & !< The unblocked lengths of the v-faces of the h-cell in m for OBC.
     IareaCv, &   !< The masked inverse areas of v-grid cells in m2.
     areaCv       !< The areas of the v-grid cells in m2.
 
@@ -148,8 +145,8 @@ type, public :: ocean_grid_type
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dF_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
-    dF_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
+    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
+    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
   real :: g_Earth !< The gravitational acceleration in m s-2.
 
   ! These variables are global sums that are useful for 1-d diagnostics
@@ -157,8 +154,8 @@ type, public :: ocean_grid_type
   real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) in m2.
 
   ! These variables are for block structures.
-  integer :: nblocks
-  type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
+  integer :: nblocks  !< The number of sub-PE blocks on this PE
+  type(hor_index_type), pointer :: Block(:) => NULL() !< Index ranges for each block
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)
@@ -437,9 +434,10 @@ logical function isPointInCell(G, i, j, x, y)
   endif
 end function isPointInCell
 
+!> Store an integer indicating which direction to work on first.
 subroutine set_first_direction(G, y_first)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  integer,               intent(in) :: y_first
+  integer,               intent(in) :: y_first !< The first direction to store
 
   G%first_direction = y_first
 end subroutine set_first_direction
@@ -504,8 +502,6 @@ subroutine allocate_metrics(G)
 
   ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB))     ; G%dx_Cv(:,:) = 0.0
   ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed))     ; G%dy_Cu(:,:) = 0.0
-  ALLOC_(G%dx_Cv_obc(isd:ied,JsdB:JedB)) ; G%dx_Cv_obc(:,:) = 0.0
-  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0
 
   ALLOC_(G%areaCu(IsdB:IedB,jsd:jed))  ; G%areaCu(:,:) = 0.0
   ALLOC_(G%areaCv(isd:ied,JsdB:JedB))  ; G%areaCv(:,:) = 0.0
@@ -551,7 +547,6 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%geoLonCv) ; DEALLOC_(G%geoLonBu)
 
   DEALLOC_(G%dx_Cv) ; DEALLOC_(G%dy_Cu)
-  DEALLOC_(G%dx_Cv_obc) ; DEALLOC_(G%dy_Cu_obc)
 
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
@@ -574,18 +569,21 @@ end subroutine MOM_grid_end
 !!
 !! Grid metrics and their inverses are labelled according to their staggered location on a Arakawa C (or B) grid.
 !! - Metrics centered on h- or T-points are labelled T, e.g. dxT is the distance across the cell in the x-direction.
-!! - Metrics centered on u-points are labelled Cu (C-grid u location). e.g. dyCu is the y-distance between two corners of a T-cell.
+!! - Metrics centered on u-points are labelled Cu (C-grid u location). e.g. dyCu is the y-distance between
+!!   two corners of a T-cell.
 !! - Metrics centered on v-points are labelled Cv (C-grid v location). e.g. dyCv is the y-distance between two -points.
 !! - Metrics centered on q-points are labelled Bu (B-grid u,v location). e.g. areaBu is the area centered on a q-point.
 !!
-!! \image html Grid_metrics.png "The labelling of distances (grid metrics) at various staggered location on an T-cell and around a q-point.
+!! \image html Grid_metrics.png "The labelling of distances (grid metrics) at various staggered
+!! location on an T-cell and around a q-point."
 !!
 !! Areas centered at T-, u-, v- and q- points are `areaT`, `areaCu`, `areaCv` and `areaBu` respectively.
 !!
 !! The reciprocal of metrics are pre-calculated and also stored in the ocean_grid_type with a I prepended to the name.
 !! For example, `1./areaT` is called `IareaT`, and `1./dyCv` is `IdyCv`.
 !!
-!! Geographic latitude and longitude (or model coordinates if not on a sphere) are stored in `geoLatT`, `geoLonT` for T-points.
+!! Geographic latitude and longitude (or model coordinates if not on a sphere) are stored in
+!! `geoLatT`, `geoLonT` for T-points.
 !! u-, v- and q- point coordinates are follow same pattern of replacing T with Cu, Cv and Bu respectively.
 !!
 !! Each location also has a 2D mask indicating whether the entire column is land or ocean.

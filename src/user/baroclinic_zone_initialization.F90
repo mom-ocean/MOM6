@@ -119,7 +119,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
                  + dSdx * x         & ! Linear gradient
                  + delta_S * fn       ! Smooth fn of width L_zone
     enddo
-  end do ; end do
+  enddo ; enddo
 
 end subroutine baroclinic_zone_init_temperature_salinity
 

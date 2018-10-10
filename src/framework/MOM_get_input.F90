@@ -30,7 +30,7 @@ contains
 
 !> Get the names of the I/O directories and initialization file.
 !! Also calls the subroutine that opens run-time parameter files.
-subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename)
+subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename, ensemble_num)
   type(param_file_type), optional, intent(out) :: param_file   !< A structure to parse for run-time parameters.
   type(directories),     optional, intent(out) :: dirs         !< Container for paths and parameter file names.
   logical,               optional, intent(in)  :: check_params !< If present and False will stop error checking for
@@ -38,6 +38,7 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename)
   character(len=*),      optional, intent(in)  :: default_input_filename !< If present, is the value assumed for
                                                                !! input_filename if input_filename is not listed
                                                                !! in the namelist MOM_input_nml.
+  integer, optional, intent(in) :: ensemble_num !< The ensemble id of the current member
   ! Local variables
   integer, parameter :: npf = 5 ! Maximum number of parameter files
   character(len=240) :: &
@@ -77,10 +78,17 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename)
 
   ! Store parameters in container
   if (present(dirs)) then
-    dirs%output_directory = slasher(ensembler(output_directory))
-    dirs%restart_output_dir = slasher(ensembler(restart_output_dir))
-    dirs%restart_input_dir = slasher(ensembler(restart_input_dir))
-    dirs%input_filename = ensembler(input_filename)
+    if (present(ensemble_num)) then
+      dirs%output_directory = slasher(ensembler(output_directory,ensemble_num))
+      dirs%restart_output_dir = slasher(ensembler(restart_output_dir,ensemble_num))
+      dirs%restart_input_dir = slasher(ensembler(restart_input_dir,ensemble_num))
+      dirs%input_filename = ensembler(input_filename,ensemble_num)
+    else
+      dirs%output_directory = slasher(ensembler(output_directory))
+      dirs%restart_output_dir = slasher(ensembler(restart_output_dir))
+      dirs%restart_input_dir = slasher(ensembler(restart_input_dir))
+      dirs%input_filename = ensembler(input_filename)
+    endif
   endif
 
   ! Open run-time parameter file(s)
@@ -89,8 +97,13 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename)
     valid_param_files = 0
     do io = 1, npf
       if (len_trim(trim(parameter_filename(io))) > 0) then
-        call open_param_file(ensembler(parameter_filename(io)), param_file, &
-                             check_params, doc_file_dir=output_dir)
+        if (present(ensemble_num)) then
+          call open_param_file(ensembler(parameter_filename(io),ensemble_num), param_file, &
+               check_params, doc_file_dir=output_dir)
+        else
+          call open_param_file(ensembler(parameter_filename(io)), param_file, &
+               check_params, doc_file_dir=output_dir)
+        endif
         valid_param_files = valid_param_files + 1
       endif
     enddo

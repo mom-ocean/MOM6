@@ -1,16 +1,19 @@
+!> Configures the model for the "DOME" experiment.
+!! DOME = Dynamics of Overflows and Mixing Experiment
 module DOME_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
-use MOM_tracer_registry, only : tracer_registry_type
+use MOM_tracer_registry, only : tracer_registry_type, tracer_type
+use MOM_tracer_registry, only : tracer_name_lookup
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -241,9 +244,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
 ! Local variables
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_v => NULL()       ! boundary conditions, in C and psu.
   ! The following variables are used to set the target temperature and salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
@@ -260,9 +260,11 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  character(len=32)  :: name
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
+  type(tracer_type), pointer      :: tr_ptr => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -279,12 +281,15 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
 
-  if (OBC%number_of_segments .ne. 1) then
-    print *, 'Error in DOME OBC segment setup'
+  if (OBC%number_of_segments /= 1) then
+    call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)
     return   !!! Need a better error message here
   endif
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
+
+  NTR = tr_Reg%NTR
+  allocate(segment%field(NTR))
 
   do k=1,nz
     rst = -1.0
@@ -318,9 +323,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   ! these variables are used.  The following code is just a naive example.
   if (associated(tv%S)) then
     ! In this example, all S inflows have values of 35 psu.
-!   call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
-!   call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
-!                                segment, OBC_scalar=35.0)
+    name = 'salt'
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_scalar=35.0)
   endif
   if (associated(tv%T)) then
     ! In this example, the T values are set to be consistent with the layer
@@ -337,21 +342,39 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 
-    ! This is no longer a full 3-D array thanks to the segment code above,
-    ! which is what we want now.
-    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
+    ! Temperature on tracer 1???
+    allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-      OBC_T_v(i,J,k) = T0(k)
+      segment%field(1)%buffer_src(i,j,k) = T0(k)
     enddo ; enddo ; enddo
-!   call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
-!   call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
-!                                segment, OBC_array=.true.)
+    name = 'temp'
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.true.)
   endif
+
+  ! Dye tracers - fight with T,S???
+  ! First dye - only one with OBC values
+  ! This field(1) requires tr_D1 to be the first tracer.
+  allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
+  do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
+    if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
+    else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
+  enddo ; enddo ; enddo
+  name = 'tr_D1'
+  call tracer_name_lookup(tr_Reg, tr_ptr, name)
+  call register_segment_tracer(tr_ptr, param_file, GV, &
+                               OBC%segment(1), OBC_array=.true.)
+
+  ! All tracers but the first have 0 concentration in their inflows. As this
+  ! is the default value, the following calls are unnecessary.
+  do m=2,NTR
+    if (m < 10) then ; write(name,'("tr_D",I1.1)') m
+    else ; write(name,'("tr_D",I2.2)') m ; endif
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, &
+                                 OBC%segment(1), OBC_scalar=0.0)
+  enddo
 
 end subroutine DOME_set_OBC_data
 
-!> \namespace dome_initialization
-!!
-!! The module configures the model for the "DOME" experiment.
-!! DOME = Dynamics of Overflows and Mixing Experiment
 end module DOME_initialization

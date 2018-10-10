@@ -61,7 +61,7 @@ use MOM_diag_mediator,    only: diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator,    only: diag_mediator_close_registration, diag_mediator_end
 use MOM_diag_mediator,    only: safe_alloc_ptr
 use MOM_ice_shelf,        only: initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf,        only: ice_shelf_end, ice_shelf_save_restart
+use MOM_ice_shelf,        only: add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use MOM_string_functions, only: uppercase
 use MOM_constants,        only: CELSIUS_KELVIN_OFFSET, hlf, hlv
 use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
@@ -890,7 +890,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     if (.not. OS%use_ice_shelf) call allocate_forcing_type(OS%grid, OS%fluxes, ustar=.true., shelf=.true.)
   endif
 
-  if (ASSOCIATED(OS%grid%Domain%maskmap)) then
+  if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
                                       OS%diag, maskmap=OS%grid%Domain%maskmap, &
                                       gas_fields_ocn=gas_fields_ocn)
@@ -1622,7 +1622,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
                               glb%ocn_state%dirs%restart_output_dir, .true.)
     ! Once we start using the ice shelf module, the following will be needed
     if (glb%ocn_state%use_ice_shelf) then
-      call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, glb%ocn_state%dirs%restart_output_dir, .true.)
+      call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, &
+                                  glb%ocn_state%dirs%restart_output_dir, .true.)
     endif
 
   endif
@@ -1675,7 +1676,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   type(cpl_indices),      intent(inout) :: ind !< Structure with MCT attribute vectors and indices
   logical,                intent(in)    :: sw_decomp !< controls if shortwave is
                                                      !!decomposed into four components
-  real(kind=8),           intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  real(kind=8), optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
 
   ! local variables
   type(time_type) :: Master_time !< This allows step_MOM to temporarily change
@@ -1726,13 +1727,15 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
     !  This assumes that the iceshelf and ocean are on the same grid. I hope this is true.
-    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
+    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg, &
+    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Indicate that there are new unused fluxes.
@@ -1746,13 +1749,15 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
                        OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
+    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg, &
+    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Accumulate the forcing over time steps
@@ -1769,8 +1774,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes, &
-                                   OS%restart_CSp)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
 
   call disable_averaging(OS%diag)
@@ -1786,8 +1790,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%diag)
-  call mech_forcing_diags(OS%forces, OS%fluxes, time_step, OS%grid, &
-                          OS%diag, OS%forcing_CSp%handles)
+  call mech_forcing_diags(OS%forces, time_step, OS%grid, OS%diag, OS%forcing_CSp%handles)
   call disable_averaging(OS%diag)
 
   if (OS%fluxes%fluxes_used) then
@@ -1813,21 +1816,21 @@ end subroutine update_ocean_model
 !! the future.
 subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
                              c1, c2, c3, c4, restore_salt, restore_temp)
-  type(mech_forcing),         intent(inout)        :: forces !<  Driving mechanical forces
-  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes
-  type(time_type),            intent(in)           :: Time !< Model time
-  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid
-  type(surface_forcing_CS),   pointer              :: CS !< control structure returned by
-                                                   !! a previous call to surface_forcing_init
-  type(surface),              intent(in)           :: state !< control structure to ocean
-                                                   !! surface state fields.
-  real(kind=8),               intent(in)           :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
-  type(cpl_indices),          intent(inout)        :: ind !< Structure with MCT attribute vectors and indices
-  logical,                    intent(in)           :: sw_decomp !< controls if shortwave is
-                                                   !!decomposed into four components
-  real(kind=8),               intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-  logical, optional,          intent(in)            :: restore_salt, restore_temp !< Controls if salt and temp are
-                                                   !! restored
+  type(mech_forcing),         intent(inout) :: forces !<  Driving mechanical forces
+  type(forcing),              intent(inout) :: fluxes !< Surface fluxes
+  type(time_type),            intent(in)    :: Time !< Model time
+  type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid
+  type(surface_forcing_CS),   pointer       :: CS !< control structure returned by
+                                            !! a previous call to surface_forcing_init
+  type(surface),              intent(in)    :: state !< control structure to ocean
+                                            !! surface state fields.
+  real(kind=8),               intent(in)    :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
+  type(cpl_indices),          intent(inout) :: ind !< Structure with MCT attribute vectors and indices
+  logical,                    intent(in)    :: sw_decomp !< controls if shortwave is
+                                            !!decomposed into four components
+  real(kind=8),     optional, intent(in)    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  logical, optional,          intent(in)    :: restore_salt, restore_temp !< Controls if salt and temp are
+                                            !! restored
 
   ! local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -1942,9 +1945,12 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
   endif   ! endif for allocation and initialization
 
   if (CS%allow_flux_adjustments) then
-   fluxes%heat_added(:,:)=0.0
-   fluxes%salt_flux_added(:,:)=0.0
+    fluxes%heat_added(:,:)=0.0
+    fluxes%salt_flux_added(:,:)=0.0
   endif
+  forces%accumulate_rigidity = .true. ! Multiple components may contribute to rigidity.
+  if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
+  if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
   if (CS%area_surf < 0.0) then
     do j=js,je ; do i=is,ie
@@ -2050,70 +2056,70 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
     endif
 
     ! liquid precipitation (rain)
-    if (ASSOCIATED(fluxes%lprec)) &
+    if (associated(fluxes%lprec)) &
       fluxes%lprec(i,j) = x2o_o(ind%x2o_Faxa_rain,k) * G%mask2dT(i,j)
 
     ! frozen precipitation (snow)
-    if (ASSOCIATED(fluxes%fprec)) &
+    if (associated(fluxes%fprec)) &
       fluxes%fprec(i,j) = x2o_o(ind%x2o_Faxa_snow,k) * G%mask2dT(i,j)
 
     ! evaporation
-    if (ASSOCIATED(fluxes%evap)) &
+    if (associated(fluxes%evap)) &
       fluxes%evap(i,j) = x2o_o(ind%x2o_Foxx_evap,k) * G%mask2dT(i,j)
 
     ! river runoff flux
-    if (ASSOCIATED(fluxes%lrunoff)) &
+    if (associated(fluxes%lrunoff)) &
       fluxes%lrunoff(i,j) = x2o_o(ind%x2o_Foxx_rofl,k) * G%mask2dT(i,j)
 
     ! ice runoff flux
-    if (ASSOCIATED(fluxes%frunoff)) &
+    if (associated(fluxes%frunoff)) &
       fluxes%frunoff(i,j) = x2o_o(ind%x2o_Foxx_rofi,k) * G%mask2dT(i,j)
 
     ! GMM, we don't have an icebergs yet so the following is not needed
-    !if (((ASSOCIATED(IOB%ustar_berg) .and. (.not. ASSOCIATED(fluxes%ustar_berg)))   &
-    !  .or. (ASSOCIATED(IOB%area_berg) .and. (.not. ASSOCIATED(fluxes%area_berg)))) &
-    !  .or. (ASSOCIATED(IOB%mass_berg) .and. (.not. ASSOCIATED(fluxes%mass_berg)))) &
+    !if (((associated(IOB%ustar_berg) .and. (.not. associated(fluxes%ustar_berg)))   &
+    !  .or. (associated(IOB%area_berg) .and. (.not. associated(fluxes%area_berg)))) &
+    !  .or. (associated(IOB%mass_berg) .and. (.not. associated(fluxes%mass_berg)))) &
     !  call allocate_forcing_type(G, fluxes, iceberg=.true.)
-    !if (ASSOCIATED(IOB%ustar_berg)) &
+    !if (associated(IOB%ustar_berg)) &
     !  fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
-    !if (ASSOCIATED(IOB%area_berg)) &
+    !if (associated(IOB%area_berg)) &
     !  fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
-    !if (ASSOCIATED(IOB%mass_berg)) &
+    !if (associated(IOB%mass_berg)) &
     !  fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
     ! heat_content_frunoff. I am seeting these to zero for now.
-    if (ASSOCIATED(fluxes%heat_content_lrunoff)) &
+    if (associated(fluxes%heat_content_lrunoff)) &
       fluxes%heat_content_lrunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
-    if (ASSOCIATED(fluxes%heat_content_frunoff)) &
+    if (associated(fluxes%heat_content_frunoff)) &
       fluxes%heat_content_frunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
     ! longwave radiation, sum up and down (W/m2)
-    if (ASSOCIATED(fluxes%LW)) &
+    if (associated(fluxes%LW)) &
       fluxes%LW(i,j) = (x2o_o(ind%x2o_Faxa_lwdn,k) + x2o_o(ind%x2o_Foxx_lwup,k)) * G%mask2dT(i,j)
 
     ! sensible heat flux (W/m2)
-    if (ASSOCIATED(fluxes%sens)) &
+    if (associated(fluxes%sens)) &
       fluxes%sens(i,j) =  x2o_o(ind%x2o_Foxx_sen,k) * G%mask2dT(i,j)
 
     ! latent heat flux (W/m^2)
-    if (ASSOCIATED(fluxes%latent)) &
+    if (associated(fluxes%latent)) &
       fluxes%latent(i,j) = x2o_o(ind%x2o_Foxx_lat,k) * G%mask2dT(i,j)
 
     if (sw_decomp) then
       ! Use runtime coefficients to decompose net short-wave heat flux into 4 components
       ! 1) visible, direct shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_vis_dir)) &
+      if (associated(fluxes%sw_vis_dir)) &
         fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c1
       ! 2) visible, diffuse shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_vis_dif)) &
+      if (associated(fluxes%sw_vis_dif)) &
         fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c2
       ! 3) near-IR, direct shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_nir_dir)) &
+      if (associated(fluxes%sw_nir_dir)) &
         fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c3
       ! 4) near-IR, diffuse shortwave (W/m2)
-      if (ASSOCIATED(fluxes%sw_nir_dif)) &
+      if (associated(fluxes%sw_nir_dif)) &
         fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c4
 
       fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
@@ -2125,7 +2131,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
 
     ! applied surface pressure from atmosphere and cryosphere
     ! sea-level pressure (Pa)
-    if (ASSOCIATED(forces%p_surf_full) .and. ASSOCIATED(forces%p_surf)) then
+    if (associated(forces%p_surf_full) .and. associated(forces%p_surf)) then
       forces%p_surf_full(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Sa_pslv,k)
       if (CS%max_p_surf >= 0.0) then
           forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
@@ -2138,15 +2144,16 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       else
         forces%p_surf_SSH => forces%p_surf_full
       endif
+      forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
     endif
 
     ! salt flux
     ! more salt restoring logic
-    if (ASSOCIATED(fluxes%salt_flux)) &
+    if (associated(fluxes%salt_flux)) &
       fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(x2o_o(ind%x2o_Fioi_salt,k) + fluxes%salt_flux(i,j))
 
-    if (ASSOCIATED(fluxes%salt_flux_in)) &
+    if (associated(fluxes%salt_flux_in)) &
       fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*x2o_o(ind%x2o_Fioi_salt,k)
 
   enddo ; enddo
@@ -2164,7 +2171,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
-      if (ASSOCIATED(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
+      if (associated(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
         net_FW(i,j) = net_FW(i,j) + G%areaT(i,j) * &
                      (fluxes%salt_flux(i,j) / CS%ice_salt_concentration)
       net_FW2(i,j) = net_FW(i,j)/G%areaT(i,j)
@@ -2293,7 +2300,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       endif
       ! CAUTION: with both rigid_sea_ice and ice shelves, we will need to make this
       ! a maximum for the second call.
-      forces%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=isd,ied ; do J=jsd,jed-1
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
@@ -2302,7 +2309,7 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
       endif
-      forces%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + Kv_rho_ice * mass_eff
     enddo ; enddo
   endif
 

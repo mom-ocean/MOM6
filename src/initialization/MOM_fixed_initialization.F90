@@ -37,7 +37,6 @@ use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
 use dumbbell_initialization, only : dumbbell_initialize_topography
 use shelfwave_initialization, only : shelfwave_initialize_topography
-use supercritical_initialization, only : supercritical_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
 use dense_water_initialization, only : dense_water_initialize_topography
 
@@ -204,7 +203,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
                  " \t dumbbell - Sloshing channel with reservoirs on both ends.\n"//&
                  " \t shelfwave - exponential slope for shelfwave test case.\n"//&
-                 " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
                  " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
@@ -226,7 +224,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
     case ("dumbbell");   call dumbbell_initialize_topography(D, G, PF, max_depth)
     case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
-    case ("supercritical");  call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
     case ("dense");     call dense_water_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
@@ -241,7 +238,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth, &
                    "The (diagnosed) maximum depth of the ocean.", units="m")
   endif
-  if (trim(config) .ne. "DOME") then
+  if (trim(config) /= "DOME") then
     call limit_topography(D, G, PF, max_depth)
   endif
 

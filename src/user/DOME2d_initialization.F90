@@ -1,3 +1,4 @@
+!> Initialization of the 2D DOME experiment with density water initialized on a coastal shelf.
 module DOME2d_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -8,9 +9,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -74,7 +72,7 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
 
     if ( x <= l1 ) then
       D(i,j) = bay_depth * max_depth
-    else if (( x > l1 ) .and. ( x < l2 )) then
+    elseif (( x > l1 ) .and. ( x < l2 )) then
       D(i,j) = bay_depth * max_depth + (1.0-bay_depth) * max_depth * &
                ( x - l1 ) / (l2 - l1)
     else
@@ -312,7 +310,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   end select
 
   ! Modify salinity and temperature when z coordinates are used
-  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_ZSTAR ) then
+  if ( coordinateMode(verticalCoordinate) == REGRIDDING_ZSTAR ) then
     index_bay_z = Nint ( dome2d_depth_bay * G%ke )
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
@@ -324,7 +322,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   endif ! Z initial conditions
 
   ! Modify salinity and temperature when sigma coordinates are used
-  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_SIGMA ) then
+  if ( coordinateMode(verticalCoordinate) == REGRIDDING_SIGMA ) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
@@ -336,8 +334,8 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
   ! Modify temperature when rho coordinates are used
   T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0
-  if (( coordinateMode(verticalCoordinate) .eq. REGRIDDING_RHO ) .or. &
-      ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_LAYER )) then
+  if (( coordinateMode(verticalCoordinate) == REGRIDDING_RHO ) .or. &
+      ( coordinateMode(verticalCoordinate) == REGRIDDING_LAYER )) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
@@ -456,7 +454,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
           h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
-    enddo;  enddo
+    enddo ; enddo
     ! Store the grid on which the T/S sponge data will reside
     call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
 

@@ -10,8 +10,7 @@ use MOM_diag_mediator,   only : post_data
 use MOM_EOS,             only : calculate_density, calculate_density_derivs
 use MOM_variables,       only : thermo_var_ptrs
 use MOM_forcing_type,    only : forcing
-use MOM_error_handler,   only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
-use MOM_error_handler,   only : is_root_pe
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser,     only : openParameterBlock, closeParameterBlock
 use MOM_debugging,       only : hchksum
 use MOM_grid,            only : ocean_grid_type
@@ -83,8 +82,9 @@ type, public :: bkgnd_mixing_cs
   logical :: bulkmixedlayer !< If true, a refined bulk mixed layer scheme is used
   logical :: debug !< If true, turn on debugging in this module
   ! Daignostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
-  integer :: id_kd_bkgnd = -1, id_kv_bkgnd = -1
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that regulates diagnostic output
+  integer :: id_kd_bkgnd = -1 !< Diagnotic IDs
+  integer :: id_kv_bkgnd = -1 !< Diagnostic IDs
 
   real, allocatable, dimension(:,:)   ::  Kd_sfc !< surface value of the diffusivity (m2/s)
   ! Diagnostics arrays
@@ -272,7 +272,7 @@ subroutine sfc_bkgnd_mixing(G, CS)
 
 
   if (.not. CS%Bryan_Lewis_diffusivity) then
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS)
     do j=js,je ; do i=is,ie
       CS%Kd_sfc(i,j) = CS%Kd
     enddo ; enddo
@@ -280,16 +280,16 @@ subroutine sfc_bkgnd_mixing(G, CS)
 
   if (CS%Henyey_IGW_background) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-!$OMP parallel do default(none)
-!shared(is,ie,js,je,Kd_sfc,CS,G,deg_to_rad,epsilon,I_x30) &
-!$OMP                          private(abs_sin)
+!$OMP parallel do default(none) &
+!$OMP shared(is,ie,js,je,CS,G,deg_to_rad,epsilon,I_x30) &
+!$OMP private(abs_sin)
     do j=js,je ; do i=is,ie
       abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
       CS%Kd_sfc(i,j) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
   elseif (CS%Kd_tanh_lat_fn) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G)
     do j=js,je ; do i=is,ie
       !   The transition latitude and latitude range are hard-scaled here, since
       ! this is not really intended for wide-spread use, but rather for
@@ -349,10 +349,9 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
       do k=2,nz+1
         depth_2d(i,k) = depth_2d(i,k-1) + GV%H_to_m*h(i,j,k-1)
       enddo
-      ! if (is_root_pe()) write(*,*)'depth_3d(i,j,:)',depth_3d(i,j,:)
 
       call CVMix_init_bkgnd(max_nlev=nz, &
-                            zw = depth_2d(i,:), &  !< interface depth, must bepositive.
+                            zw = depth_2d(i,:), &  !< interface depth, must be positive.
                             bl1 = CS%Bryan_Lewis_c1, &
                             bl2 = CS%Bryan_Lewis_c2, &
                             bl3 = CS%Bryan_Lewis_c3, &
@@ -408,7 +407,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
       CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
       CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
       do k=2,nz
-        CS%kd_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) + 0.5*(kd_lay(i,j,K-1) + kd_lay(i,j,K))
+        CS%kd_bkgnd(i,j,k) = 0.5*(kd_lay(i,j,K-1) + kd_lay(i,j,K))
         CS%kv_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
       enddo
     enddo
@@ -437,7 +436,10 @@ end function CVMix_bkgnd_is_used
 
 !> Clear pointers and dealocate memory
 subroutine bkgnd_mixing_end(CS)
-  type(bkgnd_mixing_cs), pointer :: CS ! Control structure
+  type(bkgnd_mixing_cs), pointer :: CS !< Control structure for this module that
+                                       !! will be deallocated in this subroutine
+
+  if (.not. associated(CS)) return
 
   deallocate(CS%kd_bkgnd)
   deallocate(CS%kv_bkgnd)

@@ -1,38 +1,13 @@
+!> The MOM6 facility to parse input files for runtime parameters
 module MOM_file_parser
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, updated 9/2013.           *
-!*                                                                     *
-!*    The subroutines here parse a set of input files for the value    *
-!*  a named parameter and sets that parameter at run time.  Currently  *
-!*  these files use use one of several formats:                        *
-!*    #define VAR       ! To set the logical VAR to true.              *
-!*    VAR = True        ! To set the logical VAR to true.              *
-!*    #undef VAR        ! To set the logical VAR to false.             *
-!*    VAR = False       ! To set the logical VAR to false.             *
-!*    #define VAR 999   ! To set the real or integer VAR to 999.       *
-!*    VAR = 999         ! To set the real or integer VAR to 999.       *
-!*    #override VAR = 888 ! To override a previously set value.        *
-!*    VAR = 1.1, 2.2, 3.3 ! To set an array of real values.            *
-!*                                                                     *
-!*  In addition, when set by the get_param interface, the values of    *
-!*  parameters are automatically logged, along with defaults, units,   *
-!*  and a description.  It is an error for a variable to be overridden *
-!*  more than once, and MOM6 has a facility to check for unused lines  *
-!*  to set variables, which may indicate miss-spelled or archaic       *
-!*  parameters.  Parameter names are case-specific, and lines may use  *
-!*  a F90 or C++ style comment, starting with ! or //.                 *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_coms, only : root_PE, broadcast
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_error_handler, only : is_root_pe, stdlog, stdout
-use MOM_time_manager, only : set_time, get_time, time_type, get_ticks_per_second
-use MOM_time_manager, only : set_date, get_date
+use MOM_time_manager, only : get_time, time_type, get_ticks_per_second
+use MOM_time_manager, only : set_date, get_date, real_to_time, operator(-), set_time
 use MOM_document, only : doc_param, doc_module, doc_init, doc_end, doc_type
 use MOM_document, only : doc_openBlock, doc_closeBlock
 use MOM_string_functions, only : left_int, left_ints, slasher
@@ -40,103 +15,119 @@ use MOM_string_functions, only : left_real, left_reals
 
 implicit none ; private
 
-integer, parameter, public :: MAX_PARAM_FILES = 5 ! Maximum number of parameter files.
-integer, parameter :: INPUT_STR_LENGTH = 200 ! Maximum linelength in parameter file.
-integer, parameter :: FILENAME_LENGTH = 200  ! Maximum number of characters in
-                                             ! file names.
+integer, parameter, public :: MAX_PARAM_FILES = 5 !< Maximum number of parameter files.
+integer, parameter :: INPUT_STR_LENGTH = 320 !< Maximum line length in parameter file.
+integer, parameter :: FILENAME_LENGTH = 200  !< Maximum number of characters in file names.
 
 ! The all_PEs_read option should be eliminated with post-riga shared code.
-logical :: all_PEs_read = .false.
+logical :: all_PEs_read = .false. !< If true, all PEs read the input files
+                                  !! TODO: Eliminate this parameter
 
-! Defaults
+!>@{ Default values for parameters
 logical, parameter :: report_unused_default = .false.
 logical, parameter :: unused_params_fatal_default = .false.
 logical, parameter :: log_to_stdout_default = .false.
 logical, parameter :: complete_doc_default = .true.
 logical, parameter :: minimal_doc_default = .true.
+!!@}
 
+!> The valid lines extracted from an input parameter file without comments
 type, private :: file_data_type ; private
-  integer :: num_lines = 0
-  character(len=INPUT_STR_LENGTH), pointer, dimension(:) :: line => NULL()
-  logical,                         pointer, dimension(:) :: line_used => NULL()
+  integer :: num_lines = 0 !< The number of lines in this type
+  character(len=INPUT_STR_LENGTH), pointer, dimension(:) :: line => NULL() !< The line content
+  logical,                         pointer, dimension(:) :: line_used => NULL() !< If true, the line has been read
 end type file_data_type
 
+!> A link in the list of variables that have already had override warnings issued
 type :: link_parameter ; private
-  type(link_parameter), pointer :: next => NULL() ! Facilitates linked list
-  character(len=80) :: name                       ! Parameter name
-  logical :: hasIssuedOverrideWarning = .false.   ! Has a default value
+  type(link_parameter), pointer :: next => NULL() !< Facilitates linked list
+  character(len=80) :: name                       !< Parameter name
+  logical :: hasIssuedOverrideWarning = .false.   !< Has a default value
 end type link_parameter
 
+!> Specify the active parameter block
 type :: parameter_block ; private
-  character(len=240) :: name = ''                 ! Parameter name
+  character(len=240) :: name = ''   !< The active parameter block name
 end type parameter_block
 
+!> A structure that can be parsed to read and document run-time parameters.
 type, public :: param_file_type ; private
-  integer  :: nfiles = 0            ! The number of open files.
-  integer  :: iounit(MAX_PARAM_FILES)   ! The unit number of an open file.
-  character(len=FILENAME_LENGTH) :: filename(MAX_PARAM_FILES) ! The names of the open files.
-  logical  :: NetCDF_file(MAX_PARAM_FILES)! If true, the input file is in NetCDF.
+  integer  :: nfiles = 0            !< The number of open files.
+  integer  :: iounit(MAX_PARAM_FILES) !< The unit numbers of open files.
+  character(len=FILENAME_LENGTH)  :: filename(MAX_PARAM_FILES) !< The names of the open files.
+  logical  :: NetCDF_file(MAX_PARAM_FILES) !< If true, the input file is in NetCDF.
                                     ! This is not yet implemented.
-  type(file_data_type) :: param_data(MAX_PARAM_FILES) ! Structures that contain
-                                    ! the valid data lines from the parameter
-                                    ! files, enabling all subsequent reads of
-                                    ! parameter data to occur internally.
-  logical  :: report_unused = report_unused_default ! If true, report any
-                                    ! parameter lines that are not used in the run.
-  logical  :: unused_params_fatal = unused_params_fatal_default  ! If true, kill
-                                    ! the run if there are any unused parameters.
-  logical  :: log_to_stdout = log_to_stdout_default ! If true, all log
-                                    ! messages are also sent to stdout.
-  logical  :: log_open = .false.    ! True if the log file has been opened.
-  integer  :: stdout, stdlog        ! The units from stdout() and stdlog().
-  character(len=240) :: doc_file    ! A file where all run-time parameters, their
-                                    ! settings and defaults are documented.
-  logical  :: complete_doc = complete_doc_default ! If true, document all
-                                    ! run-time parameters.
-  logical  :: minimal_doc = minimal_doc_default ! If true, document only those
-                                    ! run-time parameters that differ from defaults.
-  type(doc_type), pointer :: doc => NULL() ! A structure that contains information
-                                    ! related to parameter documentation.
-  type(link_parameter), pointer :: chain => NULL() ! Facilitates linked list
-  type(parameter_block), pointer :: blockName => NULL() ! Name of active parameter block
+  type(file_data_type) :: param_data(MAX_PARAM_FILES) !< Structures that contain
+                                    !! the valid data lines from the parameter
+                                    !! files, enabling all subsequent reads of
+                                    !! parameter data to occur internally.
+  logical  :: report_unused = report_unused_default !< If true, report any
+                                    !! parameter lines that are not used in the run.
+  logical  :: unused_params_fatal = unused_params_fatal_default  !< If true, kill
+                                    !! the run if there are any unused parameters.
+  logical  :: log_to_stdout = log_to_stdout_default !< If true, all log
+                                    !! messages are also sent to stdout.
+  logical  :: log_open = .false.    !< True if the log file has been opened.
+  integer  :: stdout                !< The unit number from stdout().
+  integer  :: stdlog                !< The unit number from stdlog().
+  character(len=240) :: doc_file    !< A file where all run-time parameters, their
+                                    !! settings and defaults are documented.
+  logical  :: complete_doc = complete_doc_default !< If true, document all
+                                    !! run-time parameters.
+  logical  :: minimal_doc = minimal_doc_default !< If true, document only those
+                                    !! run-time parameters that differ from defaults.
+  type(doc_type), pointer :: doc => NULL() !< A structure that contains information
+                                    !! related to parameter documentation.
+  type(link_parameter), pointer :: chain => NULL() !< Facilitates linked list
+  type(parameter_block), pointer :: blockName => NULL() !< Name of active parameter block
 end type param_file_type
 
 public read_param, open_param_file, close_param_file, log_param, log_version
 public doc_param, get_param
 public clearParameterBlock, openParameterBlock, closeParameterBlock
 
+!> An overloaded interface to read various types of parameters
 interface read_param
   module procedure read_param_int, read_param_real, read_param_logical, &
                    read_param_char, read_param_char_array, read_param_time, &
                    read_param_int_array, read_param_real_array
 end interface
+!> An overloaded interface to log the values of various types of parameters
 interface log_param
   module procedure log_param_int, log_param_real, log_param_logical, &
                    log_param_char, log_param_time, &
                    log_param_int_array, log_param_real_array
 end interface
+!> An overloaded interface to read and log the values of various types of parameters
 interface get_param
   module procedure get_param_int, get_param_real, get_param_logical, &
                    get_param_char, get_param_char_array, get_param_time, &
                    get_param_int_array, get_param_real_array
 end interface
+
+!> An overloaded interface to log version information about modules
 interface log_version
   module procedure log_version_cs, log_version_plain
 end interface
 
 contains
 
+!> Make the contents of a parameter input file availalble in a param_file_type
 subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
-  character(len=*),           intent(in) :: filename
-  type(param_file_type),   intent(inout) :: CS
-  logical,          optional, intent(in) :: checkable
-  character(len=*), optional, intent(in) :: component
-  character(len=*), optional, intent(in) :: doc_file_dir
+  character(len=*),           intent(in) :: filename !< An input file name, optionally with the full path
+  type(param_file_type),   intent(inout) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  logical,          optional, intent(in) :: checkable   !< If this is false, it disables checks of this
+                                         !! file for unused parameters.  The default is True.
+  character(len=*), optional, intent(in) :: component   !< If present, this component name is used
+                                         !! to generate parameter documentation file names; the default is"MOM"
+  character(len=*), optional, intent(in) :: doc_file_dir !< An optional directory in which to write out
+                                         !! the documentation files.  The default is effectively './'.
 
   logical :: file_exists, unit_in_use, Netcdf_file, may_check
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
 
   may_check = .true. ; if (present(checkable)) may_check = checkable
 
@@ -244,17 +235,20 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
 
 end subroutine open_param_file
 
+!> Close any open input files and deallocate memory associated with this param_file_type.
+!! To use this type again, open_param_file would have to be called again.
 subroutine close_param_file(CS, quiet_close, component)
-  type(param_file_type),   intent(inout) :: CS
-  logical,          optional, intent(in) :: quiet_close
-  character(len=*), optional, intent(in) :: component
-! Arguments: CS - the param_file_type to close
-!  (in,opt)  quiet_close - if present and true, do not do any logging with this
-!                          call.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  type(param_file_type),   intent(inout) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  logical,          optional, intent(in) :: quiet_close !< if present and true, do not do any
+                                         !! logging with this call.
+  character(len=*), optional, intent(in) :: component   !< If present, this component name is used
+                                         !! to generate parameter documentation file names
+  ! Local variables
   character(len=128) :: docfile_default
   character(len=40)  :: mdl   ! This module's name.
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   integer :: i, n, num_unused
 
   if (present(quiet_close)) then ; if (quiet_close) then
@@ -276,18 +270,17 @@ subroutine close_param_file(CS, quiet_close, component)
   ! Log the parameters for the parser.
   mdl = "MOM_file_parser"
   call log_version(CS, mdl, version, "")
-  call log_param(CS, mdl, "SEND_LOG_TO_STDOUT", &
-                        CS%log_to_stdout, &
+  call log_param(CS, mdl, "SEND_LOG_TO_STDOUT", CS%log_to_stdout, &
                  "If true, all log messages are also sent to stdout.", &
                  default=log_to_stdout_default)
-  call log_param(CS, mdl, "REPORT_UNUSED_PARAMS", &
-                        CS%report_unused, &
+  call log_param(CS, mdl, "REPORT_UNUSED_PARAMS", CS%report_unused, &
                  "If true, report any parameter lines that are not used \n"//&
-                 "in the run.", default=report_unused_default)
-  call log_param(CS, mdl, "FATAL_UNUSED_PARAMS", &
-                        CS%unused_params_fatal, &
+                 "in the run.", default=report_unused_default, &
+                 debuggingParam=.true.)
+  call log_param(CS, mdl, "FATAL_UNUSED_PARAMS", CS%unused_params_fatal, &
                  "If true, kill the run if there are any unused \n"//&
-                 "parameters.", default=unused_params_fatal_default)
+                 "parameters.", default=unused_params_fatal_default, &
+                 debuggingParam=.true.)
   docfile_default = "MOM_parameter_doc"
   if (present(component)) docfile_default = trim(component)//"_parameter_doc"
   call log_param(CS, mdl, "DOCUMENT_FILE", CS%doc_file, &
@@ -295,13 +288,11 @@ subroutine close_param_file(CS, quiet_close, component)
                  "settings, units and defaults are documented. Blank will\n"//&
                  "disable all parameter documentation.", default=docfile_default)
   if (len_trim(CS%doc_file) > 0) then
-    call log_param(CS, mdl, "COMPLETE_DOCUMENTATION", &
-                   CS%complete_doc, &
+    call log_param(CS, mdl, "COMPLETE_DOCUMENTATION",  CS%complete_doc, &
                   "If true, all run-time parameters are\n"//&
                   "documented in "//trim(CS%doc_file)//&
                   ".all .", default=complete_doc_default)
-    call log_param(CS, mdl, "MINIMAL_DOCUMENTATION", &
-                   CS%minimal_doc, &
+    call log_param(CS, mdl, "MINIMAL_DOCUMENTATION", CS%minimal_doc, &
                   "If true, non-default run-time parameters are\n"//&
                   "documented in "//trim(CS%doc_file)//&
                   ".short .", default=minimal_doc_default)
@@ -340,10 +331,13 @@ subroutine close_param_file(CS, quiet_close, component)
 
 end subroutine close_param_file
 
+!> Read the contents of a parameter input file, and store the contents in a
+!! file_data_type after removing comments and simplifying white space
 subroutine populate_param_data(iounit, filename, param_data)
-  integer,                 intent(in) :: iounit
-  character(len=*),        intent(in) :: filename
-  type(file_data_type), intent(inout) :: param_data
+  integer,                 intent(in) :: iounit !< The IO unit number that is open for filename
+  character(len=*),        intent(in) :: filename !< An input file name, optionally with the full path
+  type(file_data_type), intent(inout) :: param_data !< A list of the input lines that set parameters
+                                                !! after comments have been stripped out.
 
   character(len=INPUT_STR_LENGTH) :: line
   integer :: num_lines
@@ -435,8 +429,10 @@ subroutine populate_param_data(iounit, filename, param_data)
 
 end subroutine populate_param_data
 
+
+!> Return True if a /* appears on this line without a closing */
 function openMultiLineComment(string)
-  character(len=*), intent(in) :: string
+  character(len=*), intent(in) :: string  !< The input string to process
   logical                      :: openMultiLineComment
 ! True if a /* appears on this line without a closing */
   integer :: icom, last
@@ -450,38 +446,43 @@ function openMultiLineComment(string)
   icom = index(string(last:), "*/") ; if (icom > 0) openMultiLineComment=.false.
 end function openMultiLineComment
 
+!> Return True if a */ appears on this line
 function closeMultiLineComment(string)
-  character(len=*), intent(in) :: string
+  character(len=*), intent(in) :: string  !< The input string to process
   logical                      :: closeMultiLineComment
 ! True if a */ appears on this line
   closeMultiLineComment = .false.
   if (index(string, "*/")>0) closeMultiLineComment=.true.
 end function closeMultiLineComment
 
+!> Find position of last character before any comments, As marked by "!", "//", or "/*"
+!! following F90, C++, or C syntax
 function lastNonCommentIndex(string)
-  character(len=*), intent(in) :: string
+  character(len=*), intent(in) :: string  !< The input string to process
   integer                      :: lastNonCommentIndex
 ! Find position of last character before any comments
 ! This s/r is the only place where a comment needs to be defined
   integer :: icom, last
   last = len_trim(string)
   icom = index(string(:last), "!") ; if (icom > 0) last = icom-1 ! F90 style
-  icom = index(string(:last), "//") ; if (icom > 0) last = icom-1 ! C+ style
+  icom = index(string(:last), "//") ; if (icom > 0) last = icom-1 ! C++ style
   icom = index(string(:last), "/*") ; if (icom > 0) last = icom-1 ! C style
   lastNonCommentIndex = last
 end function lastNonCommentIndex
 
+!> Find position of last non-blank character before any comments
 function lastNonCommentNonBlank(string)
-  character(len=*), intent(in) :: string
+  character(len=*), intent(in) :: string  !< The input string to process
   integer                      :: lastNonCommentNonBlank
 ! Find position of last non-blank character before any comments
   lastNonCommentNonBlank = len_trim(string(:lastNonCommentIndex(string))) ! Ignore remaining trailing blanks
 end function lastNonCommentNonBlank
 
+!> Returns a string with tabs replaced by a blank
 function replaceTabs(string)
-  character(len=*), intent(in) :: string
+  character(len=*), intent(in) :: string  !< The input string to process
   character(len=len(string))   :: replaceTabs
-! Returns string with tabs replaced by a ablank
+! Returns string with tabs replaced by a blank
   integer :: i
   do i=1, len(string)
     if (string(i:i)==achar(9)) then
@@ -492,8 +493,9 @@ function replaceTabs(string)
   enddo
 end function replaceTabs
 
+!> Trims comments and leading blanks from string
 function removeComments(string)
-  character(len=*), intent(in) :: string
+  character(len=*), intent(in) :: string  !< The input string to process
   character(len=len(string))   :: removeComments
 ! Trims comments and leading blanks from string
   integer :: last
@@ -502,8 +504,10 @@ function removeComments(string)
   removeComments(:last)=adjustl(string(:last)) ! Copy only the non-comment part of string
 end function removeComments
 
+!> Constructs a string with all repeated whitespace replaced with single blanks
+!! and insert white space where it helps delineate tokens (e.g. around =)
 function simplifyWhiteSpace(string)
-  character(len=*), intent(in) :: string
+  character(len=*), intent(in) :: string !< A string to modify to simpify white space
   character(len=len(string)+16)   :: simplifyWhiteSpace
 ! Constructs a string with all repeated whitespace replaced with single blanks
 ! and insert white space where it helps delineate tokens (e.g. around =)
@@ -554,11 +558,15 @@ function simplifyWhiteSpace(string)
   endif
 end function simplifyWhiteSpace
 
+!> This subroutine reads the value of an integer model parameter from a parameter file.
 subroutine read_param_int(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  integer,             intent(inout) :: value
-  logical,      optional, intent(in) :: fail_if_missing
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  integer,             intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
 ! This subroutine determines the value of an integer model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -586,11 +594,15 @@ subroutine read_param_int(CS, varname, value, fail_if_missing)
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_int
 
+!> This subroutine reads the values of an array of integer model parameters from a parameter file.
 subroutine read_param_int_array(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  integer,             intent(inout) :: value(:)
-  logical,      optional, intent(in) :: fail_if_missing
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  integer, dimension(:),  intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
 ! This subroutine determines the value of an integer model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -619,11 +631,15 @@ subroutine read_param_int_array(CS, varname, value, fail_if_missing)
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_int_array
 
+!> This subroutine reads the value of a real model parameter from a parameter file.
 subroutine read_param_real(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  real,                intent(inout) :: value
-  logical,      optional, intent(in) :: fail_if_missing
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  real,                intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
 ! This subroutine determines the value of an integer model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -651,11 +667,15 @@ subroutine read_param_real(CS, varname, value, fail_if_missing)
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_real
 
+!> This subroutine reads the values of an array of real model parameters from a parameter file.
 subroutine read_param_real_array(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  real,                intent(inout) :: value(:)
-  logical,      optional, intent(in) :: fail_if_missing
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  real, dimension(:),     intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
 ! This subroutine determines the value of an integer model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -684,11 +704,15 @@ subroutine read_param_real_array(CS, varname, value, fail_if_missing)
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_real_array
 
+!> This subroutine reads the value of a character string model parameter from a parameter file.
 subroutine read_param_char(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  character(len=*),    intent(inout) :: value
-  logical,      optional, intent(in) :: fail_if_missing
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  character(len=*),    intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
 ! This subroutine determines the value of an integer model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -707,11 +731,15 @@ subroutine read_param_char(CS, varname, value, fail_if_missing)
 
 end subroutine read_param_char
 
+!> This subroutine reads the values of an array of character string model parameters from a parameter file.
 subroutine read_param_char_array(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  character(len=*),    intent(inout) :: value(:)
-  logical,      optional, intent(in) :: fail_if_missing
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  character(len=*), dimension(:), intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
 ! This subroutine determines the value of an integer model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -744,11 +772,15 @@ subroutine read_param_char_array(CS, varname, value, fail_if_missing)
 
 end subroutine read_param_char_array
 
+!> This subroutine reads the value of a logical model parameter from a parameter file.
 subroutine read_param_logical(CS, varname, value, fail_if_missing)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  logical,             intent(inout) :: value
-  logical,      optional, intent(in) :: fail_if_missing
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  logical,             intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
 ! This subroutine determines the value of an integer model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -766,14 +798,19 @@ subroutine read_param_logical(CS, varname, value, fail_if_missing)
   endif ; endif
 end subroutine read_param_logical
 
-
+!> This subroutine reads the value of a time_type model parameter from a parameter file.
 subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_format)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  type(time_type),     intent(inout) :: value
-  real,         optional, intent(in) :: timeunit
-  logical,      optional, intent(in) :: fail_if_missing
-  logical,     optional, intent(out) :: date_format
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  type(time_type),     intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file
+  real,         optional, intent(in) :: timeunit !< The number of seconds in a time unit for real-number input.
+  logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,     optional, intent(out) :: date_format !< If present, this indicates whether this
+                                         !! parameter was read in a date format, so that it can
+                                         !! later be logged in the same format.
 ! This subroutine determines the value of an time-type model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
@@ -784,7 +821,7 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
   character(len=240) :: err_msg
   logical            :: found, defined
   real               :: real_time, time_unit
-  integer            :: days, secs, vals(7)
+  integer            :: vals(7)
 
   if (present(date_format)) date_format = .false.
 
@@ -817,10 +854,8 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
     else
       time_unit = 1.0 ; if (present(timeunit)) time_unit = timeunit
       read( value_string(1), *) real_time
-      days = int(real_time*(time_unit/86400.0))
-      secs = int(floor((real_time*(time_unit/86400.0)-days)*86400.0 + 0.5))
-      value = set_time(secs, days)
-   endif
+      value = real_to_time(real_time*time_unit)
+    endif
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
@@ -837,8 +872,9 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
                            trim(varname)// ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_time
 
+!> This function removes single and double quotes from a character string
 function strip_quotes(val_str)
-  character(len=*) :: val_str
+  character(len=*) :: val_str !< The character string to work on
   character(len=INPUT_STR_LENGTH) :: strip_quotes
   ! Local variables
   integer :: i
@@ -857,12 +893,18 @@ function strip_quotes(val_str)
   enddo
 end function strip_quotes
 
+!> This subtoutine extracts the contents of lines in the param_file_type that refer to
+!! a named parameter.  The value_string that is returned must be interepreted in a way
+!! that depends on the type of this variable.
 subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsLogical)
-  type(param_file_type),  intent(in) :: CS
-  character(len=*),       intent(in) :: varname
-  logical,               intent(out) :: found, defined
-  character(len=*),      intent(out) :: value_string(:)
-  logical, optional,      intent(in) :: paramIsLogical
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                                !! it is also a structure to parse for run-time parameters
+  character(len=*),       intent(in) :: varname !< The case-sensitive name of the parameter to read
+  logical,               intent(out) :: found   !< If true, this parameter has been found in CS
+  logical,               intent(out) :: defined !< If true, this parameter is set (or true) in the CS
+  character(len=*),      intent(out) :: value_string(:) !< A string that encodes the new value
+  logical, optional,      intent(in) :: paramIsLogical  !< If true, this is a logical parameter
+                                                !! that can be simply defined without parsing a value_string.
 
   character(len=INPUT_STR_LENGTH) :: val_str, lname, origLine
   character(len=INPUT_STR_LENGTH) :: line, continuationBuffer, blockName
@@ -888,7 +930,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   ! return variables indicating whether this variable is defined and the string
   ! that contains the value of this variable.
   found = .false.
-  oval = 0; ival = 0;
+  oval = 0; ival = 0
   max_vals = SIZE(value_string)
   do is=1,max_vals ; value_string(is) = " " ; enddo
 
@@ -1173,18 +1215,21 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
 
 end subroutine get_variable_line
 
-subroutine flag_line_as_read(line_used,count)
-  logical, dimension(:), pointer :: line_used
-  integer,            intent(in) :: count
+!> Record that a line has been used to set a parameter
+subroutine flag_line_as_read(line_used, count)
+  logical, dimension(:), pointer :: line_used !< A structure indicating which lines have been read
+  integer,            intent(in) :: count !< The parameter on this line number has been read
   line_used(count) = .true.
 end subroutine flag_line_as_read
 
+!> Returns true if an override warning has been issued for the variable varName
 function overrideWarningHasBeenIssued(chain, varName)
-  type(link_parameter), pointer    :: chain
-  character(len=*),     intent(in) :: varName
+  type(link_parameter), pointer    :: chain   !< The linked list of variables that have already had
+                                              !! override warnings issued
+  character(len=*),     intent(in) :: varName !< The name of the variable being queried for warnings
   logical                          :: overrideWarningHasBeenIssued
 ! Returns true if an override warning has been issued for the variable varName
-  type(link_parameter), pointer :: newLink, this
+  type(link_parameter), pointer :: newLink => NULL(), this => NULL()
   overrideWarningHasBeenIssued = .false.
   this => chain
   do while( associated(this) )
@@ -1237,16 +1282,22 @@ subroutine log_version_plain(modulename, version)
 
 end subroutine log_version_plain
 
+!> Log the name and value of an integer model parameter in documentation files.
 subroutine log_param_int(CS, modulename, varname, value, desc, units, &
                          default, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: varname
-  integer,                    intent(in) :: value
-  character(len=*), optional, intent(in) :: desc, units
-  integer,          optional, intent(in) :: default
-  logical,          optional, intent(in) :: layoutParam
-  logical,          optional, intent(in) :: debuggingParam
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: modulename !< The name of the module using this parameter
+  character(len=*),           intent(in) :: varname !< The name of the parameter to log
+  integer,                    intent(in) :: value   !< The value of the parameter to log
+  character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  integer,          optional, intent(in) :: default !< The default value of the parameter
+  logical,          optional, intent(in) :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in) :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of an integer parameter to a log file,
 ! along with its name and the module it came from.
   character(len=240) :: mesg, myunits
@@ -1264,16 +1315,22 @@ subroutine log_param_int(CS, modulename, varname, value, desc, units, &
 
 end subroutine log_param_int
 
+!> Log the name and values of an array of integer model parameter in documentation files.
 subroutine log_param_int_array(CS, modulename, varname, value, desc, &
                                units, default, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: varname
-  integer,                    intent(in) :: value(:)
-  character(len=*), optional, intent(in) :: desc, units
-  integer,          optional, intent(in) :: default
-  logical,          optional, intent(in) :: layoutParam
-  logical,          optional, intent(in) :: debuggingParam
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: modulename !< The name of the module using this parameter
+  character(len=*),           intent(in) :: varname !< The name of the parameter to log
+  integer, dimension(:),      intent(in) :: value   !< The value of the parameter to log
+  character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  integer,          optional, intent(in) :: default !< The default value of the parameter
+  logical,          optional, intent(in) :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in) :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of an integer parameter to a log file,
 ! along with its name and the module it came from.
   character(len=1320) :: mesg
@@ -1292,15 +1349,20 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
 
 end subroutine log_param_int_array
 
+!> Log the name and value of a real model parameter in documentation files.
 subroutine log_param_real(CS, modulename, varname, value, desc, units, &
                           default, debuggingParam)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: varname
-  real,                       intent(in) :: value
-  character(len=*), optional, intent(in) :: desc, units
-  real,             optional, intent(in) :: default
-  logical,          optional, intent(in) :: debuggingParam
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: modulename !< The name of the calling module
+  character(len=*),           intent(in) :: varname !< The name of the parameter to log
+  real,                       intent(in) :: value   !< The value of the parameter to log
+  character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  real,             optional, intent(in) :: default !< The default value of the parameter
+  logical,          optional, intent(in) :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   character(len=240) :: mesg, myunits
@@ -1319,14 +1381,18 @@ subroutine log_param_real(CS, modulename, varname, value, desc, units, &
 
 end subroutine log_param_real
 
+!> Log the name and values of an array of real model parameter in documentation files.
 subroutine log_param_real_array(CS, modulename, varname, value, desc, &
                                 units, default)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: varname
-  real,                       intent(in) :: value(:)
-  character(len=*), optional, intent(in) :: desc, units
-  real,             optional, intent(in) :: default
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: modulename !< The name of the calling module
+  character(len=*),           intent(in) :: varname !< The name of the parameter to log
+  real, dimension(:),         intent(in) :: value   !< The value of the parameter to log
+  character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
+                                             !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  real,             optional, intent(in) :: default !< The default value of the parameter
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   character(len=1320) :: mesg
@@ -1348,16 +1414,22 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
 
 end subroutine log_param_real_array
 
+!> Log the name and value of a logical model parameter in documentation files.
 subroutine log_param_logical(CS, modulename, varname, value, desc, &
                              units, default, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: varname
-  logical,                    intent(in) :: value
-  character(len=*), optional, intent(in) :: desc, units
-  logical,          optional, intent(in) :: default
-  logical,          optional, intent(in) :: layoutParam
-  logical,          optional, intent(in) :: debuggingParam
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: modulename !< The name of the calling module
+  character(len=*),           intent(in) :: varname !< The name of the parameter to log
+  logical,                    intent(in) :: value   !< The value of the parameter to log
+  character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  logical,          optional, intent(in) :: default !< The default value of the parameter
+  logical,          optional, intent(in) :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in) :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a logical parameter to a log file,
 ! along with its name and the module it came from.
   character(len=240) :: mesg, myunits
@@ -1379,16 +1451,22 @@ subroutine log_param_logical(CS, modulename, varname, value, desc, &
 
 end subroutine log_param_logical
 
+!> Log the name and value of a character string model parameter in documentation files.
 subroutine log_param_char(CS, modulename, varname, value, desc, units, &
                           default, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: varname
-  character(len=*),           intent(in) :: value
-  character(len=*), optional, intent(in) :: desc, units
-  character(len=*), optional, intent(in) :: default
-  logical,          optional, intent(in) :: layoutParam
-  logical,          optional, intent(in) :: debuggingParam
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: modulename !< The name of the calling module
+  character(len=*),           intent(in) :: varname !< The name of the parameter to log
+  character(len=*),           intent(in) :: value   !< The value of the parameter to log
+  character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  character(len=*), optional, intent(in) :: default !< The default value of the parameter
+  logical,          optional, intent(in) :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in) :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a character string parameter to a log
 ! file, along with its name and the module it came from.
   character(len=240) :: mesg, myunits
@@ -1411,16 +1489,23 @@ end subroutine log_param_char
 !! along with its name and the module it came from.
 subroutine log_param_time(CS, modulename, varname, value, desc, units, &
                           default, timeunit, layoutParam, debuggingParam, log_date)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: varname
-  type(time_type),            intent(in) :: value
-  character(len=*), optional, intent(in) :: desc, units
-  type(time_type),  optional, intent(in) :: default
-  real,             optional, intent(in) :: timeunit
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: modulename !< The name of the calling module
+  character(len=*),           intent(in) :: varname !< The name of the parameter to log
+  type(time_type),            intent(in) :: value   !< The value of the parameter to log
+  character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  type(time_type),  optional, intent(in) :: default !< The default value of the parameter
+  real,             optional, intent(in) :: timeunit !< The number of seconds in a time unit for
+                                         !! real-number output.
   logical,          optional, intent(in) :: log_date   !< If true, log the time_type in date format.
-  logical,          optional, intent(in) :: layoutParam
-  logical,          optional, intent(in) :: debuggingParam
+                                         !! If missing the default is false.
+  logical,          optional, intent(in) :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in) :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 
   real :: real_time, real_default
   logical :: use_timeunit, date_format
@@ -1519,19 +1604,34 @@ function convert_date_to_string(date) result(date_string)
 
 end function convert_date_to_string
 
+!> This subroutine reads the value of an integer model parameter from a parameter file
+!! and logs it in documentation files.
 subroutine get_param_int(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, &
                static_value, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  integer,                    intent(inout) :: value
-  character(len=*), optional, intent(in)    :: desc, units
-  integer,          optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
-  logical,          optional, intent(in)    :: layoutParam
-  logical,          optional, intent(in)    :: debuggingParam
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  integer,                    intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file and logged
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  integer,          optional, intent(in)    :: default !< The default value of the parameter
+  integer,          optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
+  logical,          optional, intent(in)    :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in)    :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1552,19 +1652,34 @@ subroutine get_param_int(CS, modulename, varname, value, desc, units, &
 
 end subroutine get_param_int
 
+!> This subroutine reads the values of an array of integer model parameters from a parameter file
+!! and logs them in documentation files.
 subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, &
                static_value, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  integer,                    intent(inout) :: value(:)
-  character(len=*), optional, intent(in)    :: desc, units
-  integer,          optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
-  logical,          optional, intent(in)    :: layoutParam
-  logical,          optional, intent(in)    :: debuggingParam
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  integer, dimension(:),      intent(inout) :: value   !< The value of the parameter that may be reset
+                                         !! from the parameter file
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  integer,          optional, intent(in)    :: default !< The default value of the parameter
+  integer,          optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
+  logical,          optional, intent(in)    :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in)    :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1585,16 +1700,32 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
 
 end subroutine get_param_int_array
 
+!> This subroutine reads the value of a real model parameter from a parameter file
+!! and logs it in documentation files.
 subroutine get_param_real(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, static_value)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  real,                       intent(inout) :: value
-  character(len=*), optional, intent(in)    :: desc, units
-  real,             optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
+               default, fail_if_missing, do_not_read, do_not_log, &
+               static_value, debuggingParam)
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  real,                       intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file and logged
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  real,             optional, intent(in)    :: default !< The default value of the parameter
+  real,             optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
+  logical,          optional, intent(in)    :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1610,23 +1741,35 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
 
   if (do_log) then
     call log_param_real(CS, modulename, varname, value, desc, units, &
-                        default)
+                        default, debuggingParam)
   endif
 
 end subroutine get_param_real
 
+!> This subroutine reads the values of an array of real model parameters from a parameter file
+!! and logs them in documentation files.
 subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, static_value)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  real,                       intent(inout) :: value(:)
-  character(len=*), optional, intent(in)    :: desc, units
-  real,             optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
-! This subroutine writes the value of a real parameter to a log file,
-! along with its name and the module it came from.
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  real, dimension(:),         intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file and logged
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  real,             optional, intent(in)    :: default !< The default value of the parameter
+  real,             optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
+
   logical :: do_read, do_log
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
@@ -1645,19 +1788,34 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
 
 end subroutine get_param_real_array
 
+!> This subroutine reads the value of a character string model parameter from a parameter file
+!! and logs it in documentation files.
 subroutine get_param_char(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, &
                static_value, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  character(len=*),           intent(inout) :: value
-  character(len=*), optional, intent(in)    :: desc, units
-  character(len=*), optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
-  logical,          optional, intent(in)    :: layoutParam
-  logical,          optional, intent(in)    :: debuggingParam
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  character(len=*),           intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file and logged
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  character(len=*), optional, intent(in)    :: default !< The default value of the parameter
+  character(len=*), optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
+  logical,          optional, intent(in)    :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in)    :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1678,16 +1836,29 @@ subroutine get_param_char(CS, modulename, varname, value, desc, units, &
 
 end subroutine get_param_char
 
+!> This subroutine reads the values of an array of character string model parameters
+!! from a parameter file and logs them in documentation files.
 subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, static_value)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  character(len=*),           intent(inout) :: value(:)
-  character(len=*), optional, intent(in)    :: desc, units
-  character(len=*), optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  character(len=*), dimension(:), intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file and logged
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  character(len=*), optional, intent(in)    :: default !< The default value of the parameter
+  character(len=*), optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1718,19 +1889,34 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
 
 end subroutine get_param_char_array
 
+!> This subroutine reads the value of a logical model parameter from a parameter file
+!! and logs it in documentation files.
 subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, &
                static_value, layoutParam, debuggingParam)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  logical,                    intent(inout) :: value
-  character(len=*), optional, intent(in)    :: desc, units
-  logical,          optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
-  logical,          optional, intent(in)    :: layoutParam
-  logical,          optional, intent(in)    :: debuggingParam
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  logical,                    intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file and logged
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  logical,          optional, intent(in)    :: default !< The default value of the parameter
+  logical,          optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
+  logical,          optional, intent(in)    :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in)    :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log
@@ -1751,22 +1937,39 @@ subroutine get_param_logical(CS, modulename, varname, value, desc, units, &
 
 end subroutine get_param_logical
 
+!> This subroutine reads the value of a time-type model parameter from a parameter file
+!! and logs it in documentation files.
 subroutine get_param_time(CS, modulename, varname, value, desc, units, &
                           default, fail_if_missing, do_not_read, do_not_log, &
                           timeunit, static_value, layoutParam, debuggingParam, &
                           log_as_date)
-  type(param_file_type),      intent(in)    :: CS
-  character(len=*),           intent(in)    :: modulename
-  character(len=*),           intent(in)    :: varname
-  type(time_type),            intent(inout) :: value
-  character(len=*), optional, intent(in)    :: desc, units
-  type(time_type),  optional, intent(in)    :: default, static_value
-  logical,          optional, intent(in)    :: fail_if_missing
-  logical,          optional, intent(in)    :: do_not_read, do_not_log
-  real,             optional, intent(in)    :: timeunit
-  logical,          optional, intent(in)    :: layoutParam
-  logical,          optional, intent(in)    :: debuggingParam
-  logical,          optional, intent(in)    :: log_as_date
+  type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in)    :: modulename !< The name of the calling module
+  character(len=*),           intent(in)    :: varname !< The case-sensitive name of the parameter to read
+  type(time_type),            intent(inout) :: value   !< The value of the parameter that may be
+                                         !! read from the parameter file and logged
+  character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
+                                         !! present, this paramter is not written to a doc file
+  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  type(time_type),  optional, intent(in)    :: default !< The default value of the parameter
+  type(time_type),  optional, intent(in)    :: static_value !< If this parameter is static, it takes
+                                         !! this value, which can be compared for consistency with
+                                         !! what is in the parameter file.
+  logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
+                                         !! if this variable is not found in the parameter file
+  logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
+                                         !! value for this parameter, although it might be logged.
+  logical,          optional, intent(in)    :: do_not_log !< If present and true, do not log this
+                                         !! parameter to the documentation files
+  real,             optional, intent(in)    :: timeunit !< The number of seconds in a time unit for
+                                         !! real-number input to be translated to a time.
+  logical,          optional, intent(in)    :: layoutParam !< If present and true, this paramter is
+                                         !! logged in the layout parameter file
+  logical,          optional, intent(in)    :: debuggingParam !< If present and true, this paramter is
+                                         !! logged in the debugging parameter file
+  logical,          optional, intent(in)    :: log_as_date  !< If true, log the time_type in date
+                                         !! format. The default is false.
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
   logical :: do_read, do_log, date_format, log_date
@@ -1792,10 +1995,12 @@ end subroutine get_param_time
 
 ! -----------------------------------------------------------------------------
 
+!> Resets the parameter block name to blank
 subroutine clearParameterBlock(CS)
-  type(param_file_type), intent(in) :: CS
+  type(param_file_type), intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
 ! Resets the parameter block name to blank
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = ''
@@ -1805,12 +2010,14 @@ subroutine clearParameterBlock(CS)
   endif
 end subroutine clearParameterBlock
 
+!> Tags blockName onto the end of the active parameter block name
 subroutine openParameterBlock(CS,blockName,desc)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: blockName
-  character(len=*), optional, intent(in) :: desc
+  type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
+  character(len=*),           intent(in) :: blockName !< The name of a parameter block being added
+  character(len=*), optional, intent(in) :: desc    !< A description of the parameter block being added
 ! Tags blockName onto the end of the active parameter block name
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = pushBlockLevel(block%name,blockName)
@@ -1821,10 +2028,12 @@ subroutine openParameterBlock(CS,blockName,desc)
   endif
 end subroutine openParameterBlock
 
+!> Remove the lowest level of recursion from the active block name
 subroutine closeParameterBlock(CS)
-  type(param_file_type), intent(in) :: CS
+  type(param_file_type), intent(in) :: CS      !< The control structure for the file_parser module,
+                                         !! it is also a structure to parse for run-time parameters
 ! Remove the lowest level of recursion from the active block name
-  type(parameter_block), pointer :: block
+  type(parameter_block), pointer :: block => NULL()
 
   if (associated(CS%blockName)) then
     block => CS%blockName
@@ -1839,8 +2048,10 @@ subroutine closeParameterBlock(CS)
   block%name = popBlockLevel(block%name)
 end subroutine closeParameterBlock
 
+!> Extends block name (deeper level of parameter block)
 function pushBlockLevel(oldblockName,newBlockName)
-  character(len=*),        intent(in) :: oldBlockName, newBlockName
+  character(len=*),        intent(in) :: oldBlockName  !< A sequence of hierarchical parameter block names
+  character(len=*),        intent(in) :: newBlockName  !< A new block name to add to the end of the sequence
   character(len=len(oldBlockName)+40) :: pushBlockLevel
 ! Extends block name (deeper level of parameter block)
   if (len_trim(oldBlockName)>0) then
@@ -1850,8 +2061,9 @@ function pushBlockLevel(oldblockName,newBlockName)
   endif
 end function pushBlockLevel
 
+!> Truncates block name (shallower level of parameter block)
 function popBlockLevel(oldblockName)
-  character(len=*),        intent(in) :: oldBlockName
+  character(len=*),        intent(in) :: oldBlockName !< A sequence of hierarchical parameter block names
   character(len=len(oldBlockName)+40) :: popBlockLevel
 ! Truncates block name (shallower level of parameter block)
   integer :: i
@@ -1865,5 +2077,30 @@ function popBlockLevel(oldblockName)
       'popBlockLevel: A pop was attempted leaving an empty block name.')
   endif
 end function popBlockLevel
+
+!> \namespace mom_file_parser
+!!
+!!  By Robert Hallberg and Alistair Adcroft, updated 9/2013.
+!!
+!!    The subroutines here parse a set of input files for the value
+!!  a named parameter and sets that parameter at run time.  Currently
+!!  these files use use one of several formats:
+!!    \#define VAR      ! To set the logical VAR to true.
+!!    VAR = True        ! To set the logical VAR to true.
+!!    \#undef VAR       ! To set the logical VAR to false.
+!!    VAR = False       ! To set the logical VAR to false.
+!!    \#define VAR 999  ! To set the real or integer VAR to 999.
+!!    VAR = 999         ! To set the real or integer VAR to 999.
+!!    \#override VAR = 888 ! To override a previously set value.
+!!    VAR = 1.1, 2.2, 3.3  ! To set an array of real values.
+  ! Note that in the comments above, dOxygen translates \# to # .
+!!
+!!  In addition, when set by the get_param interface, the values of
+!!  parameters are automatically logged, along with defaults, units,
+!!  and a description.  It is an error for a variable to be overridden
+!!  more than once, and MOM6 has a facility to check for unused lines
+!!  to set variables, which may indicate miss-spelled or archaic
+!!  parameters.  Parameter names are case-specific, and lines may use
+!!  a F90 or C++ style comment, starting with ! or //.
 
 end module MOM_file_parser

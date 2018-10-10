@@ -10,8 +10,7 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
-                             time_type_to_real
+use MOM_time_manager, only : time_type, operator(+), operator(/), time_type_to_real
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -40,7 +39,7 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mdl = "SCM_idealized_hurricane" ! This module's name.
+character(len=40)  :: mdl = "SCM_idealized_hurricane" !< This module's name.
 
 contains
 
@@ -95,9 +94,9 @@ end subroutine SCM_idealized_hurricane_TS_init
 
 !> Initializes wind profile for the SCM idealized hurricane example
 subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
-  type(time_type),              intent(in) :: Time       !< Time
-  type(ocean_grid_type),        intent(in) :: G          !< Grid structure
-  type(param_file_type),        intent(in) :: param_file !< Input parameter structure
+  type(time_type),                  intent(in) :: Time       !< Model time
+  type(ocean_grid_type),            intent(in) :: G          !< Grid structure
+  type(param_file_type),            intent(in) :: param_file !< Input parameter structure
   type(SCM_idealized_hurricane_CS), pointer    :: CS         !< Parameter container
 
 ! This include declares and sets the variable "version".
@@ -228,9 +227,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
   ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
   ! Note that rho_a is set to 1.2 following generated wind for experiment
-  if (r/CS%r_max.gt.0.001 .AND. r/CS%r_max.lt.10.) then
+  if (r/CS%r_max > 0.001 .AND. r/CS%r_max < 10.) then
      U10 = sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
-  elseif (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
+  elseif (r/CS%r_max > 10. .AND. r/CS%r_max < 12.) then
      r=CS%r_max*10.
      if (BR_Bench) then
         rkm = r/1000.
@@ -243,7 +242,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
            * (12. - r/CS%r_max)/2.
   else
      U10 = 0.
-  end if
+  endif
   Adir = atan2(CS%YY,xx)
 
   !/ BR
@@ -254,9 +253,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   A1 = -A0 *(0.04*RSTR +0.05*CS%tran_speed+0.14)
   P1 = (6.88*RSTR -9.60*CS%tran_speed+85.31)*pie/180.
   ALPH = A0 - A1*cos( (TRANSDIR - ADIR ) - P1)
-  if (r/CS%r_max.gt.10. .AND. r/CS%r_max.lt.12.) then
+  if (r/CS%r_max > 10. .AND. r/CS%r_max < 12.) then
      ALPH = ALPH* (12. - r/CS%r_max)/2.
-  elseif (r/CS%r_max.gt.12.) then
+  elseif (r/CS%r_max > 12.) then
      ALPH = 0.0
   endif
   ALPH = ALPH * Deg2Rad
@@ -289,9 +288,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
     !  Add a simple drag coefficient as a function of U10 |
     !/----------------------------------------------------|
     du10=sqrt(du**2+dv**2)
-    if (du10.LT.11.) then
+    if (du10 < 11.) then
        Cd = 1.2e-3
-    elseif (du10.LT.20.) then
+    elseif (du10 < 20.) then
        Cd = (0.49 + 0.065 * U10 )*0.001
     else
        Cd = 0.0018
@@ -307,9 +306,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
     dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
     dV = U10*cos(Adir-Alph) - Vocn + V_TS
     du10=sqrt(du**2+dv**2)
-    if (du10.LT.11.) then
+    if (du10 < 11.) then
        Cd = 1.2e-3
-    elseif (du10.LT.20.) then
+    elseif (du10 < 20.) then
        Cd = (0.49 + 0.065 * U10 )*0.001
     else
        Cd = 0.0018

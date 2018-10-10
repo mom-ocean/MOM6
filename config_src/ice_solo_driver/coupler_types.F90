@@ -68,7 +68,8 @@ end type coupler_3d_field_type
 
 type, public :: coupler_3d_bc_type
   integer                                            :: num_bcs = 0  !< The number of boundary condition fields
-  type(coupler_3d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary condition fields
+  type(coupler_3d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary
+                                                                     !! condition fields
   logical    :: set = .false.       !< If true, this type has been initialized
   integer    :: isd, isc, iec, ied  !< The i-direction data and computational domain index ranges for this type
   integer    :: jsd, jsc, jec, jed  !< The j-direction data and computational domain index ranges for this type
@@ -115,7 +116,8 @@ end type coupler_2d_field_type
 
 type, public    :: coupler_2d_bc_type
   integer                                            :: num_bcs = 0  !< The number of boundary condition fields
-  type(coupler_2d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary condition fields
+  type(coupler_2d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary
+                                                                     !! condition fields
   logical    :: set = .false.       !< If true, this type has been initialized
   integer    :: isd, isc, iec, ied  !< The i-direction data and computational domain index ranges for this type
   integer    :: jsd, jsc, jec, jed  !< The j-direction data and computational domain index ranges for this type
@@ -156,7 +158,8 @@ end type coupler_1d_field_type
 
 type, public    :: coupler_1d_bc_type
   integer                                            :: num_bcs = 0  !< The number of boundary condition fields
-  type(coupler_1d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary condition fields
+  type(coupler_1d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary
+                                                                     !! condition fields
   logical    :: set = .false.       !< If true, this type has been initialized
 end type coupler_1d_bc_type
 
@@ -291,10 +294,11 @@ subroutine coupler_type_copy_1d_2d(var_in, var_out, is, ie, js, je,     &
   integer, intent(in)                     :: ie !< upper bound of first dimension
   integer, intent(in)                     :: js !< lower bound of second dimension
   integer, intent(in)                     :: je !< upper bound of second dimension
-  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then
+                                                       !! don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
        '==>Error from coupler_types_mod (coupler_type_copy_1d_2d):'
@@ -310,7 +314,7 @@ subroutine coupler_type_copy_1d_2d(var_in, var_out, is, ie, js, je,     &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_1d_2d(var_in, var_out, (/ is, is, ie, ie /), (/ js, js, je, je /), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_2d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_1d_2d
@@ -340,10 +344,11 @@ subroutine coupler_type_copy_1d_3d(var_in, var_out, is, ie, js, je, kd, &
   integer, intent(in)                     :: js !< lower bound of second dimension
   integer, intent(in)                     :: je !< upper bound of second dimension
   integer, intent(in)                     :: kd !< third dimension
-  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then
+                                                       !! don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
      '==>Error from coupler_types_mod (coupler_type_copy_1d_3d):'
@@ -360,7 +365,7 @@ subroutine coupler_type_copy_1d_3d(var_in, var_out, is, ie, js, je, kd, &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_1d_3d(var_in, var_out,  (/ is, is, ie, ie /), (/ js, js, je, je /), (/1, kd/), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_3d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_1d_3d
@@ -383,10 +388,11 @@ subroutine coupler_type_copy_2d_2d(var_in, var_out, is, ie, js, je,     &
   integer, intent(in)                     :: ie !< upper bound of first dimension
   integer, intent(in)                     :: js !< lower bound of second dimension
   integer, intent(in)                     :: je !< upper bound of second dimension
-  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank,
+                                                       !! then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
        '==>Error from coupler_types_mod (coupler_type_copy_2d_2d):'
@@ -402,7 +408,7 @@ subroutine coupler_type_copy_2d_2d(var_in, var_out, is, ie, js, je,     &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_2d_2d(var_in, var_out, (/ is, is, ie, ie /), (/ js, js, je, je /), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_2d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_2d_2d
@@ -432,10 +438,11 @@ subroutine coupler_type_copy_2d_3d(var_in, var_out, is, ie, js, je, kd, &
   integer, intent(in)                     :: js !< lower bound of second dimension
   integer, intent(in)                     :: je !< upper bound of second dimension
   integer, intent(in)                     :: kd !< third dimension
-  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank,
+                                                       !! then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
      '==>Error from coupler_types_mod (coupler_type_copy_2d_3d):'
@@ -452,7 +459,7 @@ subroutine coupler_type_copy_2d_3d(var_in, var_out, is, ie, js, je, kd, &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_2d_3d(var_in, var_out,  (/ is, is, ie, ie /), (/ js, js, je, je /), (/1, kd/), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_3d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_2d_3d
@@ -475,10 +482,11 @@ subroutine coupler_type_copy_3d_2d(var_in, var_out, is, ie, js, je,     &
   integer, intent(in)                     :: ie !< upper bound of first dimension
   integer, intent(in)                     :: js !< lower bound of second dimension
   integer, intent(in)                     :: je !< upper bound of second dimension
-  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank,
+                                                       !! then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
        '==>Error from coupler_types_mod (coupler_type_copy_3d_2d):'
@@ -494,7 +502,7 @@ subroutine coupler_type_copy_3d_2d(var_in, var_out, is, ie, js, je,     &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_3d_2d(var_in, var_out, (/ is, is, ie, ie /), (/ js, js, je, je /), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_2d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_3d_2d
@@ -524,10 +532,11 @@ subroutine coupler_type_copy_3d_3d(var_in, var_out, is, ie, js, je, kd, &
   integer, intent(in)                     :: js !< lower bound of second dimension
   integer, intent(in)                     :: je !< upper bound of second dimension
   integer, intent(in)                     :: kd !< third dimension
-  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*), intent(in)            :: diag_name !< name for diagnostic file--if blank,
+                                                       !! then don't register the fields
   integer, dimension(:), intent(in)       :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type), intent(in)             :: time !< model time variable for registering diagnostic field
-  character(len=*), intent(in), optional  :: suffix !< optional suffix to make the name identifier unique
+  character(len=*), optional, intent(in)  :: suffix !< optional suffix to make the name identifier unique
 
   character(len=256), parameter :: error_header = &
      '==>Error from coupler_types_mod (coupler_type_copy_3d_3d):'
@@ -544,7 +553,7 @@ subroutine coupler_type_copy_3d_3d(var_in, var_out, is, ie, js, je, kd, &
   if (var_in%num_bcs >= 0) &
     call CT_spawn_3d_3d(var_in, var_out,  (/ is, is, ie, ie /), (/ js, js, je, je /), (/1, kd/), suffix)
 
-  if ((var_out%num_bcs > 0) .and. (diag_name .ne. ' ')) &
+  if ((var_out%num_bcs > 0) .and. (diag_name /= ' ')) &
     call CT_set_diags_3d(var_out, diag_name, axes, time)
 
 end subroutine  coupler_type_copy_3d_3d
@@ -1174,8 +1183,10 @@ subroutine CT_copy_data_2d(var_in, var, halo_size, bc_index, field_index, &
                                                        !! that is being copied
   integer,          optional, intent(in)    :: field_index !< The index of the field in the
                                                        !! boundary condition that is being copied
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this copy.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this copy.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this copy.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this copy.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only copy BCs whose
                                                        !! value of pass_through ice matches this
   logical :: copy_bc
@@ -1249,8 +1260,10 @@ subroutine CT_copy_data_3d(var_in, var, halo_size, bc_index, field_index, &
                                                        !! that is being copied
   integer,          optional, intent(in)    :: field_index !< The index of the field in the
                                                        !! boundary condition that is being copied
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this copy.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this copy.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this copy.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this copy.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only copy BCs whose
                                                        !! value of pass_through ice matches this
   logical :: copy_bc
@@ -1329,8 +1342,10 @@ subroutine CT_copy_data_2d_3d(var_in, var, halo_size, bc_index, field_index, &
                                                        !! that is being copied
   integer,          optional, intent(in)    :: field_index !< The index of the field in the
                                                        !! boundary condition that is being copied
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this copy.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this copy.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this copy.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this copy.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only copy BCs whose
                                                        !! value of pass_through ice matches this
   integer,          optional, intent(in)    :: ind3_start  !< The starting value of the 3rd
@@ -1563,8 +1578,10 @@ subroutine CT_rescale_data_2d(var, scale, halo_size, bc_index, field_index, &
                                                        !! that is being copied
   integer,          optional, intent(in)    :: field_index !< The index of the field in the
                                                        !! boundary condition that is being copied
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this copy.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this copy.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this copy.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this copy.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only copy BCs whose
                                                        !! value of pass_through ice matches this
   logical :: do_bc
@@ -1640,8 +1657,10 @@ subroutine CT_rescale_data_3d(var, scale, halo_size, bc_index, field_index, &
                                                        !! that is being copied
   integer,          optional, intent(in)    :: field_index !< The index of the field in the
                                                        !! boundary condition that is being copied
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this copy.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this copy.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this copy.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this copy.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only copy BCs whose
                                                        !! value of pass_through ice matches this
   logical :: do_bc
@@ -1718,8 +1737,10 @@ subroutine CT_increment_data_2d_2d(var_in, var, halo_size, bc_index, field_index
                                                        !! boundary condition that is being copied
   real,             optional, intent(in)    :: scale_factor  !< A scaling factor for the data that is being added
   real,             optional, intent(in)    :: scale_prev    !< A scaling factor for the data that is already here
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this increment.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this increment.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this increment.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this increment.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only increment BCs whose
                                                        !! value of pass_through ice matches this
 
@@ -1802,8 +1823,10 @@ subroutine CT_increment_data_3d_3d(var_in, var, halo_size, bc_index, field_index
                                                        !! boundary condition that is being copied
   real,             optional, intent(in)    :: scale_factor  !< A scaling factor for the data that is being added
   real,             optional, intent(in)    :: scale_prev    !< A scaling factor for the data that is already here
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this increment.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this increment.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this increment.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this increment.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only increment BCs whose
                                                        !! value of pass_through ice matches this
 
@@ -1893,8 +1916,10 @@ subroutine CT_increment_data_2d_3d(var_in, weights, var, halo_size, bc_index, fi
                                                        !! boundary condition that is being copied
   real,             optional, intent(in)    :: scale_factor  !< A scaling factor for the data that is being added
   real,             optional, intent(in)    :: scale_prev    !< A scaling factor for the data that is already here
-  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types of fluxes to exclude from this increment.
-  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types of fluxes to include from this increment.
+  character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
+                                                       !! of fluxes to exclude from this increment.
+  character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
+                                                       !! of fluxes to include from this increment.
   logical,          optional, intent(in)    :: pass_through_ice !< If true, only increment BCs whose
                                                        !! value of pass_through ice matches this
 
@@ -1946,7 +1971,8 @@ subroutine CT_increment_data_2d_3d(var_in, weights, var, halo_size, bc_index, fi
     elseif ((1+var_in%ied-var_in%isd) == size(weights,1)) then
       iow = 1 + (var_in%isc - var_in%isd) - var%isc
     else
-      call mpp_error(FATAL, "CT_increment_data_2d_3d: weights array must be the i-size of a computational or data domain.")
+      call mpp_error(FATAL, "CT_increment_data_2d_3d: weights array must be the i-size "//&
+                            "of a computational or data domain.")
     endif
     if ((1+var%jec-var%jsc) == size(weights,2)) then
       jow = 1 - var%jsc
@@ -1955,7 +1981,8 @@ subroutine CT_increment_data_2d_3d(var_in, weights, var, halo_size, bc_index, fi
     elseif ((1+var_in%jed-var_in%jsd) == size(weights,2)) then
       jow = 1 + (var_in%jsc - var_in%jsd) - var%jsc
     else
-      call mpp_error(FATAL, "CT_increment_data_2d_3d: weights array must be the j-size of a computational or data domain.")
+      call mpp_error(FATAL, "CT_increment_data_2d_3d: weights array must be the j-size "//&
+                            "of a computational or data domain.")
     endif
 
     io1 = var_in%isc - var%isc ; jo1 = var_in%jsc - var%jsc ; kow = 1 - var_in%ks
@@ -2720,7 +2747,8 @@ end subroutine CT_set_data_3d
 !> This routine registers the diagnostics of a coupler_2d_bc_type.
 subroutine CT_set_diags_2d(var, diag_name, axes, time)
   type(coupler_2d_bc_type), intent(inout) :: var  !< BC_type structure for which to register diagnostics
-  character(len=*),         intent(in)    :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*),         intent(in)    :: diag_name !< name for diagnostic file--if blank,
+                                                       !! then don't register the fields
   integer, dimension(:),    intent(in)    :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type),          intent(in)    :: time !< model time variable for registering diagnostic field
 
@@ -2746,7 +2774,8 @@ end subroutine CT_set_diags_2d
 !> This routine registers the diagnostics of a coupler_3d_bc_type.
 subroutine CT_set_diags_3d(var, diag_name, axes, time)
   type(coupler_3d_bc_type), intent(inout) :: var  !< BC_type structure for which to register diagnostics
-  character(len=*),         intent(in)    :: diag_name !< name for diagnostic file--if blank, then don't register the fields
+  character(len=*),         intent(in)    :: diag_name !< name for diagnostic file--if blank,
+                                                       !! then don't register the fields
   integer, dimension(:),    intent(in)    :: axes !< array of axes identifiers for diagnostic variable registration
   type(time_type),          intent(in)    :: time !< model time variable for registering diagnostic field
 
@@ -3106,9 +3135,9 @@ end subroutine CT_restore_state_3d
 
 !> This subroutine potentially overrides the values in a coupler_2d_bc_type
 subroutine CT_data_override_2d(gridname, var, Time)
-  character(len=3),         intent(in) :: gridname !< 3-character long model grid ID
-  type(coupler_2d_bc_type), intent(in) :: var  !< BC_type structure to override
-  type(time_type),          intent(in) :: time !< The current model time
+  character(len=3),         intent(in)    :: gridname !< 3-character long model grid ID
+  type(coupler_2d_bc_type), intent(inout) :: var  !< BC_type structure to override
+  type(time_type),          intent(in)    :: time !< The current model time
 
   integer :: m, n
 
@@ -3120,9 +3149,9 @@ end subroutine CT_data_override_2d
 
 !> This subroutine potentially overrides the values in a coupler_3d_bc_type
 subroutine CT_data_override_3d(gridname, var, Time)
-  character(len=3),         intent(in) :: gridname !< 3-character long model grid ID
-  type(coupler_3d_bc_type), intent(in) :: var  !< BC_type structure to override
-  type(time_type),          intent(in) :: time !< The current model time
+  character(len=3),         intent(in)    :: gridname !< 3-character long model grid ID
+  type(coupler_3d_bc_type), intent(inout) :: var  !< BC_type structure to override
+  type(time_type),          intent(in)    :: time !< The current model time
 
   integer :: m, n
 

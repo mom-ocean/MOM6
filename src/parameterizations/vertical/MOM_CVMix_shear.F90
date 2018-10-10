@@ -3,13 +3,7 @@ module MOM_CVMix_shear
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!---------------------------------------------------
-! module MOM_CVMix_shear
-! Author: Brandon Reichl
-! Date: Aug 31, 2016
-! Purpose: Interface to CVMix interior shear schemes
-! Further information to be added at a later time.
-!---------------------------------------------------
+!> \author Brandon Reichl
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -29,19 +23,25 @@ public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear
 
 !> Control structure including parameters for CVMix interior shear schemes.
 type, public :: CVMix_shear_cs
-  logical :: use_LMD94, use_PP81            !< Flags for various schemes
+  logical :: use_LMD94                      !< Flags to use the LMD94 scheme
+  logical :: use_PP81                       !< Flags to use Pacanowski and Philander (JPO 1981)
+  logical :: smooth_ri                      !< If true, smooth Ri using a 1-2-1 filter
   real    :: Ri_zero                        !< LMD94 critical Richardson number
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
-  real    :: KPP_exp                        !<
+  real    :: KPP_exp                        !< Exponent of unitless factor of diff.
+                                            !! for KPP internal shear mixing scheme.
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
-!  real, allocatable, dimension(:,:,:) :: kv !< vertical viscosity at interface (m2/s)
-!  real, allocatable, dimension(:,:,:) :: kd !< vertical diffusivity at interface (m2/s)
+  real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
+                                                        !! after smoothing
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
-  ! Daignostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
+
+  type(diag_ctrl), pointer :: diag => NULL() !< Pointer to the diagnostics control structure
+  !>@{ Diagnostic handles
   integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
+  integer :: id_ri_grad_smooth = -1
+  !!@}
 
 end type CVMix_shear_cs
 
@@ -52,24 +52,25 @@ contains
 !> Subroutine for calculating (internal) vertical diffusivities/viscosities
 subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
                                  kv, G, GV, CS )
-  type(ocean_grid_type),                      intent(in)  :: G !< Grid structure.
-  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
+  type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness, in m or kg m-2.
-  type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd !< The vertical diffusivity at each interface
-                                                                !! (not layer!) in m2 s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv !< The vertical viscosity at each interface
-                                                                !! (not layer!) in m2 s-1.
-  type(CVMix_shear_cs),                       pointer     :: CS !< The control structure returned by a previous call to
-                                                                !! CVMix_shear_init.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
+  type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
+                                                                 !! (not layer!) in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The vertical viscosity at each interface
+                                                                 !! (not layer!) in m2 s-1.
+  type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous call to
+                                                                 !! CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
-  real :: gorho
-  real :: pref, DU, DV, DRHO, DZ, N2, S2
+  real :: GoRho
+  real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) ::  Ri_Grad !< Gradient Richardson number
+  real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
@@ -115,19 +116,42 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
         DZ = ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_m)
         N2 = DRHO/DZ
         S2 = (DU*DU+DV*DV)/(DZ*DZ)
-        Ri_Grad(k) = max(0.,N2)/max(S2,1.e-16)
+        Ri_Grad(k) = max(0.,N2)/max(S2,1.e-10)
 
         ! fill 3d arrays, if user asks for diagsnostics
         if (CS%id_N2 > 0) CS%N2(i,j,k) = N2
         if (CS%id_S2 > 0) CS%S2(i,j,k) = S2
-        if (CS%id_ri_grad > 0) CS%ri_grad(i,j,k) = Ri_Grad(k)
 
       enddo
+
+      Ri_grad(G%ke+1) = Ri_grad(G%ke)
+
+      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
+
+      if (CS%smooth_ri) then
+        ! 1) fill Ri_grad in vanished layers with adjacent value
+        do k = 2, G%ke
+          if (h(i,j,k) .le. epsln) Ri_grad(k) = Ri_grad(k-1)
+        enddo
+
+        Ri_grad(G%ke+1) = Ri_grad(G%ke)
+
+        ! 2) vertically smooth Ri with 1-2-1 filter
+        dummy =  0.25 * Ri_grad(2)
+        Ri_grad(G%ke+1) = Ri_grad(G%ke)
+        do k = 3, G%ke
+          Ri_Grad(k) = dummy + 0.5 * Ri_Grad(k) + 0.25 * Ri_grad(k+1)
+          dummy = 0.25 * Ri_grad(k)
+        enddo
+
+        if (CS%id_ri_grad_smooth > 0) CS%ri_grad_smooth(i,j,:) = Ri_Grad(:)
+      endif
+
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
       call  CVMix_coeffs_shear(Mdiff_out=kv(i,j,:), &
                                    Tdiff_out=kd(i,j,:), &
-                                   RICH=Ri_Grad, &
+                                   RICH=Ri_Grad(:), &
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
     enddo
@@ -139,6 +163,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd,  &
   if (CS%id_N2 > 0) call post_data(CS%id_N2,CS%N2, CS%diag)
   if (CS%id_S2 > 0) call post_data(CS%id_S2,CS%S2, CS%diag)
   if (CS%id_ri_grad > 0) call post_data(CS%id_ri_grad,CS%ri_grad, CS%diag)
+  if (CS%id_ri_grad_smooth > 0) call post_data(CS%id_ri_grad_smooth,CS%ri_grad_smooth, CS%diag)
 
 end subroutine calculate_CVMix_shear
 
@@ -188,7 +213,7 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
   if (use_JHL) NumberTrue = NumberTrue + 1
   ! After testing for interior schemes, make sure only 0 or 1 are enabled.
   ! Otherwise, warn user and kill job.
-  if ((NumberTrue).gt.1) then
+  if ((NumberTrue) > 1) then
      call MOM_error(FATAL, 'MOM_CVMix_shear_init: '// &
            'Multiple shear driven internal mixing schemes selected,'//&
            ' please disable all but one scheme to proceed.')
@@ -204,12 +229,16 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
                  "Critical Richardson for KPP shear mixing,"// &
                  " NOTE this the internal mixing and this is"// &
                  " not for setting the boundary layer depth." &
-                 ,units="nondim", default=0.7)
+                 ,units="nondim", default=0.8)
   call get_param(param_file, mdl, "KPP_EXP", CS%KPP_exp, &
                  "Exponent of unitless factor of diffusivities,"// &
                  " for KPP internal shear mixing scheme." &
                  ,units="nondim", default=3.0)
-  call CVMix_init_shear(mix_scheme=CS%mix_scheme, &
+  call get_param(param_file, mdl, "SMOOTH_RI", CS%smooth_ri, &
+                 "If true, vertically smooth the Richardson"// &
+                 "number by applying a 1-2-1 filter once.", &
+                 default = .false.)
+  call cvmix_init_shear(mix_scheme=CS%Mix_Scheme, &
                         KPP_nu_zero=CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)
@@ -231,6 +260,12 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
       'Gradient Richarson number used by MOM_CVMix_shear module','nondim')
   if (CS%id_ri_grad > 0) & !Initialize w/ large Richardson value
      allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad(:,:,:) = 1.e8
+
+  CS%id_ri_grad_smooth = register_diag_field('ocean_model', 'ri_grad_shear_smooth', &
+       diag%axesTi, Time, &
+      'Smoothed gradient Richarson number used by MOM_CVMix_shear module','nondim')
+  if (CS%id_ri_grad_smooth > 0) & !Initialize w/ large Richardson value
+     allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad_smooth(:,:,:) = 1.e8
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
       'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s')
@@ -255,7 +290,10 @@ end function CVMix_shear_is_used
 
 !> Clear pointers and dealocate memory
 subroutine CVMix_shear_end(CS)
-  type(CVMix_shear_cs), pointer :: CS ! Control structure
+  type(CVMix_shear_cs), pointer :: CS !< Control structure for this module that
+                                      !! will be deallocated in this subroutine
+
+  if (.not. associated(CS)) return
 
   if (CS%id_N2 > 0) deallocate(CS%N2)
   if (CS%id_S2 > 0) deallocate(CS%S2)

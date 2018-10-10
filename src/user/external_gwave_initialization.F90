@@ -1,3 +1,4 @@
+!> Initialization for the "external gravity wave wave" configuration
 module external_gwave_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -17,7 +18,6 @@ public external_gwave_initialize_thickness
 
 contains
 
-! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the external_gwave experiment.
 subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
@@ -28,13 +28,13 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
-  real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
-                          ! negative because it is positive upward.      !
-  real :: e_pert(SZK_(G)) ! Interface height perturbations, positive     !
-                          ! upward, in m.                                !
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
-                          ! positive upward, in m.                       !
+  ! Local variables
+  real :: e0(SZK_(G))     ! The resting interface heights, in m, usually
+                          ! negative because it is positive upward.
+  real :: e_pert(SZK_(G)) ! Interface height perturbations, positive
+                          ! upward, in m.
+  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+                          ! positive upward, in m.
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly
   real :: ssh_anomaly_width ! Lateral width of anomaly
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -77,10 +77,5 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
   enddo ; enddo
 
 end subroutine external_gwave_initialize_thickness
-! -----------------------------------------------------------------------------
 
-!> \namespace external_gwave_initialization
-!!
-!! The module configures the model for the "external_gwave" experiment.
-!! external_gwave = External Gravity Wave
 end module external_gwave_initialization

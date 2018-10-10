@@ -1,3 +1,4 @@
+!> Initialization for the "Neverland" configuration
 module Neverland_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -22,7 +23,6 @@ public Neverland_initialize_thickness
 
 contains
 
-! -----------------------------------------------------------------------------
 !> This subroutine sets up the Neverland test case topography.
 subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
@@ -30,8 +30,7 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
                                       intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
-
-! This subroutine sets up the Neverland test case topography
+  ! Local variables
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
@@ -60,15 +59,15 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
 !  This sets topography that has a reentrant channel to the south.
 
     D(i,j) = 1.0 - (1.2 * spike(x,0.2) + 1.2 * spike(x-1.0,0.2)) * spike(MIN(0.0,y-0.3),0.2) & !< South America
-                -  1.2 * spike(x-0.5,0.2) * spike(MIN(0.0,y-0.55),0.2)                       & !< Africa
-                -  1.1 * spike(y-1,0.12) - 1.1 * spike(y,0.12)                               & !< The great northern wall and Antarctica
-                -  1.2 * (spike(x,0.12)  + spike(x-1,0.12)) * spike(MAX(0.0,y-0.06),0.12)    & !< Antarctic Peninsula
-                -  0.1 * (cosbell(x,0.1) + cosbell(x-1,0.1))                                   & !< Drake Passage ridge
-                -  0.5 * cosbell(x-0.16,0.05) * (cosbell(y-0.18,0.13)**0.4)                  & !< Scotia Arc East
-                -  0.4 * (cosbell(x-0.09,0.08)**0.4) * cosbell(y-0.26,0.05)                  & !< Scotia Arc North
-                -  0.4 * (cosbell(x-0.08,0.08)**0.4) * cosbell(y-0.1,0.05)                   & !< Scotia Arc South
-                -  nl_roughness_amp * cos(14*PI*x) * sin(14*PI*y)                            & !< roughness
-                -  nl_roughness_amp * cos(20*PI*x) * cos(20*PI*y)                              !< roughness
+              -  1.2 * spike(x-0.5,0.2) * spike(MIN(0.0,y-0.55),0.2)       & !< Africa
+              -  1.1 * spike(y-1,0.12) - 1.1 * spike(y,0.12)               & !< The great northern wall and Antarctica
+              -  1.2 * (spike(x,0.12)  + spike(x-1,0.12)) * spike(MAX(0.0,y-0.06),0.12)    & !< Antarctic Peninsula
+              -  0.1 * (cosbell(x,0.1) + cosbell(x-1,0.1))                 & !< Drake Passage ridge
+              -  0.5 * cosbell(x-0.16,0.05) * (cosbell(y-0.18,0.13)**0.4)  & !< Scotia Arc East
+              -  0.4 * (cosbell(x-0.09,0.08)**0.4) * cosbell(y-0.26,0.05)  & !< Scotia Arc North
+              -  0.4 * (cosbell(x-0.08,0.08)**0.4) * cosbell(y-0.1,0.05)   & !< Scotia Arc South
+              -  nl_roughness_amp * cos(14*PI*x) * sin(14*PI*y)            & !< roughness
+              -  nl_roughness_amp * cos(20*PI*x) * cos(20*PI*y)              !< roughness
 
     if (D(i,j) < 0.0) D(i,j) = 0.0
     D(i,j) = D(i,j) * max_depth
@@ -79,29 +78,26 @@ end subroutine Neverland_initialize_topography
 ! -----------------------------------------------------------------------------
 
 !> Returns the value of a cosine-bell function evaluated at x/L
- real function cosbell(x,L)
+real function cosbell(x,L)
+  real , intent(in) :: x       !< non-dimensional position
+  real , intent(in) :: L       !< non-dimensional width
+  real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
-   real , intent(in) :: x       !< non-dimensional position
-   real , intent(in) :: L       !< non-dimensional width
-   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
-
-   PI      = 4.0*atan(1.0)
-   cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
- end function cosbell
+  PI      = 4.0*atan(1.0)
+  cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
+end function cosbell
 
 !> Returns the value of a sin-spike function evaluated at x/L
- real function spike(x,L)
+real function spike(x,L)
 
-   real , intent(in) :: x       !< non-dimensional position
-   real , intent(in) :: L       !< non-dimensional width
-   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
+  real , intent(in) :: x       !< non-dimensional position
+  real , intent(in) :: L       !< non-dimensional width
+  real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
-   PI    = 4.0*atan(1.0)
-   spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
- end function spike
+  PI    = 4.0*atan(1.0)
+  spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
+end function spike
 
-
-! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the Neverland test case,
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
@@ -148,9 +144,5 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   enddo ; enddo
 
 end subroutine Neverland_initialize_thickness
-! -----------------------------------------------------------------------------
 
-!! \class Neverland_initialization
-!!
-!! The module configures the model for the Neverland experiment.
 end module Neverland_initialization
