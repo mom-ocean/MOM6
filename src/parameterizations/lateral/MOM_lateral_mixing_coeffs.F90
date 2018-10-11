@@ -393,7 +393,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
-    call find_eta(h, tv, G, GV, e, halo_size=2, eta_to_m=1.0)
+    call find_eta(h, tv, G, GV, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
@@ -599,6 +599,8 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
   real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
   real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
+  real :: Z_to_L        ! A conversion factor between from units for e to the
+                        ! units for lateral distances.
   real :: one_meter     ! One meter in thickness units of m or kg m-2.
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
@@ -618,6 +620,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
   H_cutoff = real(2*nz) * (GV%Angstrom_H + h_neglect)
+  Z_to_L = GV%Z_to_m
 
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
@@ -629,12 +632,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
     if (calculate_slopes) then
       ! Calculate the interface slopes E_x and E_y and u- and v- points respectively
       do j=js-1,je+1 ; do I=is-1,ie
-        E_x(I,j) = (e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
+        E_x(I,j) = Z_to_L*(e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
         ! Mask slopes where interface intersects topography
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) E_x(I,j) = 0.
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        E_y(i,J) = (e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
+        E_y(i,J) = Z_to_L*(e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
         ! Mask slopes where interface intersects topography
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
       enddo ; enddo
