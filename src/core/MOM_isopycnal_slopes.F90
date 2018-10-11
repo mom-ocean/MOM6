@@ -18,11 +18,12 @@ contains
 
 !> Calculate isopycnal slopes, and optionally return N2 used in calculation.
 subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
-                                  slope_x, slope_y, N2_u, N2_v, halo)
+                                  slope_x, slope_y, N2_u, N2_v, halo) !, eta_to_m)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (in Z or units
+                                                                     !! given by 1/eta_to_m)
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
   real,                                        intent(in)    :: dt_kappa_smooth !< A vertical diffusive smoothing
@@ -36,6 +37,9 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                                      optional, intent(inout) :: N2_v !< Brunt-Vaisala frequency squared at
                                                                      !! interfaces between u-points (s-2)
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
+
+  ! real,                              optional, intent(in)    :: eta_to_m !< The conversion factor from the units
+  !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; GV%Z_to_m by default.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -63,12 +67,12 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                         ! interface times the grid spacing, in kg m-3.
   real :: drdkL, drdkR  ! Vertical density differences across an interface,
                         ! in kg m-3.
-  real :: hg2A, hg2B, hg2L, hg2R
-  real :: haA, haB, haL, haR
-  real :: dzaL, dzaR
-  real :: wtA, wtB, wtL, wtR
-  real :: drdx, drdy, drdz  ! Zonal, meridional, and vertical density gradients,
-                            ! in units of kg m-4.
+  real :: hg2A, hg2B, hg2L, hg2R ! Squares of geometric mean thicknesses, in H2.
+  real :: haA, haB, haL, haR     ! Arithmetic mean thicknesses in H.
+  real :: dzaL, dzaR    ! Temporary thicknesses in eta units (Z?).
+  real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
+  real :: drdx, drdy    ! Zonal and meridional density gradients, in kg m-4.
+  real :: drdz          ! Vertical density gradient, in units of kg m-3 Z-1.
   real :: Slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1.
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient, in kg2 m-8.
@@ -77,10 +81,15 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                         ! in roundoff and can be neglected, in H.
   real :: h_neglect2    ! h_neglect^2, in H2.
   real :: dz_neglect    ! A thickness in m that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
+                        ! in roundoff and can be neglected, in eta units (Z?).
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   real :: G_Rho0, N2, dzN2,  H_x(SZIB_(G)), H_y(SZI_(G))
+  real :: Z_to_L        ! A conversion factor between from units for e to the
+                        ! units for lateral distances.
+  real :: L_to_Z        ! A conversion factor between from units for lateral distances
+                        ! to the units for e.
+  real :: H_to_Z        ! A conversion factor from thickness units to the units of e.
 
   logical :: present_N2_u, present_N2_v
   integer :: is, ie, js, je, nz, IsdB
@@ -94,13 +103,18 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
   nz = G%ke ; IsdB = G%IsdB
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = GV%H_subroundoff*GV%H_to_m
+  Z_to_L = GV%Z_to_m ; H_to_Z = GV%H_to_Z
+  ! if (present(eta_to_m)) then
+  !   Z_to_L = eta_to_m ; H_to_Z = GV%H_to_m / eta_to_m
+  ! endif
+  L_to_Z = 1.0 / Z_to_L
+  dz_neglect = GV%H_subroundoff * H_to_Z
 
   use_EOS = associated(tv%eqn_of_state)
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  G_Rho0 = (GV%g_Earth*L_to_Z*GV%m_to_Z) / GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.
@@ -187,7 +201,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
         if (GV%Boussinesq) then
-          dzaL = haL * GV%H_to_m ; dzaR = haR * GV%H_to_m
+          dzaL = haL * H_to_Z ; dzaR = haR * H_to_Z
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
@@ -207,7 +221,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
         ! This estimate of slope is accurate for small slopes, but bounded
         ! to be between -1 and 1.
-        mag_grad2 = drdx**2 + drdz**2
+        mag_grad2 = drdx**2 + (L_to_Z*drdz)**2
         if (mag_grad2 > 0.0) then
           slope_x(I,j,K) = drdx / sqrt(mag_grad2)
         else ! Just in case mag_grad2 = 0 ever.
@@ -217,7 +231,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))
+        slope_x(I,j,K) = (Z_to_L*(e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
       endif
 
     enddo ! I
@@ -271,7 +285,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
         if (GV%Boussinesq) then
-          dzaL = haL * GV%H_to_m ; dzaR = haR * GV%H_to_m
+          dzaL = haL * H_to_Z ; dzaR = haR * H_to_Z
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
@@ -291,7 +305,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
         ! This estimate of slope is accurate for small slopes, but bounded
         ! to be between -1 and 1.
-        mag_grad2 = drdy**2 + drdz**2
+        mag_grad2 = drdy**2 + (L_to_Z*drdz)**2
         if (mag_grad2 > 0.0) then
           slope_y(i,J,K) = drdy / sqrt(mag_grad2)
         else ! Just in case mag_grad2 = 0 ever.
@@ -301,7 +315,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))
+        slope_y(i,J,K) = (Z_to_L*(e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
       endif
 
     enddo ! i
