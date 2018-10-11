@@ -209,7 +209,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume or mass
                                                    !! transport since the last tracer advection, in m3 or kg.
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_av !< The time-mean free surface height or
-                                                   !! column mass, in m or kg m-2.
+                                                   !! column mass, in H (m or kg m-2).
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
                                                    !! initialize_dyn_unsplit.
   type(VarMix_CS),         pointer       :: VarMix !< A pointer to a structure with fields
@@ -491,7 +491,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   endif
 
   if (GV%Boussinesq) then
-    do j=js,je ; do i=is,ie ; eta_av(i,j) = -G%Zd_to_m*G%bathyT(i,j) ; enddo ; enddo
+    do j=js,je ; do i=is,ie ; eta_av(i,j) = -GV%Z_to_H*G%bathyT(i,j) ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie ; eta_av(i,j) = 0.0 ; enddo ; enddo
   endif
