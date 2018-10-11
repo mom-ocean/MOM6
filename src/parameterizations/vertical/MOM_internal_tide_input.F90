@@ -88,8 +88,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  kappa_fill = 1.e-3 ! m2 s-1
-  dt_fill = 7200.
+  kappa_fill = 1.e-3*GV%m_to_Z**2 !### Dimensional constant in m2 s-1.
+  dt_fill    = 7200.              !### Dimensionalconstant in s.
 
   use_EOS = associated(tv%eqn_of_state)
 

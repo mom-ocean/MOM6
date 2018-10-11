@@ -26,8 +26,8 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                                                                      !! given by 1/eta_to_m)
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
-  real,                                        intent(in)    :: dt_kappa_smooth !< A vertical diffusive smoothing
-                                                                     !! timescale, in s.
+  real,                                        intent(in)    :: dt_kappa_smooth !< A smoothing vertical diffusivity
+                                                                     !! times a smoothing timescale, in Z2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: slope_x !< Isopycnal slope in i-direction (nondim)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y !< Isopycnal slope in j-direction (nondim)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), &
@@ -130,9 +130,9 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
   if (use_EOS) then
     if (present(halo)) then
-      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, GV, halo+1)
+      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, halo+1)
     else
-      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, GV, 1)
+      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, 1)
     endif
   endif
 
@@ -325,14 +325,14 @@ end subroutine calc_isoneutral_slopes
 
 !> Returns tracer arrays (nominally T and S) with massless layers filled with
 !! sensible values, by diffusing vertically with a small but constant diffusivity.
-subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
+subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Salinity (psu)
-  real,                                     intent(in)  :: kappa !< A vertical diffusivity to use for smoothing (m2 s-1)
-  real,                                     intent(in)  :: dt   !< The time increment, in s.
+  real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
+                                                                !! times a smoothing timescale, in Z2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f  !< Filled temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filed salinity (psu)
   integer,                        optional, intent(in)  :: halo_here !< Halo width over which to compute
@@ -352,7 +352,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
 
-  kap_dt_x2 = (2.0*kappa*dt)*GV%m_to_H**2
+  kap_dt_x2 = (2.0*kappa_dt)*GV%Z_to_H**2
   h_neglect = GV%H_subroundoff
 
   if (kap_dt_x2 <= 0.0) then
