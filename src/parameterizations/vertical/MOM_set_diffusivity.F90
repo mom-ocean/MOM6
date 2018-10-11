@@ -276,8 +276,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
          "Module must be initialized before it is used.")
 
   I_Rho0     = 1.0/GV%Rho0
-  kappa_fill = 1.e-3 ! m2 s-1
-  dt_fill    = 7200.
+  kappa_fill = 1.e-3*GV%m_to_Z**2 !### Dimensional constant in m2 s-1.
+  dt_fill    = 7200.              !### Dimensionalconstant in s.
   Omega2     = CS%Omega*CS%Omega
 
   use_EOS = associated(tv%eqn_of_state)
@@ -346,7 +346,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     call cpu_clock_begin(id_clock_kappaShear)
     if (CS%Vertex_shear) then
       call full_convection(G, GV, h, tv, T_adj, S_adj, fluxes%p_surf, &
-                           kappa_fill*dt_fill, halo=1)
+                           GV%Z_to_H**2*kappa_fill*dt_fill, halo=1)
 
       call calc_kappa_shear_vertex(u, v, h, T_adj, S_adj, tv, fluxes%p_surf, visc%Kd_shear, &
                                    visc%TKE_turb, visc%Kv_shear_Bu, dt, G, GV, CS%kappaShear_CSp)
