@@ -469,18 +469,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
     enddo ; endif
 
-    ! Calculate horizontal divergence (not from continuity) if needed.
-    ! h_u and h_v include modifications at OBCs from above.
-!    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-!      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-!        div_xx(i,j) = ((G%dyCu(I  ,j) * u(I  ,j,k) * h_u(I  ,j) - &
-!                        G%dyCu(I-1,j) * u(I-1,j,k) * h_u(I-1,j) ) + &
-!                       (G%dxCv(i,J  ) * v(i,J  ,k) * h_v(i,J  ) - &
-!                        G%dxCv(i,J-1) * v(i,J-1,k) * h_v(i,J-1) ) )*G%IareaT(i,j)/ &
-!                                  (h(i,j,k) + h_neglect)
-!      enddo ; enddo
-!    endif
-
     ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
     ! dudy and dvdx include modifications at OBCs from above.
     if (CS%no_slip) then
@@ -492,38 +480,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) )
       enddo ; enddo
     endif
-
-!    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-!      ! Calculate relative vorticity (including no-slip boundary conditions at the 2-D land-sea mask).
-!      ! dudy and dvdx include modifications at OBCs from above.
-!      if (CS%no_slip) then
-!        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-!          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-!        enddo ; enddo
-!      else
-!        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-!          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-!        enddo ; enddo
-!      endif
-!
-!      ! Vorticity gradient
-!      do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
-!        vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
-!      enddo ; enddo
-!
-!      do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
-!        vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
-!      enddo ; enddo
-!
-      ! Divergence gradient
-!      do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
-!        div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
-!      enddo ; enddo
-!
-!      do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
-!        div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
-!      enddo ; enddo
-!    endif
 
     !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
