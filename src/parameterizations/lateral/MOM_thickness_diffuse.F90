@@ -1601,10 +1601,10 @@ end subroutine add_detangling_Kh
 subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   type(ocean_grid_type),                    intent(in)  :: G     !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV    !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness in H (m or kg/m2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature (C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity (ppt)
-  real,                                     intent(in)  :: kappa !< Constant diffusivity to use (m2/s)
+  real,                                     intent(in)  :: kappa !< Constant diffusivity to use (Z2/s)
   real,                                     intent(in)  :: dt    !< Time increment (s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature (C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity (ppt)
@@ -1633,8 +1633,8 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
   h_neglect = GV%H_subroundoff
-  kap_dt_x2 = (2.0*kappa*dt)*GV%m_to_H**2
-  h0 = 1.0e-16*sqrt(kappa*dt)*GV%m_to_H
+  kap_dt_x2 = (2.0*kappa*dt)*GV%Z_to_H**2
+  h0 = 1.0e-16*sqrt(kappa*dt)*GV%Z_to_H
 
   if (kap_dt_x2 <= 0.0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
@@ -1742,7 +1742,7 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6)
+                 default=1.0e-6, scale=GV%m_to_Z**2)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", CS%use_FGNV_streamfn, &
                  "If true, use the streamfunction formulation of\n"//    &
                  "Ferrari et al., 2010, which effectively emphasizes\n"//&
