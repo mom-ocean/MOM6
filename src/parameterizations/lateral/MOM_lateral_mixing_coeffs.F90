@@ -716,9 +716,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 end subroutine calc_slope_functions_using_just_e
 
 !> Initializes the variables mixing coefficients container
-subroutine VarMix_init(Time, G, param_file, diag, CS)
+subroutine VarMix_init(Time, G, GV, param_file, diag, CS)
   type(time_type),            intent(in) :: Time !< Current model time
   type(ocean_grid_type),      intent(in) :: G    !< Ocean grid structure
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
@@ -835,7 +836,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6)
+                 default=1.0e-6, scale=GV%m_to_Z**2) !### Add units argument.
   endif
 
   if (CS%calculate_Eady_growth_rate) then
