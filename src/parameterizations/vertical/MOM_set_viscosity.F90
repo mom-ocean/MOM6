@@ -1723,6 +1723,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   logical :: adiabatic, useKPP, useEPBL
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
+  real :: hfreeze !< If hfreeze > 0 (m), melt potential will be computed.
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -1779,14 +1780,23 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                 "Vertical turbulent viscosity at interfaces due to slow processes", &
                 "m2 s-1", z_grid='i')
 
-  ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
+  ! visc%MLD is used to communicate the state of the (e)PBL or KPP to the rest of the model
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
                  default=.false., do_not_log=.true.)
+  ! visc%MLD needs to be allocated when melt potential is computed (HFREEZE>0)
+  call get_param(param_file, mdl, "HFREEZE", hfreeze, &
+                 default=-1.0, do_not_log=.true.)
+
   if (MLE_use_PBL_MLD) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
     call register_restart_field(visc%MLD, "MLD", .false., restart_CS, &
                   "Instantaneous active mixing layer depth", "m")
   endif
+
+  if (hfreeze >= 0.0 .and. .not.MLE_use_PBL_MLD) then
+    call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
+  endif
+
 
 end subroutine set_visc_register_restarts
 
