@@ -158,6 +158,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: v_flux          =>NULL() !< j-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux (W/m2)
   real, pointer, dimension(:,:) :: melth           =>NULL() !< sea ice and snow melt heat flux (W/m2)
+  real, pointer, dimension(:,:) :: meltw           =>NULL() !< water flux due to sea ice and snow melting (kg/m2/s)
   real, pointer, dimension(:,:) :: q_flux          =>NULL() !< specific humidity flux (kg/m2/s)
   real, pointer, dimension(:,:) :: salt_flux       =>NULL() !< salt flux (kg/m2/s)
   real, pointer, dimension(:,:) :: lw_flux         =>NULL() !< long wave radiation (W/m2)
@@ -445,6 +446,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, &
     ! sea ice and snow melt heat flux (W/m2)
     if (associated(fluxes%melth)) &
       fluxes%melth(i,j) = G%mask2dT(i,j) * IOB%melth(i-i0,j-j0)
+
+    ! water flux due to sea ice and snow melt (kg/m2/s)
+    if (associated(fluxes%meltw)) &
+      fluxes%meltw(i,j) = G%mask2dT(i,j) * IOB%meltw(i-i0,j-j0)
 
     ! latent heat flux (W/m^2)
     if (associated(fluxes%latent)) &
@@ -776,6 +781,7 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
              IOB% v_flux (isc:iec,jsc:jec),          &
              IOB% t_flux (isc:iec,jsc:jec),          &
              IOB% melth (isc:iec,jsc:jec),          &
+             IOB% meltw (isc:iec,jsc:jec),          &
              IOB% q_flux (isc:iec,jsc:jec),          &
              IOB% salt_flux (isc:iec,jsc:jec),       &
              IOB% lw_flux (isc:iec,jsc:jec),         &
@@ -801,6 +807,7 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
   IOB%v_flux          = 0.0
   IOB%t_flux          = 0.0
   IOB%melth           = 0.0
+  IOB%meltw           = 0.0
   IOB%q_flux          = 0.0
   IOB%salt_flux       = 0.0
   IOB%lw_flux         = 0.0
@@ -1316,6 +1323,7 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   write(outunit,100) 'iobt%v_flux         ', mpp_chksum( iobt%v_flux         )
   write(outunit,100) 'iobt%t_flux         ', mpp_chksum( iobt%t_flux         )
   write(outunit,100) 'iobt%melth          ', mpp_chksum( iobt%melth          )
+  write(outunit,100) 'iobt%meltw          ', mpp_chksum( iobt%meltw          )
   write(outunit,100) 'iobt%q_flux         ', mpp_chksum( iobt%q_flux         )
   write(outunit,100) 'iobt%rofl_flux      ', mpp_chksum( iobt%rofl_flux      )
   write(outunit,100) 'iobt%rofi_flux      ', mpp_chksum( iobt%rofi_flux      )
