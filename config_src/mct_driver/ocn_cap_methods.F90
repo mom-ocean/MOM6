@@ -65,13 +65,13 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
       ice_ocean_boundary%lw_flux(i,j) = (x2o(ind%x2o_Faxa_lwdn,k) + x2o(ind%x2o_Foxx_lwup,k))
 
       ! specific humitidy flux
-      ice_ocean_boundary%q_flux(i,j) = x2o(ind%x2o_Foxx_evap,k) !???TODO: should this be a minus sign
+      ice_ocean_boundary%q_flux(i,j) = x2o(ind%x2o_Foxx_evap,k)
 
       ! sensible heat flux (W/m2)
-      ice_ocean_boundary%t_flux(i,j) = x2o(ind%x2o_Foxx_sen,k)  !???TODO: should this be a minus sign
+      ice_ocean_boundary%t_flux(i,j) = x2o(ind%x2o_Foxx_sen,k)
 
       ! latent heat flux (W/m^2)
-      ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k) !???TODO: should this be a minus sign
+      ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k)
 
       ! snow&ice melt heat flux  (W/m^2)
       ice_ocean_boundary%melth(i,j) = x2o(ind%x2o_Fioi_melth,k)
