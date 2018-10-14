@@ -1,7 +1,9 @@
 !> Initial conditions and forcing for the idealized hurricane example.
 module Idealized_hurricane
-! Renamed from SCM_idealized_hurricane to idealizeD_hurricane
+! Renamed from SCM_idealized_hurricane to idealized_hurricane
 !  This module is no longer exclusively for use in SCM mode.
+!  Legacy code that can be deleted is at the bottom.
+!  The T/S initializations have been removed.
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -19,14 +21,12 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public idealized_hurricane_TS_init !Public interface to initialize TS as vertically
-                                   ! uniform with prescribed vertical for hurricane
-                                   ! experiments.  Used for other idealized
-                                   ! configurations.
 public idealized_hurricane_wind_init !Public interface to intialize the idealized
                                      ! hurricane wind profile.
 public idealized_hurricane_wind_forcing !Public interface to update the idealized
                                         ! hurricane wind profile.
+public SCM_idealized_hurricane_wind_forcing !Public interface to the legacy idealized
+                                        ! hurricane wind profile for SCM.
 
 !> Container for parameters describing idealized wind structure
 type, public :: idealized_hurricane_CS ; private
@@ -75,77 +75,6 @@ end type
 character(len=40)  :: mdl = "idealized_hurricane" !< This module's name.
 
 contains
-
-!> Initializes temperature and salinity for the idealized hurricane example
-subroutine idealized_hurricane_TS_init(T, S, h, G, GV, param_file, just_read_params)
-  type(ocean_grid_type), &
-       intent(in)  :: G                !< Grid structure
-  type(verticalGrid_type), &
-       intent(in)  :: GV               !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-       intent(out) :: T                !< Potential temperature (degC)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-       intent(out) :: S                !< Salinity (psu)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-       intent(in)  :: h                !< Layer thickness in H (m or Pa)
-  type(param_file_type), &
-       intent(in)  :: param_file       !< Input parameter structure
-  logical, optional, &
-       intent(in)  :: just_read_params !< If present and true, this call will
-                                       !! only read parameters without changing h.
-  ! Local variables
-  real :: top ! The 1-d nominal positions of the upper interface.
-  real :: bot ! The 1-d nominal positions of the lower interface.
-  real :: S_ref, SST_ref, dTdZ, MLD
-  real :: zC
-  logical :: just_read    ! If true, just read parameters but set nothing.
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
-  real :: Tbot
-
-  Tbot = 4.0
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
-
-  if (.not.just_read) call log_version(param_file, mdl, version)
-  call get_param(param_file, mdl,"SALT_REF",S_ref, &
-                 'Reference salinity', units='1e-3',default=35.0, &
-                 do_not_log=just_read)
-  call get_param(param_file, mdl,"TEMP_REF",SST_ref, &
-                 'Reference surface temperature', units='C', &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mdl,"INTERIOR_DTDZ",dTdZ, &
-                 'Initial temperature stratification below mixed layer', &
-                 units='C/m', fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mdl,"REF_LAYER_DEPTH",MLD, &
-                 'Initial mixed layer depth', units='m', &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
-
-  if (just_read) return ! All run-time parameters have been read, so return.
-
-  T(:,:,:) = 0.0
-  S(:,:,:) = 0.0
-
-  do j=jsd,jed
-    do i=isd,ied
-      top = 0.
-      bot = 0.
-      do k=1,nz
-        ! Compute next interface
-        bot = bot - h(i,j,k)*GV%H_to_m
-        ! Depth of middle of layer
-        zC = 0.5*( top + bot )
-        ! Compute Temperature and Salinity based on decay rates
-        T(i,j,k) = max(Tbot,SST_ref + dTdz * min(0., zC + MLD))
-        S(i,j,k) = S_ref
-        top = bot
-      enddo ! k
-    enddo
-  enddo
-
-end subroutine idealized_hurricane_TS_init
 
 !> Initializes wind profile for the SCM idealized hurricane example
 subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
@@ -304,6 +233,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   YC = CS%Hurr_cen_Y0 + (time_type_to_real(day)*CS%hurr_translation_spd*&
        sin(CS%hurr_translation_dir))
 
+
   if (CS%BR_Bench) then
      ! f reset to value used in generated wind for benchmark test
      fbench = 5.5659e-05
@@ -323,7 +253,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
            + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then
-        YY = YC
+        YY = YC + CS%dy_from_center
         XX = XC
       else
         LAT = G%geoLatCu(I,j)*1000. !KM_to_m
@@ -346,7 +276,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
            + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then
-        YY = YC
+        YY = YC + CS%dy_from_center
         XX = XC
       else
         LAT = G%geoLatCv(i,J)*1000. !KM_to_m
@@ -443,6 +373,7 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
            (radius/CS%rad_max_wind .lt. 15.) ) then
 
     radius10 = CS%rad_max_wind*10.
+
     if (CS%BR_Bench) then
       radius_km = radius10/1000.
     else
@@ -498,5 +429,177 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
 
   return
 end subroutine idealized_hurricane_wind_profile
+
+!> This subroutine is primarily needed as a legacy for reproducing answers.  
+!! It is included as an additional subroutine rather than padded into the previous
+!! routine with flags to ease its eventual removal.  Its functionality is replaced 
+!! with the new routines and it can be deleted when answer changes are acceptable.
+subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
+  type(surface),                    intent(in)    :: state  !< Surface state structure
+  type(mech_forcing),               intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),                  intent(in)    :: day    !< Time in days
+  type(ocean_grid_type),            intent(inout) :: G      !< Grid structure
+  type(idealized_hurricane_CS), pointer       :: CS     !< Container for SCM parameters
+  ! Local variables
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  real :: pie, Deg2Rad
+  real :: U10, A, B, C, r, f, du10, rkm ! For wind profile expression
+  real :: xx, t0 !for location
+  real :: dp, rB
+  real :: Cd ! Air-sea drag coefficient
+  real :: Uocn, Vocn ! Surface ocean velocity components
+  real :: dU, dV ! Air-sea differential motion
+  !Wind angle variables
+  real :: Alph,Rstr, A0, A1, P1, Adir, transdir, V_TS, U_TS
+  logical :: BR_Bench
+  ! Bounds for loops and memory allocation
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  ! Allocate the forcing arrays, if necessary.
+
+  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
+  pie = 4.0*atan(1.0) ; Deg2Rad = pie/180.
+  !/ BR
+  ! Implementing Holland (1980) parameteric wind profile
+  !------------------------------------------------------|
+  BR_Bench = .true.   !true if comparing to LES runs     |
+  t0 = 129600.        !TC 'eye' crosses (0,0) at 36 hours|
+  transdir = pie      !translation direction (-x)        |
+  !------------------------------------------------------|
+  dp = CS%pressure_ambient - CS%pressure_central
+  C = CS%max_windspeed / sqrt( DP )
+  B = C**2 * CS%rho_a * exp(1.0)
+  if (BR_Bench) then
+     ! rho_a reset to value used in generated wind for benchmark test
+     B = C**2 * 1.2 * exp(1.0)
+  endif
+  A = (CS%rad_max_wind/1000.)**B
+  f =G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  if (BR_Bench) then
+     ! f reset to value used in generated wind for benchmark test
+     f = 5.5659e-05
+  endif
+  !/ BR
+  ! Calculate x position as a function of time.
+  xx = ( t0 - time_type_to_real(day)) * CS%hurr_translation_spd * cos(transdir)
+  r = sqrt(xx**2.+CS%DY_from_center**2.)
+  !/ BR
+  ! rkm - r converted to km for Holland prof.
+  !       used in km due to error, correct implementation should
+  !       not need rkm, but to match winds w/ experiment this must
+  !       be maintained.  Causes winds far from storm center to be a
+  !       couple of m/s higher than the correct Holland prof.
+  if (BR_Bench) then
+     rkm = r/1000.
+     rB = (rkm)**B
+  else
+     ! if not comparing to benchmark, then use correct Holland prof.
+     rkm = r
+     rB = r**B
+  endif
+  !/ BR
+  ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
+  ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
+  ! Note that rho_a is set to 1.2 following generated wind for experiment
+  if (r/CS%rad_max_wind > 0.001 .AND. r/CS%rad_max_wind < 10.) then
+     U10 = sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f
+  elseif (r/CS%rad_max_wind > 10. .AND. r/CS%rad_max_wind < 12.) then
+     r=CS%rad_max_wind*10.
+     if (BR_Bench) then
+        rkm = r/1000.
+        rB=rkm**B
+     else
+        rkm = r
+        rB = r**B
+     endif
+     U10 = ( sqrt( A*B*dp*exp(-A/rB)/(1.2*rB) + 0.25*(rkm*f)**2 ) - 0.5*rkm*f) &
+           * (12. - r/CS%rad_max_wind)/2.
+  else
+     U10 = 0.
+  endif
+  Adir = atan2(CS%DY_from_center,xx)
+
+  !/ BR
+  ! Wind angle model following Zhang and Ulhorn (2012)
+  ! ALPH is inflow angle positive outward.
+  RSTR = min(10.,r / CS%rad_max_wind)
+  A0 = -0.9*RSTR -0.09*CS%max_windspeed - 14.33
+  A1 = -A0 *(0.04*RSTR +0.05*CS%hurr_translation_spd+0.14)
+  P1 = (6.88*RSTR -9.60*CS%hurr_translation_spd+85.31)*pie/180.
+  ALPH = A0 - A1*cos( (TRANSDIR - ADIR ) - P1)
+  if (r/CS%rad_max_wind > 10. .AND. r/CS%rad_max_wind < 12.) then
+     ALPH = ALPH* (12. - r/CS%rad_max_wind)/2.
+  elseif (r/CS%rad_max_wind > 12.) then
+     ALPH = 0.0
+  endif
+  ALPH = ALPH * Deg2Rad
+ !/BR
+  ! Prepare for wind calculation
+  ! X_TS is component of translation speed added to wind vector
+  ! due to background steering wind.
+  U_TS = CS%hurr_translation_spd/2.*cos(transdir)
+  V_TS = CS%hurr_translation_spd/2.*sin(transdir)
+
+  ! Set the surface wind stresses, in units of Pa. A positive taux
+  ! accelerates the ocean to the (pseudo-)east.
+  !   The i-loop extends to is-1 so that taux can be used later in the
+  ! calculation of ustar - otherwise the lower bound would be Isq.
+  do j=js,je ; do I=is-1,Ieq
+    !/BR
+    ! Turn off surface current for stress calculation to be
+    ! consistent with test case.
+    Uocn = 0.!state%u(I,j)
+    Vocn = 0.!0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
+             !    +(state%v(i+1,J) + state%v(i,J-1)) )
+    !/BR
+    ! Wind vector calculated from location/direction (sin/cos flipped b/c
+    ! cyclonic wind is 90 deg. phase shifted from position angle).
+    dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
+    dV = U10*cos(Adir-Alph) - Vocn + V_TS
+    !/----------------------------------------------------|
+    !BR
+    !  Add a simple drag coefficient as a function of U10 |
+    !/----------------------------------------------------|
+    du10=sqrt(du**2+dv**2)
+    if (du10 < 11.) then
+       Cd = 1.2e-3
+    elseif (du10 < 20.) then
+       Cd = (0.49 + 0.065 * U10 )*0.001
+    else
+       Cd = 0.0018
+    endif
+    forces%taux(I,j) = CS%rho_a * G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
+  enddo ; enddo
+  !/BR
+  ! See notes above
+  do J=js-1,Jeq ; do i=is,ie
+    Uocn = 0.!0.25*( (state%u(I,j) + state%u(I-1,j+1)) &
+             !    +(state%u(I-1,j) + state%u(I,j+1)) )
+    Vocn = 0.!state%v(i,J)
+    dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
+    dV = U10*cos(Adir-Alph) - Vocn + V_TS
+    du10=sqrt(du**2+dv**2)
+    if (du10 < 11.) then
+       Cd = 1.2e-3
+    elseif (du10 < 20.) then
+       Cd = (0.49 + 0.065 * U10 )*0.001
+    else
+       Cd = 0.0018
+    endif
+    forces%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
+  enddo ; enddo
+  ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
+  do j=js,je ; do i=is,ie
+    !  This expression can be changed if desired, but need not be.
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
+       sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+            0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
+  enddo ; enddo
+  return
+end subroutine SCM_idealized_hurricane_wind_forcing
 
 end module idealized_hurricane
