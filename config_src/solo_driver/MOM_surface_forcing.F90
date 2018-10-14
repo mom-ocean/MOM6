@@ -45,7 +45,7 @@ use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forc
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,     only : user_revise_forcing_CS
 use idealized_hurricane, only : idealized_hurricane_wind_init
-use idealized_hurricane, only : idealized_hurricane_wind_forcing
+use idealized_hurricane, only : idealized_hurricane_wind_forcing, SCM_idealized_hurricane_wind_forcing
 use idealized_hurricane, only : idealized_hurricane_CS
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_surface_forcing_init
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_wind_forcing
@@ -277,6 +277,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call Neverland_wind_forcing(sfc_state, forces, day_center, G, CS%Neverland_forcing_CSp)
     elseif (trim(CS%wind_config) == "ideal_hurr") then
       call idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, CS%idealized_hurricane_CSp)
+    elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
+      call SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, CS%idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_wind_forcing(sfc_state, forces, day_center, G, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%wind_config) == "USER") then
@@ -1685,7 +1687,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   elseif (trim(CS%wind_config) == "Neverland") then
     call Neverland_surface_forcing_init(Time, G, param_file, diag, CS%Neverland_forcing_CSp)
-  elseif (trim(CS%wind_config) == "ideal_hurr") then
+  elseif (trim(CS%wind_config) == "ideal_hurr" .or.&
+          trim(CS%wind_config) == "SCM_ideal_hurr") then
     call idealized_hurricane_wind_init(Time, G, param_file, CS%idealized_hurricane_CSp)
   elseif (trim(CS%wind_config) == "const") then
     call get_param(param_file, mdl, "CONST_WIND_TAUX", CS%tau_x0, &
