@@ -1,11 +1,23 @@
-!> Initial conditions and forcing for the idealized hurricane example.
+!> Forcing for the idealized hurricane and SCM_idealized_hurricane examples.
 module Idealized_hurricane
-! Renamed from SCM_idealized_hurricane to idealized_hurricane
-!  This module is no longer exclusively for use in SCM mode.
-!  Legacy code that can be deleted is at the bottom.
-!  The T/S initializations have been removed.
 
 ! This file is part of MOM6. See LICENSE.md for the license.
+
+! History
+!--------
+! November 2014: Origination.
+! October 2018: Renamed module from SCM_idealized_hurricane to idealized_hurricane
+!               This module is no longer exclusively for use in SCM mode.
+!               Legacy code that can be deleted is at the bottom (currently maintained
+!               only to preserve exact answers in SCM mode).
+!               The T/S initializations have been removed since they are redundant
+!               w/ T/S initializations in CVMix_tests (which should be moved
+!               into the main state_initialization to their utility
+!               for multiple example cases)..
+! To do
+! 1. Remove the legacy SCM_idealized_hurricane_wind_forcing code
+! 2. Make the hurricane-to-background wind transition a runtime parameter
+!
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -64,8 +76,8 @@ type, public :: idealized_hurricane_CS ; private
   real    :: DY_from_center  !< (Fixed) distance in y from storm center path [m]
 
   ! Par
-  real :: PI
-  real :: Deg2Rad
+  real :: PI      !< Mathematical constant
+  real :: Deg2Rad !< Mathematical constant
 
 end type
 
@@ -430,9 +442,9 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   return
 end subroutine idealized_hurricane_wind_profile
 
-!> This subroutine is primarily needed as a legacy for reproducing answers.  
+!> This subroutine is primarily needed as a legacy for reproducing answers.
 !! It is included as an additional subroutine rather than padded into the previous
-!! routine with flags to ease its eventual removal.  Its functionality is replaced 
+!! routine with flags to ease its eventual removal.  Its functionality is replaced
 !! with the new routines and it can be deleted when answer changes are acceptable.
 subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   type(surface),                    intent(in)    :: state  !< Surface state structure
