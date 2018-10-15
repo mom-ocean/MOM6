@@ -39,13 +39,9 @@ subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
   ! Local variables
   integer   :: i, j
 
-  do i=G%isc,G%iec
-    do j=G%jsc,G%jec
-
-      D(i,j) = max_depth
-
-    enddo
-  enddo
+  do i=G%isc,G%iec ; do j=G%jsc,G%jec
+    D(i,j) = max_depth
+  enddo ; enddo
 
 end subroutine sloshing_initialize_topography
 
@@ -68,28 +64,21 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real    :: displ(SZK_(G)+1)
-  real    :: z_unif(SZK_(G)+1)
-  real    :: z_inter(SZK_(G)+1)
-  real    :: x
-  real    :: a0
-  real    :: deltah
-  real    :: total_height
-  real    :: weight_z
-  real    :: x1, y1, x2, y2
-  real    :: t
-  logical :: just_read    ! If true, just read parameters but set nothing.
-  integer :: n
+  real    :: displ(SZK_(G)+1)   ! The interface displacement in depth units.
+  real    :: z_unif(SZK_(G)+1)  ! Fractional uniform interface heights, nondim.
+  real    :: z_inter(SZK_(G)+1) ! Interface heights, in depth units.
+  real    :: a0                 ! The displacement amplitude in depth units.
+  real    :: weight_z           ! A (misused?) depth-space weighting, in inconsistent units.
+  real    :: x1, y1, x2, y2     ! Dimensonless parameters.
+  real    :: x, t               ! Dimensionless depth coordinates?
+  logical :: just_read          ! If true, just read parameters but set nothing.
 
   integer :: i, j, k, is, ie, js, je, nx, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
-
   if (just_read) return ! This subroutine has no run-time parameters.
-
-  deltah = G%max_depth / nz
 
   ! Define thicknesses
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -100,7 +89,6 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     enddo
 
     ! 1. Define stratification
-    n = 3
     do k = 1,nz+1
 
       ! Thin pycnocline in the middle
@@ -126,13 +114,14 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     enddo
 
     ! 2. Define displacement
-    a0 = 75.0;      ! Displacement amplitude (meters)
+    a0 = 75.0 * GV%m_to_Z ! 75m Displacement amplitude in depth units.
     do k = 1,nz+1
 
-      weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1
+      weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1.0
 
       x = G%geoLonT(i,j) / G%len_lon
-      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z
+      !### Perhaps the '+ weight_z' here should be '* weight_z' - RWH
+      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * GV%m_to_Z
 
       if ( k == 1 ) then
         displ(k) = 0.0
@@ -148,23 +137,16 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
 
     ! 3. The last interface must coincide with the seabed
     z_inter(nz+1) = -G%bathyT(i,j)
-
-    ! Modify interface heights to make sure all thicknesses
-    ! are strictly positive
+    ! Modify interface heights to make sure all thicknesses are strictly positive
     do k = nz,1,-1
-
       if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_Z) ) then
         z_inter(k) = z_inter(k+1) + GV%Angstrom_Z
       endif
-
     enddo
 
     ! 4. Define layers
-    total_height = 0.0
     do k = 1,nz
-      h(i,j,k) = GV%m_to_H * (z_inter(k) - z_inter(k+1))
-
-      total_height = total_height + h(i,j,k)
+      h(i,j,k) = GV%Z_to_H * (z_inter(k) - z_inter(k+1))
     enddo
 
   enddo ; enddo
@@ -235,7 +217,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   do j=js,je ; do i=is,ie
     xi0 = 0.0
     do k = 1,nz
-      xi1 = xi0 + deltah / G%max_depth
+      xi1 = xi0 + deltah / G%max_depth ! =  xi0 + 1.0 / real(nz)
       S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
       xi0 = xi1
     enddo
@@ -255,6 +237,5 @@ end subroutine sloshing_initialize_temperature_salinity
 
 !> \namespace sloshing_initialization
 !!
-!! The module configures the model for the non-rotating sloshing
-!! test case.
+!! The module configures the model for the non-rotating sloshing test case.
 end module sloshing_initialization

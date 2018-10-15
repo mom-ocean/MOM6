@@ -534,7 +534,7 @@ subroutine initialize_diagnostic_fields(CS, ISS, G, Time)
 
   do j=jsd,jed
     do i=isd,ied
-      OD = G%bathyT(i,j) - rhoi/rhow * ISS%h_shelf(i,j)
+      OD = G%Zd_to_m*G%bathyT(i,j) - rhoi/rhow * ISS%h_shelf(i,j)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
@@ -829,7 +829,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
         do k=0,1
           do l=0,1
             if ((ISS%hmask(i,j) == 1) .and. &
-              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%bathyT(i,j) <= 0)) then
+              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%Zd_to_m*G%bathyT(i,j) <= 0)) then
               nodefloat = nodefloat + 1
             endif
           enddo
@@ -888,7 +888,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
   Au(:,:) = 0.0 ; Av(:,:) = 0.0
 
   call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-            CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, G%areaT, &
+            CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, G%areaT, &
             G, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi/rhow)
 
   err_init = 0 ; err_tempu = 0; err_tempv = 0
@@ -947,7 +947,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
     Au(:,:) = 0 ; Av(:,:) = 0
 
     call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-            CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, G%areaT, &
+            CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, G%areaT, &
             G, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi/rhow)
 
     err_max = 0
@@ -1111,7 +1111,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
   call pass_vector(DIAGu, DIAGv, G%domain, TO_ALL, BGRID_NE)
 
   call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, hmask, &
-          H_node, CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, &
+          H_node, CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, &
           G%areaT, G, isc-1, iec+1, jsc-1, jec+1, CS%density_ice/CS%density_ocean_avg)
 
   call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
@@ -1182,7 +1182,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
     Au(:,:) = 0 ; Av(:,:) = 0
 
     call CG_action(Au, Av, Du, Dv, Phi, Phisub, CS%umask, CS%vmask, hmask, &
-          H_node, CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, &
+          H_node, CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, &
           G%areaT, G, is, ie, js, je, CS%density_ice/CS%density_ocean_avg)
 
     ! Au, Av valid region moves in by 1
@@ -2123,7 +2123,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, TAUD_X, TAUD_Y, OD)
   ! prelim - go through and calculate S
 
   ! or is this faster?
-  BASE(:,:) = -G%bathyT(:,:) + OD(:,:)
+  BASE(:,:) = -G%Zd_to_m*G%bathyT(:,:) + OD(:,:)
   S(:,:) = BASE(:,:) + ISS%h_shelf(:,:)
 
   do j=jsc-1,jec+1
@@ -2222,7 +2222,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, TAUD_X, TAUD_Y, OD)
         taud_y(I,J) = taud_y(I,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sy * dxdyh
 
         if (CS%float_frac(i,j) == 1) then
-          neumann_val = .5 * grav * (rho * ISS%h_shelf(i,j) ** 2 - rhow * G%bathyT(i,j) ** 2)
+          neumann_val = .5 * grav * (rho * ISS%h_shelf(i,j) ** 2 - rhow * (G%Zd_to_m*G%bathyT(i,j)) ** 2)
         else
           neumann_val = .5 * grav * (1-rho/rhow) * rho * ISS%h_shelf(i,j) ** 2
         endif
@@ -2738,7 +2738,7 @@ subroutine matrix_diagonal(CS, G, float_cond, H_node, nu, beta, hmask, dens_rati
       enddo ; enddo
     enddo ; enddo
     if (float_cond(i,j) == 1) then
-      Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%bathyT(i,j)
+      Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%Zd_to_m*G%bathyT(i,j)
       Hcell(:,:) = H_node(i-1:i,j-1:j)
       call CG_diagonal_subgrid_basal &
           (Phisub, Hcell, dxdyh, basel, dens_ratio, Usubcontr, Vsubcontr)
@@ -2953,7 +2953,7 @@ subroutine apply_boundary_values(CS, ISS, G, time, Phisub, H_node, nu, beta, flo
       enddo ; enddo
 
       if (float_cond(i,j) == 1) then
-        Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%bathyT(i,j)
+        Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%Zd_to_m*G%bathyT(i,j)
         Ucell(:,:) = CS%u_bdry_val(i-1:i,j-1:j) ; Vcell(:,:) = CS%v_bdry_val(i-1:i,j-1:j)
         Hcell(:,:) = H_node(i-1:i,j-1:j)
         call CG_action_subgrid_basal &
@@ -3089,7 +3089,7 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
 
   do j=jsd,jed
     do i=isd,ied
-      OD = G%bathyT(i,j) - rhoi/rhow * h_shelf(i,j)
+      OD = G%Zd_to_m*G%bathyT(i,j) - rhoi/rhow * h_shelf(i,j)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
