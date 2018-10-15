@@ -117,7 +117,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 
   nkmb      = GV%nk_rho_varies
   Irho_cp   = 1.0 / (GV%H_to_kg_m2 * tv%C_p)
-  Angstrom  = GV%Angstrom
+  Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
@@ -406,10 +406,11 @@ end subroutine geothermal_end
 
 !> \namespace mom_geothermal
 !!
-!! Geothermal heating can be added either in a layered isopycnal mode, in which the heating raises the density of the layer to the
-!! target density of the layer above, and then moves the water into that layer, or in a simple Eulerian mode, in which the bottommost
-!! GEOTHERMAL_THICKNESS are heated.  Geothermal heating will also provide a buoyant source of bottom TKE that can be used to further
-!! mix the near-bottom water. In cold fresh water lakes where heating increases density, water should be moved into deeper layers, but
-!! this is not implemented yet.
+!! Geothermal heating can be added either in a layered isopycnal mode, in which the heating raises the density
+!! of the layer to the target density of the layer above, and then moves the water into that layer, or in a
+!! simple Eulerian mode, in which the bottommost GEOTHERMAL_THICKNESS are heated.  Geothermal heating will also
+!! provide a buoyant source of bottom TKE that can be used to further mix the near-bottom water. In cold fresh
+!! water lakes where heating increases density, water should be moved into deeper layers, but this is not
+!! implemented yet.
 
 end module MOM_geothermal

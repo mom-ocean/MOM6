@@ -3710,6 +3710,7 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  default=0.0, do_not_log=.true.)
+  min_depth = min_depth / G%Zd_to_m
 
   allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
   allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0

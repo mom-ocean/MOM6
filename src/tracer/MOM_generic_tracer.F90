@@ -519,7 +519,7 @@ contains
     !Prepare input arrays for source update
     !
 
-    rho_dzt(:,:,:) = GV%H_to_kg_m2 * GV%Angstrom
+    rho_dzt(:,:,:) = GV%H_to_kg_m2 * GV%Angstrom_H
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
       rho_dzt(i,j,k) = GV%H_to_kg_m2 * h_old(i,j,k)
     enddo ; enddo ; enddo !}
