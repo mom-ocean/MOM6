@@ -3434,8 +3434,6 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   endif
 
 end subroutine decimate_diag_indices_get
- 
-
 
 subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
   real, dimension(:,:,:), pointer :: locfield
@@ -3446,20 +3444,46 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
   integer, intent(out):: isv,iev,jsv,jev
   real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
   !locals
-  real, dimension(:,:,:), pointer :: locmask => NULL()  
-  integer :: isl,iel,jsl,jel
+  real, dimension(:,:,:), pointer :: locmask  
+  integer :: isl,iel,jsl,jel, xy_method
+  
+  locmask => NULL()
+  !Get the correct indices corresponding to input field
+  !Shape of the input diag field
   isl=1; iel=size(locfield,1)/dl
-  jsl=1; jel=size(locfield,2)/dl       
+  jsl=1; jel=size(locfield,2)/dl
+  !Get the shape of the decimated field isv,iev,jsv,jev
   call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+  !Set the non-decimated mask, it must be associated and initialized
   if (present(mask)) then
      locmask => mask
-     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=locmask, area=diag_cs%G%areaT)
   elseif (associated(diag%axes%mask3d)) then
-     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask3d, area=diag_cs%G%areaT)
+     locmask => diag%axes%mask3d
   else
      call MOM_error(FATAL, "decimate_diag_field_3d: Cannot decimate without a mask!!! ")
   endif
+  !Determine the decimation method
+  !Make a two digit integer case id =  x_case*10+y_case where x_case and/or y_case is 1 for sum and 2 for mean
+  xy_method = 0 !subsample and pick the SW corner value
+  if (trim(diag%axes%y_cell_method)=='sum') then
+     xy_method =  xy_method + 1
+  elseif (trim(diag%axes%y_cell_method)=='mean') then
+     xy_method =  xy_method + 2
+  endif
+  if (trim(diag%axes%x_cell_method)=='sum') then
+     xy_method = xy_method + 10
+  elseif (trim(diag%axes%x_cell_method)=='mean') then
+     xy_method = xy_method + 20
+  endif
+!  if (trim(diag%axes%area_cell_method)=='sum') then
+!     xy_method = xy_method + 100
+!  elseif (trim(diag%axes%area_cell_method)=='mean') then
+!     xy_method = xy_method + 200
+!  endif
 
+  
+  call decimate_field(locfield, locfield_decim, dl, xy_method, locmask, diag_cs)
+  
 end subroutine decimate_diag_field_3d
 
 subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
@@ -3471,157 +3495,217 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
   integer, intent(out):: isv,iev,jsv,jev
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
   !locals
-  real, dimension(:,:), pointer :: locmask => NULL()  
-  integer :: isl,iel,jsl,jel
+  real, dimension(:,:), pointer :: locmask  
+  integer :: isl,iel,jsl,jel, xy_method
+  
+  locmask => NULL()
+  !Get the correct indices corresponding to input field
+  !Shape of the input diag field
   isl=1; iel=size(locfield,1)/dl
-  jsl=1; jel=size(locfield,2)/dl       
+  jsl=1; jel=size(locfield,2)/dl
+  !Get the shape of the decimated field isv,iev,jsv,jev
   call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+  !Set the non-decimated mask, it must be associated and initialized
   if (present(mask)) then
      locmask => mask
-     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=locmask)
   elseif (associated(diag%axes%mask2d)) then
-     call decimate_field(locfield, locfield_decim, dl, method='pave', mask=diag%axes%mask2d)
+     locmask => diag%axes%mask2d
   else
      call MOM_error(FATAL, "decimate_diag_field_2d: Cannot decimate without a mask!!! ")
   endif
-
+  !Determine the decimation method
+  !Make a two digit integer case id =  x_case*10+y_case where x_case and/or y_case is 1 for sum and 2 for mean
+  xy_method = 0 !subsample and pick the SW corner value
+  if (trim(diag%axes%y_cell_method)=='sum') then
+     xy_method =  xy_method + 1
+  elseif (trim(diag%axes%y_cell_method)=='mean') then
+     xy_method =  xy_method + 2
+  endif
+  if (trim(diag%axes%x_cell_method)=='sum') then
+     xy_method = xy_method + 10
+  elseif (trim(diag%axes%x_cell_method)=='mean') then
+     xy_method = xy_method + 20
+  endif
+!  if (trim(diag%axes%area_cell_method)=='sum') then
+!     xy_method = xy_method + 100
+!  elseif (trim(diag%axes%area_cell_method)=='mean') then
+!     xy_method = xy_method + 200
+!  endif
+  
+  call decimate_field(locfield, locfield_decim, dl, xy_method, locmask, diag_cs)
+  
 end subroutine decimate_diag_field_2d
 
-subroutine decimate_field_3d(field_in, field_out, level, method, mask, area)
+subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs)
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
-  integer , intent(in) :: level
-  character(len=4), optional, intent(in) :: method !< sampling method, one of samp,pave,aave,vave
-  real, dimension(:,:,:), optional , pointer :: mask
-  real, dimension(:,:), optional , intent(in) :: area
- !locals
+  integer , intent(in) :: dl
+  integer, optional, intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
+  real, dimension(:,:,:), pointer :: mask
+  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  !locals
+  character(len=240) :: mesg
   integer :: i,j,ii,jj,is,js,i0,j0
   integer :: isl,iel,jsl,jel
   integer :: k,ks,ke
-  real :: ave,tot_non_zero,a1
-  character(len=4) :: samplemethod
-  samplemethod = 'samp' 
-  if(present(method)) samplemethod = method
-
+  real :: ave,total_weight,weight
+  real :: epsilon = 1.0e-20
   !Always start from the first element
   is=1
   js=1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke))  
+  isl=1; iel=size(field_in,1)/dl
+  jsl=1; jel=size(field_in,2)/dl  
+  allocate(field_out(isl:iel,jsl:jel,ks:ke))
 
-  
-  select case (samplemethod)
-  case ('samp') !subsample the SW corner cell
+  if(method .eq. 0) then    !point average the fields in dl^2 cells
      do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+level*(i-isl)
-        j0 = js+level*(j-jsl)
-        field_out(i,j,k)  = field_in(i0,j0,k)
-     enddo; enddo; enddo
-  case ('pave') !point average of the cells
-     if(present(mask)) then
-        do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-           i0 = is+level*(i-isl)
-           j0 = js+level*(j-jsl)
-           ave = 0.0
-           tot_non_zero = 0.0
-           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
-              tot_non_zero = tot_non_zero + mask(ii,jj,k)
-              ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
-           enddo; enddo
-           field_out(i,j,k)  = ave/max(1.0,tot_non_zero) !Avoid zero mask at all aggregating cells where ave=0.0
-        enddo; enddo; enddo
-     else
-        do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-           i0 = is+level*(i-isl)
-           j0 = js+level*(j-jsl)
-           ave = 0.0
-           tot_non_zero = 0.0
-           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
-              tot_non_zero = tot_non_zero + 1
-              ave=ave+field_in(ii,jj,k)
-           enddo; enddo
-           field_out(i,j,k)  = ave/tot_non_zero
-        enddo; enddo; enddo
-     endif
-  case ('aave') !area average of the cells
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        field_out(i,j,k)  = 0.0
-        i0 = is+level*(i-isl)
-        j0 = js+level*(j-jsl)
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
         ave = 0.0
-        tot_non_zero = 0.0
-        do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
-           a1 = area(ii,jj)*mask(ii,jj,k)
-           tot_non_zero = tot_non_zero + a1
-           ave=ave + field_in(ii,jj,k) * a1
+        total_weight = 0.0
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           total_weight = total_weight + mask(ii,jj,k)
+           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
         enddo; enddo
-        if(tot_non_zero .gt. 0.0) field_out(i,j,k)  = ave/tot_non_zero
+        field_out(i,j,k)  = ave/max(1.0,total_weight) !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  case default
-     call MOM_error(FATAL, "decimate_field_3d: unknown sampling method "//trim(samplemethod))
-  end select
-
+  elseif(method .eq. 1) then    !point in x, sum in y
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        ii=i0
+        do jj=j0,j0+dl-1
+           total_weight = total_weight + mask(ii,jj,k)
+           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
+        enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. 10) then    !sum in x, point in y
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        jj=j0
+        do ii=i0,i0+dl-1
+           total_weight = total_weight + mask(ii,jj,k)
+           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
+        enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. 2) then    !point in x, normal area average in y
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        ii=i0
+        do jj=j0,j0+dl-1
+           weight =mask(ii,jj,k)*diag_cs%G%dyCu(ii,jj)*diag_cs%h(ii,jj,k) 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. 20) then    !normal area average in x, point in y
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        jj=j0
+        do ii=i0,i0+dl-1
+           weight = mask(ii,jj,k)*diag_cs%G%dxCv(ii,jj)*diag_cs%h(ii,jj,k) 
+           total_weight = total_weight + weight
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. 22) then    !Volume average the fields in x and y
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,k)
+           total_weight = total_weight + weight
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo; enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. 11) then    !sum the fields in x and y
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           total_weight = total_weight + mask(ii,jj,k)
+           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
+        enddo; enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo  
+  else
+     write (mesg,*) " unknown sampling method: ",method  
+     call MOM_error(FATAL, "decimate_field_3d: "//trim(mesg))
+  endif
+     
 end subroutine decimate_field_3d
 
-subroutine decimate_field_2d(field_in, field_out, level, method, mask)
+subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs)
   real, dimension(:,:) , pointer :: field_in
   real, dimension(:,:) , allocatable :: field_out
-  integer , intent(in) :: level
-  character(len=4), optional, intent(in) :: method !< sampling method, one of samp,pave,aave,vave
-  real, dimension(:,:), optional , pointer :: mask
+  integer , intent(in) :: dl
+  integer, optional, intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
+  real, dimension(:,:), pointer :: mask
+  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   !locals
+  character(len=240) :: mesg
   integer :: i,j,ii,jj,is,js,i0,j0
   integer :: isl,iel,jsl,jel
-  real :: ave,tot_non_zero
-  character(len=4) :: samplemethod
-  samplemethod = 'samp' 
-  if(present(method)) samplemethod = method
-
+  real :: ave,total_weight,weight
+  real :: epsilon = 1.0e-20
   !Always start from the first element
   is=1
   js=1
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
+  isl=1; iel=size(field_in,1)/dl
+  jsl=1; jel=size(field_in,2)/dl  
   allocate(field_out(isl:iel,jsl:jel))
 
-  select case (samplemethod)
-  case ('samp') !subsample the SW corner cell
+  if(method .eq. 0) then    !point average the fields in dl^2 cells
      do j=jsl,jel ; do i=isl,iel
-        i0 = is+level*(i-isl)
-        j0 = js+level*(j-jsl)
-        field_out(i,j)  = field_in(i0,j0)
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           total_weight = total_weight + mask(ii,jj)
+           ave=ave+field_in(ii,jj)*mask(ii,jj)
+        enddo; enddo
+        field_out(i,j)  = ave/max(1.0,total_weight) !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  case ('pave') !point average of the cells
-     if(present(mask)) then
-        do j=jsl,jel ; do i=isl,iel
-           i0 = is+level*(i-isl)
-           j0 = js+level*(j-jsl)
-           ave = 0.0
-           tot_non_zero = 0.0
-           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
-              tot_non_zero = tot_non_zero + mask(ii,jj)
-              ave=ave+field_in(ii,jj)*mask(ii,jj)
-           enddo; enddo
-           field_out(i,j)  = ave/max(1.0,tot_non_zero) !Avoid zero mask at all aggregating cells where ave=0.0
+  elseif(method .eq. 22) then    !Volume average the fields in x and y
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,1)
+           total_weight = total_weight + weight 
+           ave=ave+field_in(ii,jj)*weight
         enddo; enddo
-     else !Niki: How are we supposed to decimate/average without a mask? What if field_in is on land at one or more aggregating cells?
-        do j=jsl,jel ; do i=isl,iel
-           i0 = is+level*(i-isl)
-           j0 = js+level*(j-jsl)
-           ave = 0.0
-           tot_non_zero = 0.0
-           do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
-              tot_non_zero = tot_non_zero + 1
-              ave=ave+field_in(ii,jj)
-           enddo; enddo
-           field_out(i,j)  = ave/tot_non_zero
-        enddo; enddo
-     endif
-  case default
-     call MOM_error(FATAL, "decimate_field_2d: unknown sampling method "//trim(samplemethod))
-  end select
+        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo
+     
+  else
+     write (mesg,*) " unknown sampling method: ",method  
+     call MOM_error(FATAL, "decimate_field_2d: "//trim(mesg))
+  endif
      
 end subroutine decimate_field_2d
 
