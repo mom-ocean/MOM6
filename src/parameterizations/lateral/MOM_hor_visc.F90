@@ -54,8 +54,11 @@ type, public :: hor_visc_CS ; private
                              !! viscosity. KH is the background value.
   logical :: Modified_Leith  !< If true, use extra component of Leith viscosity
                              !! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
+  logical :: use_beta_in_Leith !< If true, includes the beta term in the Leith viscosity
   logical :: Leith_Ah        !< If true, use a biharmonic form of 2D Leith
                              !! nonlinear eddy viscosity. AH is the background.
+  logical :: use_QG_Leith    !< If true, use QG Leith nonlinear eddy viscosity.
+                             !! KH is the background value.
   logical :: bound_Coriolis  !< If true & SMAGORINSKY_AH is used, the biharmonic
                              !! viscosity is modified to include a term that
                              !! scales quadratically with the velocity shears.
@@ -201,13 +204,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    u0, &   ! Laplacian of u (m-1 s-1)
-    h_u     ! Thickness interpolated to u points, in H.
+    u0, &         ! Laplacian of u (m-1 s-1)
+    h_u, &        ! Thickness interpolated to u points, in H.
+    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
+    div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    v0, &   ! Laplacian of v (m-1 s-1)
-    h_v     ! Thickness interpolated to v points, in H.
-
+    v0, &         ! Laplacian of v (m-1 s-1)
+    h_v, &        ! Thickness interpolated to v points, in H.
+    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
+    div_xx_dy     ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
   real, dimension(SZI_(G),SZJ_(G)) :: &
+    div_xx, &     ! Estimate of horizontal divergence at h-points (s-1)
     sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
     str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
     bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
@@ -220,6 +227,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
     bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
+    vort_xy, & ! Vertical vorticity (dv/dx - du/dy) (s-1)
     Leith_Kh_q, & ! Leith Laplacian viscosity at q-points (m2 s-1)
     Leith_Ah_q    ! Leith bi-harmonic viscosity at q-points (m4 s-1)
 
@@ -242,6 +250,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
                      ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag  ! magnitude of the shear (1/s)
+  real :: vert_vort_mag  ! magnitude of the vertical vorticity gradient (m-1 s-1)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
@@ -508,14 +517,86 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-      call calc_Leith_viscosity(VarMix, G, GV, u, v, h, k, Leith_Kh_h, Leith_Kh_q, Leith_Ah_h, Leith_Ah_q)
-    endif
+      ! Divergence
+      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+        div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
+                        G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
+                       (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
+                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
+                                  (h(i,j,k) + GV%H_subroundoff)
+      enddo ; enddo
+
+      ! Divergence gradient
+      do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+        div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+      enddo ; enddo
+
+      do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+        div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+      enddo ; enddo
+
+      ! Components for the vertical vorticity
+      ! Note this a simple re-calculation of shearing components using the same discretization.
+      ! We will consider using a circulation based calculation of vorticity later.
+      ! Also note this will need OBC boundary conditions re-applied...
+      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+        dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
+        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+        dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
+      enddo ; enddo
+
+      ! Vorticity
+      if (CS%no_slip) then
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      else
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      endif
+
+      ! Vorticity gradient
+      do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+        vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
+      enddo ; enddo
+
+      do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+        vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
+      enddo ; enddo
+
+      ! Add in beta for the Leith viscosity
+      if (CS%use_beta_in_Leith) then
+        do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+          vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1) )
+        enddo ; enddo
+        do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j) )
+        enddo ; enddo
+      endif
+
+      mod_Leith = 0.; if (CS%modified_Leith) mod_Leith = 1.0
+
+      if (CS%use_QG_Leith) then
+        call calc_QG_Leith_viscosity(VarMix, G, GV, h, k, vort_xy_dx, vort_xy_dy)
+      endif
+  endif
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
         Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
           0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
+      endif
+      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then      
+        vert_vort_mag = sqrt( &
+          0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
+              (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
+          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
+              (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
       endif
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
         hrat_min = min(1.0, min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1)) / &
@@ -528,7 +609,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xx(i,j) * Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, Leith_Kh_h(i,j))
+        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xx(i,j) * vert_vort_mag)
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
         ! Older method of bounding for stability
@@ -576,7 +657,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               AhSm = CS%BIHARM_CONST_xx(i,j) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) AhLth = Leith_Ah_h(i,j)
+          if (CS%Leith_Ah) AhLth = CS%BIHARM5_CONST_xx(i,j) * vert_vort_mag
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
@@ -642,7 +723,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             0.25*((sh_xx(i,j)*sh_xx(i,j) + sh_xx(i+1,j+1)*sh_xx(i+1,j+1)) + &
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
       endif
-
+      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+        vert_vort_mag = sqrt( &
+          0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
+              (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
+          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
+              (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
+      endif
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
       !hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
@@ -681,7 +768,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, Leith_Kh_q(I,J))
+        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xy(I,J) * vert_vort_mag)
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
         ! Older method of bounding for stability
@@ -732,7 +819,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               AhSm = CS%BIHARM_CONST_xy(I,J) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) AhLth = Leith_Ah_q(I,J)
+          if (CS%Leith_Ah) AhLth = CS%BIHARM5_CONST_xy(I,J) * vert_vort_mag
           Ah = MAX(MAX(CS%Ah_bg_xy(I,J), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xy(I,J))
@@ -971,6 +1058,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   ! cases where the corresponding parameters are not read.
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
+  CS%use_QG_Leith = .false.
   CS%bound_Coriolis = .false.
   CS%Modified_Leith = .false.
   CS%anisotropic = .false.
@@ -1020,7 +1108,27 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
-
+    if (CS%Leith_Kh .or. get_all) then
+      call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
+                 "The nondimensional Laplacian Leith constant, \n"//&
+                 "often set to 1.0", units="nondim", default=0.0, &
+                  fail_if_missing = CS%Leith_Kh)
+      call get_param(param_file, mdl, "USE_QG_LEITH", CS%use_QG_Leith, &
+                 "If true, use QG Leith nonlinear eddy viscosity.", &
+                 default=.false.)
+      if (CS%use_QG_Leith .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
+                 "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+                 "LEITH_KH must be True when USE_QG_LEITH=True.")
+    endif
+    if (CS%Leith_Kh .or. CS%Leith_Ah .or. get_all) then
+      call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
+                 "If true, include the beta term in the QG Leith nonlinear eddy viscosity.", &
+                 default=CS%use_QG_Leith)
+      call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
+                 "If true, add a term to Leith viscosity which is \n"//&
+                 "proportional to the gradient of divergence.", &
+                 default=.false.)
+    endif
     call get_param(param_file, mdl, "BOUND_KH", CS%bound_Kh, &
                  "If true, the Laplacian coefficient is locally limited \n"//&
                  "to be stable.", default=.true.)
@@ -1109,6 +1217,11 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  units="m s-1", default=maxvel)
       endif
     endif
+    if (CS%Leith_Ah .or. get_all)
+        call get_param(param_file, mdl, "LEITH_BI_CONST", Leith_bi_const, &
+                 "The nondimensional biharmonic Leith constant, \n"//&
+                 "typical values are thus far undetermined.", units="nondim", default=0.0, &
+                 fail_if_missing = CS%Leith_Ah)
 
   endif
 
@@ -1179,7 +1292,10 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ALLOC_(CS%Laplac_Const_xx(isd:ied,jsd:jed))     ; CS%Laplac_Const_xx(:,:) = 0.0
       ALLOC_(CS%Laplac_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac_Const_xy(:,:) = 0.0
     endif
-
+    if (CS%Leith_Kh) then
+      ALLOC_(CS%Laplac3_const_xx(isd:ied,jsd:jed)) ; CS%Laplac3_const_xx(:,:) = 0.0
+      ALLOC_(CS%Laplac3_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac3_const_xy(:,:) = 0.0    
+    endif
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
   ALLOC_(CS%reduction_xy(IsdB:IedB,JsdB:JedB)) ; CS%reduction_xy(:,:) = 0.0
@@ -1233,6 +1349,10 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
         ALLOC_(CS%Biharm_Const2_xx(isd:ied,jsd:jed))     ; CS%Biharm_Const2_xx(:,:) = 0.0
         ALLOC_(CS%Biharm_Const2_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const2_xy(:,:) = 0.0
       endif
+    endif
+    if (CS%Leith_Ah) then
+        ALLOC_(CS%biharm5_const_xx(isd:ied,jsd:jed)) ; CS%biharm5_const_xx(:,:) = 0.0    
+        ALLOC_(CS%biharm5_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm5_const_xy(:,:) = 0.0
     endif
   endif
 
@@ -1288,7 +1408,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       grid_sp_h2 = (2.0*CS%DX2h(i,j)*CS%DY2h(i,j)) / (CS%DX2h(i,j) + CS%DY2h(i,j))
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xx(i,j) = Smag_Lap_const * grid_sp_h2
-
+      if (CS%Leith_Kh)       CS%LAPLAC3_const_xx(i,j) = Leith_Lap_const * grid_sp_h3
       ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xx(i,j) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_h2))
 
@@ -1314,7 +1434,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       grid_sp_q2 = (2.0*CS%DX2q(I,J)*CS%DY2q(I,J)) / (CS%DX2q(I,J) + CS%DY2q(I,J))
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xy(I,J) = Smag_Lap_const * grid_sp_q2
-
+      if (CS%Leith_Kh)       CS%LAPLAC3_const_xy(I,J) = Leith_Lap_const * grid_sp_q3
       ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
@@ -1365,7 +1485,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                                   (fmax * BoundCorConst)
         endif
       endif
-
+      if (CS%Leith_Ah) then       
+         CS%biharm5_const_xx(i,j) = Leith_bi_const * (grid_sp_h2 * grid_sp_h3)
+      endif
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
@@ -1382,6 +1504,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
           CS%Biharm_Const2_xy(I,J) = (grid_sp_q2 * grid_sp_q2 * grid_sp_q2) * &
                                       (abs(G%CoriolisBu(I,J)) * BoundCorConst)
         endif
+      endif
+      if (CS%Leith_Ah) then
+         CS%biharm5_const_xy(i,j) = Leith_bi_const * (grid_sp_q2 * grid_sp_q3)
       endif
 
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
@@ -1558,6 +1683,9 @@ subroutine hor_visc_end(CS)
     if (CS%Smagorinsky_Kh) then
       DEALLOC_(CS%Laplac_Const_xx) ; DEALLOC_(CS%Laplac_Const_xy)
     endif
+    if (CS%Leith_Kh) then
+      DEALLOC_(CS%Laplac3_Const_xx) ; DEALLOC_(CS%Laplac3_Const_xy)
+    endif
   endif
 
   if (CS%biharmonic) then
@@ -1573,6 +1701,8 @@ subroutine hor_visc_end(CS)
         DEALLOC_(CS%Biharm_Const2_xx) ; DEALLOC_(CS%Biharm_Const2_xy)
       endif
     endif
+    if (CS%Leith_Ah) then
+      DEALLOC_(CS%Biharm5_Const_xx) ; DEALLOC_(CS%Biharm5_Const_xy)
   endif
   if (CS%anisotropic) then
     DEALLOC_(CS%n1n2_h)

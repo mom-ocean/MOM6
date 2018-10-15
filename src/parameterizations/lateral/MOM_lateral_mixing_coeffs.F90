@@ -110,24 +110,24 @@ type, public :: VarMix_CS
   real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate (nondim).
 
   ! Leith parameters
-  logical :: use_QG_Leith      !< If true, enables the QG Leith scheme
-  logical :: use_beta_in_Leith !< If true, includes the beta term in the Leith viscosity
-  logical :: Leith_Kh          !< If true, enables the Leith scheme
-  logical :: modified_Leith    !< if true, include the divergence contribution to Leith viscosity
-  logical :: Leith_Ah          !< If true, enables the bi-harmonic Leith scheme
-  logical :: no_slip           !< If true, no slip boundary conditions are used.
-                               !! Otherwise free slip boundary conditions are assumed.
-                               !! The implementation of the free slip boundary
-                               !! conditions on a C-grid is much cleaner than the
-                               !! no slip boundary conditions. The use of free slip
-                               !! b.c.s is strongly encouraged. The no slip b.c.s
-                               !! are not implemented with the biharmonic viscosity.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Laplac3_const_xx, & ! Laplacian  metric-dependent constants (nondim)
-    biharm5_const_xx    ! Biharmonic metric-dependent constants (nondim)
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Laplac3_const_xy, & ! Laplacian  metric-dependent constants (nondim)
-    biharm5_const_xy    ! Biharmonic metric-dependent constants (nondim)
+  logical :: use_QG_Leith_GM    !< If true, uses the QG Leith viscosity as the GM coefficient
+!  logical :: use_beta_in_Leith !< If true, includes the beta term in the Leith viscosity
+!  logical :: Leith_Kh          !< If true, enables the Leith scheme
+!  logical :: modified_Leith    !< if true, include the divergence contribution to Leith viscosity
+!  logical :: Leith_Ah          !< If true, enables the bi-harmonic Leith scheme
+!  logical :: no_slip           !< If true, no slip boundary conditions are used.
+!                               !! Otherwise free slip boundary conditions are assumed.
+!                               !! The implementation of the free slip boundary
+!                               !! conditions on a C-grid is much cleaner than the
+!                               !! no slip boundary conditions. The use of free slip
+!                               !! b.c.s is strongly encouraged. The no slip b.c.s
+!                               !! are not implemented with the biharmonic viscosity.
+!  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+!    Laplac3_const_xx, & ! Laplacian  metric-dependent constants (nondim)
+!    biharm5_const_xx    ! Biharmonic metric-dependent constants (nondim)
+!  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
+!    Laplac3_const_xy, & ! Laplacian  metric-dependent constants (nondim)
+!    biharm5_const_xy    ! Biharmonic metric-dependent constants (nondim)
 
   ! Diagnostics
   !>@{
@@ -743,103 +743,106 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 end subroutine calc_slope_functions_using_just_e
 
 !> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
-subroutine calc_Leith_viscosity(CS, G, GV, u, v, h, k, Leith_Kh_h, Leith_Kh_q, Leith_Ah_h, Leith_Ah_q)
+subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, vort_xy_dx, vort_xy_dy)
   type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
+!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
+!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg m-2)
   integer,                                   intent(in)  :: k !< Layer for which to calculate vorticity magnitude
-  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity at h-points (m2 s-1)
-  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity at q-points (m2 s-1)
-  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity at h-points (m4 s-1)
-  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity at q-points (m4 s-1)
+  real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: vort_xy_dx !< x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: vort_xy_dy !< y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity at h-points (m2 s-1)
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity at q-points (m2 s-1)
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity at h-points (m4 s-1)
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity at q-points (m4 s-1)
+
   ! Local variables
-  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) (s-1)
-                                        dudy, & ! Meridional shear of zonal velocity (s-1)
-                                        dvdx    ! Zonal shear of meridional velocity (s-1)
+!  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) (s-1)
+!                                        dudy, & ! Meridional shear of zonal velocity (s-1)
+!                                        dvdx    ! Zonal shear of meridional velocity (s-1)
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
-    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
+!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
+!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
     dslopey_dz, & ! z-derivative of y-slope at v-points (m-1)
     h_at_v        ! Thickness at v-points (m or kg m-2)
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
-    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
+!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
     dslopex_dz, & ! z-derivative of x-slope at u-points (m-1)
     h_at_u        ! Thickness at u-points (m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
-  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
+!  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
+!  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
   real :: h_at_slope_above, h_at_slope_below, Ih, f
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  ! Divergence
-  do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-    div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
-                        G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
-                       (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
-                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
-                                  (h(i,j,k) + GV%H_subroundoff)
-  enddo ; enddo
-
-  ! Divergence gradient
-  do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
-    div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
-  enddo ; enddo
-
-  do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
-    div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
-  enddo ; enddo
-
-  ! Components for the vertical vorticity
-  ! Note this a simple re-calculation of shearing components using the same discretization.
-  ! We will consider using a circulation based calculation of vorticity later.
-  ! Also note this will need OBC boundary conditions re-applied...
-  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-    DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
-    dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
-    DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
-    dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
-  enddo ; enddo
-
-  ! Vorticity
-  if (CS%no_slip) then
-    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-    enddo ; enddo
-  else
-    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-    enddo ; enddo
-  endif
-
-  ! Vorticity gradient
-  do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
-    DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
-    vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
-  enddo ; enddo
-
-  do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
-    DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
-    vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
-  enddo ; enddo
-
-  ! Add in beta for the Leith viscosity
-  if (CS%use_beta_in_Leith) then
-    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
-      vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1) )
-    enddo ; enddo
-    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
-      vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j) )
-    enddo ; enddo
-  endif
-
+!  ! Divergence
+!  do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+!    div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
+!                        G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
+!                       (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
+!                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
+!                                  (h(i,j,k) + GV%H_subroundoff)
+!  enddo ; enddo
+!
+!  ! Divergence gradient
+!  do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+!    div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+!  enddo ; enddo
+!
+!  do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+!    div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+!  enddo ; enddo
+!
+!  ! Components for the vertical vorticity
+!  ! Note this a simple re-calculation of shearing components using the same discretization.
+!  ! We will consider using a circulation based calculation of vorticity later.
+!  ! Also note this will need OBC boundary conditions re-applied...
+!  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+!    DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+!    dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
+!    DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+!    dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
+!  enddo ; enddo
+!
+!  ! Vorticity
+!  if (CS%no_slip) then
+!    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+!      vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+!    enddo ; enddo
+!  else
+!    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+!      vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+!    enddo ; enddo
+!  endif
+!
+!  ! Vorticity gradient
+!  do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+!    DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+!    vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
+!  enddo ; enddo
+!
+!  do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+!    DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+!    vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
+!  enddo ; enddo
+!
+!  ! Add in beta for the Leith viscosity
+!  if (CS%use_beta_in_Leith) then
+!    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+!      vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1) )
+!    enddo ; enddo
+!    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+!      vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j) )
+!    enddo ; enddo
+!  endif
+! 
   ! Add in stretching term for the QG Leith vsicosity
-  if (CS%use_QG_Leith) then
+!  if (CS%use_QG_Leith) then
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       h_at_slope_above = 2. * ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) * h(i+1,j,k) ) / &
                          ( ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) + h(i+1,j,k) ) &
@@ -876,33 +879,33 @@ subroutine calc_Leith_viscosity(CS, G, GV, u, v, h, k, Leith_Kh_h, Leith_Kh_q, L
             + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
               ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) )
     enddo ; enddo
-  endif
+!  endif
 
-  mod_Leith = 0.; if (CS%modified_Leith) mod_Leith = 1.0
+!  mod_Leith = 0.; if (CS%modified_Leith) mod_Leith = 1.0
 
-  ! h-point viscosities
-  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    vert_vort_mag = sqrt( &
-      0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
-            (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
-      mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
-            (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
-    if (CS%Leith_Kh) Leith_Kh_h(i,j) = CS%Laplac3_const_xx(i,j) * vert_vort_mag
-    if (CS%Leith_Ah) Leith_Ah_h(i,j) = CS%biharm5_const_xx(i,j) * vert_vort_mag
-  enddo ; enddo
+!  ! h-point viscosities
+!  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+!    vert_vort_mag = sqrt( &
+!      0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
+!            (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
+!      mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
+!            (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
+!    if (CS%Leith_Kh) Leith_Kh_h(i,j) = CS%Laplac3_const_xx(i,j) * vert_vort_mag
+!    if (CS%Leith_Ah) Leith_Ah_h(i,j) = CS%biharm5_const_xx(i,j) * vert_vort_mag
+!  enddo ; enddo
 
-  ! q-point viscosities
-  do J=js-1,Jeq ; do I=is-1,Ieq
-    vert_vort_mag = sqrt( &
-      0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
-            (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
-      mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
-            (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
-    if (CS%Leith_Kh) Leith_Kh_q(I,J) = CS%Laplac3_const_xy(I,J) * vert_vort_mag
-    if (CS%Leith_Ah) Leith_Ah_q(I,J) = CS%biharm5_const_xx(I,J) * vert_vort_mag
-  enddo ; enddo
+!  ! q-point viscosities
+!  do J=js-1,Jeq ; do I=is-1,Ieq
+!    vert_vort_mag = sqrt( &
+!      0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
+!            (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
+!      mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
+!            (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
+!    if (CS%Leith_Kh) Leith_Kh_q(I,J) = CS%Laplac3_const_xy(I,J) * vert_vort_mag
+!    if (CS%Leith_Ah) Leith_Ah_q(I,J) = CS%biharm5_const_xx(I,J) * vert_vort_mag
+!  enddo ; enddo
 
-end subroutine calc_Leith_viscosity
+end subroutine calc_QG_Leith_viscosity
 
 subroutine VarMix_init(Time, G, param_file, diag, CS)
   type(time_type),            intent(in) :: Time !< Current model time
@@ -1204,82 +1207,83 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   endif
 
   ! Leith parameters
-  call get_param(param_file, mdl, "USE_QG_LEITH", CS%use_QG_Leith, &
-               "If true, use the QG Leith nonlinear eddy viscosity.", &
-               default=.false.)
-  call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
-               "If true, use a Leith nonlinear eddy viscosity.", &
-               default=CS%use_QG_Leith)
-  if (CS%use_QG_Leith .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
-           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
-           "LEITH_KH must be True when USE_QG_LEITH=True.")
-  call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
-               "If true, include the beta term in the QG Leith nonlinear eddy viscosity.", &
-               default=CS%use_QG_Leith)
-  call get_param(param_file, mdl, "LEITH_AH", CS%Leith_Ah, &
-               "If true, use a biharmonic Leith nonlinear eddy \n"//&
-               "viscosity.", default=.false.)
-  call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
-               "If true, add a term to Leith viscosity which is \n"//&
-               "proportional to the gradient of divergence.", &
-               default=.false.)
-  call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
-               "The nondimensional Laplacian Leith constant, \n"//&
-               "often set to 1.0", units="nondim", default=0.0, &
-                fail_if_missing = CS%Leith_Kh)
-  call get_param(param_file, mdl, "LEITH_BI_CONST", Leith_bi_const, &
-               "The nondimensional biharmonic Leith constant, \n"//&
-               "typical values are thus far undetermined.", units="nondim", default=0.0, &
-               fail_if_missing = CS%Leith_Ah)
-  if (CS%Leith_Kh .or. CS%Leith_Ah) then
-    in_use = .true.
-    call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
-                   "If true, no slip boundary conditions are used; otherwise \n"//&
-                   "free slip boundary conditions are assumed. The \n"//&
-                   "implementation of the free slip BCs on a C-grid is much \n"//&
-                   "cleaner than the no slip BCs. The use of free slip BCs \n"//&
-                   "is strongly encouraged, and no slip BCs are not used with \n"//&
-                   "the biharmonic viscosity.", default=.false.)
+!  call get_param(param_file, mdl, "USE_QG_LEITH", CS%use_QG_Leith, &
+!               "If true, use the QG Leith nonlinear eddy viscosity.", &
+!               default=.false.)
+!  call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
+!               "If true, use a Leith nonlinear eddy viscosity.", &
+!               default=CS%use_QG_Leith)
+!  if (CS%use_QG_Leith .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
+!           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+!           "LEITH_KH must be True when USE_QG_LEITH=True.")
+!  call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
+!               "If true, include the beta term in the QG Leith nonlinear eddy viscosity.", &
+!               default=CS%use_QG_Leith)
+!  call get_param(param_file, mdl, "LEITH_AH", CS%Leith_Ah, &
+!               "If true, use a biharmonic Leith nonlinear eddy \n"//&
+!               "viscosity.", default=.false.)
+!  call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
+!               "If true, add a term to Leith viscosity which is \n"//&
+!               "proportional to the gradient of divergence.", &
+!               default=.false.)
+!  call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
+!               "The nondimensional Laplacian Leith constant, \n"//&
+!               "often set to 1.0", units="nondim", default=0.0, &
+!                fail_if_missing = CS%Leith_Kh)
+!  call get_param(param_file, mdl, "LEITH_BI_CONST", Leith_bi_const, &
+!               "The nondimensional biharmonic Leith constant, \n"//&
+!               "typical values are thus far undetermined.", units="nondim", default=0.0, &
+!               fail_if_missing = CS%Leith_Ah)
+!  if (CS%Leith_Kh .or. CS%Leith_Ah) then
+!    in_use = .true.
+!    call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
+!                   "If true, no slip boundary conditions are used; otherwise \n"//&
+!                   "free slip boundary conditions are assumed. The \n"//&
+!                   "implementation of the free slip BCs on a C-grid is much \n"//&
+!                   "cleaner than the no slip BCs. The use of free slip BCs \n"//&
+!                   "is strongly encouraged, and no slip BCs are not used with \n"//&
+!                   "the biharmonic viscosity.", default=.false.)
+  if (CS%Use_QG_Leith_GM) then
     if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
-           "USE_STORED_SLOPES must be True when ing Leith.")
+           "USE_STORED_SLOPES must be True when using QG Leith.")
   endif
-  if (CS%Leith_Kh) then
-    allocate(CS%Laplac3_const_xx(isd:ied,jsd:jed)) ; CS%Laplac3_const_xx(:,:) = 0.0
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      DX2 = G%dxT(i,j)*G%dxT(i,j)
-      DY2 = G%dyT(i,j)*G%dyT(i,j)
-      grid_sp_2 = (2.0*DX2*DY2) / (DX2 + DY2)
-      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
-      CS%Laplac3_const_xx(i,j) = Leith_Lap_const * grid_sp_3
-    enddo ; enddo
-    allocate(CS%Laplac3_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac3_const_xy(:,:) = 0.0
-    do J=js-1,Jeq ; do I=is-1,Ieq
-      DX2 = G%dxBu(I,J)*G%dxBu(I,J)
-      DY2 = G%dyBu(I,J)*G%dyBu(I,J)
-      grid_sp_2 = (2.0*DX2*DY2) / (DX2 + DY2)
-      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
-      CS%Laplac3_const_xy(I,J) = Leith_Lap_const * grid_sp_3
-    enddo ; enddo
-  endif
-  if (CS%Leith_Ah) then
-    allocate(CS%biharm5_const_xx(isd:ied,jsd:jed)) ; CS%biharm5_const_xx(:,:) = 0.0
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      DX2 = G%dxT(i,j)*G%dxT(i,j)
-      DY2 = G%dyT(i,j)*G%dyT(i,j)
-      grid_sp_2 = (2.0*DX2*DY2) / (DX2+DY2)
-      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
-      CS%biharm5_const_xx(i,j) = Leith_bi_const * (grid_sp_2 * grid_sp_3)
-    enddo ; enddo
-    allocate(CS%biharm5_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm5_const_xy(:,:) = 0.0
-    do J=js-1,Jeq ; do I=is-1,Ieq
-      DX2 = G%dxBu(I,J)*G%dxBu(I,J)
-      DY2 = G%dyBu(I,J)*G%dyBu(I,J)
-      grid_sp_2 = (2.0*DX2*DY2) / (DX2+DY2)
-      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
-      CS%biharm5_const_xy(I,J) = Leith_bi_const * (grid_sp_2 * grid_sp_3)
-    enddo ; enddo
-  endif
+!  if (CS%Leith_Kh) then
+!    allocate(CS%Laplac3_const_xx(isd:ied,jsd:jed)) ; CS%Laplac3_const_xx(:,:) = 0.0
+!    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+!      DX2 = G%dxT(i,j)*G%dxT(i,j)
+!      DY2 = G%dyT(i,j)*G%dyT(i,j)
+!      grid_sp_2 = (2.0*DX2*DY2) / (DX2 + DY2)
+!      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
+!      CS%Laplac3_const_xx(i,j) = Leith_Lap_const * grid_sp_3
+!    enddo ; enddo
+!    allocate(CS%Laplac3_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac3_const_xy(:,:) = 0.0
+!    do J=js-1,Jeq ; do I=is-1,Ieq
+!      DX2 = G%dxBu(I,J)*G%dxBu(I,J)
+!      DY2 = G%dyBu(I,J)*G%dyBu(I,J)
+!      grid_sp_2 = (2.0*DX2*DY2) / (DX2 + DY2)
+!      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
+!      CS%Laplac3_const_xy(I,J) = Leith_Lap_const * grid_sp_3
+!    enddo ; enddo
+!  endif
+!  if (CS%Leith_Ah) then
+!    allocate(CS%biharm5_const_xx(isd:ied,jsd:jed)) ; CS%biharm5_const_xx(:,:) = 0.0
+!    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+!      DX2 = G%dxT(i,j)*G%dxT(i,j)
+!      DY2 = G%dyT(i,j)*G%dyT(i,j)
+!      grid_sp_2 = (2.0*DX2*DY2) / (DX2+DY2)
+!      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
+!      CS%biharm5_const_xx(i,j) = Leith_bi_const * (grid_sp_2 * grid_sp_3)
+!    enddo ; enddo
+!    allocate(CS%biharm5_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm5_const_xy(:,:) = 0.0
+!    do J=js-1,Jeq ; do I=is-1,Ieq
+!      DX2 = G%dxBu(I,J)*G%dxBu(I,J)
+!      DY2 = G%dyBu(I,J)*G%dyBu(I,J)
+!      grid_sp_2 = (2.0*DX2*DY2) / (DX2+DY2)
+!      grid_sp_3 = grid_sp_2*sqrt(grid_sp_2)
+!      CS%biharm5_const_xy(I,J) = Leith_bi_const * (grid_sp_2 * grid_sp_3)
+!    enddo ; enddo
+!  endif
 
   ! If nothing is being stored in this class then deallocate
   if (in_use) then
