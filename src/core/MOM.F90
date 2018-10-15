@@ -72,10 +72,11 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
+use MOM_dyn_horgrid,           only : rescale_dyn_horgrid_bathymetry
 use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
-use MOM_grid,                  only : ocean_grid_type, set_first_direction
-use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
+use MOM_grid,                  only : ocean_grid_type, MOM_grid_init, MOM_grid_end
+use MOM_grid,                  only : set_first_direction, rescale_grid_bathymetry
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
@@ -113,6 +114,7 @@ use MOM_variables,             only : surface, allocate_surface_state, deallocat
 use MOM_variables,             only : thermo_var_ptrs, vertvisc_type
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
+use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only : wave_parameters_CS, waves_end
 use MOM_wave_interface,        only : Update_Stokes_Drift
@@ -272,7 +274,7 @@ type, public :: MOM_control_struct ; private
 
   ! These elements are used to control the calculation and error checking of the surface state
   real :: Hmix                  !< Diagnostic mixed layer thickness over which to
-                                !! average surface tracer properties (in meter) when
+                                !! average surface tracer properties (in depth units, Z) when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
   real :: HFrz                  !< If HFrz > 0, melt potential will be computed.
@@ -280,7 +282,7 @@ type, public :: MOM_control_struct ; private
                                 !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                                 !! If HFrz <= 0 (default), melt potential will not be computed.
   real :: Hmix_UV               !< Depth scale over which to average surface flow to
-                                !! feedback to the coupler/driver (m) when
+                                !! feedback to the coupler/driver (in depth units, Z) when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
   logical :: check_bad_sfc_vals !< If true, scan surface state for ridiculous values.
@@ -751,7 +753,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
       CS%time_in_cycle = CS%time_in_cycle + dt
-      call find_eta(h, CS%tv, GV%g_Earth, G, GV, ssh, CS%eta_av_bc)
+      call find_eta(h, CS%tv, G, GV, ssh, CS%eta_av_bc, eta_to_m=1.0)
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
       enddo ; enddo
@@ -1574,7 +1576,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
-  real :: conv2watt, conv2salt, H_convert
+  real :: conv2watt, conv2salt
   character(len=48) :: flux_units, S_flux_units
 
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
@@ -1753,12 +1755,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
                  "over which to average to find surface properties like \n"//&
                  "SST and SSS or density (but not surface velocities).", &
-                 units="m", default=1.0)
+                 units="m", default=1.0) !, scale=GV%m_to_Z)
     call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
                  "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
                  "over which to average to find surface flow properties,\n"//&
                  "SSU, SSV. A non-positive value indicates no averaging.", &
-                 units="m", default=0.)
+                 units="m", default=0.) !, scale=GV%m_to_Z)
   endif
   call get_param(param_file, "MOM", "HFREEZE", CS%HFrz, &
                  "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
@@ -1950,7 +1952,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call verticalGridInit( param_file, CS%GV )
   GV => CS%GV
-!  dG%g_Earth = GV%g_Earth
+!  dG%g_Earth = (GV%g_Earth*GV%m_to_Z)
+  !### These should be merged with the get_param calls, but must follow verticalGridInit.
+  if (.not.bulkmixedlayer) then
+    CS%Hmix = CS%Hmix * GV%m_to_Z
+    CS%Hmix_UV = CS%Hmix_UV * GV%m_to_Z
+  endif
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
@@ -1964,6 +1971,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Allocate initialize time-invariant MOM variables.
   call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+  ! This could replace a later call to rescale_grid_bathymetry.
+  if (dG%Zd_to_m /= GV%Z_to_m) call rescale_dyn_horgrid_bathymetry(dG, GV%Z_to_m)
+
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
@@ -1974,7 +1984,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   IsdB = dG%IsdB  ; IedB = dG%IedB ; JsdB = dG%JsdB ; JedB = dG%JedB
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
   ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
-  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = GV%Angstrom
+  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = GV%Angstrom_H
   ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
   ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
   if (use_temperature) then
@@ -2005,10 +2015,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       conv2watt    = GV%H_to_kg_m2 * CS%tv%C_p
       if (GV%Boussinesq) then
         conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
-        H_convert = GV%H_to_m
       else
         conv2salt = GV%H_to_kg_m2
-        H_convert = GV%H_to_kg_m2
       endif
       call register_tracer(CS%tv%T, CS%tracer_Reg, param_file, dG%HI, GV, &
                            tr_desc=vd_T, registry_diags=.true., flux_nameroot='T', &
@@ -2124,11 +2132,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Initialize dynamically evolving fields, perhaps from restart files.
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize_coord(GV, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv, dG%max_depth)
+                            dirs%output_directory, CS%tv, dG%max_depth*dG%Zd_to_m)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call ALE_init(param_file, GV, dG%max_depth, CS%ALE_CSp)
+    call ALE_init(param_file, GV, dG%max_depth*dG%Zd_to_m, CS%ALE_CSp)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
@@ -2140,6 +2148,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call copy_dyngrid_to_MOM_grid(dG, G)
   call destroy_dyn_horgrid(dG)
 
+  ! This could replace an earlier call to rescale_dyn_horgrid_bathymetry just after MOM_initialize_fixed.
+  !  if (G%Zd_to_m /= GV%Z_to_m) call rescale_grid_bathymetry(G, GV%Z_to_m)
+
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
@@ -2148,7 +2159,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else ; G%Domain_aux => G%Domain ; endif
   ! Copy common variables from the vertical grid to the horizontal grid.
   ! Consider removing this later?
-  G%ke = GV%ke ; G%g_Earth = GV%g_Earth
+  G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*GV%m_to_Z)
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
                             dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -2177,7 +2188,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
     else ; CS%G%Domain_aux => CS%G%Domain ;endif
-    G%ke = GV%ke ; G%g_Earth = GV%g_Earth
+    G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*GV%m_to_Z)
   endif
 
 
@@ -2286,8 +2297,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, restart_CSp)
 
-  call VarMix_init(Time, G, param_file, diag, CS%VarMix)
-  call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp, CS%OBC)
+  call VarMix_init(Time, G, GV, param_file, diag, CS%VarMix)
+  call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
@@ -2322,7 +2333,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call thickness_diffuse_init(Time, G, GV, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, param_file, diag, &
-                                                  CS%mixedlayer_restrat_CSp)
+                                                  CS%mixedlayer_restrat_CSp, restart_CSp)
   if (CS%mixedlayer_restrat) then
     if (.not.(bulkmixedlayer .or. CS%use_ALE_algorithm)) &
       call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
@@ -2429,9 +2440,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (.not.query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, CS%ave_ssh_ibc, eta)
+      call find_eta(CS%h, CS%tv, G, GV, CS%ave_ssh_ibc, eta, eta_to_m=1.0)
     else
-      call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, CS%ave_ssh_ibc)
+      call find_eta(CS%h, CS%tv, G, GV, CS%ave_ssh_ibc, eta_to_m=1.0)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2446,17 +2457,19 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
                       (LEN_TRIM(dirs%input_filename) == 1))
 
-
   if (CS%ensemble_ocean) then
-      call init_oda(Time, G, GV, CS%odaCS)
+    call init_oda(Time, G, GV, CS%odaCS)
   endif
+
+  !### This could perhaps go here instead of in finish_MOM_initialization?
+  ! call fix_restart_scaling(GV)
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
 
 end subroutine initialize_MOM
 
-!> Finishe initializing MOM and writes out the initial conditions.
+!> Finishes initializing MOM and writes out the initial conditions.
 subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
@@ -2468,7 +2481,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(verticalGrid_type), pointer :: GV => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp_tmp => NULL()
   real, allocatable :: z_interface(:,:,:) ! Interface heights (meter)
-  real, allocatable :: eta(:,:) ! Interface heights (meter)
   type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)
@@ -2477,12 +2489,15 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   ! Pointers for convenience
   G => CS%G ; GV => CS%GV
 
+  !### Move to initialize_MOM?
+  call fix_restart_scaling(GV)
+
   ! Write initial conditions
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
-    call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, z_interface)
+    call find_eta(CS%h, CS%tv, G, GV, z_interface, eta_to_m=1.0)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
 
@@ -2615,9 +2630,15 @@ subroutine set_restart_fields(GV, param_file, CS, restart_CSp)
   call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., &
                  do_not_log=.true.)
   if (use_ice_shelf .and. associated(CS%Hml)) then
-     call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
-                                 "Mixed layer thickness", "meter")
+    call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
+                                "Mixed layer thickness", "meter")
   endif
+
+  ! Register scalar unit conversion factors.
+  call register_restart_field(GV%m_to_Z_restart, "m_to_Z", .false., restart_CSp, &
+                              "Height unit conversion factor", "Z meter-1")
+  call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, &
+                              "Thickness unit conversion factor", "Z meter-1")
 
 end subroutine set_restart_fields
 
@@ -2651,7 +2672,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
       else
         Rho_conv=GV%Rho0
       endif
-      IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
+      IgR0 = 1.0 / (Rho_conv * (GV%g_Earth*GV%m_to_Z))
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif
@@ -2676,14 +2697,15 @@ subroutine extract_surface_state(CS, sfc_state)
     u => NULL(), & !< u : zonal velocity component (m/s)
     v => NULL(), & !< v : meridional velocity component (m/s)
     h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))           !< distance from the surface (meter)
-  real :: depth_ml                    !< depth over which to average to
-                                      !< determine mixed layer properties (meter)
-  real :: dh                          !< thickness of a layer within mixed layer (meter)
-  real :: mass                        !< mass per unit area of a layer (kg/m2)
-  real :: T_freeze                    !< freezing temperature (oC)
-  real :: delT(SZI_(CS%G))            !< T-T_freeze (oC)
-  logical :: use_temperature   !< If true, temp and saln used as state variables.
+  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units (Z)
+  real :: depth_ml           !< Depth over which to average to determine mixed
+                             !! layer properties (Z)
+  real :: dh                 !< Thickness of a layer within the mixed layer (Z)
+  real :: mass               !< Mass per unit area of a layer (kg/m2)
+  real :: bathy_m            !< The depth of bathymetry in m (not Z), used for error checking.
+  real :: T_freeze           !< freezing temperature (oC)
+  real :: delT(SZI_(CS%G))   !< T-T_freeze (oC)
+  logical :: use_temperature !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -2737,7 +2759,8 @@ subroutine extract_surface_state(CS, sfc_state)
     enddo ; enddo
 
   else  ! (CS%Hmix >= 0.0)
-
+    !### This calculation should work in thickness (H) units instead of Z, but that
+    !### would change answers at roundoff in non-Boussinesq cases.
     depth_ml = CS%Hmix
   !   Determine the mean tracer properties of the uppermost depth_ml fluid.
     !$OMP parallel do default(shared) private(depth,dh)
@@ -2752,8 +2775,8 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (depth(i) + h(i,j,k)*GV%H_to_m < depth_ml) then
-          dh = h(i,j,k)*GV%H_to_m
+        if (depth(i) + h(i,j,k)*GV%H_to_Z < depth_ml) then
+          dh = h(i,j,k)*GV%H_to_Z
         elseif (depth(i) < depth_ml) then
           dh = depth_ml - depth(i)
         else
@@ -2769,19 +2792,23 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-            depth(i) = GV%H_subroundoff*GV%H_to_m
+        if (depth(i) < GV%H_subroundoff*GV%H_to_Z) &
+            depth(i) = GV%H_subroundoff*GV%H_to_Z
         if (use_temperature) then
           sfc_state%SST(i,j) = sfc_state%SST(i,j) / depth(i)
           sfc_state%SSS(i,j) = sfc_state%SSS(i,j) / depth(i)
         else
           sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
         endif
+        !### Verify that this is no longer needed.
+        ! sfc_state%Hml(i,j) = GV%Z_to_m * depth(i)
       enddo
     enddo ! end of j loop
 
 !   Determine the mean velocities in the uppermost depth_ml fluid.
     if (CS%Hmix_UV>0.) then
+      !### This calculation should work in thickness (H) units instead of Z, but that
+      !### would change answers at roundoff in non-Boussinesq cases.
       depth_ml = CS%Hmix_UV
       !$OMP parallel do default(shared) private(depth,dh,hv)
       do J=jscB,jecB
@@ -2790,7 +2817,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%v(i,J) = 0.0
         enddo
         do k=1,nz ; do i=is,ie
-          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_m
+          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_Z
           if (depth(i) + hv < depth_ml) then
             dh = hv
           elseif (depth(i) < depth_ml) then
@@ -2803,8 +2830,8 @@ subroutine extract_surface_state(CS, sfc_state)
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
         do i=is,ie
-          if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-              depth(i) = GV%H_subroundoff*GV%H_to_m
+          if (depth(i) < GV%H_subroundoff*GV%H_to_Z) &
+              depth(i) = GV%H_subroundoff*GV%H_to_Z
           sfc_state%v(i,J) = sfc_state%v(i,J) / depth(i)
         enddo
       enddo ! end of j loop
@@ -2816,7 +2843,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%u(I,j) = 0.0
         enddo
         do k=1,nz ; do I=iscB,iecB
-          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_m
+          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_Z
           if (depth(i) + hu < depth_ml) then
             dh = hu
           elseif (depth(I) < depth_ml) then
@@ -2829,8 +2856,8 @@ subroutine extract_surface_state(CS, sfc_state)
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
         do I=iscB,iecB
-          if (depth(I) < GV%H_subroundoff*GV%H_to_m) &
-              depth(I) = GV%H_subroundoff*GV%H_to_m
+          if (depth(I) < GV%H_subroundoff*GV%H_to_Z) &
+              depth(I) = GV%H_subroundoff*GV%H_to_Z
           sfc_state%u(I,j) = sfc_state%u(I,j) / depth(I)
         enddo
       enddo ! end of j loop
@@ -2942,10 +2969,11 @@ subroutine extract_surface_state(CS, sfc_state)
     numberOfErrors=0 ! count number of errors
     do j=js,je; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
-        localError = sfc_state%sea_lev(i,j)<=-G%bathyT(i,j)       &
+        bathy_m = G%Zd_to_m*G%bathyT(i,j)
+        localError = sfc_state%sea_lev(i,j)<=-bathy_m &
                 .or. sfc_state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j)<=-CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j)+G%bathyT(i,j) < CS%bad_vol_col_thick
+                .or. sfc_state%sea_lev(i,j) + bathy_m < CS%bad_vol_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &
@@ -2958,7 +2986,7 @@ subroutine extract_surface_state(CS, sfc_state)
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),8(a,es11.4,x))') &
                 'Extreme surface sfc_state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
-                'D=',G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
+                'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
@@ -2966,7 +2994,7 @@ subroutine extract_surface_state(CS, sfc_state)
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),6(a,es11.4))') &
                 'Extreme surface sfc_state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
-                'D=',G%bathyT(i,j),  'SSH=',sfc_state%sea_lev(i,j), &
+                'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
             endif
