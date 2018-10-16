@@ -9,8 +9,7 @@ use MOM_domains,               only : pass_var
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
-use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_lateral_mixing_coeffs, only : calc_Leith_viscosity
+use MOM_lateral_mixing_coeffs, only : VarMix_CS, calc_QG_Leith_viscosity
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
@@ -160,6 +159,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_diffu     = -1, id_diffv         = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
+  integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
   !!@}
 
@@ -233,12 +233,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
-    Kh_q      ! Laplacian viscosity at corner points (m2/s)
+    Kh_q, &   ! Laplacian viscosity at corner points (m2/s)
+    vort_xy_q ! vertical vorticity at corner points (s-1)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
-    FrictWork        ! energy dissipated by lateral friction (W/m2)
+    FrictWork, &     ! energy dissipated by lateral friction (W/m2)
+    div_xx_h         ! horizontal divergence (s-1)
 
   real :: Ah         ! biharmonic viscosity (m4/s)
   real :: Kh         ! Laplacian  viscosity (m2/s)
@@ -269,7 +271,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: RoScl     ! The scaling function for MEKE source term
   real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
   real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
-
+  real :: DY_dxBu, DX_dyBu
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
@@ -323,7 +325,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
 !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
 !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
-!$OMP                                  mod_Leith, legacy_bound)                       &
+!$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
@@ -591,7 +593,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
-      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then      
+      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
         vert_vort_mag = sqrt( &
           0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
               (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
@@ -631,6 +633,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         endif
 
         if (CS%id_Kh_h>0) Kh_h(i,j,k) = Kh
+        if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
 
         str_xx(i,j) = -Kh * sh_xx(i,j)
       else   ! not Laplacian
@@ -793,6 +796,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         endif
 
         if (CS%id_Kh_q>0) Kh_q(I,J,k) = Kh
+        if (CS%id_vort_xy_q>0) vort_xy_q(I,J,k) = vort_xy(I,J)
 
         str_xy(I,J) = -Kh * sh_xy(I,J)
       else   ! not Laplacian
@@ -961,6 +965,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   if (CS%id_diffv>0)     call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
   if (CS%id_Ah_h>0)      call post_data(CS%id_Ah_h, Ah_h, CS%diag)
+  if (CS%id_div_xx_h>0)  call post_data(CS%id_div_xx_h, div_xx_h, CS%diag)
+  if (CS%id_vort_xy_q>0) call post_data(CS%id_vort_xy_q, vort_xy_q, CS%diag)
   if (CS%id_Ah_q>0)      call post_data(CS%id_Ah_q, Ah_q, CS%diag)
   if (CS%id_Kh_h>0)      call post_data(CS%id_Kh_h, Kh_h, CS%diag)
   if (CS%id_Kh_q>0)      call post_data(CS%id_Kh_q, Kh_q, CS%diag)
@@ -1217,7 +1223,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  units="m s-1", default=maxvel)
       endif
     endif
-    if (CS%Leith_Ah .or. get_all)
+    if (CS%Leith_Ah .or. get_all) &
         call get_param(param_file, mdl, "LEITH_BI_CONST", Leith_bi_const, &
                  "The nondimensional biharmonic Leith constant, \n"//&
                  "typical values are thus far undetermined.", units="nondim", default=0.0, &
@@ -1294,7 +1300,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     endif
     if (CS%Leith_Kh) then
       ALLOC_(CS%Laplac3_const_xx(isd:ied,jsd:jed)) ; CS%Laplac3_const_xx(:,:) = 0.0
-      ALLOC_(CS%Laplac3_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac3_const_xy(:,:) = 0.0    
+      ALLOC_(CS%Laplac3_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac3_const_xy(:,:) = 0.0
     endif
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
@@ -1351,7 +1357,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       endif
     endif
     if (CS%Leith_Ah) then
-        ALLOC_(CS%biharm5_const_xx(isd:ied,jsd:jed)) ; CS%biharm5_const_xx(:,:) = 0.0    
+        ALLOC_(CS%biharm5_const_xx(isd:ied,jsd:jed)) ; CS%biharm5_const_xx(:,:) = 0.0
         ALLOC_(CS%biharm5_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm5_const_xy(:,:) = 0.0
     endif
   endif
@@ -1485,7 +1491,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                                   (fmax * BoundCorConst)
         endif
       endif
-      if (CS%Leith_Ah) then       
+      if (CS%Leith_Ah) then
          CS%biharm5_const_xx(i,j) = Leith_bi_const * (grid_sp_h2 * grid_sp_h3)
       endif
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
@@ -1628,6 +1634,15 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
     CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
         'Laplacian Horizontal Viscosity at q Points', 'm2 s-1')
+
+    if (CS%Leith_Kh) then
+      CS%id_vort_xy_q = register_diag_field('ocean_model', 'vort_xy_q', diag%axesBL, Time, &
+        'Vertical vorticity at q Points', 's-1')
+
+      CS%id_div_xx_h = register_diag_field('ocean_model', 'div_xx_h', diag%axesTL, Time, &
+        'Horizontal divergence at h Points', 's-1')
+    endif
+
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
@@ -1703,6 +1718,7 @@ subroutine hor_visc_end(CS)
     endif
     if (CS%Leith_Ah) then
       DEALLOC_(CS%Biharm5_Const_xx) ; DEALLOC_(CS%Biharm5_Const_xy)
+    endif
   endif
   if (CS%anisotropic) then
     DEALLOC_(CS%n1n2_h)
