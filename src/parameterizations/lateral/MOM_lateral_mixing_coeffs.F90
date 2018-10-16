@@ -145,7 +145,7 @@ type, public :: VarMix_CS
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
-public calc_Leith_viscosity
+public calc_QG_Leith_viscosity
 
 contains
 
@@ -840,7 +840,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, vort_xy_dx, vort_xy_dy)
 !      vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j) )
 !    enddo ; enddo
 !  endif
-! 
+!
   ! Add in stretching term for the QG Leith vsicosity
 !  if (CS%use_QG_Leith) then
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
