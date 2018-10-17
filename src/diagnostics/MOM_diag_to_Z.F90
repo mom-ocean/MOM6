@@ -8,7 +8,7 @@ module MOM_diag_to_Z
 
 use MOM_domains,       only : pass_var
 use MOM_coms,          only : reproducing_sum
-use MOM_diag_mediator, only : post_data, post_data_1d_k, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
 use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_diag_mediator, only : ocean_register_diag
@@ -107,7 +107,7 @@ function global_z_mean(var,G,CS,tracer)
   do k=1,nz ; do j=js,je ; do i=is,ie
     valid_point = 1.0
     ! Weight factor for partial bottom cells
-    depth_weight = min( max( (-1.*G%bathyT(i,j)), CS%Z_int(k+1) ) - CS%Z_int(k), 0.)
+    depth_weight = min( max( (-G%Zd_to_m*G%bathyT(i,j)), CS%Z_int(k+1) ) - CS%Z_int(k), 0.)
 
     ! Flag the point as invalid if it contains missing data, or is below the bathymetry
     if (var(i,j,k) == CS%missing_tr(tracer)) valid_point = 0.
@@ -115,7 +115,7 @@ function global_z_mean(var,G,CS,tracer)
 
     weight(i,j,k) = depth_weight * ( (valid_point * (G%areaT(i,j) * G%mask2dT(i,j))) )
 
-    ! If the point is flagged, set the variable itsef to zero to avoid NaNs
+    ! If the point is flagged, set the variable itself to zero to avoid NaNs
     if (valid_point == 0.) then
       tmpForSumming(i,j,k) = 0.0
     else
@@ -190,7 +190,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
   nkml = max(GV%nkml, 1)
-  Angstrom = GV%Angstrom
+  Angstrom = GV%Angstrom_H
   ssh(:,:) = ssh_in
   linear_velocity_profiles = .true.
   ! Update the halos
@@ -217,7 +217,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
       ! Remove all massless layers.
       do I=Isq,Ieq
         nk_valid(I) = 0
-        D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
+        D_pt(I) = 0.5*G%Zd_to_m*(G%bathyT(i+1,j)+G%bathyT(i,j))
         if (ice_shelf) then
           if (frac_shelf_h(i,j)+frac_shelf_h(i+1,j) > 0.) then ! under shelf
             shelf_depth(I) = abs(0.5*(ssh(i+1,j)+ssh(i,j)))
@@ -314,7 +314,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
       shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
       do i=is,ie
-        nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
+        nk_valid(i) = 0 ; D_pt(i) = 0.5*G%Zd_to_m*(G%bathyT(i,j)+G%bathyT(i,j+1))
         if (ice_shelf) then
           if (frac_shelf_h(i,j)+frac_shelf_h(i,j+1) > 0.) then ! under shelf
             shelf_depth(i) = abs(0.5*(ssh(i,j)+ssh(i,j+1)))
@@ -406,7 +406,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
       shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
       do i=is,ie
-        nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j)
+        nk_valid(i) = 0 ; D_pt(i) = G%Zd_to_m*G%bathyT(i,j)
         if (ice_shelf) then
           if (frac_shelf_h(i,j) > 0.) then ! under shelf
             shelf_depth(i) = abs(ssh(i,j))
@@ -479,7 +479,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
       if (CS%id_tr(m) > 0) call post_data(CS%id_tr(m), CS%tr_z(m)%p, CS%diag)
       if (CS%id_tr_xyave(m) > 0) then
         layer_ave = global_z_mean(CS%tr_z(m)%p,G,CS,m)
-        call post_data_1d_k(CS%id_tr_xyave(m), layer_ave, CS%diag)
+        call post_data(CS%id_tr_xyave(m), layer_ave, CS%diag)
       endif
     enddo
   endif
@@ -556,13 +556,13 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
     htot(i,j) = htot(i,j) + h(i,j,k)
   enddo ; enddo ; enddo
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    dilate(i,j) = G%bathyT(i,j) / htot(i,j)
+    dilate(i,j) = G%Zd_to_m*G%bathyT(i,j) / htot(i,j)
   enddo ; enddo
 
   ! zonal transport
   if (CS%id_uh_Z > 0) then ; do j=js,je
     do I=Isq,Ieq
-      kz(I) = nk_z ; z_int_above(I) = -0.5*(G%bathyT(i,j)+G%bathyT(i+1,j))
+      kz(I) = nk_z ; z_int_above(I) = -0.5*G%Zd_to_m*(G%bathyT(i,j)+G%bathyT(i+1,j))
     enddo
     do k=nk_z,1,-1 ; do I=Isq,Ieq
       uh_Z(I,k) = 0.0
@@ -597,7 +597,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
   ! meridional transport
   if (CS%id_vh_Z > 0) then ; do J=Jsq,Jeq
     do i=is,ie
-      kz(i) = nk_z ; z_int_above(i) = -0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
+      kz(i) = nk_z ; z_int_above(i) = -0.5*G%Zd_to_m*(G%bathyT(i,j)+G%bathyT(i,j+1))
     enddo
     do k=nk_z,1,-1 ; do i=is,ie
       vh_Z(i,k) = 0.0
@@ -678,20 +678,24 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   ! Note that by convention, e and Z_int decrease with increasing k.
   if (e(K+1)<=Z_bot) then
     wt(k) = 1.0 ; k_bot = k
-    Ih = 1.0 / (e(K)-e(K+1))
+    Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
     e_c = 0.5*(e(K)+e(K+1))
     z1(k) = (e_c - MIN(e(K),Z_top)) * Ih
     z2(k) = (e_c - Z_bot) * Ih
   else
     wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
-    z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K),Z_top)) / (e(K)-e(K+1))
+    if (e(K) /= e(K+1)) then
+      z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K), Z_top)) / (e(K)-e(K+1))
+    else ; z1(k) = -0.5 ; endif
     z2(k) = 0.5
     k_bot = k_max
     do k=k_top+1,k_max
       if (e(K+1)<=Z_bot) then
         k_bot = k
         wt(k) = e(K) - Z_bot ; z1(k) = -0.5
-        z2(k) = (0.5*(e(K)+e(K+1)) - Z_bot) / (e(K)-e(K+1))
+        if (e(K) /= e(K+1)) then
+          z2(k) = (0.5*(e(K)+e(K+1)) - Z_bot) / (e(K)-e(K+1))
+        else ; z2(k) = 0.5 ; endif
       else
         wt(k) = e(K) - e(K+1) ; z1(k) = -0.5 ; z2(k) = 0.5
       endif
@@ -705,7 +709,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
 
 end subroutine find_overlap
 
-!>   This subroutine determines a limited slope for val to be advected with
+!> This subroutine determines a limited slope for val to be advected with
 !! a piecewise limited scheme.
 subroutine find_limited_slope(val, e, slope, k)
   real, dimension(:), intent(in)  :: val !< A column of values that are being interpolated.
@@ -715,10 +719,10 @@ subroutine find_limited_slope(val, e, slope, k)
   ! Local variables
   real :: d1, d2
 
-  if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
+  d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
+  if (((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) .or. (d1*d2 <= 0.0)) then
     slope = 0.0 ! ; curvature = 0.0
   else
-    d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
     slope = (d1**2*(val(k+1) - val(k)) + d2**2*(val(k) - val(k-1))) * &
             ((e(K) - e(K+1)) / (d1*d2*(d1+d2)))
     ! slope = 0.5*(val(k+1) - val(k-1))
@@ -769,8 +773,8 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
     do k=1,nk ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
     do i=is,ie
       dilate(i) = 0.0
-      if (htot(i)*GV%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
-      e(i,nk+1) = -G%bathyT(i,j)
+      if (htot(i)*GV%H_to_m > 0.5) dilate(i) = (G%Zd_to_m*G%bathyT(i,j) - 0.0) / htot(i)
+      e(i,nk+1) = -G%Zd_to_m*G%bathyT(i,j)
     enddo
     do k=nk,1,-1 ; do i=is,ie
       e(i,k) = e(i,k+1) + h(i,j,k) * dilate(i)
@@ -1287,12 +1291,13 @@ function register_Z_diag(var_desc, CS, day, missing)
 end function register_Z_diag
 
 !> Register a diagnostic to be output at depth space interfaces
-function register_Zint_diag(var_desc, CS, day)
+function register_Zint_diag(var_desc, CS, day, conversion)
   integer                        :: register_Zint_diag !< The returned z-interface diagnostic index
   type(vardesc),      intent(in) :: var_desc !< A type with metadata for this diagnostic
   type(diag_to_Z_CS), pointer    :: CS   !< Control structure returned by
                                          !! previous call to diag_to_Z_init.
   type(time_type),    intent(in) :: day  !< The current model time
+  real,     optional, intent(in) :: conversion !< A value to multiply data by before writing to file
   ! Local variables
   character(len=64) :: var_name         ! A variable's name.
   character(len=48) :: units            ! A variable's units.
@@ -1323,8 +1328,9 @@ function register_Zint_diag(var_desc, CS, day)
         "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model_zold", trim(var_name),&
-        axes, day, trim(longname), trim(units), missing_value=CS%missing_value)
+  register_Zint_diag = register_diag_field("ocean_model_zold", trim(var_name), &
+        axes, day, trim(longname), trim(units), missing_value=CS%missing_value, &
+        conversion=conversion)
 
 end function register_Zint_diag
 

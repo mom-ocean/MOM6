@@ -44,6 +44,7 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   if ((isd > oG%isc) .or. (ied < oG%ied) .or. (jsd > oG%jsc) .or. (jed > oG%jed)) &
     call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
+  oG%Zd_to_m = dG%Zd_to_m
   do i=isd,ied ; do j=jsd,jed
     oG%geoLonT(i,j) = dG%geoLonT(i+ido,j+jdo)
     oG%geoLatT(i,j) = dG%geoLatT(i+ido,j+jdo)
@@ -187,6 +188,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
   if ((isd > dG%isc) .or. (ied < dG%ied) .or. (jsd > dG%jsc) .or. (jed > dG%jed)) &
     call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
+  dG%Zd_to_m = oG%Zd_to_m
   do i=isd,ied ; do j=jsd,jed
     dG%geoLonT(i,j) = oG%geoLonT(i+ido,j+jdo)
     dG%geoLatT(i,j) = oG%geoLatT(i+ido,j+jdo)

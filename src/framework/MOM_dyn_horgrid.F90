@@ -11,6 +11,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 implicit none ; private
 
 public create_dyn_horgrid, destroy_dyn_horgrid, set_derived_dyn_horgrid
+public rescale_dyn_horgrid_bathymetry
 
 !> Describes the horizontal ocean grid with only dynamic memory arrays
 type, public :: dyn_horgrid_type
@@ -130,17 +131,18 @@ type, public :: dyn_horgrid_type
     ! Except on a Cartesian grid, these are usually  some variant of "degrees".
 
   real, allocatable, dimension(:,:) :: &
-    bathyT        !< Ocean bottom depth at tracer points, in m.
+    bathyT        !< Ocean bottom depth at tracer points, in depth units.
+  real :: Zd_to_m  = 1.0 !< The conversion factor between the units of bathyT and m.
 
   logical :: bathymetry_at_vel  !< If true, there are separate values for the
                   !! basin depths at velocity points.  Otherwise the effects of
                   !! of topography are entirely determined from thickness points.
   real, allocatable, dimension(:,:) :: &
-    Dblock_u, &   !< Topographic depths at u-points at which the flow is blocked, in m.
-    Dopen_u       !< Topographic depths at u-points at which the flow is open at width dy_Cu, in m.
+    Dblock_u, &   !< Topographic depths at u-points at which the flow is blocked, in depth units.
+    Dopen_u       !< Topographic depths at u-points at which the flow is open at width dy_Cu, in depth units.
   real, allocatable, dimension(:,:) :: &
-    Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked, in m.
-    Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv, in m.
+    Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked, in depth units.
+    Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv, in depth units.
   real, allocatable, dimension(:,:) :: &
     CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
   real, allocatable, dimension(:,:) :: &
@@ -158,7 +160,7 @@ type, public :: dyn_horgrid_type
   real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
   real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
   real :: Rad_Earth = 6.378e6 !< The radius of the planet in meters.
-  real :: max_depth     !< The maximum depth of the ocean in meters.
+  real :: max_depth     !< The maximum depth of the ocean in depth units (scaled by Zd_to_m).
 end type dyn_horgrid_type
 
 contains
@@ -271,6 +273,40 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%gridLatB(jsg-1:jeg)) ; G%gridLatB(:) = 0.0
 
 end subroutine create_dyn_horgrid
+
+!> rescale_dyn_horgrid_bathymetry permits a change in the internal units for the bathymetry on the
+!! grid, both rescaling the depths and recording the new internal depth units.
+subroutine rescale_dyn_horgrid_bathymetry(G, m_in_new_units)
+  type(dyn_horgrid_type), intent(inout) :: G !< The dynamic horizontal grid type
+  real,                   intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
+
+  ! Local variables
+  real :: rescale
+  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (m_in_new_units == G%Zd_to_m) return
+  if (m_in_new_units < 0.0) &
+    call MOM_error(FATAL, "rescale_grid_bathymetry: Negative depth units are not permitted.")
+  if (m_in_new_units == 0.0) &
+    call MOM_error(FATAL, "rescale_grid_bathymetry: Zero depth units are not permitted.")
+
+  rescale = G%Zd_to_m / m_in_new_units
+  do j=jsd,jed ; do i=isd,ied
+    G%bathyT(i,j) = rescale*G%bathyT(i,j)
+  enddo ; enddo
+  if (G%bathymetry_at_vel) then ; do j=jsd,jed ; do I=IsdB,IedB
+    G%Dblock_u(I,j) = rescale*G%Dblock_u(I,j) ; G%Dopen_u(I,j) = rescale*G%Dopen_u(I,j)
+  enddo ; enddo ; endif
+  if (G%bathymetry_at_vel) then ; do J=JsdB,JedB ; do i=isd,ied
+    G%Dblock_v(i,J) = rescale*G%Dblock_v(i,J) ; G%Dopen_v(i,J) = rescale*G%Dopen_v(i,J)
+  enddo ; enddo ; endif
+  G%max_depth = rescale*G%max_depth
+  G%Zd_to_m = m_in_new_units
+
+end subroutine rescale_dyn_horgrid_bathymetry
 
 !> set_derived_dyn_horgrid calculates metric terms that are derived from other metrics.
 subroutine set_derived_dyn_horgrid(G)
