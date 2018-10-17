@@ -1149,12 +1149,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   character(len=*),           intent(in)    :: directory !< The directory into which to place the geometry file.
   character(len=*), optional, intent(in)    :: geom_file !< If present, the name of the geometry file
                                                          !! (otherwise the file is "ocean_geometry")
-!   This subroutine writes out a file containing all of the ocean geometry
-! and grid data uses by the MOM ocean model.
-! Arguments: G - The ocean's grid structure.  Effectively intent in.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      directory - The directory into which to place the file.
+
+  ! Local variables.
   character(len=240) :: filepath
   character(len=40)  :: mdl = "write_ocean_geometry_file"
   integer, parameter :: nFlds=23
@@ -1244,7 +1240,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
   call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
 
-  call write_field(unit, fields(5), G%Domain%mpp_domain, G%bathyT)
+  do j=js,je ; do i=is,ie ; out_h(i,j) = G%Zd_to_m*G%bathyT(i,j) ; enddo ; enddo
+  call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
   call write_field(unit, fields(6), G%Domain%mpp_domain, G%CoriolisBu)
 
   !   I think that all of these copies are holdovers from a much earlier

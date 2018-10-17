@@ -57,12 +57,12 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
   call get_param(param_file, mdl, "FRONT_DISPLACEMENT", front_displacement, &
                  "The vertical displacement of interfaces across the front. \n"//&
                  "A value larger in magnitude that MAX_DEPTH is truncated,", &
-                 units="m", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="m", fail_if_missing=.not.just_read, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl, "THERMOCLINE_THICKNESS", thermocline_thickness, &
                  "The thickness of the thermocline in the lock exchange \n"//&
                  "experiment.  A value of zero creates a two layer system \n"//&
                  "with vanished layers in between the two inflated layers.", &
-                 default=0., units="m", do_not_log=just_read)
+                 default=0., units="m", do_not_log=just_read, scale=GV%m_to_Z)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -71,9 +71,9 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
       eta1D(K) = -0.5 * G%max_depth & ! Middle of column
               - thermocline_thickness * ( (real(k-1))/real(nz) -0.5 ) ! Stratification
       if (G%geoLonT(i,j)-G%west_lon < 0.5 * G%len_lon) then
-        eta1D(K)=eta1D(K) + 0.5 * front_displacement
+        eta1D(K) = eta1D(K) + 0.5 * front_displacement
       elseif (G%geoLonT(i,j)-G%west_lon > 0.5 * G%len_lon) then
-        eta1D(K)=eta1D(K) - 0.5 * front_displacement
+        eta1D(K) = eta1D(K) - 0.5 * front_displacement
       endif
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
@@ -85,7 +85,7 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
       eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_Z )
     enddo
     do k=nz,1,-1
-      h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+      h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
     enddo
   enddo ; enddo
 
