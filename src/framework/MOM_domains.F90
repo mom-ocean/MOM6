@@ -43,6 +43,7 @@ public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
+public :: get_simple_array_i_ind, get_simple_array_j_ind
 
 !> Do a halo update on an array
 interface pass_var
@@ -1737,31 +1738,29 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
                              symmetric, local_indexing, index_offset)
   type(MOM_domain_type), &
-           intent(in)  :: Domain         !< The MOM domain from which to extract information
-  integer, intent(out) :: isc            !< The start i-index of the computational domain
-  integer, intent(out) :: iec            !< The end i-index of the computational domain
-  integer, intent(out) :: jsc            !< The start j-index of the computational domain
-  integer, intent(out) :: jec            !< The end j-index of the computational domain
-  integer, intent(out) :: isd            !< The start i-index of the data domain
-  integer, intent(out) :: ied            !< The end i-index of the data domain
-  integer, intent(out) :: jsd            !< The start j-index of the data domain
-  integer, intent(out) :: jed            !< The end j-index of the data domain
-  integer, intent(out) :: isg            !< The start i-index of the global domain
-  integer, intent(out) :: ieg            !< The end i-index of the global domain
-  integer, intent(out) :: jsg            !< The start j-index of the global domain
-  integer, intent(out) :: jeg            !< The end j-index of the global domain
-  integer, intent(out) :: idg_offset     !< The offset between the corresponding global and
-                                         !! data i-index spaces.
-  integer, intent(out) :: jdg_offset     !< The offset between the corresponding global and
-                                         !! data j-index spaces.
-  logical, intent(out) :: symmetric      !< True if symmetric memory is used.
-  logical, optional, &
-           intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
-                                         !! as in most MOM6 code.
-  integer, optional, &
-           intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
-                                         !! can be useful for some types of debugging with
-                                         !! dynamic memory allocation.
+           intent(in)  :: Domain !< The MOM domain from which to extract information
+  integer, intent(out) :: isc    !< The start i-index of the computational domain
+  integer, intent(out) :: iec    !< The end i-index of the computational domain
+  integer, intent(out) :: jsc    !< The start j-index of the computational domain
+  integer, intent(out) :: jec    !< The end j-index of the computational domain
+  integer, intent(out) :: isd    !< The start i-index of the data domain
+  integer, intent(out) :: ied    !< The end i-index of the data domain
+  integer, intent(out) :: jsd    !< The start j-index of the data domain
+  integer, intent(out) :: jed    !< The end j-index of the data domain
+  integer, intent(out) :: isg    !< The start i-index of the global domain
+  integer, intent(out) :: ieg    !< The end i-index of the global domain
+  integer, intent(out) :: jsg    !< The start j-index of the global domain
+  integer, intent(out) :: jeg    !< The end j-index of the global domain
+  integer, intent(out) :: idg_offset !< The offset between the corresponding global and
+                                 !! data i-index spaces.
+  integer, intent(out) :: jdg_offset !< The offset between the corresponding global and
+                                 !! data j-index spaces.
+  logical, intent(out) :: symmetric  !< True if symmetric memory is used.
+  logical, optional, intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
+                                           !! as in most MOM6 code.
+  integer, optional, intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
+                                           !! can be useful for some types of debugging with
+                                           !! dynamic memory allocation.
   ! Local variables
   integer :: ind_off
   logical :: local
@@ -1792,6 +1791,79 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
   symmetric = Domain%symmetric
 
 end subroutine get_domain_extent
+
+!> Return the (potentially symmetric) computational domain i-bounds for an array
+!! passed without index specifications (i.e. indices start at 1) based on an array size.
+subroutine get_simple_array_i_ind(domain, size, is, ie, symmetric)
+  type(MOM_domain_type), intent(in)  :: domain !< MOM domain from which to extract information
+  integer,               intent(in)  :: size   !< The i-array size
+  integer,               intent(out) :: is     !< The computational domain starting i-index.
+  integer,               intent(out) :: ie     !< The computational domain ending i-index.
+  logical,     optional, intent(in)  :: symmetric !< If present, indicates whether symmetric sizes
+                                               !! can be considered.
+  ! Local variables
+  logical :: sym
+  character(len=120) :: mesg, mesg2
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed
+
+  call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
+  call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
+
+  isc = isc-isd+1 ; iec = iec-isd+1 ; ied = ied-isd+1 ; isd = 1
+  sym = Domain%symmetric ; if (present(symmetric)) sym = symmetric
+
+  if (size == ied) then ; is = isc ; ie = iec
+  elseif (size == 1+iec-isc) then ; is = 1 ; ie = size
+  elseif (sym .and. (size == 1+ied)) then ; is = isc ; ie = iec+1
+  elseif (sym .and. (size == 2+iec-isc)) then ; is = 1 ; ie = size+1
+  else
+    write(mesg,'("Unrecognized size ", i6, "in call to get_simple_array_i_ind.  \")') size
+    if (sym) then
+      write(mesg2,'("Valid sizes are : ", 2i7)') ied, 1+iec-isc
+    else
+      write(mesg2,'("Valid sizes are : ", 4i7)') ied, 1+iec-isc, 1+ied, 2+iec-isc
+    endif
+    call MOM_error(FATAL, trim(mesg)//trim(mesg2))
+  endif
+
+end subroutine get_simple_array_i_ind
+
+
+!> Return the (potentially symmetric) computational domain j-bounds for an array
+!! passed without index specifications (i.e. indices start at 1) based on an array size.
+subroutine get_simple_array_j_ind(domain, size, js, je, symmetric)
+  type(MOM_domain_type), intent(in)  :: domain !< MOM domain from which to extract information
+  integer,               intent(in)  :: size   !< The j-array size
+  integer,               intent(out) :: js     !< The computational domain starting j-index.
+  integer,               intent(out) :: je     !< The computational domain ending j-index.
+  logical,     optional, intent(in)  :: symmetric !< If present, indicates whether symmetric sizes
+                                               !! can be considered.
+  ! Local variables
+  logical :: sym
+  character(len=120) :: mesg, mesg2
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed
+
+  call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
+  call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
+
+  jsc = jsc-jsd+1 ; jec = jec-jsd+1 ; jed = jed-jsd+1 ; jsd = 1
+  sym = Domain%symmetric ; if (present(symmetric)) sym = symmetric
+
+  if (size == jed) then ; js = jsc ; je = jec
+  elseif (size == 1+jec-jsc) then ; js = 1 ; je = size
+  elseif (sym .and. (size == 1+jed)) then ; js = jsc ; je = jec+1
+  elseif (sym .and. (size == 2+jec-jsc)) then ; js = 1 ; je = size+1
+  else
+    write(mesg,'("Unrecognized size ", i6, "in call to get_simple_array_j_ind.  \")') size
+    if (sym) then
+      write(mesg2,'("Valid sizes are : ", 2i7)') jed, 1+jec-jsc
+    else
+      write(mesg2,'("Valid sizes are : ", 4i7)') jed, 1+jec-jsc, 1+jed, 2+jec-jsc
+    endif
+    call MOM_error(FATAL, trim(mesg)//trim(mesg2))
+  endif
+
+end subroutine get_simple_array_j_ind
 
 !> Returns the global shape of h-point arrays
 subroutine get_global_shape(domain, niglobal, njglobal)

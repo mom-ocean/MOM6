@@ -215,13 +215,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
       do j=js,je ; do I=is-1,ie
         drag_vel_u(I,j) = 0.0
         if ((G%mask2dCu(I,j) > 0.0) .and. (visc%bbl_thick_u(I,j) > 0.0)) &
-          drag_vel_u(I,j) = visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
+          drag_vel_u(I,j) = GV%Z_to_m*visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
       enddo ; enddo
 !$OMP do
       do J=js-1,je ; do i=is,ie
         drag_vel_v(i,J) = 0.0
         if ((G%mask2dCv(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
-          drag_vel_v(i,J) = visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
+          drag_vel_v(i,J) = GV%Z_to_m*visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
       enddo ; enddo
 
 !$OMP do
@@ -612,7 +612,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
       do while (resid>0.)
         n1 = n1 + 1
         EKE = EKEmax
-        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
+        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j), &
                                   MEKE%Rd_dx_h(i,j), SN, EKE,            &
                                   bottomFac2, barotrFac2, LmixScale,     &
                                   Lrhines, Leady)
@@ -717,7 +717,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
       beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),            &
+    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j),  &
                               MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j),            &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
                               Lrhines(i,j), Leady(i,j))
