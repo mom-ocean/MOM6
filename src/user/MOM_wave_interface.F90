@@ -84,7 +84,7 @@ type, public:: wave_parameters_CS ; private
   real, allocatable, dimension(:,:), public :: &
        La_SL,&            !< SL Langmuir number (directionality factored later)
                           !! Horizontal -> H points
-       La_Turb            !< Aligned Turbulent Langmuir number 
+       La_Turb            !< Aligned Turbulent Langmuir number
                           !! Horizontal -> H points
   real, allocatable, dimension(:,:), public :: &
        US0_x              !< Surface Stokes Drift (zonal, m/s)
@@ -864,8 +864,8 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
   real, intent(in)    :: USTAR  !< Friction velocity (m/s)
   real, intent(in)    :: HBL    !< (Positive) thickness of boundary
                                 !! layer (m)
-  logical, optional,& 
-       intent(in)      :: Override_MA !< Override to use misalignment in LA 
+  logical, optional,&
+       intent(in)      :: Override_MA !< Override to use misalignment in LA
                                 !! calculation. This can be used if diagnostic
                                 !! LA outputs are desired that are different than
                                 !! those used by the dynamical model.
