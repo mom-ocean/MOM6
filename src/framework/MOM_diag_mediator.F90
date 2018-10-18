@@ -142,6 +142,25 @@ type, public :: diag_grid_storage
   type(diag_grids_type), dimension(:), allocatable :: diag_grids      !< Primarily empty, except h field
 end type diag_grid_storage
 
+!> integers to encode the total cell methods
+integer :: PPP=0    !< x:point,y:point,z:point
+integer :: PPS=1    !< x:point,y:point,z:sum
+integer :: PPM=2    !< x:point,y:point,z:mean
+integer :: PSP=10   !< x:point,y:sum,z:point
+integer :: PSS=11   !< x:point,y:sum,z:point
+integer :: PSM=12   !< x:point,y:sum,z:mean
+integer :: PMP=20   !< x:point,y:mean,z:point
+integer :: PMM=22   !< x:point,y:mean,z:mean
+integer :: SPP=100  !< x:sum,y:point,z:point
+integer :: SPS=101  !< x:sum,y:point,z:sum
+integer :: SSP=110  !< x:sum;y:sum,z:point
+integer :: MPP=200  !< x:mean,y:point,z:point
+integer :: MPM=202  !< x:mean,y:point,z:mean
+integer :: MMP=220  !< x:mean,y:mean,z:point
+integer :: MMS=221  !< x:mean,y:mean,z:sum
+integer :: SSS=111  !< x:sum,y:sum,z:sum
+integer :: MMM=222  !< x:mean,y:mean,z:mean
+
 !> This type is used to represent a diagnostic at the diag_mediator level.
 !!
 !! There can be both 'primary' and 'seconday' diagnostics. The primaries
@@ -160,6 +179,8 @@ type, private :: diag_type
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
   logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated).
                                    !! False for intensive (concentrations).
+  integer :: xyz_method = 0 !< A 3 digit integer encoding the diagnostics cell method
+                                   !! It can be used to determine the decimation algorithm 
 end type diag_type
 
 type diagcs_decim
@@ -289,8 +310,6 @@ type, public :: diag_ctrl
 #endif
 
 end type diag_ctrl
-
-
 
 ! CPU clocks
 integer :: id_clock_diag_mediator, id_clock_diag_remap, id_clock_diag_grid_updates
@@ -1246,7 +1265,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
 
   ! Local variables
-  real, dimension(:,:), pointer :: locfield => NULL()
+  real, dimension(:,:), pointer :: locfield 
   real, dimension(:,:), pointer :: locmask
   character(len=300) :: mesg
   logical :: used, is_stat
@@ -1256,6 +1275,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:), allocatable, target :: locmask_decim
   integer :: dl
 
+  locfield => NULL()
   locmask => NULL()
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1326,13 +1346,15 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   if (present(mask)) then
      locmask => mask
-  elseif(associated(diag%axes%mask2d)) then
-     locmask => diag%axes%mask2d 
+  elseif(.NOT. is_stat) then
+     if(associated(diag%axes%mask2d)) locmask => diag%axes%mask2d 
   endif   
 
-  dl = diag%axes%decimation_level
+  dl=1
+  if(.NOT. is_stat) dl = diag%axes%decimation_level
   if (dl > 1) then
      call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+     if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
      locfield => locfield_decim
      if (present(mask)) then
         call decimate_mask(locmask, locmask_decim, dl)
@@ -1375,7 +1397,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
       endif
     endif
   endif
-  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.) .and. dl<2) &
     deallocate( locfield )
 end subroutine post_data_2d_low
 
@@ -1509,7 +1531,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
 
   ! Local variables
-  real, dimension(:,:,:), pointer :: locfield => NULL()
+  real, dimension(:,:,:), pointer :: locfield
   real, dimension(:,:,:), pointer :: locmask
   character(len=300) :: mesg
   logical :: used  ! The return value of send_data is not used for anything.
@@ -1522,6 +1544,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:,:), allocatable, target :: locmask_decim
   integer :: isl,iel,jsl,jel,dl
 
+  locfield => NULL()
   locmask => NULL()
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1599,9 +1622,11 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
      locmask => diag%axes%mask3d 
   endif
 
-  dl = diag%axes%decimation_level
+  dl=1
+  if(.NOT. is_stat)  dl = diag%axes%decimation_level
   if (dl > 1) then
      call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+     if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
      locfield => locfield_decim
      if (present(mask)) then
         call decimate_mask(locmask, locmask_decim, dl)
@@ -1644,7 +1669,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
       endif
     endif
   endif
-  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.) .and. dl<2) &
     deallocate( locfield )
 
 end subroutine post_data_3d_low
@@ -2077,7 +2102,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
     call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
     this_diag%fms_xyave_diag_id = fms_xyave_id
-
+    call add_xyz_method(this_diag, axes, x_cell_method, y_cell_method, v_cell_method, v_extensive)
     if (present(v_extensive)) this_diag%v_extensive = v_extensive
     if (present(conversion)) this_diag%conversion_factor = conversion
     register_diag_field_expand_cmor = .true.
@@ -2137,7 +2162,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
       call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
       this_diag%fms_xyave_diag_id = fms_xyave_id
-
+      call add_xyz_method(this_diag, axes, x_cell_method, y_cell_method, v_cell_method, v_extensive)
       if (present(v_extensive)) this_diag%v_extensive = v_extensive
       if (present(conversion)) this_diag%conversion_factor = conversion
       register_diag_field_expand_cmor = .true.
@@ -2273,6 +2298,67 @@ subroutine add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name
 
 end subroutine add_diag_to_list
 
+subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_method, v_extensive)
+  type(diag_type),        pointer       :: diag !< This diagnostic
+  type(axes_grp),             intent(in)  :: axes !< Container w/ up to 3 integer handles that indicates
+                                                  !! axes for this field
+  character(len=*), optional, intent(in)  :: x_cell_method !< Specifies the cell method for the x-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in)  :: y_cell_method !< Specifies the cell method for the y-direction.
+                                                         !! Use '' have no method.
+  character(len=*), optional, intent(in)  :: v_cell_method !< Specifies the cell method for the vertical direction.
+                                                         !! Use '' have no method.
+  logical,          optional, intent(in)  :: v_extensive !< True for vertically extensive fields
+                                                         !! (vertically integrated). Default/absent for intensive.
+  integer :: xyz_method
+  character(len=9) :: mstr
+  
+  !This is a simple way to encode the cell method information made from 3 strings
+  !(x_cell_method,y_cell_method,v_cell_method) in a 3 digit integer xyz
+  !x_cell_method,y_cell_method,v_cell_method can each be 'point' or 'sum' or 'mean'
+  !We can encode these with setting  0 for 'point', 1 for 'sum, 2 for 'mean' in
+  !the 100s position for x, 10s position for y, 1s position for z
+  !E.g., x:sum,y:point,z:mean is 102
+  
+  xyz_method = 0
+
+  mstr = diag%axes%v_cell_method
+  if (present(v_extensive)) then
+     if (present(v_cell_method)) call MOM_error(FATAL, "attach_cell_methods: " // &
+          'Vertical cell method was specified along with the vertically extensive flag.')
+     if(v_extensive) then
+        mstr='sum'
+     else
+        mstr='mean'
+     endif       
+  elseif (present(v_cell_method)) then
+     mstr = v_cell_method
+  endif
+  if (trim(mstr)=='sum') then
+     xyz_method = xyz_method + 1
+  elseif (trim(mstr)=='mean') then
+     xyz_method = xyz_method + 2
+  endif
+  
+  mstr = diag%axes%y_cell_method
+  if (present(y_cell_method)) mstr = y_cell_method
+  if (trim(mstr)=='sum') then
+     xyz_method = xyz_method + 10
+  elseif (trim(mstr)=='mean') then
+     xyz_method = xyz_method + 20
+  endif
+  
+  mstr = diag%axes%x_cell_method
+  if (present(x_cell_method)) mstr = x_cell_method
+  if (trim(mstr)=='sum') then
+     xyz_method = xyz_method + 100
+  elseif (trim(mstr)=='mean') then
+     xyz_method = xyz_method + 200
+  endif
+
+  diag%xyz_method = xyz_method
+end subroutine add_xyz_method
+
 !> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
 subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
                                x_cell_method, y_cell_method, v_cell_method, v_extensive)
@@ -2360,6 +2446,7 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
       endif
     elseif (present(v_extensive)) then
+     if(v_extensive) then 
       if (axes%rank==1) then
         call get_diag_axis_name(axes%handles(1), axis_name)
       elseif (axes%rank==3) then
@@ -2367,6 +2454,7 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
       endif
       call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':sum')
       ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':sum'
+     endif
     else
       if (len(trim(axes%v_cell_method))>0) then
         if (axes%rank==1) then
@@ -3445,7 +3533,7 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
   real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
   !locals
   real, dimension(:,:,:), pointer :: locmask  
-  integer :: isl,iel,jsl,jel, xy_method
+  integer :: isl,iel,jsl,jel
   
   locmask => NULL()
   !Get the correct indices corresponding to input field
@@ -3462,27 +3550,8 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
   else
      call MOM_error(FATAL, "decimate_diag_field_3d: Cannot decimate without a mask!!! ")
   endif
-  !Determine the decimation method
-  !Make a two digit integer case id =  x_case*10+y_case where x_case and/or y_case is 1 for sum and 2 for mean
-  xy_method = 0 !subsample and pick the SW corner value
-  if (trim(diag%axes%y_cell_method)=='sum') then
-     xy_method =  xy_method + 1
-  elseif (trim(diag%axes%y_cell_method)=='mean') then
-     xy_method =  xy_method + 2
-  endif
-  if (trim(diag%axes%x_cell_method)=='sum') then
-     xy_method = xy_method + 10
-  elseif (trim(diag%axes%x_cell_method)=='mean') then
-     xy_method = xy_method + 20
-  endif
-!  if (trim(diag%axes%area_cell_method)=='sum') then
-!     xy_method = xy_method + 100
-!  elseif (trim(diag%axes%area_cell_method)=='mean') then
-!     xy_method = xy_method + 200
-!  endif
-
   
-  call decimate_field(locfield, locfield_decim, dl, xy_method, locmask, diag_cs)
+  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs, diag)
   
 end subroutine decimate_diag_field_3d
 
@@ -3496,7 +3565,7 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
   !locals
   real, dimension(:,:), pointer :: locmask  
-  integer :: isl,iel,jsl,jel, xy_method
+  integer :: isl,iel,jsl,jel
   
   locmask => NULL()
   !Get the correct indices corresponding to input field
@@ -3513,36 +3582,45 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
   else
      call MOM_error(FATAL, "decimate_diag_field_2d: Cannot decimate without a mask!!! ")
   endif
-  !Determine the decimation method
-  !Make a two digit integer case id =  x_case*10+y_case where x_case and/or y_case is 1 for sum and 2 for mean
-  xy_method = 0 !subsample and pick the SW corner value
-  if (trim(diag%axes%y_cell_method)=='sum') then
-     xy_method =  xy_method + 1
-  elseif (trim(diag%axes%y_cell_method)=='mean') then
-     xy_method =  xy_method + 2
-  endif
-  if (trim(diag%axes%x_cell_method)=='sum') then
-     xy_method = xy_method + 10
-  elseif (trim(diag%axes%x_cell_method)=='mean') then
-     xy_method = xy_method + 20
-  endif
-!  if (trim(diag%axes%area_cell_method)=='sum') then
-!     xy_method = xy_method + 100
-!  elseif (trim(diag%axes%area_cell_method)=='mean') then
-!     xy_method = xy_method + 200
-!  endif
   
-  call decimate_field(locfield, locfield_decim, dl, xy_method, locmask, diag_cs)
+  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs,diag)
   
 end subroutine decimate_diag_field_2d
 
-subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs)
+
+!- According to Alistair, the decimation method could be solely deduced
+!  from the axes%x_cell_method, axes%y_cell_method and probably the area_cell_method
+!  at the time of send_data
+!- This is the summary of the algoritm
+!  f(Id,Jd) = \sum_{i,j} f(Id+i,Jd+j) * weight(Id+i,Jd+j) / [ \sum_{i,j} weight(Id+i,Jd+j)]
+!     Id,Jd are the decimated (coarse grid) indices run over the coarsened compute grid,    
+!     i and j run from 0 to dl-1 (dl being the decimation level)
+!     if and jf
+!     weight(if,jf) run over the original fine computre grid
+!
+!example   x_cell y_cell ?_cell weight  impemented weight(if,jf)            algorithm_id
+!---------------------------------------------------------------------------------------
+!theta     mean   mean   mean   A*h     A(if,jf)*h(if,jf)                   22
+!u         point  mean   mean   dy*h    dyCu(if,jf)*h(if,jf)*delta(if,Id)   02    
+!v         mean   point  mean   dx*h    dxCv(if,jf)*h(if,jf)*delta(jf,Jd)   20 
+!volcello  sum    sum    sum    1       1                                   11
+!umo       point  sum    sum    1       1*delta(if,Id)                      01
+!?         sum    point  sum    1       1*delta(jf,Jd)                      10
+!w         mean   mean   point  A       N/A              
+!h*theta   mean   mean   sum    A       N/A                            
+!
+!delta is the Kroneker delta
+!Niki: I am not sure if he meant area_cell_method or z_cell_method for the 4th column
+!Niki: I have not used the 4th column at all!!!
+
+subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag)
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
   integer , intent(in) :: dl
   integer, optional, intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
   real, dimension(:,:,:), pointer :: mask
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   !locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,is,js,i0,j0
@@ -3553,50 +3631,51 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs)
   !Always start from the first element
   is=1
   js=1
-  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
+  ks=1 ; ke =size(field_in,3)
   isl=1; iel=size(field_in,1)/dl
   jsl=1; jel=size(field_in,2)/dl  
   allocate(field_out(isl:iel,jsl:jel,ks:ke))
 
-  if(method .eq. 0) then    !point average the fields in dl^2 cells
+  if(method .eq. MMM) then    !xyz_method = MMM = 222
      do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
         i0 = is+dl*(i-isl)
         j0 = js+dl*(j-jsl)
         ave = 0.0
         total_weight = 0.0
         do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           total_weight = total_weight + mask(ii,jj,k)
-           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
+           weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,k)
+           total_weight = total_weight + weight
+           ave=ave+field_in(ii,jj,k)*weight
         enddo; enddo
-        field_out(i,j,k)  = ave/max(1.0,total_weight) !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. 1) then    !point in x, sum in y
+  elseif(method .eq. SSS) then    !xyz_method = SSS = 111 e.g., volcello
      do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
         i0 = is+dl*(i-isl)
         j0 = js+dl*(j-jsl)
         ave = 0.0
         total_weight = 0.0
-        ii=i0
-        do jj=j0,j0+dl-1
-           total_weight = total_weight + mask(ii,jj,k)
-           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
-        enddo
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           weight = mask(ii,jj,k)
+           total_weight = total_weight + weight
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo; enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. 10) then    !sum in x, point in y
+  elseif(method .eq. MMP .or. method .eq. MMS) then    !xyz_method = MMP = 220, e.g.,  or T_advection_xy
      do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
         i0 = is+dl*(i-isl)
         j0 = js+dl*(j-jsl)
         ave = 0.0
         total_weight = 0.0
-        jj=j0
-        do ii=i0,i0+dl-1
-           total_weight = total_weight + mask(ii,jj,k)
-           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
-        enddo
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)
+           total_weight = total_weight + weight
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo; enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. 2) then    !point in x, normal area average in y
+  elseif(method .eq. PMM) then    !xyz_method = PMM = 022
      do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
         i0 = is+dl*(i-isl)
         j0 = js+dl*(j-jsl)
@@ -3610,7 +3689,49 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs)
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. 20) then    !normal area average in x, point in y
+  elseif(method .eq. PSM) then    !xyz_method = PSM = 012
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        ii=i0
+        do jj=j0,j0+dl-1
+           weight =mask(ii,jj,k)*diag_cs%G%dyCu(ii,jj)*diag_cs%h(ii,jj,k) 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. PSS) then    !xyz_method = PSS = 011 e.g. umo
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        ii=i0
+        do jj=j0,j0+dl-1
+           weight =mask(ii,jj,k) 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. SPS) then    !xyz_method = SPS = 101 e.g. vmo
+     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        jj=j0
+        do ii=i0,i0+dl-1
+           weight =mask(ii,jj,k) 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj,k)*weight
+        enddo
+        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo; enddo
+  elseif(method .eq. MPM) then    !xyz_method = MPM = 202
      do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
         i0 = is+dl*(i-isl)
         j0 = js+dl*(j-jsl)
@@ -3624,45 +3745,21 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs)
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. 22) then    !Volume average the fields in x and y
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
-        ave = 0.0
-        total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,k)
-           total_weight = total_weight + weight
-           ave=ave+field_in(ii,jj,k)*weight
-        enddo; enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo; enddo
-  elseif(method .eq. 11) then    !sum the fields in x and y
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
-        ave = 0.0
-        total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           total_weight = total_weight + mask(ii,jj,k)
-           ave=ave+field_in(ii,jj,k)*mask(ii,jj,k)
-        enddo; enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo; enddo  
   else
      write (mesg,*) " unknown sampling method: ",method  
-     call MOM_error(FATAL, "decimate_field_3d: "//trim(mesg))
+     call MOM_error(FATAL, "decimate_field_3d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
      
 end subroutine decimate_field_3d
 
-subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs)
+subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag)
   real, dimension(:,:) , pointer :: field_in
   real, dimension(:,:) , allocatable :: field_out
   integer , intent(in) :: dl
   integer, optional, intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
   real, dimension(:,:), pointer :: mask
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
+  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   !locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,is,js,i0,j0
@@ -3675,20 +3772,8 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs)
   isl=1; iel=size(field_in,1)/dl
   jsl=1; jel=size(field_in,2)/dl  
   allocate(field_out(isl:iel,jsl:jel))
-
-  if(method .eq. 0) then    !point average the fields in dl^2 cells
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
-        ave = 0.0
-        total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           total_weight = total_weight + mask(ii,jj)
-           ave=ave+field_in(ii,jj)*mask(ii,jj)
-        enddo; enddo
-        field_out(i,j)  = ave/max(1.0,total_weight) !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method .eq. 22) then    !Volume average the fields in x and y
+     
+  if(method .eq. MMM) then    !xyz_method = MMM
      do j=jsl,jel ; do i=isl,iel
         i0 = is+dl*(i-isl)
         j0 = js+dl*(j-jsl)
@@ -3696,15 +3781,96 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs)
         total_weight = 0.0
         do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
            weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,1)
-           total_weight = total_weight + weight 
+           total_weight = total_weight + weight
            ave=ave+field_in(ii,jj)*weight
         enddo; enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-     
+  elseif(method .eq. MMP) then    !xyz_method = MMP
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)
+           total_weight = total_weight + weight
+           ave=ave+field_in(ii,jj)*weight
+        enddo; enddo
+        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo
+  elseif(method .eq. SSP) then    !xyz_method = SSP , e.g., T_dfxy_cont_tendency_2d
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+           weight = mask(ii,jj)
+           total_weight = total_weight + weight
+           ave=ave+field_in(ii,jj)*weight
+        enddo; enddo
+        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo
+  elseif(method .eq. PSP) then    !xyz_method = PSP = 010, e.g., umo_2d
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        ii=i0
+        do jj=j0,j0+dl-1
+           weight =mask(ii,jj) 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj)*weight
+        enddo
+        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo
+  elseif(method .eq. SPP) then    !xyz_method = SPP = 100, e.g., vmo_2d
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        jj=j0
+        do ii=i0,i0+dl-1
+           weight =mask(ii,jj) 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj)*weight
+        enddo
+        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo
+  elseif(method .eq. PMP) then    !xyz_method = PMP = 020
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        ii=i0
+        do jj=j0,j0+dl-1
+           weight =mask(ii,jj)*diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki? 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj)*weight
+        enddo
+        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo
+  elseif(method .eq. MPP) then    !xyz_method = MPP = 200
+     do j=jsl,jel ; do i=isl,iel
+        i0 = is+dl*(i-isl)
+        j0 = js+dl*(j-jsl)
+        ave = 0.0
+        total_weight = 0.0
+        jj=j0
+        do ii=i0,i0+dl-1
+           weight =mask(ii,jj)*diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki? 
+           total_weight = total_weight +weight 
+           ave=ave+field_in(ii,jj)*weight
+        enddo
+        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+     enddo; enddo
   else
      write (mesg,*) " unknown sampling method: ",method  
-     call MOM_error(FATAL, "decimate_field_2d: "//trim(mesg))
+     call MOM_error(FATAL, "decimate_field_2d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
      
 end subroutine decimate_field_2d
