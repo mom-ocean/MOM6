@@ -32,13 +32,8 @@ type, public :: Kelvin_OBC_CS ; private
   real    :: coast_angle = 0   !< Angle of coastline
   real    :: coast_offset1 = 0 !< Longshore distance to coastal angle
   real    :: coast_offset2 = 0 !< Longshore distance to coastal angle
-  real    :: N0 = 0            !< Brunt-Vaisala frequency
   real    :: H0 = 0            !< Bottom depth
   real    :: F_0               !< Coriolis parameter
-  real    :: plx = 0           !< Longshore wave parameter
-  real    :: pmz = 0           !< Vertical wave parameter
-  real    :: lambda = 0        !< Vertical wave parameter
-  real    :: omega             !< Frequency
   real    :: rho_range         !< Density range
   real    :: rho_0             !< Mean density
 end type Kelvin_OBC_CS
@@ -160,17 +155,23 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
 end subroutine Kelvin_initialize_topography
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
-  type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
-                                             !! whether, where, and what open boundary
-                                             !! conditions are used.
-  type(Kelvin_OBC_CS),    pointer    :: CS   !< Kelvin wave control structure.
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
-  type(time_type),        intent(in) :: Time !< model time.
+subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, h, Time)
+  type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
+                                              !! whether, where, and what open boundary
+                                              !! conditions are used.
+  type(Kelvin_OBC_CS),     pointer    :: CS   !< Kelvin wave control structure.
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness, in H.
+  type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the Kelvin example.
   real :: time_sec, cff
+  real :: N0           ! Brunt-Vaisala frequency in s-1
+  real :: plx          !< Longshore wave parameter
+  real :: pmz          !< Vertical wave parameter
+  real :: lambda       !< Offshore decay scale
+  real :: omega        !< Wave frequency in s-1
   real :: PI
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
@@ -190,15 +191,18 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
   fac = 1.0
 
   if (CS%mode == 0) then
-    CS%omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
-    val1 = sin(CS%omega * time_sec)
+    omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
+    val1 = GV%m_to_Z * sin(omega * time_sec)
   else
-    CS%N0 = sqrt(CS%rho_range / CS%rho_0 * G%g_Earth * CS%H0)
+    N0 = sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth * (GV%m_to_Z * CS%H0))
     ! Two wavelengths in domain
-    CS%plx = 4.0 * PI / G%len_lon
-    CS%pmz = PI * CS%mode / CS%H0
-    CS%lambda = CS%pmz * CS%F_0 / CS%N0
-    CS%omega = CS%F_0 * CS%plx / CS%lambda
+    plx = 4.0 * PI / G%len_lon
+    pmz = PI * CS%mode / CS%H0
+    lambda = pmz * CS%F_0 / N0
+    omega = CS%F_0 * plx / lambda
+
+    ! lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
+    ! omega = (4.0 * CS%H0 * N0)  / (CS%mode * G%len_lon)
   endif
 
   sina = sin(CS%coast_angle)
@@ -223,26 +227,26 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(G%g_Earth * 0.5 * G%Zd_to_m * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
           val2 = fac * exp(- CS%F_0 * y / cff)
-          segment%eta(I,j) = val2 * cos(CS%omega * time_sec)
+          segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = val1 * cff * cosa /         &
-                 (0.5 * G%Zd_to_m * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
           ! Not rotated yet
           segment%eta(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
-                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
-                   cos(CS%omega * time_sec)
+              segment%nudged_normal_vel(I,j,k) = fac * lambda / CS%F_0 * &
+                   exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
+                   cos(omega * time_sec)
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
-                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
-                   cos(CS%omega * time_sec)
+              segment%normal_vel(I,j,k) = fac * lambda / CS%F_0 * &
+                   exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
+                   cos(omega * time_sec)
               segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * &
                    h(i+1,j,k) * G%dyCu(I,j)
             enddo
@@ -260,12 +264,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           if (CS%mode == 0) then
             do k=1,nz
               segment%tangential_vel(I,J,k) = val1 * cff * sina / &
-                 (0.25 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j) + &
-                                    G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+                 (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) + &
+                          G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
 !### For rotational symmetry, this should be:
 !              segment%tangential_vel(I,J,k) = val1 * cff * sina / &
-!                 ( 0.25*G%Zd_to_m*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +&
-!                                   (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ) * val2
+!                 ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +&
+!                         (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ) * val2
             enddo
           endif
         enddo ; enddo
@@ -279,24 +283,24 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(G%g_Earth * 0.5 * G%Zd_to_m*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
-          segment%eta(I,j) = val2 * cos(CS%omega * time_sec)
+          segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = val1 * cff * sina / &
-                 (0.5 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+                 (0.5*(G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
           ! Not rotated yet
           segment%eta(i,J) = 0.0
           segment%normal_vel_bt(i,J) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
-                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
+              segment%nudged_normal_vel(i,J,k) = fac * lambda / CS%F_0 * &
+                   exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
-                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
+              segment%normal_vel(i,J,k) = fac * lambda / CS%F_0 * &
+                   exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
               segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * &
                    h(i,j+1,k) * G%dxCv(i,J)
             enddo
@@ -314,12 +318,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           if (CS%mode == 0) then
             do k=1,nz
               segment%tangential_vel(I,J,k) = val1 * cff * sina / &
-                 (0.25 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j) + &
-                                    G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+                 (0.25*(G%bathyT(i+1,j) + G%bathyT(i,j) + &
+                        G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
 !### This should be:
 !              segment%tangential_vel(I,J,k) = val1 * cff * sina / &
-!                 ( 0.25*G%Zd_to_m*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +&
-!                                   (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ) * val2
+!                 ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +&
+!                         (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ) * val2
             enddo
           endif
         enddo ; enddo
