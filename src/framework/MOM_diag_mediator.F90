@@ -1786,6 +1786,7 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
       endif
     elseif (present(v_extensive)) then
+     if(v_extensive) then
       if (axes%rank==1) then
         call get_diag_axis_name(axes%handles(1), axis_name)
       elseif (axes%rank==3) then
@@ -1793,6 +1794,7 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
       endif
       call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':sum')
       ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':sum'
+     endif
     else
       if (len(trim(axes%v_cell_method))>0) then
         if (axes%rank==1) then
