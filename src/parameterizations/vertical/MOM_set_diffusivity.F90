@@ -165,13 +165,13 @@ end type set_diffusivity_CS
 !> This structure has memory for used in calculating diagnostics of diffusivity
 type diffusivity_diags
   real, pointer, dimension(:,:,:) :: &
-    N2_3d     => NULL(),& !< squared buoyancy frequency at interfaces (1/s2)
-    Kd_user   => NULL(),& !< user-added diffusivity at interfaces (m2/s)
-    Kd_BBL    => NULL(),& !< BBL diffusivity at interfaces (m2/s)
-    Kd_work   => NULL(),& !< layer integrated work by diapycnal mixing (W/m2)
-    maxTKE    => NULL(),& !< energy required to entrain to h_max (m3/s3)
-    KT_extra  => NULL(),& !< double diffusion diffusivity for temp (Z2/s)
-    KS_extra  => NULL()   !< double diffusion diffusivity for saln (Z2/s)
+    N2_3d    => NULL(), & !< squared buoyancy frequency at interfaces (1/s2)
+    Kd_user  => NULL(), & !< user-added diffusivity at interfaces (m2/s)
+    Kd_BBL   => NULL(), & !< BBL diffusivity at interfaces (m2/s)
+    Kd_work  => NULL(), & !< layer integrated work by diapycnal mixing (W/m2)
+    maxTKE   => NULL(), & !< energy required to entrain to h_max (m3/s3)
+    KT_extra => NULL(), & !< double diffusion diffusivity for temp (Z2/s)
+    KS_extra => NULL()    !< double diffusion diffusivity for saln (Z2/s)
   real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
                           !< conversion rate (~1.0 / (G_Earth + dRho_lay))
                           !! between TKE dissipated within a layer and Kd
@@ -744,11 +744,11 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
     kmb = GV%nk_rho_varies
     do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,nz
-      call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p_0,rho_0(:,k),&
-                             is,ie-is+1,tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_0, rho_0(:,k), &
+                             is, ie-is+1, tv%eqn_of_state)
     enddo
-    call calculate_density(tv%T(:,j,kmb),tv%S(:,j,kmb),p_ref,Rcv_kmb,&
-                           is,ie-is+1,tv%eqn_of_state)
+    call calculate_density(tv%T(:,j,kmb), tv%S(:,j,kmb), p_ref, Rcv_kmb, &
+                           is, ie-is+1, tv%eqn_of_state)
 
     kb_min = kmb+1
     do i=is,ie
@@ -1845,8 +1845,8 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,kmb
-      call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p_ref,Rcv(:,k),&
-                             is,ie-is+1,tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), &
+                             is, ie-is+1, tv%eqn_of_state)
     enddo
     do i=is,ie
       if (kb(i) <= nz-1) then
@@ -1994,7 +1994,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     call get_param(param_file, mdl, "ML_RAD_APPLY_TKE_DECAY", CS%ML_rad_TKE_decay, &
                  "If true, apply the same exponential decay to ML_rad as \n"//&
                  "is applied to the other surface sources of TKE in the \n"//&
-                 "mixed layer code. This is only used if ML_RADIATION is true.",&
+                 "mixed layer code. This is only used if ML_RADIATION is true.", &
                  default=.true.)
     call get_param(param_file, mdl, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
@@ -2059,7 +2059,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   else
     CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
   endif
-  CS%id_Kd_BBL = register_diag_field('ocean_model','Kd_BBL',diag%axesTi,Time, &
+  CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &
        'Bottom Boundary Layer Diffusivity', 'm2 s-1', conversion=GV%Z_to_m**2)
   call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will\n"//&
@@ -2154,27 +2154,27 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation .or. &
       CS%tm_csp%Lowmode_itidal_dissipation) then
 
-    CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',diag%axesTL,Time, &
+    CS%id_Kd_Work = register_diag_field('ocean_model', 'Kd_Work', diag%axesTL, Time, &
          'Work done by Diapycnal Mixing', 'W m-2')
-    CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',diag%axesTL,Time, &
+    CS%id_maxTKE = register_diag_field('ocean_model', 'maxTKE', diag%axesTL, Time, &
            'Maximum layer TKE', 'm3 s-3')
-    CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',diag%axesTL,Time, &
+    CS%id_TKE_to_Kd = register_diag_field('ocean_model', 'TKE_to_Kd', diag%axesTL, Time, &
            'Convert TKE to Kd', 's2 m', conversion=GV%Z_to_m**2)
-    CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time,            &
-         'Buoyancy frequency squared', 's-2', cmor_field_name='obvfsq',          &
-          cmor_long_name='Square of seawater buoyancy frequency',&
+    CS%id_N2 = register_diag_field('ocean_model', 'N2', diag%axesTi, Time, &
+         'Buoyancy frequency squared', 's-2', cmor_field_name='obvfsq', &
+          cmor_long_name='Square of seawater buoyancy frequency', &
           cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water')
 
     if (CS%user_change_diff) &
-      CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',diag%axesTi,Time, &
-           'User-specified Extra Diffusivity', 'm2 s-1')
+      CS%id_Kd_user = register_diag_field('ocean_model', 'Kd_user', diag%axesTi, Time, &
+           'User-specified Extra Diffusivity', 'm2 s-1', conversion=GV%Z_to_m**2)
 
     if (associated(diag_to_Z_CSp)) then
-      vd = var_desc("N2", "s-2",&
+      vd = var_desc("N2", "s-2", &
                     "Buoyancy frequency, interpolated to z", z_grid='z')
       CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
       if (CS%user_change_diff) &
-        CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+        CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=GV%Z_to_m**2)
     endif
   endif
 
@@ -2195,10 +2195,10 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "double-diffusive convection.", default=1.5e-6, units="m2 s-1")
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
-    CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
+    CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
          'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=GV%Z_to_m**2)
 
-    CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
+    CS%id_KS_extra = register_diag_field('ocean_model', 'KS_extra', diag%axesTi, Time, &
          'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=GV%Z_to_m**2)
 
     if (associated(diag_to_Z_CSp)) then
@@ -2207,7 +2207,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                     z_grid='z')
       CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=GV%Z_to_m**2)
       vd = var_desc("KS_extra", "m2 s-1", &
-                    "Double-Diffusive Salinity Diffusivity, interpolated to z",&
+                    "Double-Diffusive Salinity Diffusivity, interpolated to z", &
                     z_grid='z')
       CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=GV%Z_to_m**2)
       vd = var_desc("Kd_BBL", "m2 s-1", &
@@ -2217,7 +2217,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   endif ! old double-diffusion
 
   if (CS%user_change_diff) then
-    call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
+    call user_change_diff_init(Time, G, GV, param_file, diag, CS%user_change_diff_CSp)
   endif
 
   if (CS%tm_csp%Int_tide_dissipation .and. CS%bkgnd_mixing_csp%Bryan_Lewis_diffusivity) &
