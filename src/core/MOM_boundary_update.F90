@@ -113,7 +113,7 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
   type(ocean_grid_type),                    intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
   type(thermo_var_ptrs),                    intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thicknesses, in H
   type(ocean_OBC_type),                     pointer       :: OBC  !< Open boundary structure
   type(update_OBC_CS),                      pointer       :: CS   !< Control structure for OBCs
   type(time_type),                          intent(in)    :: Time !< Model time
@@ -138,7 +138,7 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
   if (CS%use_tidal_bay) &
       call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC_CSp, G, h, Time)
   if (CS%use_Kelvin)  &
-      call Kelvin_set_OBC_data(OBC, CS%Kelvin_OBC_CSp, G, h, Time)
+      call Kelvin_set_OBC_data(OBC, CS%Kelvin_OBC_CSp, G, GV, h, Time)
   if (CS%use_shelfwave) &
       call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, h, Time)
   if (CS%use_dyed_channel) &
