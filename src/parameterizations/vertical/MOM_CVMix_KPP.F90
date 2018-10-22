@@ -135,7 +135,9 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_dTdt = -1
   integer :: id_NLT_temp_budget = -1
   integer :: id_NLT_saln_budget = -1
-  integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
+  integer :: id_EnhK     = -1, id_EnhVt2   = -1
+  integer :: id_EnhW     = -1
+  integer :: id_La_SL    = -1
   integer :: id_OBLdepth_original = -1
   !!@}
 
@@ -523,6 +525,8 @@ logical function KPP_init(paramFile, G, GV, diag, Time, CS, passive, Waves)
       'Langmuir number enhancement to K as used by [CVMix] KPP','nondim')
   CS%id_EnhVt2 = register_diag_field('ocean_model', 'EnhVt2', diag%axesTL, Time, &
       'Langmuir number enhancement to Vt2 as used by [CVMix] KPP','nondim')
+  CS%id_La_SL = register_diag_field('ocean_model', 'KPP_La_SL', diag%axesT1, Time, &
+      'Surface-layer Langmuir number computed in [CVMix] KPP','nondim')
 
   allocate( CS%N( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%N(:,:,:) = 0.
@@ -707,10 +711,12 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
         if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
            LangEnhK = CS%KPP_K_ENH_FAC
         elseif (CS%LT_K_METHOD==LT_K_MODE_VR12) then
-           LangEnhK = min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
-                (5.4*WAVES%LangNum(i,j))**(-4)))
+           ! Added minimum value for La_SL, so removed maximum value for LangEnhK.
+           LangEnhK = sqrt(1.+(1.5*WAVES%La_SL(i,j))**(-2) + &
+                (5.4*WAVES%La_SL(i,j))**(-4))
         elseif (CS%LT_K_METHOD==LT_K_MODE_RW16) then
-           LangEnhK = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+          !This maximum value is proposed in Reichl et al., 2016 JPO formula
+          LangEnhK = min(2.25, 1. + 1./WAVES%La_SL(i,j))
         else
            !This shouldn't be reached.
            !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in LT_K_ENHANCEMENT")
@@ -915,7 +921,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   real :: MLD_GUESS, LA
   real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
   real :: VarUp, VarDn, M, VarLo, VarAvg
-  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
+  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct, enhvt2
   integer :: B
   real :: WST
 
@@ -1064,7 +1070,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
         MLD_GUESS = max( 1., abs(CS%OBLdepthprev(i,j) ) )
         call get_Langmuir_Number( LA, G, GV, MLD_guess, surfFricVel, I, J, &
              H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
-        WAVES%LangNum(i,j)=LA
+        WAVES%La_SL(i,j)=LA
       endif
 
 
@@ -1111,20 +1117,24 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
             LangEnhVT2(k) = CS%KPP_VT2_ENH_FAC
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_VR12) then
+          !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
+          enhvt2 = sqrt(1.+(1.5*WAVES%La_SL(i,j))**(-2) + &
+                   (5.4*WAVES%La_SL(i,j))**(-4))
           do k=1,G%ke
-             LangEnhVT2(k) = min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
-                  (5.4*WAVES%LangNum(i,j))**(-4)))
+             LangEnhVT2(k) = enhvt2
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_RW16) then
+          !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
+          enhvt2 = 1. + 2.3*WAVES%La_SL(i,j)**(-0.5)
           do k=1,G%ke
-            LangEnhVT2(k) = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+            LangEnhVT2(k) = enhvt2
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_LF17) then
           CS%CS=cvmix_get_kpp_real('c_s',CS%KPP_params)
           do k=1,G%ke
             WST = (max(0.,-buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
             LangEnhVT2(k) = sqrt((0.15*WST**3. + 0.17*surfFricVel**3.* &
-                 (1.+0.49*WAVES%LangNum(i,j)**(-2.)))  / &
+                 (1.+0.49*WAVES%La_SL(i,j)**(-2.)))  / &
                  (0.2*ws_1d(k)**3/(CS%cs*CS%surf_layer_ext*CS%vonKarman**4.)))
           enddo
         else
@@ -1297,6 +1307,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   if (CS%id_BulkUz2  > 0) call post_data(CS%id_BulkUz2,  CS%Uz2,             CS%diag)
   if (CS%id_EnhK     > 0) call post_data(CS%id_EnhK,     CS%EnhK,            CS%diag)
   if (CS%id_EnhVt2   > 0) call post_data(CS%id_EnhVt2,   CS%EnhVt2,          CS%diag)
+  if (CS%id_La_SL>0.and.present(WAVES)) call post_data(CS%id_La_SL,WAVES%La_SL,CS%diag)
 
   ! BLD smoothing:
   if (CS%n_smooth > 0) call KPP_smooth_BLD(CS,G,GV,h)
