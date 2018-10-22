@@ -290,7 +290,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     call uvchksum("Kh_[uv]", Kh_u, Kh_v, G%HI,haloshift=0)
     call uvchksum("int_slope_[uv]", int_slope_u, int_slope_v, G%HI, haloshift=0)
     call hchksum(h, "thickness_diffuse_1 h", G%HI, haloshift=1, scale=GV%H_to_m)
-    call hchksum(e, "thickness_diffuse_1 e", G%HI, haloshift=1)
+    call hchksum(e, "thickness_diffuse_1 e", G%HI, haloshift=1, scale=GV%Z_to_m)
     if (use_stored_slopes) then
       call uvchksum("VarMix%slope_[xy]", VarMix%slope_x, VarMix%slope_y, &
                     G%HI, haloshift=0)
