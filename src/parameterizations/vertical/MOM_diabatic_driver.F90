@@ -606,7 +606,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
 
     call KPP_compute_BLD(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux)
+      fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
     call KPP_calculate(CS%KPP_CSp, G, GV, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
       Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
@@ -1530,7 +1530,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     endif
 
     call KPP_compute_BLD(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux)
+      fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
     call KPP_calculate(CS%KPP_CSp, G, GV, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
       Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
