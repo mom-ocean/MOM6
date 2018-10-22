@@ -1067,7 +1067,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
                "without activating USEWAVES")
         endif
         !For now get Langmuir number based on prev. MLD (otherwise must compute 3d LA)
-        MLD_GUESS = max( 1., abs(CS%OBLdepthprev(i,j) ) )
+        MLD_GUESS = max( 1.*GV%m_to_Z, abs(GV%m_to_Z*CS%OBLdepthprev(i,j) ) )
         call get_Langmuir_Number( LA, G, GV, MLD_guess, surfFricVel, I, J, &
              H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
         WAVES%La_SL(i,j)=LA
