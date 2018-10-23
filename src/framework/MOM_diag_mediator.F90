@@ -1330,20 +1330,6 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
     locfield => field
   endif
 
-  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
-    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
-    do j=jsv,jev ; do i=isv,iev
-      if (field(i,j) == diag_cs%missing_value) then
-        locfield(i,j) = diag_cs%missing_value
-      else
-        locfield(i,j) = field(i,j) * diag%conversion_factor
-      endif
-    enddo ; enddo
-    locfield(isv:iev,jsv:jev) = field(isv:iev,jsv:jev) * diag%conversion_factor
-  else
-    locfield => field
-  endif
-
   if (present(mask)) then
      locmask => mask
   elseif(.NOT. is_stat) then
@@ -1633,7 +1619,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
         locmask => locmask_decim
       elseif(associated(diag%axes%decim(dl)%mask3d)) then
         locmask => diag%axes%decim(dl)%mask3d 
-     endif
+     endif     
   endif
 
   if (diag_cs%diag_as_chksum) then
@@ -3443,10 +3429,10 @@ subroutine decimate_diag_masks_set(G, nz, diag_cs)
 !print*,'coarse   c extents ',G%isc_zap2,G%iec_zap2,G%jsc_zap2,G%jec_zap2
 !print*,'original d extents ',G%isd,G%ied,G%jsd,G%jed
 !print*,'coarse   d extents ',G%isd_zap2,G%ied_zap2,G%jsd_zap2,G%jed_zap2
-! original c extents            5          52           5          64
-! coarse   c extents            5          28           5          34
-! original d extents            1          56           1          68
-! coarse   d extents            1          32           1          38
+! original c extents            5          52           5          52
+! coarse   c extents            3          26           3          26
+! original d extents            1          56           1          56
+! coarse   d extents            1          28           1          28
   
   do dl=2,MAX_DECIM_LEV 
      ! 2d masks
@@ -3495,7 +3481,8 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec
 
   if ( f1 == dszi ) then
-     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec    ! Data domain
+     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec    ! field on Data domain, take compute domain indcies
+  !The rest is not taken with the full MOM6 diag_table   
   elseif ( f1 == dszi + 1 ) then
      isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec+1   ! Symmetric data domain
   elseif ( f1 == cszi) then
@@ -3505,7 +3492,7 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   else
      write (mesg,*) " peculiar size ",f1," in i-direction\n"//&
           "does not match one of ", cszi, cszi+1, dszi, dszi+1
-     call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
+     call MOM_error(FATAL,"decimate_diag_indices_get: "//trim(mesg))
   endif
   if ( f2 == dszj ) then
      jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec     ! Data domain
@@ -3518,7 +3505,7 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   else
      write (mesg,*) " peculiar size ",f2," in j-direction\n"//&
           "does not match one of ", cszj, cszj+1, dszj, dszj+1
-     call MOM_error(FATAL,"decimate_diag_field: "//trim(mesg))
+     call MOM_error(FATAL,"decimate_diag_indices_get: "//trim(mesg))
   endif
 
 end subroutine decimate_diag_indices_get
@@ -3529,19 +3516,21 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   integer, intent(in) :: dl
-  integer, intent(out):: isv,iev,jsv,jev
+  integer, intent(inout):: isv,iev,jsv,jev
   real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
   !locals
   real, dimension(:,:,:), pointer :: locmask  
-  integer :: isl,iel,jsl,jel
+  integer :: f1,f2,isv_o,jsv_o
   
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
-  isl=1; iel=size(locfield,1)/dl
-  jsl=1; jel=size(locfield,2)/dl
-  !Get the shape of the decimated field isv,iev,jsv,jev
-  call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+  f1=size(locfield,1)/dl
+  f2=size(locfield,2)/dl
+  !Save the extents of the original (fine) domain
+  isv_o=isv;jsv_o=jsv
+  !Get the shape of the decimated field and overwrite isv,iev,jsv,jev with them
+  call decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   !Set the non-decimated mask, it must be associated and initialized
   if (present(mask)) then
      locmask => mask
@@ -3551,7 +3540,8 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
      call MOM_error(FATAL, "decimate_diag_field_3d: Cannot decimate without a mask!!! ")
   endif
   
-  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs, diag)
+  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs, diag, &
+                      isv_o,jsv_o,isv,iev,jsv,jev)
   
 end subroutine decimate_diag_field_3d
 
@@ -3565,15 +3555,17 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
   !locals
   real, dimension(:,:), pointer :: locmask  
-  integer :: isl,iel,jsl,jel
+  integer :: f1,f2,isv_o,jsv_o
   
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
-  isl=1; iel=size(locfield,1)/dl
-  jsl=1; jel=size(locfield,2)/dl
-  !Get the shape of the decimated field isv,iev,jsv,jev
-  call decimate_diag_indices_get(iel,jel, dl, diag_cs,isv,iev,jsv,jev)
+  f1=size(locfield,1)/dl
+  f2=size(locfield,2)/dl
+  !Save the extents of the original (fine) domain
+  isv_o=isv;jsv_o=jsv
+  !Get the shape of the decimated field and overwrite isv,iev,jsv,jev with them
+  call decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   !Set the non-decimated mask, it must be associated and initialized
   if (present(mask)) then
      locmask => mask
@@ -3583,66 +3575,70 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
      call MOM_error(FATAL, "decimate_diag_field_2d: Cannot decimate without a mask!!! ")
   endif
   
-  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs,diag)
+  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs,diag, &
+                      isv_o,jsv_o,isv,iev,jsv,jev)
   
 end subroutine decimate_diag_field_2d
 
 
-!- According to Alistair, the decimation method could be solely deduced
-!  from the axes%x_cell_method, axes%y_cell_method and probably the area_cell_method
-!  at the time of send_data
-!- This is the summary of the algoritm
+!- The decimation method could be deduced (before send_data call)
+!  from the diag%x_cell_method, diag%y_cell_method and diag%v_cell_method
+!  
+!- This is the summary of the decimation algoritm for a diagnostic field f:
 !  f(Id,Jd) = \sum_{i,j} f(Id+i,Jd+j) * weight(Id+i,Jd+j) / [ \sum_{i,j} weight(Id+i,Jd+j)]
-!     Id,Jd are the decimated (coarse grid) indices run over the coarsened compute grid,    
 !     i and j run from 0 to dl-1 (dl being the decimation level)
-!     if and jf
-!     weight(if,jf) run over the original fine computre grid
+!     Id,Jd are the decimated (coarse grid) indices run over the coarsened compute grid,    
+!     if and jf are the original (fine grid) indices
 !
-!example   x_cell y_cell ?_cell weight  impemented weight(if,jf)            algorithm_id
+!example   x_cell y_cell v_cell algorithm_id    impemented weight(if,jf)            
 !---------------------------------------------------------------------------------------
-!theta     mean   mean   mean   A*h     A(if,jf)*h(if,jf)                   22
-!u         point  mean   mean   dy*h    dyCu(if,jf)*h(if,jf)*delta(if,Id)   02    
-!v         mean   point  mean   dx*h    dxCv(if,jf)*h(if,jf)*delta(jf,Jd)   20 
-!volcello  sum    sum    sum    1       1                                   11
-!umo       point  sum    sum    1       1*delta(if,Id)                      01
-!?         sum    point  sum    1       1*delta(jf,Jd)                      10
-!w         mean   mean   point  A       N/A              
-!h*theta   mean   mean   sum    A       N/A                            
+!theta     mean   mean   mean   MMM =222        G%areaT(if,jf)*h(if,jf)             
+!u         point  mean   mean   PMM =022        dyCu(if,jf)*h(if,jf)*delta(if,Id)     
+!?         point  sum    mean   PSM =012        dyCu(if,jf)*h(if,jf)*delta(if,Id)   right?   
+!v         mean   point  mean   MPM =202        dxCv(if,jf)*h(if,jf)*delta(jf,Jd)   
+!volcello  sum    sum    sum    SSS =111        1                                   
+!T_dfxy_co sum    sum    point  SSP =110        1                                   right? T_dfxy_cont_tendency_2d
+!umo       point  sum    sum    PSS =011        1*delta(if,Id)                      
+!vmo       sum    point  sum    SPS =101        1*delta(jf,Jd)                      
+!umo_2d    point  sum    point  PSP =010        1*delta(if,Id)                      right?
+!vmo_2d    sum    point  point  SPP =100        1*delta(jf,Jd)                      right?
+!?         point  mean   point  PMP =020        dyCu(if,jf)*delta(if,Id)            right?
+!?         mean   point  point  MPP =200        dxCv(if,jf)*delta(jf,Jd)            right?
+!w         mean   mean   point  MMP =220        G%areaT(if,jf)                                       
+!h*theta   mean   mean   sum    MMS =221        G%areaT(if,jf)                      right?
 !
 !delta is the Kroneker delta
-!Niki: I am not sure if he meant area_cell_method or z_cell_method for the 4th column
-!Niki: I have not used the 4th column at all!!!
 
-subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag)
+subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
   integer , intent(in) :: dl
-  integer, optional, intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
+  integer,  intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
   real, dimension(:,:,:), pointer :: mask
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
+  integer , intent(in) :: isv_o,jsv_o             !< original indices,  In practice  isv_o=jsv_o=1
+  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< decimaed indices
   !locals
   character(len=240) :: mesg
-  integer :: i,j,ii,jj,is,js,i0,j0
-  integer :: isl,iel,jsl,jel
+  integer :: i,j,ii,jj,i0,j0
   integer :: k,ks,ke
   real :: ave,total_weight,weight
   real :: epsilon = 1.0e-20
-  !Always start from the first element
-  is=1
-  js=1
-  ks=1 ; ke =size(field_in,3)
-  isl=1; iel=size(field_in,1)/dl
-  jsl=1; jel=size(field_in,2)/dl  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke))
 
+  ks=1 ; ke =size(field_in,3)
+  !Allocate the decimated field on the decimated data domain
+  allocate(field_out(diag_cs%decim(dl)%isd:diag_cs%decim(dl)%ied,diag_cs%decim(dl)%jsd:diag_cs%decim(dl)%jed,ks:ke))
+!  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl,ks:ke))
+  !Fill the decimated field on the decimated diagnostics (almost always compuate) domain
   if(method .eq. MMM) then    !xyz_method = MMM = 222
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 !This seems to be faster!!!!
            weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,k)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
@@ -3650,12 +3646,13 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   elseif(method .eq. SSS) then    !xyz_method = SSS = 111 e.g., volcello
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
            weight = mask(ii,jj,k)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
@@ -3663,12 +3660,13 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   elseif(method .eq. MMP .or. method .eq. MMS) then    !xyz_method = MMP = 220, e.g.,  or T_advection_xy
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
            weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
@@ -3676,9 +3674,9 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   elseif(method .eq. PMM) then    !xyz_method = PMM = 022
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         ii=i0
@@ -3690,9 +3688,9 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   elseif(method .eq. PSM) then    !xyz_method = PSM = 012
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         ii=i0
@@ -3704,9 +3702,9 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   elseif(method .eq. PSS) then    !xyz_method = PSS = 011 e.g. umo
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         ii=i0
@@ -3718,9 +3716,9 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   elseif(method .eq. SPS) then    !xyz_method = SPS = 101 e.g. vmo
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         jj=j0
@@ -3732,9 +3730,9 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   elseif(method .eq. MPM) then    !xyz_method = MPM = 202
-     do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         jj=j0
@@ -3752,7 +3750,7 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
      
 end subroutine decimate_field_3d
 
-subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag)
+subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
   real, dimension(:,:) , pointer :: field_in
   real, dimension(:,:) , allocatable :: field_out
   integer , intent(in) :: dl
@@ -3760,26 +3758,27 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
   real, dimension(:,:), pointer :: mask
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
+  integer , intent(in) :: isv_o,jsv_o             !< original indices,  In practice  isv_o=jsv_o=1
+  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< decimaed indices
   !locals
   character(len=240) :: mesg
-  integer :: i,j,ii,jj,is,js,i0,j0
-  integer :: isl,iel,jsl,jel
+  integer :: i,j,ii,jj,i0,j0
   real :: ave,total_weight,weight
   real :: epsilon = 1.0e-20
-  !Always start from the first element
-  is=1
-  js=1
-  isl=1; iel=size(field_in,1)/dl
-  jsl=1; jel=size(field_in,2)/dl  
-  allocate(field_out(isl:iel,jsl:jel))
-     
+
+  !Allocate the decimated field on the decimated data domain
+  allocate(field_out(diag_cs%decim(dl)%isd:diag_cs%decim(dl)%ied,diag_cs%decim(dl)%jsd:diag_cs%decim(dl)%jed))
+!  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl))
+  !Fill the decimated field on the decimated diagnostics (almost always compuate) domain
+
   if(method .eq. MMM) then    !xyz_method = MMM
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
            weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,1)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj)*weight
@@ -3787,25 +3786,27 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
   elseif(method .eq. MMP) then    !xyz_method = MMP
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
            weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj)*weight
         enddo; enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. SSP) then    !xyz_method = SSP , e.g., T_dfxy_cont_tendency_2d
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+  elseif(method .eq. SSP) then    !xyz_method = SSP , e.g., T_dfxy_cont_tendency_2d 
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
-        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
            weight = mask(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj)*weight
@@ -3813,9 +3814,9 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
   elseif(method .eq. PSP) then    !xyz_method = PSP = 010, e.g., umo_2d
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         ii=i0
@@ -3827,9 +3828,9 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
   elseif(method .eq. SPP) then    !xyz_method = SPP = 100, e.g., vmo_2d
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         jj=j0
@@ -3841,9 +3842,9 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
   elseif(method .eq. PMP) then    !xyz_method = PMP = 020
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         ii=i0
@@ -3855,9 +3856,9 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
   elseif(method .eq. MPP) then    !xyz_method = MPP = 200
-     do j=jsl,jel ; do i=isl,iel
-        i0 = is+dl*(i-isl)
-        j0 = js+dl*(j-jsl)
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         jj=j0
@@ -3875,99 +3876,107 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
      
 end subroutine decimate_field_2d
 
-subroutine decimate_mask_3d_p(field_in, field_out, level)
-  integer , intent(in) :: level
+subroutine decimate_mask_3d_p(field_in, field_out, dl)
+  integer , intent(in) :: dl
   real, dimension(:,:,:) , pointer :: field_in, field_out
-  integer :: i,j,ii,jj,is,js,i0,j0
-  integer :: isl,iel,jsl,jel
+  integer :: i,j,ii,jj,i0,j0
+  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   integer :: k,ks,ke
   real    :: tot_non_zero
   !decimated mask = 0 unless the mask value of one of the decimating cells is 1
-  is=1
-  js=1
+  isv_o=1
+  jsv_o=1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke)); field_out(:,:,:) = 0.0  
-  do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-     i0 = is+level*(i-isl)
-     j0 = js+level*(j-jsl)
+  isv_d=1; iev_d=size(field_in,1)/dl
+  jsv_d=1; jev_d=size(field_in,2)/dl  
+  allocate(field_out(isv_d:iev_d,jsv_d:jev_d,ks:ke))
+  field_out(:,:,:) = 0.0
+  do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+     i0 = isv_o+dl*(i-isv_d)
+     j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
-     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+!    do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
         tot_non_zero = tot_non_zero + field_in(ii,jj,k)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo; enddo; enddo
 end subroutine decimate_mask_3d_p
 
-subroutine decimate_mask_2d_p(field_in, field_out, level)
-  integer , intent(in) :: level
+subroutine decimate_mask_2d_p(field_in, field_out, dl)
+  integer , intent(in) :: dl
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , pointer :: field_out
-  integer :: i,j,ii,jj,is,js,i0,j0
-  integer :: isl,iel,jsl,jel
+  integer :: i,j,ii,jj,i0,j0
+  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   real    :: tot_non_zero
   !decimated mask = 0 unless the mask value of one of the decimating cells is 1
-  is=1
-  js=1
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel)); field_out(:,:) = 0.0  
-  do j=jsl,jel ; do i=isl,iel
-     i0 = is+level*(i-isl)
-     j0 = js+level*(j-jsl)
+  isv_o=1
+  jsv_o=1
+  isv_d=1; iev_d=size(field_in,1)/dl
+  jsv_d=1; jev_d=size(field_in,2)/dl  
+  allocate(field_out(isv_d:iev_d,jsv_d:jev_d))  
+  field_out(:,:) = 0.0
+  do j=jsv_d,jev_d ; do i=isv_d,iev_d
+     i0 = isv_o+dl*(i-isv_d)
+     j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
-     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+!     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
         tot_non_zero = tot_non_zero + field_in(ii,jj)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j)=1.0
   enddo; enddo
 end subroutine decimate_mask_2d_p
 
-subroutine decimate_mask_3d_a(field_in, field_out, level)
-  integer , intent(in) :: level
+subroutine decimate_mask_3d_a(field_in, field_out, dl)
+  integer , intent(in) :: dl
   real, dimension(:,:,:), pointer :: field_in
   real, dimension(:,:,:), allocatable :: field_out
-  integer :: i,j,ii,jj,is,js,i0,j0
-  integer :: isl,iel,jsl,jel
+  integer :: i,j,ii,jj,i0,j0
+  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   integer :: k,ks,ke
   real    :: tot_non_zero
   !decimated mask = 0 unless the mask value of one of the decimating cells is 1
-  is=1
-  js=1
+  isv_o=1
+  jsv_o=1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel,ks:ke)); field_out(:,:,:) = 0.0  
-  do k= ks,ke ; do j=jsl,jel ; do i=isl,iel
-     i0 = is+level*(i-isl)
-     j0 = js+level*(j-jsl)
+  isv_d=1; iev_d=size(field_in,1)/dl
+  jsv_d=1; jev_d=size(field_in,2)/dl  
+  allocate(field_out(isv_d:iev_d,jsv_d:jev_d,ks:ke))
+  field_out(:,:,:) = 0.0
+  do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+     i0 = isv_o+dl*(i-isv_d)
+     j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
-     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+!     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1 
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
         tot_non_zero = tot_non_zero + field_in(ii,jj,k)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo; enddo; enddo
 end subroutine decimate_mask_3d_a
 
-subroutine decimate_mask_2d_a(field_in, field_out, level)
-  integer , intent(in) :: level
+subroutine decimate_mask_2d_a(field_in, field_out, dl)
+  integer , intent(in) :: dl
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , allocatable :: field_out
-  integer :: i,j,ii,jj,is,js,i0,j0
-  integer :: isl,iel,jsl,jel
+  integer :: i,j,ii,jj,i0,j0
+  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   real    :: tot_non_zero
   !decimated mask = 0 unless the mask value of one of the decimating cells is 1
-  is=1
-  js=1
-  isl=1; iel=size(field_in,1)/level
-  jsl=1; jel=size(field_in,2)/level  
-  allocate(field_out(isl:iel,jsl:jel)); field_out(:,:) = 0.0   
-  do j=jsl,jel ; do i=isl,iel
-     i0 = is+level*(i-isl)
-     j0 = js+level*(j-jsl)
+  isv_o=1
+  jsv_o=1
+  isv_d=1; iev_d=size(field_in,1)/dl
+  jsv_d=1; jev_d=size(field_in,2)/dl  
+  allocate(field_out(isv_d:iev_d,jsv_d:jev_d))
+  field_out(:,:) = 0.0
+  do j=jsv_d,jev_d ; do i=isv_d,iev_d
+     i0 = isv_o+dl*(i-isv_d)
+     j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
-     do ii=i0,i0+level-1 ; do jj=j0,j0+level-1
+!     do jj=j0,j0+dl-1 ;  do ii=i0,i0+dl-1 
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
         tot_non_zero = tot_non_zero + field_in(ii,jj)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j)=1.0
