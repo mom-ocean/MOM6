@@ -679,7 +679,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
       enddo ! end of j loop
     endif
   else ! not use_EOS
-    !$OMP parallel do default(share) private(Ihtot)
+    !$OMP parallel do default(shared) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
