@@ -864,7 +864,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 
   ! Arguments
   type(KPP_CS),                               pointer       :: CS    !< Control structure
-  type(ocean_grid_type),                      intent(in)    :: G     !< Ocean grid
+  type(ocean_grid_type),                      intent(inout) :: G     !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
@@ -1308,7 +1308,7 @@ end subroutine KPP_compute_BLD
 subroutine KPP_smooth_BLD(CS,G,GV,h)
   ! Arguments
   type(KPP_CS),                           pointer       :: CS             !< Control structure
-  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
+  type(ocean_grid_type),                  intent(inout) :: G              !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h              !< Layer/level thicknesses (units of H)
 
