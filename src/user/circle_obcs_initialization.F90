@@ -33,10 +33,10 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(GV)+1)   ! The resting interface heights, in m, usually !
-                           ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface !
-                           ! positive upward, in m.                       !
+  real :: e0(SZK_(GV)+1)   ! The resting interface heights, in depth units (Z), usually
+                           ! negative because it is positive upward.
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
+                           ! positive upward, in in depth units (Z).
   real :: diskrad, rad, xCenter, xRadius, lonC, latC, xOffset
   logical :: just_read
 ! This include declares and sets the variable "version".
@@ -70,14 +70,14 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
 
   ! Uniform thicknesses for base state
   do j=js,je ; do i=is,ie                        !
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
+        h(i,j,k) = GV%Angstrom_H
       else
-        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo

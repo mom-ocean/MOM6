@@ -82,7 +82,9 @@ type, public:: wave_parameters_CS ; private
                           !! Horizontal -> V points
                           !! Vertical -> Mid-points
   real, allocatable, dimension(:,:), public :: &
-       LangNum            !< Langmuir number (directionality factored later)
+       La_SL,&            !< SL Langmuir number (directionality factored later)
+                          !! Horizontal -> H points
+       La_Turb            !< Aligned Turbulent Langmuir number
                           !! Horizontal -> H points
   real, allocatable, dimension(:,:), public :: &
        US0_x              !< Surface Stokes Drift (zonal, m/s)
@@ -106,9 +108,17 @@ type, public:: wave_parameters_CS ; private
   type(diag_ctrl), pointer, public :: diag !< A structure that is used to regulate the
                                            !! timing of diagnostic output.
 
+  ! An arbitrary lower-bound on the Langmuir number.  Run-time parameter.
+  ! Langmuir number is sqrt(u_star/u_stokes). When both are small
+  ! but u_star is orders of magnitude smaller the Langmuir number could
+  ! have unintended consequences.  Since both are small it can be safely capped
+  ! to avoid such consequences.
+  real :: La_min = 0.05
+
   !>@{ Diagnostic handles
-  integer, public :: id_surfacestokes_x, id_surfacestokes_y
-  integer, public :: id_3dstokes_x, id_3dstokes_y
+  integer, public :: id_surfacestokes_x = -1 , id_surfacestokes_y = -1
+  integer, public :: id_3dstokes_x = -1 , id_3dstokes_y = -1
+  integer, public :: id_La_turb = -1
   !!@}
 
 end type wave_parameters_CS
@@ -343,6 +353,11 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   call get_param(param_file, mdl, "LA_MISALIGNMENT", LA_Misalignment,    &
          "Flag (logical) if using misalignment bt shear and waves in LA",&
          default=.false.)
+  call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
+         "A minimum value for all Langmuir numbers that is not physical, \n"//&
+         " but is likely only encountered when the wind is very small and \n"//&
+         " therefore its effects should be mostly benign.",units="nondim",&
+         default=0.05)
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
@@ -356,8 +371,10 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   allocate(CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB))
   CS%US0_y(:,:) = 0.0
   ! c. Langmuir number
-  allocate(CS%LangNum(G%isc:G%iec,G%jsc:G%jec))
-  CS%LangNum(:,:) = 0.0
+  allocate(CS%La_SL(G%isc:G%iec,G%jsc:G%jec))
+  allocate(CS%La_turb(G%isc:G%iec,G%jsc:G%jec))
+  CS%La_SL(:,:) = 0.0
+  CS%La_turb (:,:) = 0.0
   ! d. Viscosity for Stokes drift
   if (CS%StokesMixing) then
     allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,G%ke))
@@ -373,6 +390,8 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
        CS%diag%axesCvL,Time,'3d Stokes drift (y)','m s-1')
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
        CS%diag%axesCuL,Time,'3d Stokes drift (y)','m s-1')
+  CS%id_La_turb = register_diag_field('ocean_model','La_turbulent',&
+       CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
 
   return
 end subroutine MOM_wave_interface_init
@@ -454,6 +473,7 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
   real    :: CMN_FAC, WN, US
+  real    :: La
   integer :: ii, jj, kk, b, iim1, jjm1
 
   ! 1. If Test Profile Option is chosen
@@ -525,11 +545,11 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/GV%g_Earth)
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*GV%m_to_Z))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / GV%g_Earth !bgr bug-fix missing g
+                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*GV%m_to_Z) !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -568,11 +588,11 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/GV%g_Earth)
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*GV%m_to_Z))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / GV%g_Earth
+                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*GV%m_to_Z)
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -636,6 +656,18 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
     enddo
   endif
 
+  ! Turbulent Langmuir number is computed here and available to use anywhere.
+  ! SL Langmuir number requires mixing layer depth, and therefore is computed
+  ! in the routine it is needed by (e.g. KPP or ePBL).
+  do ii = G%isc,G%iec
+    do jj = G%jsc, G%jec
+      Top = h(ii,jj,1)*GV%H_to_m
+      call get_Langmuir_Number( La, G, GV, Top, ustar(ii,jj), ii, jj, &
+             Override_MA=.false.,WAVES=CS)
+      CS%La_turb(ii,jj) = La
+    enddo
+  enddo
+
   ! Output any desired quantities
   if (CS%id_surfacestokes_y>0) &
        call post_data(CS%id_surfacestokes_y, CS%us0_y, CS%diag)
@@ -645,7 +677,8 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
        call post_data(CS%id_3dstokes_y, CS%us_y, CS%diag)
   if (CS%id_3dstokes_x>0) &
        call post_data(CS%id_3dstokes_x, CS%us_x, CS%diag)
-
+  if (CS%id_La_turb>0) &
+       call post_data(CS%id_La_turb, CS%La_turb, CS%diag)
   return
 end subroutine Update_Stokes_Drift
 
@@ -672,11 +705,6 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
   if (.not.dataOverrideIsInitialized) then
     call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
     dataOverrideIsInitialized = .true.
-
-    allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:id))
-    CS%STKx0(:,:,:) = 0.0
-    allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:id))
-    CS%STKy0(:,:,:) = 0.0
 
     ! Read in number of wavenumber bands in file to set number to be read in
     ! Hardcoded filename/variables
@@ -742,9 +770,13 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
       ! Allocating size of frequency bins
       allocate( CS%Freq_Cen(1:id) )
       CS%Freq_Cen(:) = 0.0
-    ! Allocating size of wavenumber bins
+      ! Allocating size of wavenumber bins
       allocate( CS%WaveNum_Cen(1:id) )
       CS%WaveNum_Cen(:) = 0.0
+      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:id))
+      CS%STKx0(:,:,:) = 0.0
+      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:id))
+      CS%STKy0(:,:,:) = 0.0
     endif
 
     ! Reading wavenumber bins/Frequencies
@@ -770,7 +802,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
       endif
       NUMBANDS = ID
       do B = 1,NumBands
-        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2 / GV%g_Earth
+        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*GV%m_to_Z)
       enddo
     endif
 
@@ -822,7 +854,7 @@ end subroutine Surface_Bands_by_data_override
 !!  want the wind-speed only dependent Langmuir number.  Therefore, we need to be
 !!  careful about what we try to access here.
 subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
-                                H, U_H, V_H, Waves )
+                                H, U_H, V_H, Override_MA, Waves )
   type(ocean_grid_type), &
        intent(in)     :: G      !< Ocean grid structure
   type(verticalGrid_type), &
@@ -832,6 +864,11 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
   real, intent(in)    :: USTAR  !< Friction velocity (m/s)
   real, intent(in)    :: HBL    !< (Positive) thickness of boundary
                                 !! layer (m)
+  logical, optional,&
+       intent(in)      :: Override_MA !< Override to use misalignment in LA
+                                !! calculation. This can be used if diagnostic
+                                !! LA outputs are desired that are different than
+                                !! those used by the dynamical model.
   real, optional, dimension(SZK_(GV)), &
        intent(in)      :: H     !< Grid layer thickness (m or kg/m2)
   real, optional, dimension(SZK_(GV)), &
@@ -847,7 +884,7 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
   real :: Top, bottom, midpoint
   real :: Dpt_LASL, ShearDirection, WaveDirection
   real :: LA_STKx, LA_STKy, LA_STK
-  logical :: ContinueLoop
+  logical :: ContinueLoop, USE_MA
   real, dimension(SZK_(G)) :: US_H, VS_H
   real, dimension(NumBands) :: StkBand_X, StkBand_Y
   integer :: KK, BB
@@ -855,10 +892,14 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
  ! Compute averaging depth for Stokes drift (negative)
   Dpt_LASL = min(-0.1, -LA_FracHBL*HBL)
 
+  USE_MA = LA_Misalignment
+  if (present(Override_MA)) USE_MA = Override_MA
+
   ! If requesting to use misalignment in the Langmuir number compute the Shear Direction
-  if (LA_Misalignment .and. (.not.(present(H).and.present(U_H).and.present(V_H)))) then
-    call MOM_error(Fatal,'Get_LA_waves requested to consider misalignment.')
-  elseif (LA_Misalignment) then
+  if (USE_MA) then
+    if (.not.(present(H).and.present(U_H).and.present(V_H))) then
+      call MOM_error(Fatal,'Get_LA_waves requested to consider misalignment.')
+    endif
     ContinueLoop = .true.
     bottom = 0.0
     do kk = 1,G%ke
@@ -905,11 +946,12 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, i, j, &
     ! This is an arbitrary lower bound on Langmuir number.
     ! We shouldn't expect values lower than this, but
     ! there is also no good reason to cap it here other then
-    ! to prevent artificially big enhancements.
-    LA = max(0.1,sqrt(USTAR/(LA_STK+1.e-8)))
+    ! to prevent large enhancements in unconstrained parts of
+    ! the curve fit parameterizations.
+    LA = max(WAVES%La_min,sqrt(USTAR/(LA_STK+1.e-10)))
   endif
 
-  if (LA_Misalignment) then
+  if (Use_MA) then
     WaveDirection = atan2(LA_STKy,LA_STKx)
     LA = LA / sqrt(max(1.e-8,cos( WaveDirection - ShearDirection)))
   endif
@@ -968,7 +1010,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL, LA)
     !
     ! peak frequency (PM, Bouws, 1998)
     tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * GV%g_Earth / tmp
+    fp = 0.877 * (GV%g_Earth*GV%m_to_Z) / tmp
     !
     ! mean frequency
     fm = fm_to_fp * fp
@@ -1102,14 +1144,14 @@ subroutine DHH85_mid(GV, ust, zpt, US)
   !/
   omega_min = 0.1 ! Hz
   ! Cut off at 30cm for now...
-  omega_max = 6.5 ! ~sqrt(0.2*GV%g_earth*2*pi/0.3)
+  omega_max = 6.5 ! ~sqrt(0.2*(GV%g_Earth*GV%m_to_Z)*2*pi/0.3)
   domega=0.05
   NOmega = (omega_max-omega_min)/domega
   !
   if (WaveAgePeakFreq) then
-    omega_peak = GV%G_EARTH/WA/u10
+    omega_peak = (GV%g_Earth*GV%m_to_Z)/WA/u10
   else
-    omega_peak = 2. * pi * 0.13 * GV%g_earth / U10
+    omega_peak = 2. * pi * 0.13 * (GV%g_Earth*GV%m_to_Z) / U10
   endif
   !/
   Ann = 0.006 * WaveAge**(-0.55)
@@ -1125,11 +1167,11 @@ subroutine DHH85_mid(GV, ust, zpt, US)
   do oi = 1,nomega-1
     Dnn = exp ( -0.5 * (omega-omega_peak)**2 / Snn**2 / omega_peak**2 )
     ! wavespec units = m2s
-    wavespec = (Ann * GV%g_earth**2 / (omega_peak*omega**4 ) ) &
+    wavespec = (Ann * (GV%g_Earth*GV%m_to_Z)**2 / (omega_peak*omega**4 ) ) &
          *exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
     ! Stokes units m  (multiply by frequency range for units of m/s)
     Stokes = 2.0 * wavespec * omega**3 * &
-         exp( 2.0 * omega**2 * zpt/GV%g_earth)/GV%g_earth
+         exp( 2.0 * omega**2 * zpt/(GV%g_Earth*GV%m_to_Z))/(GV%g_Earth*GV%m_to_Z)
     US=US+Stokes*domega
     omega = omega + domega
   enddo
@@ -1290,7 +1332,7 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
     CT=CT+1
     u10a = u10
     alpha = min(0.028,0.0017 * u10 - 0.005)
-    z0rough = alpha * USTair**2/GV%g_Earth ! Compute z0rough from ustar guess
+    z0rough = alpha * USTair**2/(GV%g_Earth*GV%m_to_Z) ! Compute z0rough from ustar guess
     z0=z0sm+z0rough
     CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
     u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop
@@ -1312,11 +1354,12 @@ end subroutine ust_2_u10_coare3p5
 subroutine Waves_end(CS)
   type(wave_parameters_CS), pointer :: CS !< Control structure
 
-  if (allocated(CS%WaveNum_Cen)) then; deallocate( CS%WaveNum_Cen ); endif
+  if (allocated(CS%WaveNum_Cen)) deallocate( CS%WaveNum_Cen )
   if (allocated(CS%Freq_Cen))    deallocate( CS%Freq_Cen )
   if (allocated(CS%Us_x))        deallocate( CS%Us_x )
   if (allocated(CS%Us_y))        deallocate( CS%Us_y )
-  if (allocated(CS%LangNum))     deallocate( CS%LangNum )
+  if (allocated(CS%La_SL))       deallocate( CS%La_SL )
+  if (allocated(CS%La_turb))     deallocate( CS%La_turb )
   if (allocated(CS%STKx0))       deallocate( CS%STKx0 )
   if (allocated(CS%STKy0))       deallocate( CS%STKy0 )
   if (allocated(CS%KvS))         deallocate( CS%KvS )

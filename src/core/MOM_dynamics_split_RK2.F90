@@ -58,6 +58,7 @@ use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init, vertvis
 use MOM_vert_friction,         only : updateCFLtruncationValue
 use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
+use MOM_wave_interface, only: wave_parameters_CS
 
 implicit none ; private
 
@@ -228,7 +229,7 @@ contains
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                  Time_local, dt, forces, p_surf_begin, p_surf_end, &
                  uh, vh, uhtr, vhtr, eta_av, &
-                 G, GV, CS, calc_dtbt, VarMix, MEKE)
+                 G, GV, CS, calc_dtbt, VarMix, MEKE, Waves)
   type(ocean_grid_type),             intent(inout) :: G            !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -262,7 +263,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
   type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
   type(MEKE_type),                   pointer       :: MEKE         !< related to mesoscale eddy kinetic energy param
-
+  type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
+                                                                   !! fields related to the surface wave conditions
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping.
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocity in m s-1.
@@ -576,7 +578,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call vertvisc_coef(up, vp, h, forces, visc, dt_pred, G, GV, CS%vertvisc_CSp, &
                      CS%OBC)
   call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
-                GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+                GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc)
@@ -774,7 +776,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, &
-                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves)
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc)
     call start_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
@@ -909,7 +911,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:)    = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
-  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom
+  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom_H
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
@@ -992,6 +994,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units, eta_rest_name
+  real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
+                     ! a restart file to the internal representation in this run.
+  real :: uH_rescale ! A rescaling factor for thickness transports from the representation in
+                     ! a restart file to the internal representation in this run.
   real :: H_convert
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
@@ -1110,11 +1116,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
     ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
     if (GV%Boussinesq) then
-      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) * GV%m_to_H ; enddo ; enddo
+      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -GV%Z_to_H * G%bathyT(i,j) ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
        CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)
     enddo ; enddo ; enddo
+  elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+    H_rescale = GV%m_to_H / GV%m_to_H_restart
+    do j=js,je ; do i=is,ie ; CS%eta(i,j) = H_rescale * CS%eta(i,j) ; enddo ; enddo
   endif
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
@@ -1141,8 +1150,17 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
     call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
     CS%h_av(:,:,:) = 0.5*(h(:,:,:) + h_tmp(:,:,:))
   else
-    if (.not. query_initialized(CS%h_av,"h2",restart_CS)) &
+    if (.not. query_initialized(CS%h_av,"h2",restart_CS)) then
       CS%h_av(:,:,:) = h(:,:,:)
+    elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+      H_rescale = GV%m_to_H / GV%m_to_H_restart
+      do k=1,nz ; do j=js,je ; do i=is,ie ; CS%h_av(i,j,k) = H_rescale * CS%h_av(i,j,k) ; enddo ; enddo ; enddo
+    endif
+    if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+      uH_rescale = GV%m_to_H / GV%m_to_H_restart
+      do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB ; uh(I,j,k) = uH_rescale * uh(I,j,k) ; enddo ; enddo ; enddo
+      do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie ; vh(i,J,k) = uH_rescale * vh(i,J,k) ; enddo ; enddo ; enddo
+    endif
   endif
 
   call cpu_clock_begin(id_clock_pass_init)

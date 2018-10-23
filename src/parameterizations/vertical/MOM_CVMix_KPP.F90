@@ -135,7 +135,9 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_dTdt = -1
   integer :: id_NLT_temp_budget = -1
   integer :: id_NLT_saln_budget = -1
-  integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
+  integer :: id_EnhK     = -1, id_EnhVt2   = -1
+  integer :: id_EnhW     = -1
+  integer :: id_La_SL    = -1
   integer :: id_OBLdepth_original = -1
   !!@}
 
@@ -170,11 +172,12 @@ contains
 
 !> Initialize the CVMix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
-logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
+logical function KPP_init(paramFile, G, GV, diag, Time, CS, passive, Waves)
 
   ! Arguments
   type(param_file_type),   intent(in)    :: paramFile !< File parser
   type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
+  type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
   type(time_type),         intent(in)    :: Time      !< Model time
   type(KPP_CS),            pointer       :: CS        !< Control structure
@@ -493,7 +496,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
-      'Diffusivity passed to KPP', 'm2/s')
+      'Diffusivity passed to KPP', 'm2/s', conversion=GV%Z_to_m**2)
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
@@ -522,6 +525,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
       'Langmuir number enhancement to K as used by [CVMix] KPP','nondim')
   CS%id_EnhVt2 = register_diag_field('ocean_model', 'EnhVt2', diag%axesTL, Time, &
       'Langmuir number enhancement to Vt2 as used by [CVMix] KPP','nondim')
+  CS%id_La_SL = register_diag_field('ocean_model', 'KPP_La_SL', diag%axesT1, Time, &
+      'Surface-layer Langmuir number computed in [CVMix] KPP','nondim')
 
   allocate( CS%N( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%N(:,:,:) = 0.
@@ -533,7 +538,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%Vt2(:,:,:) = 0.
   if (CS%id_OBLdepth_original > 0) allocate( CS%OBLdepth_original( SZI_(G), SZJ_(G) ) )
 
-  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0
+  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) ) ; CS%OBLdepthprev(:,:) = 0.0
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
   if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
   if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -581,12 +586,12 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
-                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
-                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (m2/s)
-                                                                    !< (out) Vertical viscosity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP (Z2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (Z2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP (Z2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (Z2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (Z2/s)
+                                                                    !< (out) Vertical viscosity including KPP (Z2/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
@@ -612,8 +617,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
     call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
     call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
-    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=GV%Z_to_m**2)
   endif
 #endif
 
@@ -621,9 +626,7 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
-  !$OMP parallel do default(private) firstprivate(nonLocalTrans) &
-  !$OMP                shared(G,GV,CS,uStar,h,Waves,&
-  !$OMP                       buoyFlux,nonLocalTransHeat,nonLocalTransScalar,Kt,Ks,Kv)
+  !$OMP parallel do default(shared) firstprivate(nonLocalTrans)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -671,9 +674,9 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
          Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
          Kviscosity(:)     = 0. ! Viscosity (m2/s)
       else
-         Kdiffusivity(:,1) = Kt(i,j,:)
-         Kdiffusivity(:,2) = Ks(i,j,:)
-         Kviscosity(:)=Kv(i,j,:)
+         Kdiffusivity(:,1) = GV%Z_to_m**2 * Kt(i,j,:)
+         Kdiffusivity(:,2) = GV%Z_to_m**2 * Ks(i,j,:)
+         Kviscosity(:) = GV%Z_to_m**2 * Kv(i,j,:)
       endif
 
       call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity (m2/s)
@@ -708,10 +711,12 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
         if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
            LangEnhK = CS%KPP_K_ENH_FAC
         elseif (CS%LT_K_METHOD==LT_K_MODE_VR12) then
-           LangEnhK = min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
-                (5.4*WAVES%LangNum(i,j))**(-4)))
+           ! Added minimum value for La_SL, so removed maximum value for LangEnhK.
+           LangEnhK = sqrt(1.+(1.5*WAVES%La_SL(i,j))**(-2) + &
+                (5.4*WAVES%La_SL(i,j))**(-4))
         elseif (CS%LT_K_METHOD==LT_K_MODE_RW16) then
-           LangEnhK = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+          !This maximum value is proposed in Reichl et al., 2016 JPO formula
+          LangEnhK = min(2.25, 1. + 1./WAVES%La_SL(i,j))
         else
            !This shouldn't be reached.
            !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in LT_K_ENHANCEMENT")
@@ -814,17 +819,17 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
       if (.not. CS%passiveMode) then
         if (CS%KPPisAdditive) then
           do k=1, G%ke+1
-            Kt(i,j,k) = Kt(i,j,k) + Kdiffusivity(k,1)
-            Ks(i,j,k) = Ks(i,j,k) + Kdiffusivity(k,2)
-            Kv(i,j,k) = Kv(i,j,k) + Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            Kt(i,j,k) = Kt(i,j,k) + GV%m_to_Z**2 * Kdiffusivity(k,1)
+            Ks(i,j,k) = Ks(i,j,k) + GV%m_to_Z**2 * Kdiffusivity(k,2)
+            Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, G%ke+1
-            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
-            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
-            if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = GV%m_to_Z**2 * Kdiffusivity(k,1)
+            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = GV%m_to_Z**2 * Kdiffusivity(k,2)
+            if (Kviscosity(k) /= 0.) Kv(i,j,k) = GV%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
           enddo
         endif
       endif
@@ -837,8 +842,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt",G%HI,haloshift=0)
-    call hchksum(Ks, "KPP out: Ks",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=GV%Z_to_m**2)
   endif
 #endif
 
@@ -916,7 +921,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   real :: MLD_GUESS, LA
   real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
   real :: VarUp, VarDn, M, VarLo, VarAvg
-  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
+  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct, enhvt2
   integer :: B
   real :: WST
 
@@ -931,7 +936,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 #endif
 
   ! some constants
-  GoRho = GV%g_Earth / GV%Rho0
+  GoRho = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
 
   ! loop over horizontal points on processor
   !$OMP parallel do default(shared)
@@ -1065,7 +1070,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
         MLD_GUESS = max( 1., abs(CS%OBLdepthprev(i,j) ) )
         call get_Langmuir_Number( LA, G, GV, MLD_guess, surfFricVel, I, J, &
              H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
-        WAVES%LangNum(i,j)=LA
+        WAVES%La_SL(i,j)=LA
       endif
 
 
@@ -1112,20 +1117,24 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
             LangEnhVT2(k) = CS%KPP_VT2_ENH_FAC
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_VR12) then
+          !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
+          enhvt2 = sqrt(1.+(1.5*WAVES%La_SL(i,j))**(-2) + &
+                   (5.4*WAVES%La_SL(i,j))**(-4))
           do k=1,G%ke
-             LangEnhVT2(k) = min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
-                  (5.4*WAVES%LangNum(i,j))**(-4)))
+             LangEnhVT2(k) = enhvt2
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_RW16) then
+          !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
+          enhvt2 = 1. + 2.3*WAVES%La_SL(i,j)**(-0.5)
           do k=1,G%ke
-            LangEnhVT2(k) = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+            LangEnhVT2(k) = enhvt2
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_LF17) then
           CS%CS=cvmix_get_kpp_real('c_s',CS%KPP_params)
           do k=1,G%ke
             WST = (max(0.,-buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
             LangEnhVT2(k) = sqrt((0.15*WST**3. + 0.17*surfFricVel**3.* &
-                 (1.+0.49*WAVES%LangNum(i,j)**(-2.)))  / &
+                 (1.+0.49*WAVES%La_SL(i,j)**(-2.)))  / &
                  (0.2*ws_1d(k)**3/(CS%cs*CS%surf_layer_ext*CS%vonKarman**4.)))
           enddo
         else
@@ -1298,6 +1307,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   if (CS%id_BulkUz2  > 0) call post_data(CS%id_BulkUz2,  CS%Uz2,             CS%diag)
   if (CS%id_EnhK     > 0) call post_data(CS%id_EnhK,     CS%EnhK,            CS%diag)
   if (CS%id_EnhVt2   > 0) call post_data(CS%id_EnhVt2,   CS%EnhVt2,          CS%diag)
+  if (CS%id_La_SL>0.and.present(WAVES)) call post_data(CS%id_La_SL,WAVES%La_SL,CS%diag)
 
   ! BLD smoothing:
   if (CS%n_smooth > 0) call KPP_smooth_BLD(CS,G,GV,h)

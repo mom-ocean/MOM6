@@ -65,7 +65,7 @@ public diag_save_grids, diag_restore_grids
 
 !> Make a diagnostic available for averaging or output.
 interface post_data
-  module procedure post_data_3d, post_data_2d, post_data_0d
+  module procedure post_data_3d, post_data_2d, post_data_1d_k, post_data_0d
 end interface post_data
 
 interface decimate_field
@@ -249,7 +249,7 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesZi !< A 1-D z-space axis at interfaces
   type(axes_grp) :: axesZL !< A 1-D z-space axis at layer centers
   type(axes_grp) :: axesNull !< An axis group for scalars
-  
+
   real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
   real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
   real, dimension(:,:),   pointer :: mask2dCu  => null() !< 2D mask array for east-face points
@@ -333,6 +333,23 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
+  ! Horizontal axes for the native grids
+  if (G%symmetric) then
+    id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
+              'q point nominal longitude', Domain2=G%Domain%mpp_domain)
+    id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+              'q point nominal latitude', Domain2=G%Domain%mpp_domain)
+  else
+    id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
+              'q point nominal longitude', Domain2=G%Domain%mpp_domain)
+    id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
+              'q point nominal latitude', Domain2=G%Domain%mpp_domain)
+  endif
+  id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
+              'h point nominal longitude', Domain2=G%Domain%mpp_domain)
+  id_yh = diag_axis_init('yh', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
+              'h point nominal latitude', Domain2=G%Domain%mpp_domain)
+
   if (set_vert) then
     nz = GV%ke
     zinter(1:nz+1) = GV%sInterface(1:nz+1)
@@ -348,28 +365,10 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   endif
   id_zl_native = id_zl ; id_zi_native = id_zi
   ! Vertical axes for the interfaces and layers
-  call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, 1, &
+  call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, nz=1, &
        v_cell_method='point', is_interface=.true.)
-  call define_axes_group(diag_cs, (/ id_zL /), diag_cs%axesZL, 1, &
+  call define_axes_group(diag_cs, (/ id_zL /), diag_cs%axesZL, nz=1, &
        v_cell_method='mean', is_layer=.true.)
-
-  ! Horizontal axes for the native grid
-  
-  if (G%symmetric) then
-     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-          'q point nominal longitude', Domain2=G%Domain%mpp_domain)
-     id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-          'q point nominal latitude', Domain2=G%Domain%mpp_domain)
-  else
-     id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
-          'q point nominal longitude', Domain2=G%Domain%mpp_domain)
-     id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
-          'q point nominal latitude', Domain2=G%Domain%mpp_domain)
-  endif
-  id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
-       'h point nominal longitude', Domain2=G%Domain%mpp_domain)
-  id_yh = diag_axis_init('yh', G%gridLatT(G%jsg:G%jeg), G%y_axis_units, 'y', &
-       'h point nominal latitude', Domain2=G%Domain%mpp_domain)
 
   ! Axis groupings for the model layers
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL, &
@@ -408,6 +407,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
        x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
+
   ! Axis group for special null axis from diag manager
   call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
 
@@ -442,7 +442,6 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
            nz=nz, vertical_coordinate_number=i, &
            v_cell_method='mean', &
            is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
-      
       call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%remap_axesTL(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
@@ -469,7 +468,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
            xyave_axes=diag_cs%remap_axesZL(i))
 
       ! Axes for z interfaces
-      call define_axes_group(diag_cs, (/ id_zi /), diag_cs%remap_axesZi(i),&
+      call define_axes_group(diag_cs, (/ id_zi /), diag_cs%remap_axesZi(i), &
            nz=nz, vertical_coordinate_number=i, &
            v_cell_method='point', &
            is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true.)
@@ -499,7 +498,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
     endif
   enddo
 
-  !Defien the decimated axes
+  !Define the decimated axes
   call set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
   
   call diag_grid_storage_init(diag_CS%diag_grid_temp, G, diag_CS)
@@ -522,24 +521,25 @@ subroutine set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   id_zl = id_zl_native ; id_zi = id_zi_native
   !Axes group for native decimated diagnostics
   do dl=2,MAX_DECIM_LEV
-     if(dl .ne. 2) call MOM_error(FATAL, "Decimation level other than 2 is not supported yet!")
+     if(dl .ne. 2) call MOM_error(FATAL, "set_axes_info_decim: Decimation level other than 2 is not supported yet!")
      allocate(gridLonT_zap(diag_cs%decim(dl)%isg:diag_cs%decim(dl)%ieg))
      allocate(gridLatT_zap(diag_cs%decim(dl)%jsg:diag_cs%decim(dl)%jeg))
 
      do i=diag_cs%decim(dl)%isg,diag_cs%decim(dl)%ieg;  gridLonT_zap(i) = G%gridLonT(G%isg+dl*i-2); enddo
      do j=diag_cs%decim(dl)%jsg,diag_cs%decim(dl)%jeg;  gridLatT_zap(j) = G%gridLatT(G%jsg+dl*j-2); enddo
 
-     !  if (G%symmetric) then
-     !    id_xq = diag_axis_init('xq', G%gridLonB_zap2(G%isgB:G%iegB), G%x_axis_units, 'x', &
-     !              'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-     !    id_yq = diag_axis_init('yq', G%gridLatB_zap2(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-     !              'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
-     !  else
-     id_xq = diag_axis_init('xq', gridLonT_zap, G%x_axis_units, 'x', &
-          'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-     id_yq = diag_axis_init('yq', gridLatT_zap, G%y_axis_units, 'y', &
-          'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
-     !  endif
+     if (G%symmetric) then
+        call MOM_error(FATAL, "set_axes_info_decim: Decimation of symmetric case is not supported yet!")
+     !   id_xq = diag_axis_init('xq', gridLonB_zap(G%isgB:G%iegB), G%x_axis_units, 'x', &
+     !             'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
+     !   id_yq = diag_axis_init('yq', gridLatB_zap(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+     !             'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+     else
+        id_xq = diag_axis_init('xq', gridLonT_zap, G%x_axis_units, 'x', &
+                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
+        id_yq = diag_axis_init('yq', gridLatT_zap, G%y_axis_units, 'y', &
+                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+     endif
      id_xh = diag_axis_init('xh', gridLonT_zap, G%x_axis_units, 'x', &
           'h point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
      id_yh = diag_axis_init('yh', gridLatT_zap, G%y_axis_units, 'y', &
@@ -774,6 +774,7 @@ subroutine set_masks_for_axes(G, diag_cs)
     endif
   enddo
 
+  !Allocate and initialize the decimated masks for the axes
   call set_masks_for_axes_decim(G, diag_cs)
   
 end subroutine set_masks_for_axes
@@ -791,7 +792,7 @@ subroutine set_masks_for_axes_decim(G, diag_cs)
   !The decimated mask is needed for sending out the diagnostics output via diag_manager
   !The non-decimated mask is needed for decimating the diagnostics field 
   do dl=2,MAX_DECIM_LEV
-     if(dl .ne. 2) call MOM_error(FATAL, "Decimation level other than 2 is not supported yet!")
+     if(dl .ne. 2) call MOM_error(FATAL, "set_masks_for_axes_decim: Decimation level other than 2 is not supported yet!")
      do c=1, diag_cs%num_diag_coords
         ! Level/layer h-points in diagnostic coordinate
         axes => diag_cs%remap_axesTL(c)
@@ -1014,7 +1015,7 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
 
 end subroutine define_axes_group
 
-!> Defines a group of "axes" from list of handles
+!> Defines a group of decimated "axes" from list of handles
 subroutine define_axes_group_decim(diag_cs, handles, axes, dl, nz, vertical_coordinate_number, &
                              x_cell_method, y_cell_method, v_cell_method, &
                              is_h_point, is_q_point, is_u_point, is_v_point, &
@@ -1161,7 +1162,7 @@ subroutine set_diag_mediator_grid(G, diag_cs)
   diag_cs%js = G%jsc - (G%jsd-1) ; diag_cs%je = G%jec - (G%jsd-1)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied
   diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
-  
+
 end subroutine set_diag_mediator_grid
 
 !> Make a real scalar diagnostic available for averaging or output
@@ -1200,14 +1201,15 @@ end subroutine post_data_0d
 subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
                                                  !! previous call to register_diag_field.
-  real,              intent(in) :: field(:)      !< 1-d array being offered for output or averaging
+  real, target,      intent(in) :: field(:)      !< 1-d array being offered for output or averaging
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
   ! Local variables
   logical :: used  ! The return value of send_data is not used for anything.
+  real, dimension(:), pointer :: locfield => NULL()
   logical :: is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: k, ks, ke
   type(diag_type), pointer :: diag => null()
 
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
@@ -1218,11 +1220,29 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
               'post_data_1d_k: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-    if (is_stat) then
-      used = send_data(diag%fms_diag_id, field)
-    elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, weight=diag_cs%time_int)
+
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
+      ks = lbound(field,1) ; ke = ubound(field,1)
+      allocate( locfield( ks:ke ) )
+
+      do k=ks,ke
+        if (field(k) == diag_cs%missing_value) then
+          locfield(k) = diag_cs%missing_value
+        else
+          locfield(k) = field(k) * diag%conversion_factor
+        endif
+      enddo
+    else
+      locfield => field
     endif
+
+    if (is_stat) then
+      used = send_data(diag%fms_diag_id, locfield)
+    elseif (diag_cs%ave_enabled) then
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
+    endif
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
+
     diag => diag%next
   enddo
 
@@ -1248,7 +1268,7 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
               'post_data_2d: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-     call post_data_2d_low(diag, field, diag_cs, is_static, mask)
+    call post_data_2d_low(diag, field, diag_cs, is_static, mask)
     diag => diag%next
   enddo
 
@@ -1337,7 +1357,8 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif   
 
   dl=1
-  if(.NOT. is_stat) dl = diag%axes%decimation_level
+  if(.NOT. is_stat) dl = diag%axes%decimation_level !static field decimation i not supported yet
+  !Decimate the diag field and mask (if present)
   if (dl > 1) then
      call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
@@ -1609,7 +1630,8 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   dl=1
-  if(.NOT. is_stat)  dl = diag%axes%decimation_level
+  if(.NOT. is_stat) dl = diag%axes%decimation_level !static field decimation i not supported yet
+  !Decimate the diag field and mask (if present)
   if (dl > 1) then
      call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
@@ -1622,36 +1644,38 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
      endif     
   endif
 
-  if (diag_cs%diag_as_chksum) then
-    chksum = chksum_general(locfield)
-    if (is_root_pe()) then
-      call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
-    endif
-  else
-    if (is_stat) then
-      if (present(mask)) then
-        call assert(size(locfield) == size(locmask), &
-            'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
-     !elseif (associated(diag%axes%mask2d)) then
-     !  used = send_data(diag%fms_diag_id, locfield, &
-     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
-      else
-        used = send_data(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+  if (diag%fms_diag_id>0) then
+    if (diag_cs%diag_as_chksum) then
+      chksum = chksum_general(locfield)
+      if (is_root_pe()) then
+        call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
       endif
-    elseif (diag_cs%ave_enabled) then
-      if (associated(locmask)) then
-        call assert(size(locfield) == size(locmask), &
-            'post_data_3d_low: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=locmask)
-      else
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int)
+    else
+      if (is_stat) then
+        if (present(mask)) then
+          call assert(size(locfield) == size(locmask), &
+              'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
+          used = send_data(diag%fms_diag_id, locfield, &
+                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=locmask)
+       !elseif (associated(diag%axes%mask2d)) then
+       !  used = send_data(diag%fms_diag_id, locfield, &
+       !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
+        else
+          used = send_data(diag%fms_diag_id, locfield, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+        endif
+      elseif (diag_cs%ave_enabled) then
+        if (associated(locmask)) then
+          call assert(size(locfield) == size(locmask), &
+              'post_data_3d_low: mask size mismatch: '//diag%debug_str)
+          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                           weight=diag_cs%time_int, rmask=locmask)
+        else
+          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                           weight=diag_cs%time_int)
+        endif
       endif
     endif
   endif
@@ -1846,52 +1870,52 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
   ! For each diagnostic coordinate register the diagnostic again under a different module name
   do i=1,diag_cs%num_diag_coords
-     new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)
+    new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)
 
-     ! Register diagnostics remapped to z vertical coordinate
-     if (axes_in%rank == 3) then
-        remap_axes => null()
-        if ((axes_in%id == diag_cs%axesTL%id)) then
-           remap_axes => diag_cs%remap_axesTL(i)
-        elseif (axes_in%id == diag_cs%axesBL%id) then
-           remap_axes => diag_cs%remap_axesBL(i)
-        elseif (axes_in%id == diag_cs%axesCuL%id ) then
-           remap_axes => diag_cs%remap_axesCuL(i)
-        elseif (axes_in%id == diag_cs%axesCvL%id) then
-           remap_axes => diag_cs%remap_axesCvL(i)
-        elseif (axes_in%id == diag_cs%axesTi%id) then
-           remap_axes => diag_cs%remap_axesTi(i)
-        elseif (axes_in%id == diag_cs%axesBi%id) then
-           remap_axes => diag_cs%remap_axesBi(i)
-        elseif (axes_in%id == diag_cs%axesCui%id ) then
-           remap_axes => diag_cs%remap_axesCui(i)
-        elseif (axes_in%id == diag_cs%axesCvi%id) then
-           remap_axes => diag_cs%remap_axesCvi(i)
-        endif
-
-        ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
-        ! always exist but in the mean-time we have to do this check:
-        ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
-        if (associated(remap_axes)) then
-           if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
-              active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, remap_axes, &
-                   init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-                   range=range, mask_variant=mask_variant, standard_name=standard_name, &
-                   verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-                   interp_method=interp_method, tile_count=tile_count, &
-                   cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
-                   cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
-                   cell_methods=cell_methods, x_cell_method=x_cell_method, &
-                   y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
-                   conversion=conversion, v_extensive=v_extensive)
-              if (active) then
-                 call diag_remap_set_active(diag_cs%diag_remap_cs(i))
-              endif
-           endif ! remap_axes%needs_remapping
-        endif ! associated(remap_axes)
-     endif ! axes%rank == 3
+    ! Register diagnostics remapped to z vertical coordinate
+    if (axes_in%rank == 3) then
+      remap_axes => null()
+      if ((axes_in%id == diag_cs%axesTL%id)) then
+          remap_axes => diag_cs%remap_axesTL(i)
+      elseif (axes_in%id == diag_cs%axesBL%id) then
+          remap_axes => diag_cs%remap_axesBL(i)
+      elseif (axes_in%id == diag_cs%axesCuL%id ) then
+          remap_axes => diag_cs%remap_axesCuL(i)
+      elseif (axes_in%id == diag_cs%axesCvL%id) then
+          remap_axes => diag_cs%remap_axesCvL(i)
+      elseif (axes_in%id == diag_cs%axesTi%id) then
+          remap_axes => diag_cs%remap_axesTi(i)
+      elseif (axes_in%id == diag_cs%axesBi%id) then
+          remap_axes => diag_cs%remap_axesBi(i)
+      elseif (axes_in%id == diag_cs%axesCui%id ) then
+          remap_axes => diag_cs%remap_axesCui(i)
+      elseif (axes_in%id == diag_cs%axesCvi%id) then
+          remap_axes => diag_cs%remap_axesCvi(i)
+      endif
+      ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
+      ! always exist but in the mean-time we have to do this check:
+      ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+      if (associated(remap_axes)) then
+        if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
+          active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, remap_axes, &
+                     init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                     range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                     verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                     interp_method=interp_method, tile_count=tile_count, &
+                     cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
+                     cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
+                     cell_methods=cell_methods, x_cell_method=x_cell_method, &
+                     y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
+                     conversion=conversion, v_extensive=v_extensive)
+          if (active) then
+            call diag_remap_set_active(diag_cs%diag_remap_cs(i))
+          endif
+        endif ! remap_axes%needs_remapping
+      endif ! associated(remap_axes)
+    endif ! axes%rank == 3
   enddo ! i
 
+  !Register decimated diagnostics
   do dl=2,MAX_DECIM_LEV
      new_module_name = trim(module_name)//'_d2'
 
@@ -1930,15 +1954,15 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
      ! Register the native diagnostic
      if (associated(axes)) then
      active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes, &
-          init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-          range=range, mask_variant=mask_variant, standard_name=standard_name, &
-          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-          interp_method=interp_method, tile_count=tile_count, &
-          cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
-          cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
-          cell_methods=cell_methods, x_cell_method=x_cell_method, &
-          y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
-          conversion=conversion, v_extensive=v_extensive)
+                init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                interp_method=interp_method, tile_count=tile_count, &
+                cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
+                cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
+                cell_methods=cell_methods, x_cell_method=x_cell_method, &
+                y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
+                conversion=conversion, v_extensive=v_extensive)
      endif
 
      ! For each diagnostic coordinate register the diagnostic again under a different module name
@@ -2088,6 +2112,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
     call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
     this_diag%fms_xyave_diag_id = fms_xyave_id
+    !Encode and save the cell methods for this diag
     call add_xyz_method(this_diag, axes, x_cell_method, y_cell_method, v_cell_method, v_extensive)
     if (present(v_extensive)) this_diag%v_extensive = v_extensive
     if (present(conversion)) this_diag%conversion_factor = conversion
@@ -2148,6 +2173,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     if (fms_id /= DIAG_FIELD_NOT_FOUND .or. fms_xyave_id /= DIAG_FIELD_NOT_FOUND) then
       call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
       this_diag%fms_xyave_diag_id = fms_xyave_id
+      !Encode and save the cell methods for this diag
       call add_xyz_method(this_diag, axes, x_cell_method, y_cell_method, v_cell_method, v_extensive)
       if (present(v_extensive)) this_diag%v_extensive = v_extensive
       if (present(conversion)) this_diag%conversion_factor = conversion
@@ -2284,8 +2310,10 @@ subroutine add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name
 
 end subroutine add_diag_to_list
 
+!> Adds the encoded "cell_methods" for a diagnostics as a diag% property
+!! This allows access to the cell_method for a given diagnostics at the time of sending
 subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_method, v_extensive)
-  type(diag_type),        pointer       :: diag !< This diagnostic
+  type(diag_type),          pointer       :: diag !< This diagnostic
   type(axes_grp),             intent(in)  :: axes !< Container w/ up to 3 integer handles that indicates
                                                   !! axes for this field
   character(len=*), optional, intent(in)  :: x_cell_method !< Specifies the cell method for the x-direction.
@@ -2432,7 +2460,7 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
       endif
     elseif (present(v_extensive)) then
-     if(v_extensive) then 
+     if(v_extensive) then
       if (axes%rank==1) then
         call get_diag_axis_name(axes%handles(1), axis_name)
       elseif (axes%rank==3) then
@@ -2838,7 +2866,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   character(len=240), allocatable :: diag_coords(:)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
+  character(len=40) :: mdl = "MOM_diag_mediator" ! This module's name.
 
   id_clock_diag_mediator = cpu_clock_id('(Ocean diagnostics framework)', grain=CLOCK_MODULE)
   id_clock_diag_remap = cpu_clock_id('(Ocean diagnostics remapping)', grain=CLOCK_ROUTINE)
@@ -2852,21 +2880,22 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   enddo
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, 'NUM_DIAG_COORDS', diag_cs%num_diag_coords, &
+  call log_version(param_file, mdl, version, "")
+
+  call get_param(param_file, mdl, 'NUM_DIAG_COORDS', diag_cs%num_diag_coords, &
                  'The number of diagnostic vertical coordinates to use.\n'//&
                  'For each coordinate, an entry in DIAG_COORDS must be provided.', &
                  default=1)
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_coords(diag_cs%num_diag_coords))
     if (diag_cs%num_diag_coords==1) then ! The default is to provide just one instance of Z*
-      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+      call get_param(param_file, mdl, 'DIAG_COORDS', diag_coords, &
                  'A list of string tuples associating diag_table modules to\n'//&
                  'a coordinate definition used for diagnostics. Each string\n'//&
                  'is of the form "MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME".', &
                  default='z Z ZSTAR')
     else ! If using more than 1 diagnostic coordinate, all must be explicitly defined
-      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+      call get_param(param_file, mdl, 'DIAG_COORDS', diag_coords, &
                  'A list of string tuples associating diag_table modules to\n'//&
                  'a coordinate definition used for diagnostics. Each string\n'//&
                  'is of the form "MODULE_SUFFIX,PARAMETER_SUFFIX,COORDINATE_NAME".', &
@@ -2880,10 +2909,10 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
     deallocate(diag_coords)
   endif
 
-  call get_param(param_file, mod, 'DIAG_MISVAL', diag_cs%missing_value, &
+  call get_param(param_file, mdl, 'DIAG_MISVAL', diag_cs%missing_value, &
                  'Set the default missing value to use for diagnostics.', &
                  default=1.e20)
-  call get_param(param_file, mod, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
+  call get_param(param_file, mdl, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
                  'Instead of writing diagnostics to the diag manager, write\n' //&
                  'a textfile containing the checksum (bitcount) of the array.',  &
                  default=.false.)
@@ -2906,20 +2935,19 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied
   diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
 
-  !Decimation indices (should be generalized to arbitrary dl)
+  !Decimation indices for dl=2 (should be generalized to arbitrary dl, perhaps via a G array)
   diag_cs%decim(2)%isc = G%isc_zap2 - (G%isd_zap2-1) ; diag_cs%decim(2)%iec = G%iec_zap2 - (G%isd_zap2-1)
   diag_cs%decim(2)%jsc = G%jsc_zap2 - (G%jsd_zap2-1) ; diag_cs%decim(2)%jec = G%jec_zap2 - (G%jsd_zap2-1)
   diag_cs%decim(2)%isd = G%isd_zap2 ; diag_cs%decim(2)%ied = G%ied_zap2
   diag_cs%decim(2)%jsd = G%jsd_zap2 ; diag_cs%decim(2)%jed = G%jed_zap2
   diag_cs%decim(2)%isg = G%isg_zap2 ; diag_cs%decim(2)%ieg = G%ieg_zap2
   diag_cs%decim(2)%jsg = G%jsg_zap2 ; diag_cs%decim(2)%jeg = G%jeg_zap2
-
   
   ! Initialze available diagnostic log file
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit < 0)) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "available_diags."//this_pe
-    call get_param(param_file, mod, "AVAILABLE_DIAGS_FILE", doc_file, &
+    call get_param(param_file, mdl, "AVAILABLE_DIAGS_FILE", doc_file, &
                  "A file into which to write a list of all available \n"//&
                  "ocean diagnostics that can be included in a diag_table.", &
                  default=doc_file_dflt, do_not_log=(diag_CS%available_diag_doc_unit/=-1))
@@ -2957,7 +2985,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   if (is_root_pe() .and. (diag_CS%chksum_diag_doc_unit < 0) .and. diag_CS%diag_as_chksum) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "chksum_diag."//this_pe
-    call get_param(param_file, mod, "CHKSUM_DIAG_FILE", doc_file, &
+    call get_param(param_file, mdl, "CHKSUM_DIAG_FILE", doc_file, &
                  "A file into which to write all checksums of the \n"//&
                  "diagnostics listed in the diag_table.", &
                  default=doc_file_dflt, do_not_log=(diag_CS%chksum_diag_doc_unit/=-1))
@@ -3105,10 +3133,10 @@ subroutine diag_masks_set(G, nz, diag_cs)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
 
+  !Allocate and initialize the decimated masks
   call decimate_diag_masks_set(G, nz, diag_cs)  
-  
-end subroutine diag_masks_set
 
+end subroutine diag_masks_set
 
 subroutine diag_mediator_close_registration(diag_CS)
   type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
@@ -3147,6 +3175,14 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   enddo
 
   call diag_grid_storage_end(diag_cs%diag_grid_temp)
+  deallocate(diag_cs%mask3dTL)
+  deallocate(diag_cs%mask3dBL)
+  deallocate(diag_cs%mask3dCuL)
+  deallocate(diag_cs%mask3dCvL)
+  deallocate(diag_cs%mask3dTi)
+  deallocate(diag_cs%mask3dBi)
+  deallocate(diag_cs%mask3dCui)
+  deallocate(diag_cs%mask3dCvi)
   do i=2,MAX_DECIM_LEV
      deallocate(diag_cs%decim(i)%mask2dT)
      deallocate(diag_cs%decim(i)%mask2dBu)
@@ -3417,6 +3453,8 @@ subroutine diag_grid_storage_end(grid_storage)
   deallocate(grid_storage%diag_grids)
 end subroutine diag_grid_storage_end
 
+!< Allocate and initialize the masks for decimated diagostics in diag_cs
+!! The decimated masks in the axes would later "point" to these. 
 subroutine decimate_diag_masks_set(G, nz, diag_cs)
   type(ocean_grid_type), target, intent(in) :: G  !< The ocean grid type.
   integer,                       intent(in) :: nz !< The number of layers in the model's native grid.
@@ -3465,11 +3503,13 @@ subroutine decimate_diag_masks_set(G, nz, diag_cs)
   enddo
 end subroutine decimate_diag_masks_set
 
+!> Get the diagnostics-compute indices (to be passed to send_data) based on the shape of 
+!! the diag field (the same way they are deduced for non-decimated fields)
 subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
-  integer,           intent(in) :: f1,f2
-  integer,           intent(in) :: dl         !< integer decimation level
+  integer,           intent(in) :: f1,f2   !< the sizes of the diag field in x and y
+  integer,           intent(in) :: dl      !< integer decimation level
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  integer,           intent(out) ::isv,iev,jsv,jev
+  integer,           intent(out) ::isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   ! Local variables
   integer :: dszi,cszi,dszj,cszj
   character(len=300) :: mesg
@@ -3507,16 +3547,18 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
           "does not match one of ", cszj, cszj+1, dszj, dszj+1
      call MOM_error(FATAL,"decimate_diag_indices_get: "//trim(mesg))
   endif
-
 end subroutine decimate_diag_indices_get
 
+!> This subroutine allocates and computes a decimated array from an input array 
+!! It also determines the diagnostics-compurte indices for the decimated array
+!! 3d interface 
 subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
-  real, dimension(:,:,:), pointer :: locfield
-  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_decim
+  real, dimension(:,:,:), pointer :: locfield  !< input array pointer
+  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_decim !< output (decimated) array
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
-  integer, intent(in) :: dl
-  integer, intent(inout):: isv,iev,jsv,jev
+  type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
+  integer, intent(in) :: dl !< integer decimation level
+  integer, intent(inout):: isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
   !locals
   real, dimension(:,:,:), pointer :: locmask  
@@ -3545,13 +3587,16 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
   
 end subroutine decimate_diag_field_3d
 
+!> This subroutine allocates and computes a decimated array from an input array 
+!! It also determines the diagnostics-compurte indices for the decimated array
+!! 2d interface 
 subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
-  real, dimension(:,:), pointer :: locfield
-  real, dimension(:,:), allocatable, intent(inout) :: locfield_decim
+  real, dimension(:,:), pointer :: locfield !< input array pointer
+  real, dimension(:,:), allocatable, intent(inout) :: locfield_decim !< output (decimated) array
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
-  integer, intent(in) :: dl
-  integer, intent(out):: isv,iev,jsv,jev
+  integer, intent(in) :: dl !< integer decimation level
+  integer, intent(out):: isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
   !locals
   real, dimension(:,:), pointer :: locmask  
@@ -3580,35 +3625,39 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
   
 end subroutine decimate_diag_field_2d
 
+!> The decimation algorithm
+!! The decimation method could be deduced (before send_data call)
+!!  from the diag%x_cell_method, diag%y_cell_method and diag%v_cell_method
+!! 
+!! This is the summary of the decimation algoritm for a diagnostic field f:
+!!  f(Id,Jd) = \sum_{i,j} f(Id+i,Jd+j) * weight(Id+i,Jd+j) / [ \sum_{i,j} weight(Id+i,Jd+j)]
+!!     i and j run from 0 to dl-1 (dl being the decimation level)
+!!     Id,Jd are the decimated (coarse grid) indices run over the coarsened compute grid,    
+!!     if and jf are the original (fine grid) indices
+!!
+!!example   x_cell y_cell v_cell algorithm_id    impemented weight(if,jf)            
+!!---------------------------------------------------------------------------------------
+!!theta     mean   mean   mean   MMM =222        G%areaT(if,jf)*h(if,jf)             
+!!u         point  mean   mean   PMM =022        dyCu(if,jf)*h(if,jf)*delta(if,Id)     
+!!?         point  sum    mean   PSM =012        dyCu(if,jf)*h(if,jf)*delta(if,Id)   right?   
+!!v         mean   point  mean   MPM =202        dxCv(if,jf)*h(if,jf)*delta(jf,Jd)   
+!!volcello  sum    sum    sum    SSS =111        1                                   
+!!T_dfxy_co sum    sum    point  SSP =110        1                                   right? T_dfxy_cont_tendency_2d
+!!umo       point  sum    sum    PSS =011        1*delta(if,Id)                      
+!!vmo       sum    point  sum    SPS =101        1*delta(jf,Jd)                      
+!!umo_2d    point  sum    point  PSP =010        1*delta(if,Id)                      right?
+!!vmo_2d    sum    point  point  SPP =100        1*delta(jf,Jd)                      right?
+!!?         point  mean   point  PMP =020        dyCu(if,jf)*delta(if,Id)            right?
+!!?         mean   point  point  MPP =200        dxCv(if,jf)*delta(jf,Jd)            right?
+!!w         mean   mean   point  MMP =220        G%areaT(if,jf)                                       
+!!h*theta   mean   mean   sum    MMS =221        G%areaT(if,jf)                      right?
+!!
+!!delta is the Kroneker delta
 
-!- The decimation method could be deduced (before send_data call)
-!  from the diag%x_cell_method, diag%y_cell_method and diag%v_cell_method
-!  
-!- This is the summary of the decimation algoritm for a diagnostic field f:
-!  f(Id,Jd) = \sum_{i,j} f(Id+i,Jd+j) * weight(Id+i,Jd+j) / [ \sum_{i,j} weight(Id+i,Jd+j)]
-!     i and j run from 0 to dl-1 (dl being the decimation level)
-!     Id,Jd are the decimated (coarse grid) indices run over the coarsened compute grid,    
-!     if and jf are the original (fine grid) indices
-!
-!example   x_cell y_cell v_cell algorithm_id    impemented weight(if,jf)            
-!---------------------------------------------------------------------------------------
-!theta     mean   mean   mean   MMM =222        G%areaT(if,jf)*h(if,jf)             
-!u         point  mean   mean   PMM =022        dyCu(if,jf)*h(if,jf)*delta(if,Id)     
-!?         point  sum    mean   PSM =012        dyCu(if,jf)*h(if,jf)*delta(if,Id)   right?   
-!v         mean   point  mean   MPM =202        dxCv(if,jf)*h(if,jf)*delta(jf,Jd)   
-!volcello  sum    sum    sum    SSS =111        1                                   
-!T_dfxy_co sum    sum    point  SSP =110        1                                   right? T_dfxy_cont_tendency_2d
-!umo       point  sum    sum    PSS =011        1*delta(if,Id)                      
-!vmo       sum    point  sum    SPS =101        1*delta(jf,Jd)                      
-!umo_2d    point  sum    point  PSP =010        1*delta(if,Id)                      right?
-!vmo_2d    sum    point  point  SPP =100        1*delta(jf,Jd)                      right?
-!?         point  mean   point  PMP =020        dyCu(if,jf)*delta(if,Id)            right?
-!?         mean   point  point  MPP =200        dxCv(if,jf)*delta(jf,Jd)            right?
-!w         mean   mean   point  MMP =220        G%areaT(if,jf)                                       
-!h*theta   mean   mean   sum    MMS =221        G%areaT(if,jf)                      right?
-!
-!delta is the Kroneker delta
-
+!> This subroutine allocates and computes a decimated array given an input array 
+!! The decimation method is based on the "cell_methods" for the diagnostics as explained
+!! in the above table
+!! 3d interface 
 subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
@@ -3876,6 +3925,9 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
      
 end subroutine decimate_field_2d
 
+!> Allocate and compute the decimated masks
+!! The masks are decimated based on a minority rule, i.e., a coarse cell is open (1) 
+!! if at least one of the sub-cells are open, otherwise it's closed (0)
 subroutine decimate_mask_3d_p(field_in, field_out, dl)
   integer , intent(in) :: dl
   real, dimension(:,:,:) , pointer :: field_in, field_out
@@ -3985,3 +4037,4 @@ end subroutine decimate_mask_2d_a
 
 
 end module MOM_diag_mediator
+
