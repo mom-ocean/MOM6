@@ -2948,12 +2948,6 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   if (GV%Boussinesq) then ; thickness_units = "m"
   else ; thickness_units = "kg m-2" ; endif
 
-  ! used by layer diabatic
-  CS%id_ea = register_diag_field('ocean_model','ea',diag%axesTL,Time, &
-      'Layer entrainment from above per timestep','m')
-  CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
-      'Layer entrainment from below per timestep', 'm')
-
   CS%id_ea_t = register_diag_field('ocean_model','ea_t',diag%axesTL,Time, &
       'Layer (heat) entrainment from above per timestep','m')
   CS%id_eb_t = register_diag_field('ocean_model','eb_t',diag%axesTL,Time, &
@@ -2962,10 +2956,20 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       'Layer (salt) entrainment from above per timestep','m')
   CS%id_eb_s = register_diag_field('ocean_model','eb_s',diag%axesTL,Time, &
       'Layer (salt) entrainment from below per timestep', 'm')
+  ! used by layer diabatic
+  CS%id_ea = register_diag_field('ocean_model','ea',diag%axesTL,Time, &
+      'Layer entrainment from above per timestep','m')
+  CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
+      'Layer entrainment from below per timestep', 'm')
+  CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
+    'Diapycnal velocity', 'm s-1')
+  if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
+
   CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
       'Zonal Acceleration from Diapycnal Mixing', 'm s-2')
   CS%id_dvdt_dia = register_diag_field('ocean_model','dvdt_dia',diag%axesCvL,Time, &
       'Meridional Acceleration from Diapycnal Mixing', 'm s-2')
+
   if (CS%use_int_tides) then
     CS%id_cg1 = register_diag_field('ocean_model','cn1', diag%axesT1, &
                  Time, 'First baroclinic mode (eigen) speed', 'm s-1')
