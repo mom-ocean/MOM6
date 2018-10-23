@@ -671,7 +671,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-  !$OMP parallel do default(shared) firstprivate(i_hbbl)
+  !$OMP parallel do default(private) shared(G,GV,CS,visc,Isq,Ieq,nz,u,h,forces,hML_u, &
+  !$OMP                                     OBC,h_neglect,dt,I_valBL,Kv_u) &
+  !$OMP                     firstprivate(i_hbbl)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
