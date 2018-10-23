@@ -375,20 +375,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
   if (.not.use_BBL_EOS) Rml_vel(:,:) = 0.0
 
-!$OMP parallel do default(none) shared(u, v, h, tv, visc, G, GV, CS, Rml, is, ie, js, je,  &
-!$OMP                                  nz, Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,&
-!$OMP                                  C2pi_3, U_bg_sq, cdrag_sqrt,K2,use_BBL_EOS,OBC,     &
-!$OMP                                  maxitt,nkml,Vol_quit,D_u,D_v,mask_u,mask_v) &
-!$OMP                          private(do_i,h_at_vel,htot_vel,hwtot,hutot,Thtot,Shtot,     &
-!$OMP                                  hweight,v_at_u,u_at_v,ustar,T_EOS,S_EOS,press,      &
-!$OMP                                  dR_dT, dR_dS,ustarsq,htot,T_vel,S_vel,Rml_vel,      &
-!$OMP                                  oldfn,Dfn,Dh,Rhtot,C2f,ustH,root,bbl_thick,         &
-!$OMP                                  D_vel,tmp,Dp,Dm,a_3,a,a_12,slope,Vol_open,Vol_2_reg,&
-!$OMP                                  C24_a,apb_4a,Iapb,a2x48_apb3,ax2_3apb,Vol_direct,   &
-!$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,h_vel_pos,  &
-!$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
-!$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
-!$OMP                                  gam,Rayleigh, Vol_tol, tmp_val_m1_to_p1)
+  !$OMP parallel do default(private) shared(u,v,h,tv,visc,G,GV,CS,Rml,is,ie,js,je,nz,nkmb,    &
+  !$OMP                                     nkml,Isq,Ieq,Jsq,Jeq,h_neglect,Rho0x400_G,C2pi_3, &
+  !$OMP                                     U_bg_sq,cdrag_sqrt_Z,cdrag_sqrt,K2,use_BBL_EOS,   &
+  !$OMP                                     OBC,maxitt,Vol_quit,D_u,D_v,mask_u,mask_v)
   do j=Jsq,Jeq ; do m=1,2
 
     if (m==1) then
@@ -1211,16 +1201,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
     endif
   enddo ; endif
 
-!$OMP parallel do default(none) shared(u, v, h, tv, forces, visc, dt, G, GV, CS, use_EOS, &
-!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,OBC,    &
-!$OMP                                  Isq, Ieq, nz, U_bg_sq,mask_v,      &
-!$OMP                                  cdrag_sqrt,Rho0x400_G,nkml) &
-!$OMP                          private(do_any,htot,do_i,k_massive,Thtot,uhtot,vhtot,U_star, &
-!$OMP                                  Idecay_len_TKE,press,k2,I_2hlay,T_EOS,S_EOS,dR_dT,   &
-!$OMP                                  dR_dS,hlay,v_at_u,Uh2,T_lay,S_lay,gHprime,           &
-!$OMP                                  RiBulk,Shtot,Rhtot,absf,do_any_shelf,                &
-!$OMP                                  h_at_vel,ustar,htot_vel,hwtot,hutot,hweight,ustarsq, &
-!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb,h2f2,ustar1)
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,CS,use_EOS,dt_Rho0, &
+  !$OMP                                     h_neglect,h_tiny,g_H_Rho0,js,je,OBC,Isq,Ieq,nz,  &
+  !$OMP                                     U_bg_sq,mask_v,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml)
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1453,17 +1436,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
 
   enddo ! j-loop at u-points
 
-!$OMP parallel do default(none) shared(u, v, h, tv, forces, visc, dt, G, GV, CS, use_EOS,&
-!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,OBC,   &
-!$OMP                                  Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml,    &
-!$OMP                                  mask_u) &
-!$OMP                          private(do_any,htot,do_i,k_massive,Thtot,vhtot,uhtot,absf,&
-!$OMP                                  U_star,Idecay_len_TKE,press,k2,I_2hlay,T_EOS,     &
-!$OMP                                  S_EOS,dR_dT, dR_dS,hlay,u_at_v,Uh2,               &
-!$OMP                                  T_lay,S_lay,gHprime,RiBulk,do_any_shelf,          &
-!$OMP                                  Shtot,Rhtot,ustar,h_at_vel,htot_vel,hwtot,        &
-!$OMP                                  hutot,hweight,ustarsq,oldfn,Dh,Rlay,Rlb,Dfn,      &
-!$OMP                                  h2f2,ustar1)
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,CS,use_EOS,dt_Rho0, &
+  !$OMP                                     h_neglect,h_tiny,g_H_Rho0,is,ie,OBC,Jsq,Jeq,nz, &
+  !$OMP                                     U_bg_sq,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml,mask_u)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
