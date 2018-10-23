@@ -1307,7 +1307,11 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   if (CS%id_BulkUz2  > 0) call post_data(CS%id_BulkUz2,  CS%Uz2,             CS%diag)
   if (CS%id_EnhK     > 0) call post_data(CS%id_EnhK,     CS%EnhK,            CS%diag)
   if (CS%id_EnhVt2   > 0) call post_data(CS%id_EnhVt2,   CS%EnhVt2,          CS%diag)
-  if (CS%id_La_SL>0.and.present(WAVES)) call post_data(CS%id_La_SL,WAVES%La_SL,CS%diag)
+  if (present(WAVES)) then
+    if ((CS%id_La_SL>0) .and. associated(WAVES)) then
+      call post_data(CS%id_La_SL,WAVES%La_SL,CS%diag)
+    endif
+  endif
 
   ! BLD smoothing:
   if (CS%n_smooth > 0) call KPP_smooth_BLD(CS,G,GV,h)
