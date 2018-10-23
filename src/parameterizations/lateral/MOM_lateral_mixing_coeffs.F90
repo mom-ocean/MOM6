@@ -426,9 +426,8 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points (1/s2)
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
+
   ! Local variables
-  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: S2            ! Interface slope squared (non-dim)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
@@ -437,8 +436,6 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real :: S2max, wNE, wSE, wSW, wNW
-  real :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
-  real :: SN_v_local(SZI_(G), SZJB_(G),SZK_(G))
   real :: H_u(SZIB_(G)), H_v(SZI_(G))
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
@@ -455,12 +452,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
 
   S2max = CS%Visbeck_S_max**2
 
-!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
-!$OMP                               S2_u,S2_v,slope_x,slope_y,   &
-!$OMP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
-!$OMP                       private(E_x,E_y,S2,H_u,H_v,Hdn,Hup,H_geom,N2, &
-!$OMP                       wNE, wSE, wSW, wNW)
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
@@ -470,7 +462,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-!$OMP do
+  !$OMP parallel do default(shared) private(S2,H_u,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do j = js,je
     do I=is-1,ie
       CS%SN_u(I,j) = 0. ; H_u(I) = 0. ; S2_u(I,j) = 0.
@@ -516,7 +508,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo
   enddo
 
-!$OMP do
+  !$OMP parallel do default(shared) private(S2,H_v,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do J = js-1,je
     do i=is,ie
       CS%SN_v(i,J) = 0. ; H_v(i) = 0. ; S2_v(i,J) = 0.
@@ -561,8 +553,6 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       endif
     enddo
   enddo
-
-!$OMP end parallel
 
 ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
