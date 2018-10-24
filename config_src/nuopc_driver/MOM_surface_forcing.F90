@@ -45,9 +45,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public IOB_allocate
-public convert_IOB_to_fluxes
-public convert_IOB_to_forces
+public convert_IOB_to_fluxes, convert_IOB_to_forces
 public surface_forcing_init
 public ice_ocn_bnd_type_chksum
 public forcing_save_restart
@@ -62,9 +60,6 @@ type, public :: surface_forcing_CS ; private
                                 ! update_ocean_model.
   logical :: use_temperature    ! If true, temp and saln used as state variables
   real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress (nondim).
-
-  ! smg: remove when have A=B code reconciled
-  logical :: bulkmixedlayer     ! If true, model based on bulk mixed layer code
 
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
   real :: area_surf = -1.0      ! total ocean surface area (m^2)
@@ -116,7 +111,7 @@ type, public :: surface_forcing_CS ; private
   logical :: adjust_net_srestore_by_scaling ! adjust srestore w/o moving zero contour
   logical :: adjust_net_fresh_water_to_zero ! adjust net surface fresh-water (w/ restoring) to zero
   logical :: use_net_FW_adjustment_sign_bug ! use the wrong sign when adjusting net FW
-  logical :: adjust_net_fresh_water_by_scaling ! adjust net surface fresh-water  w/o moving zero contour
+  logical :: adjust_net_fresh_water_by_scaling ! adjust net surface fresh-water w/o moving zero contour
   logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil
                                             ! criteria for salinity restoring.
   real    :: ice_salt_concentration         ! salt concentration for sea ice (kg/kg)
@@ -205,8 +200,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
-  type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to
-                                                   !! all possible mass, heat or salt flux forcing fields.
+  type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to all
+                                                   !! possible mass, heat or salt flux forcing fields.
                                                    !!  Unused fields have NULL ptrs.
   integer, dimension(4),   intent(in)    :: index_bounds !< The i- and j- size of the arrays in IOB.
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
@@ -215,12 +210,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
   type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
-                                                      !! surface state of the ocean.
+                                                   !! surface state of the ocean.
   logical,       optional, intent(in)    :: restore_salt !< If true, salinity is restored to a target value.
   logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
 
-  ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     data_restore,  & ! The surface value toward which to restore (g/kg or degC)
     SST_anom,      & ! Instantaneous sea surface temperature anomalies from a target value (deg C)
@@ -477,7 +471,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
       fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
     if (associated(IOB%sw_flux_nir_dif)) &
       fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
-
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
@@ -496,6 +489,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
         fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
       enddo ; enddo
     endif
+    fluxes%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
   endif
 
   ! more salt restoring logic
@@ -649,6 +643,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
   endif
 
+  forces%accumulate_rigidity = .true. ! Multiple components may contribute to rigidity.
   if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
@@ -665,7 +660,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
         forces%p_surf(i,j) = forces%p_surf_full(i,j)
       enddo ; enddo
     endif
+  else
+    do j=js,je ; do i=is,ie
+      forces%p_surf_full(i,j) = 0.0
+      forces%p_surf(i,j) = 0.0
+    enddo ; enddo
   endif
+  forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
   wind_stagger = CS%wind_stagger
   if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
@@ -843,58 +844,6 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   call cpu_clock_end(id_clock_forcing)
 end subroutine convert_IOB_to_forces
 
-subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
-
-  type(ice_ocean_boundary_type), intent(inout)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
-  integer, intent(in) :: isc, iec, jsc, jec                 !< The ocean's local grid size
-
-    allocate ( IOB% u_flux (isc:iec,jsc:jec),          &
-               IOB% v_flux (isc:iec,jsc:jec),          &
-               IOB% t_flux (isc:iec,jsc:jec),          &
-               IOB% q_flux (isc:iec,jsc:jec),          &
-               IOB% salt_flux (isc:iec,jsc:jec),       &
-               IOB% lw_flux (isc:iec,jsc:jec),         &
-               IOB% sw_flux_vis_dir (isc:iec,jsc:jec), &
-               IOB% sw_flux_vis_dif (isc:iec,jsc:jec), &
-               IOB% sw_flux_nir_dir (isc:iec,jsc:jec), &
-               IOB% sw_flux_nir_dif (isc:iec,jsc:jec), &
-               IOB% lprec (isc:iec,jsc:jec),           &
-               IOB% fprec (isc:iec,jsc:jec),           &
-               IOB% runoff (isc:iec,jsc:jec),          &
-               IOB% ustar_berg (isc:iec,jsc:jec),      &
-               IOB% area_berg (isc:iec,jsc:jec),       &
-               IOB% mass_berg (isc:iec,jsc:jec),       &
-               IOB% calving (isc:iec,jsc:jec),         &
-               IOB% runoff_hflx (isc:iec,jsc:jec),     &
-               IOB% calving_hflx (isc:iec,jsc:jec),    &
-               IOB% mi (isc:iec,jsc:jec),              &
-               IOB% p (isc:iec,jsc:jec))
-
-    IOB%u_flux          = 0.0
-    IOB%v_flux          = 0.0
-    IOB%t_flux          = 0.0
-    IOB%q_flux          = 0.0
-    IOB%salt_flux       = 0.0
-    IOB%lw_flux         = 0.0
-    IOB%sw_flux_vis_dir = 0.0
-    IOB%sw_flux_vis_dif = 0.0
-    IOB%sw_flux_nir_dir = 0.0
-    IOB%sw_flux_nir_dif = 0.0
-    IOB%lprec           = 0.0
-    IOB%fprec           = 0.0
-    IOB%runoff          = 0.0
-    IOB%ustar_berg      = 0.0
-    IOB%area_berg       = 0.0
-    IOB%mass_berg       = 0.0
-    IOB%calving         = 0.0
-    IOB%runoff_hflx     = 0.0
-    IOB%calving_hflx    = 0.0
-    IOB%mi              = 0.0
-    IOB%p               = 0.0
-
-end subroutine IOB_allocate
-
-
 !> Adds thermodynamic flux adjustments obtained via data_override
 !! Component name is 'OCN'
 !! Available adjustments are:
@@ -998,23 +947,19 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
 
 end subroutine apply_force_adjustments
 
+!> Save any restart files associated with the surface forcing.
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
-  type(surface_forcing_CS),   pointer       :: CS
+  type(surface_forcing_CS),   pointer       :: CS   !< A pointer to the control structure returned
+                                                    !! by a previous call to surface_forcing_init
   type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure
-  type(time_type),            intent(in)    :: Time
-  character(len=*),           intent(in)    :: directory
-  logical,          optional, intent(in)    :: time_stamped
-  character(len=*), optional, intent(in)    :: filename_suffix
-! Arguments: CS - A pointer to the control structure returned by a previous
-!                 call to surface_forcing_init.
-!  (in)      G - The ocean's grid structure.
-!  (in)      Time - The model time at this call.  This is needed for mpp_write calls.
-!  (in, opt) directory - An optional directory into which to write these restart files.
-!  (in, opt) time_stamped - If true, the restart file names include
-!                           a unique time stamp.  The default is false.
-!  (in, opt) filename_suffix - An optional suffix (e.g., a time-stamp) to append
-!                              to the restart file names.
+  type(time_type),            intent(in)    :: Time !< The current model time
+  character(len=*),           intent(in)    :: directory !< The directory into which to write the
+                                                    !! restart files
+  logical,          optional, intent(in)    :: time_stamped !< If true, the restart file names include
+                                                    !! a unique time stamp.  The default is false.
+  character(len=*), optional, intent(in)    :: filename_suffix !< An optional suffix (e.g., a time-
+                                                    !! stamp) to append to the restart file names.
 
   if (.not.associated(CS)) return
   if (.not.associated(CS%restart_CSp)) return
@@ -1022,22 +967,21 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 
 end subroutine forcing_save_restart
 
+!> Initialize the surface forcing, including setting parameters and allocating permanent memory.
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, restore_temp)
-  type(time_type),          intent(in)    :: Time
+  type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,  intent(inout) :: diag
-  type(surface_forcing_CS), pointer       :: CS
-  logical, optional,        intent(in)    :: restore_salt, restore_temp
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in)      restore_salt - If present and true, salinity restoring will be
-!                           applied in this model.
+  type(diag_ctrl), target,  intent(inout) :: diag !< A structure that is used to regulate
+                                                  !! diagnostic output
+  type(surface_forcing_CS), pointer       :: CS   !< A pointer that is set to point to the control
+                                                  !! structure for this module
+  logical, optional,        intent(in)    :: restore_salt !< If present and true surface salinity
+                                                  !! restoring will be applied in this model.
+  logical, optional,        intent(in)    :: restore_temp !< If present and true surface temperature
+                                                  !! restoring will be applied in this model.
+
+  ! Local variables
   real :: utide  ! The RMS tidal velocity, in m s-1.
   type(directories)  :: dirs
   logical            :: new_sim, iceberg_flux_diags
@@ -1129,11 +1073,6 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  "limited by max_p_surf instead of the full atmospheric \n"//&
                  "pressure.", default=.true.)
 
-! smg: should get_param call should be removed when have A=B code reconciled.
-! this param is used to distinguish how to diagnose surface heat content from water.
-  call get_param(param_file, mdl, "BULKMIXEDLAYER", CS%bulkmixedlayer, &
-                 default=CS%use_temperature,do_not_log=.true.)
-
   call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
                  "staggering of the input wind stress field.  Valid \n"//&
@@ -1209,7 +1148,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  "The name of the surface temperature variable to read from "//&
                  "SST_RESTORE_FILE for restoring sst.", &
                  default="temp")
-! Convert CS%Flux_const from m day-1 to m s-1.
+  ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
 
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
@@ -1360,13 +1299,14 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
   call cpu_clock_end(id_clock_forcing)
 end subroutine surface_forcing_init
 
+!> Clean up and deallocate any memory associated with this module and its children.
 subroutine surface_forcing_end(CS, fluxes)
-  type(surface_forcing_CS), pointer       :: CS
-  type(forcing), optional,  intent(inout) :: fluxes
-! Arguments:  CS - A pointer to the control structure returned by a previous
-!                  call to surface_forcing_init, it will be deallocated here.
-!  (inout)    fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
+  type(surface_forcing_CS), pointer       :: CS !< A pointer to the control structure returned by
+                                                !! a previous call to surface_forcing_init, it will
+                                                !! be deallocated here.
+  type(forcing), optional,  intent(inout) :: fluxes !< A structure containing pointers to all
+                                                !! possible mass, heat or salt flux forcing fields.
+                                                !! If present, it will be deallocated here.
 
   if (present(fluxes)) call deallocate_forcing_type(fluxes)
 
@@ -1377,40 +1317,43 @@ subroutine surface_forcing_end(CS, fluxes)
 
 end subroutine surface_forcing_end
 
+!> Write out a set of messages with checksums of the fields in an ice_ocen_boundary type
 subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
 
-    character(len=*), intent(in) :: id
-    integer         , intent(in) :: timestep
-    type(ice_ocean_boundary_type), intent(in) :: iobt
-    integer ::   n,m, outunit
+  character(len=*), intent(in) :: id     !< An identifying string for this call
+  integer,          intent(in) :: timestep !< The number of elapsed timesteps
+  type(ice_ocean_boundary_type), &
+                    intent(in) :: iobt   !< An ice-ocean boundary type with fluxes to drive the
+                                         !! ocean in a coupled model whose checksums are reported
+  integer ::   n,m, outunit
 
-    outunit = stdout()
+  outunit = stdout()
 
-    write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-    write(outunit,100) 'iobt%u_flux         ', mpp_chksum( iobt%u_flux         )
-    write(outunit,100) 'iobt%v_flux         ', mpp_chksum( iobt%v_flux         )
-    write(outunit,100) 'iobt%t_flux         ', mpp_chksum( iobt%t_flux         )
-    write(outunit,100) 'iobt%q_flux         ', mpp_chksum( iobt%q_flux         )
-    write(outunit,100) 'iobt%salt_flux      ', mpp_chksum( iobt%salt_flux      )
-    write(outunit,100) 'iobt%lw_flux        ', mpp_chksum( iobt%lw_flux        )
-    write(outunit,100) 'iobt%sw_flux_vis_dir', mpp_chksum( iobt%sw_flux_vis_dir)
-    write(outunit,100) 'iobt%sw_flux_vis_dif', mpp_chksum( iobt%sw_flux_vis_dif)
-    write(outunit,100) 'iobt%sw_flux_nir_dir', mpp_chksum( iobt%sw_flux_nir_dir)
-    write(outunit,100) 'iobt%sw_flux_nir_dif', mpp_chksum( iobt%sw_flux_nir_dif)
-    write(outunit,100) 'iobt%lprec          ', mpp_chksum( iobt%lprec          )
-    write(outunit,100) 'iobt%fprec          ', mpp_chksum( iobt%fprec          )
-    write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
-    write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
-    write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
-    if (associated(iobt%ustar_berg)) &
-      write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg )
-    if (associated(iobt%area_berg)) &
-      write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg  )
-    if (associated(iobt%mass_berg)) &
-      write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg  )
+  write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
+  write(outunit,100) 'iobt%u_flux         ', mpp_chksum( iobt%u_flux         )
+  write(outunit,100) 'iobt%v_flux         ', mpp_chksum( iobt%v_flux         )
+  write(outunit,100) 'iobt%t_flux         ', mpp_chksum( iobt%t_flux         )
+  write(outunit,100) 'iobt%q_flux         ', mpp_chksum( iobt%q_flux         )
+  write(outunit,100) 'iobt%salt_flux      ', mpp_chksum( iobt%salt_flux      )
+  write(outunit,100) 'iobt%lw_flux        ', mpp_chksum( iobt%lw_flux        )
+  write(outunit,100) 'iobt%sw_flux_vis_dir', mpp_chksum( iobt%sw_flux_vis_dir)
+  write(outunit,100) 'iobt%sw_flux_vis_dif', mpp_chksum( iobt%sw_flux_vis_dif)
+  write(outunit,100) 'iobt%sw_flux_nir_dir', mpp_chksum( iobt%sw_flux_nir_dir)
+  write(outunit,100) 'iobt%sw_flux_nir_dif', mpp_chksum( iobt%sw_flux_nir_dif)
+  write(outunit,100) 'iobt%lprec          ', mpp_chksum( iobt%lprec          )
+  write(outunit,100) 'iobt%fprec          ', mpp_chksum( iobt%fprec          )
+  write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
+  write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
+  write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
+  if (associated(iobt%ustar_berg)) &
+    write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg )
+  if (associated(iobt%area_berg)) &
+    write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg  )
+  if (associated(iobt%mass_berg)) &
+    write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg  )
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
-    call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
+  call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
 
 end subroutine ice_ocn_bnd_type_chksum
 
