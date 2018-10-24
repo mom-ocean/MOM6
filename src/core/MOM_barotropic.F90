@@ -61,20 +61,20 @@ public register_barotropic_restarts, set_dtbt
 type, private :: BT_OBC_type
   real, dimension(:,:), pointer :: Cg_u => NULL()  !< The external wave speed at u-points, in m s-1.
   real, dimension(:,:), pointer :: Cg_v => NULL()  !< The external wave speed at u-points, in m s-1.
-  real, dimension(:,:), pointer :: H_u => NULL()   !< The total thickness at the u-points, in m or kg m-2.
-  real, dimension(:,:), pointer :: H_v => NULL()   !< The total thickness at the v-points, in m or kg m-2.
+  real, dimension(:,:), pointer :: H_u => NULL()   !< The total thickness at the u-points, in H (m or kg m-2).
+  real, dimension(:,:), pointer :: H_v => NULL()   !< The total thickness at the v-points, in H (m or kg m-2).
   real, dimension(:,:), pointer :: uhbt => NULL()  !< The zonal barotropic thickness fluxes specified
-                                     !! for open boundary conditions (if any), in units of m3 s-1.
+                                     !! for open boundary conditions (if any), in units of H m2 s-1.
   real, dimension(:,:), pointer :: vhbt => NULL()  !< The meridional barotropic thickness fluxes specified
-                                     !! for open boundary conditions (if any), in units of m3 s-1.
+                                     !! for open boundary conditions (if any), in units of H m2 s-1.
   real, dimension(:,:), pointer :: ubt_outer => NULL() !< The zonal velocities just outside the domain,
                                      !! as set by the open boundary conditions, in units of m s-1.
   real, dimension(:,:), pointer :: vbt_outer => NULL() !< The meridional velocities just outside the domain,
                                      !! as set by the open boundary conditions, in units of m s-1.
   real, dimension(:,:), pointer :: eta_outer_u => NULL() !< The surface height outside of the domain
-                                     !! at a u-point with an open boundary condition, in units of m or kg m-2.
+                                     !! at a u-point with an open boundary condition, in units of H.
   real, dimension(:,:), pointer :: eta_outer_v => NULL() !< The surface height outside of the domain
-                                     !! at a v-point with an open boundary condition, in units of m or kg m-2.
+                                     !! at a v-point with an open boundary condition, in units of H.
   logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
   logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
   !>@{ Index ranges for the open boundary conditions
@@ -2422,8 +2422,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real :: vel_prev    ! The previous velocity in m s-1.
   real :: vel_trans   ! The combination of the previous and current velocity
                       ! that does the mass transport, in m s-1.
-  real :: H_u         ! The total thickness at the u-point, in m or kg m-2.
-  real :: H_v         ! The total thickness at the v-point, in m or kg m-2.
+  real :: H_u         ! The total thickness at the u-point, in H (often m or kg m-2).
+  real :: H_v         ! The total thickness at the v-point, in H (often m or kg m-2).
   real :: cfl         ! The CFL number at the point in question, ND.
   real :: u_inlet
   real :: v_inlet
@@ -2630,7 +2630,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
         endif
-      else            ! This is assuming Flather as only other option
+      else  ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%Z_to_H + eta(i,j)
@@ -2640,15 +2640,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(I,j) = eta(i,j)
-            BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + GV%m_to_Z*eta(i,j))) !### * GV%H_to_m?
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
             BT_OBC%H_u(I,j) = eta(i+1,j)
-            BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * (G%bathyT(i+1,j) + GV%m_to_Z*eta(i+1,j))) !### * GV%H_to_m?
           endif
         endif
-        if (GV%Boussinesq) then
-          BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*GV%m_to_Z * BT_OBC%H_u(i,j)) !### * GV%H_to_m?
-        endif
+        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
@@ -2686,7 +2682,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
         endif
-      else              ! This is assuming Flather as only other option
+      else  ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%Z_to_H + eta(i,j)
@@ -2696,15 +2692,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = eta(i,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + eta(i,j)*GV%m_to_Z)) !### * GV%H_to_m?
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             BT_OBC%H_v(i,J) = eta(i,j+1)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j+1) + eta(i,j+1)*GV%m_to_Z)) !### * GV%H_to_m?
           endif
         endif
-        if (GV%Boussinesq) then
-          BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*GV%m_to_Z * BT_OBC%H_v(i,J)) !### * GV%H_to_m?
-        endif
+        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
