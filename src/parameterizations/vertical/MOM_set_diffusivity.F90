@@ -555,13 +555,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   if (CS%Kd_add > 0.0) then
     if (present(Kd_int)) then
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_int,CS,Kd)
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add
         Kd_lay(i,j,k) = Kd_lay(i,j,k) + CS%Kd_add
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,Kd)
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Kd_lay(i,j,k) = Kd_lay(i,j,k) + CS%Kd_add
       enddo ; enddo ; enddo
