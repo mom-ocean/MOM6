@@ -99,7 +99,7 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
       "Unrecognized coordinate setup"//trim(config))
   end select
   if (debug) call chksum(GV%Rlay, "MOM_initialize_coord: Rlay ", 1, nz)
-  if (debug) call chksum(GV%Z_to_m*GV%g_prime(:), "MOM_initialize_coord: g_prime ", 1, nz)
+  if (debug) call chksum(GV%m_to_Z*GV%g_prime(:), "MOM_initialize_coord: g_prime ", 1, nz)
   call setVerticalGridAxes( GV%Rlay, GV )
 
 ! Copy the maximum depth across from the input argument
