@@ -1665,8 +1665,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "there is no buoyancy forcing, but makes the model \n"//&
                  "faster by eliminating subroutine calls.", default=.false.)
   call get_param(param_file, "MOM", "USE_LEGACY_DIABATIC_DRIVER", CS%use_legacy_diabatic_driver, &
-                 "If true, use the a legacy version of the diabatic subroutine. \n"//&
-                 "This is temporary and is needed avoid change in answers.", &
+                 "If true, use a legacy version of the diabatic subroutine. \n"//&
+                 "This is temporary and is needed to avoid change in answers.", &
                  default=.true.)
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as \n"//&
