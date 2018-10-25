@@ -3512,8 +3512,24 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   integer,           intent(out) ::isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   ! Local variables
   integer :: dszi,cszi,dszj,cszj
-  character(len=300) :: mesg
+  character(len=500) :: mesg
+  logical, save :: first_check = .true.
 
+  !Check ONCE that the decimated diag-compute domain is commensurate with the original non-decimated diag-compute domain
+  !This is a major limitation of the current implementation of the decimated diagnostics.
+  !We assume that the compute domain can be subdivided to dl*dl cells, hence avoiding the need of halo updates. 
+  !We want this check to error out only if there was a decimated diagnostics requested and about to post that is
+  !why the check is here and not in the init routines. This check need to be done only once, hence the outer if statement
+  if(first_check) then
+     if(mod(diag_cs%ie-diag_cs%is+1, dl) .ne. 0 .OR. mod(diag_cs%je-diag_cs%js+1, dl) .ne. 0) then
+        write (mesg,*) "Non-commensurate decimated domain is not supported. "//&
+             "Please choose a layout such that NIGLOBAL/Layout_X and NJGLOBAL/Layout_Y are both divisible by dl=",dl, " Current domain extents: ",&
+             diag_cs%is,diag_cs%ie, diag_cs%js,diag_cs%je
+        call MOM_error(FATAL,"decimate_diag_indices_get: "//trim(mesg))
+     endif
+     first_check = .false.
+  endif
+  
   cszi = diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc +1 ; dszi = diag_cs%decim(dl)%ied-diag_cs%decim(dl)%isd +1
   cszj = diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc +1 ; dszj = diag_cs%decim(dl)%jed-diag_cs%decim(dl)%jsd +1
 
