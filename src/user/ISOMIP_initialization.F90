@@ -268,7 +268,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
                  'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
@@ -441,27 +441,31 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call get_param(PF, mdl,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
-  min_thickness = GV%m_to_Z * min_thickness
+  call get_param(PF, mdl, "MIN_THICKNESS", min_thickness, "Minimum layer thickness", &
+                 units="m", default=1.e-3, scale=GV%m_to_Z)
 
-  call get_param(PF, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(PF, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
 
-  call get_param(PF, mdl, "ISOMIP_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)',  default=0.0)
+  call get_param(PF, mdl, "ISOMIP_TNUDG", TNUDG, "Nudging time scale for sponge layers (days)", default=0.0)
 
-  call get_param(PF, mdl, "T_REF", t_ref, 'Reference temperature',  default=10.0,&
+  call get_param(PF, mdl, "T_REF", t_ref, "Reference temperature", default=10.0,&
                  do_not_log=.true.)
 
-  call get_param(PF, mdl, "S_REF", s_ref, 'Reference salinity',  default=35.0,&
+  call get_param(PF, mdl, "S_REF", s_ref, "Reference salinity", default=35.0,&
                  do_not_log=.true.)
 
-  call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, 'Surface salinity in sponge layer.', default=s_ref)
+  call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, &
+                 'Surface salinity in sponge layer.', default=s_ref) ! units="PSU")
 
-  call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, 'Bottom salinity in sponge layer.', default=s_ref)
+  call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, &
+                 'Bottom salinity in sponge layer.', default=s_ref) ! units="PSU")
 
-  call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, 'Surface temperature in sponge layer.', default=t_ref)
+  call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, &
+                 'Surface temperature in sponge layer.', default=t_ref) ! units="degC")
 
-  call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, 'Bottom temperature in sponge layer.', default=t_ref)
+  call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, &
+                 'Bottom temperature in sponge layer.', default=t_ref) ! units="degC")
 
   T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0; RHO(:,:,:) = 0.0
 
