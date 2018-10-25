@@ -126,7 +126,7 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   zNext(nz+1) = zInt(i,j,nz+1)
 
   ! local depth for scaling diffusivity
-  depth = G%bathyT(i,j) * GV%m_to_H
+  depth = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
 
   ! initialize del2sigma to zero
   del2sigma(:) = 0.

@@ -48,7 +48,8 @@ program MOM_main
   use MOM_string_functions,only : uppercase
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
-  use MOM_time_manager,    only : time_type, set_date, set_time, get_date, time_type_to_real
+  use MOM_time_manager,    only : time_type, set_date, get_date
+  use MOM_time_manager,    only : real_to_time, time_type_to_real
   use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
@@ -137,7 +138,7 @@ program MOM_main
   real :: dt_dyn, dtdia, t_elapsed_seg
   integer :: n, n_max, nts, n_last_thermo
   logical :: diabatic_first, single_step_call
-  type(time_type) :: Time2
+  type(time_type) :: Time2, time_chg
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
                                 ! incremental restart files are saved and whether they
@@ -290,7 +291,7 @@ program MOM_main
     Start_time = set_date(date_init(1),date_init(2), date_init(3), &
          date_init(4),date_init(5),date_init(6))
   else
-    Start_time = set_time(0,days=0)
+    Start_time = real_to_time(0.0)
   endif
 
   call time_interp_external_init
@@ -356,7 +357,7 @@ program MOM_main
   endif
   ntstep = MAX(1,ceiling(dt_forcing/dt - 0.001))
 
-  Time_step_ocean = set_time(int(floor(dt_forcing+0.5)))
+  Time_step_ocean = real_to_time(dt_forcing)
   elapsed_time_master = (abs(dt_forcing - time_type_to_real(Time_step_ocean)) > 1.0e-12*dt_forcing)
   if (elapsed_time_master) &
     call MOM_mesg("Using real elapsed time for the master clock.", 2)
@@ -415,7 +416,7 @@ program MOM_main
   call get_param(param_file, mod_name, "RESTINT", restint, &
                  "The interval between saves of the restart file in units \n"//&
                  "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
-                 "incremental restart files at all.", default=set_time(0), &
+                 "incremental restart files at all.", default=real_to_time(0.0), &
                  timeunit=Time_unit)
   call get_param(param_file, mod_name, "WRITE_CPU_STEPS", cpu_steps, &
                  "The number of coupled timesteps between writing the cpu \n"//&
@@ -454,7 +455,7 @@ program MOM_main
   if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
       .or. (Restart_control < 0)) permit_incr_restart = .false.
 
-  if (restint > set_time(0)) then
+  if (restint > real_to_time(0.0)) then
     ! restart_time is the next integral multiple of restint.
     restart_time = Start_time + restint * &
         (1 + ((Time + Time_step_ocean) - Start_time) / restint)
@@ -532,7 +533,7 @@ program MOM_main
             dtdia = dt_dyn*(n - n_last_thermo)
             ! Back up Time2 to the start of the thermodynamic segment.
             if (n > n_last_thermo+1) &
-              Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
+              Time2 = Time2 - real_to_time(dtdia - dt_dyn)
             call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MOM_CSp, &
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_forcing)
@@ -541,7 +542,7 @@ program MOM_main
         endif
 
         t_elapsed_seg = t_elapsed_seg + dt_dyn
-        Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
+        Time2 = Time1 + real_to_time(t_elapsed_seg)
       enddo
     endif
 
@@ -549,17 +550,17 @@ program MOM_main
 !   This is here to enable fractional-second time steps.
     elapsed_time = elapsed_time + dt_forcing
     if (elapsed_time > 2e9) then
-      ! This is here to ensure that the conversion from a real to an integer
-      ! can be accurately represented in long runs (longer than ~63 years).
-      ! It will also ensure that elapsed time does not lose resolution of order
-      ! the timetype's resolution, provided that the timestep and tick are
-      ! larger than 10-5 seconds.  If a clock with a finer resolution is used,
-      ! a smaller value would be required.
-      segment_start_time = segment_start_time + set_time(int(floor(elapsed_time)))
-      elapsed_time = elapsed_time - floor(elapsed_time)
+      ! This is here to ensure that the conversion from a real to an integer can be accurately
+      ! represented in long runs (longer than ~63 years). It will also ensure that elapsed time
+      ! does not lose resolution of order the timetype's resolution, provided that the timestep and
+      ! tick are larger than 10-5 seconds.  If a clock with a finer resolution is used, a smaller
+      ! value would be required.
+      time_chg = real_to_time(elapsed_time)
+      segment_start_time = segment_start_time + time_chg
+      elapsed_time = elapsed_time - time_type_to_real(time_chg)
     endif
     if (elapsed_time_master) then
-      Master_Time = segment_start_time + set_time(int(floor(elapsed_time+0.5)))
+      Master_Time = segment_start_time + real_to_time(elapsed_time)
     else
       Master_Time = Master_Time + Time_step_ocean
     endif
@@ -570,8 +571,7 @@ program MOM_main
     endif ; endif
 
     call enable_averaging(dt_forcing, Time, diag)
-    call mech_forcing_diags(forces, fluxes, dt_forcing, grid, diag, &
-                            surface_forcing_CSp%handles)
+    call mech_forcing_diags(forces, dt_forcing, grid, diag, surface_forcing_CSp%handles)
     call disable_averaging(diag)
 
     if (.not. offline_tracer_mode) then

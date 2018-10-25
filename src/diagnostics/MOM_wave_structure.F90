@@ -44,7 +44,7 @@ type, public :: wave_structure_CS ; !private
   real, allocatable, dimension(:,:,:) :: z_depths
                                    !< Depths of layer interfaces, in m.
   real, allocatable, dimension(:,:,:) :: N2
-                                   !< Squared buoyancy frequency at each interface
+                                   !< Squared buoyancy frequency at each interface, in S-2.
   integer, allocatable, dimension(:,:):: num_intfaces
                                    !< Number of layer interfaces (including surface and bottom)
   real    :: int_tide_source_x     !< X Location of generation site
@@ -108,7 +108,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m s-2.
+    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2.
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it,
@@ -123,15 +123,14 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   real :: lam
   real :: min_h_frac
   real :: H_to_pres
-  real :: H_to_m     ! Local copy of a unit conversion factor.
   real, dimension(SZI_(G)) :: &
-    hmin, &  ! Thicknesses in m.
+    hmin, &  ! Thicknesses in Z.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
+  real :: g_Rho0  ! G_Earth/Rho0 in m5 Z-1 s-2 kg-1.
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 1 ! number of times to iterate in solving for eigenvector
@@ -152,6 +151,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   real                       :: w2avg   ! average of squared vertical velocity structure funtion
   real                       :: int_dwdz2, int_w2, int_N2w2, KE_term, PE_term, W0
                                         ! terms in vertically averaged energy equation
+  real                       :: gp_unscaled ! A version of gprime rescaled to units of m s-2.
   real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
                                         ! interface (excluding surface and bottom)
   real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag
@@ -178,11 +178,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   Pi = (4.0*atan(1.0))
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth /GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
   H_to_pres = GV%g_Earth * GV%Rho0
-  H_to_m = GV%H_to_m
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
@@ -192,7 +191,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i,j) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i,j) = htot(i,j) + h(i,j,k)*H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i,j) = htot(i,j) + h(i,j,k)*GV%H_to_Z ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i,j)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -200,20 +199,20 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*GV%H_to_Z > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*H_to_m
-          HxT_here(i) = (h(i,j,k)*H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*GV%H_to_Z
+          HxT_here(i) = (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -223,16 +222,16 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*GV%H_to_Z > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*H_to_m
-          HxR_here(i) = (h(i,j,k)*H_to_m)*GV%Rlay(k)
+          H_here(i) = h(i,j,k)*GV%H_to_Z
+          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*H_to_m)*GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -368,19 +367,19 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              N2(K) = GV%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
             N2(1) = N2(2) ; N2(kc+1) = N2(kc)
             ! Calcualte depth at bottom
             z_int(kc+1) = z_int(kc)+Hc(kc)
             ! check that thicknesses sum to total depth
-            if (abs(z_int(kc+1)-htot(i,j)) > 1.e-10) then
-              call MOM_error(WARNING, "wave_structure: mismatch in total depths")
-              print *, "kc=", kc
-              print *, "z_int(kc+1)=", z_int(kc+1)
-              print *, "htot(i,j)=", htot(i,j)
+            if (abs(z_int(kc+1)-htot(i,j)) > 1.e-14*htot(i,j)) then
+              call MOM_error(FATAL, "wave_structure: mismatch in total depths")
             endif
+
+            ! Note that many of the calcluation from here on revert to using vertical
+            ! distances in m, not Z.
 
             ! Populate interior rows of tridiagonal matrix; must multiply through by
             ! gprime to get tridiagonal matrix to the symmetrical form:
@@ -389,30 +388,33 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             ! Frist, populate interior rows
             do K=3,kc-1
               row = K-1 ! indexing for TD matrix rows
-              lam_z(row) = lam*gprime(K)
-              a_diag(row) = gprime(K)*(-Igu(K))
-              b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
-              c_diag(row) = gprime(K)*(-Igl(K))
+              gp_unscaled = GV%m_to_Z*gprime(K)
+              lam_z(row) = lam*gp_unscaled
+              a_diag(row) = gp_unscaled*(-Igu(K))
+              b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
+              c_diag(row) = gp_unscaled*(-Igl(K))
               if (isnan(lam_z(row)))then  ; print *, "Wave_structure: lam_z(row) is NAN" ; endif
               if (isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
               if (isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
               if (isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
             enddo
             ! Populate top row of tridiagonal matrix
-            K=2 ; row = K-1
-            lam_z(row) = lam*gprime(K)
+            K=2 ; row = K-1 ;
+            gp_unscaled = GV%m_to_Z*gprime(K)
+            lam_z(row) = lam*gp_unscaled
             a_diag(row) = 0.0
-            b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
-            c_diag(row) = gprime(K)*(-Igl(K))
+            b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
+            c_diag(row) = gp_unscaled*(-Igl(K))
             ! Populate bottom row of tridiagonal matrix
             K=kc ; row = K-1
-            lam_z(row) = lam*gprime(K)
-            a_diag(row) = gprime(K)*(-Igu(K))
-            b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
+            gp_unscaled = GV%m_to_Z*gprime(K)
+            lam_z(row) = lam*gp_unscaled
+            a_diag(row) = gp_unscaled*(-Igu(K))
+            b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
             c_diag(row) = 0.0
 
             ! Guess a vector shape to start with (excludes surface and bottom)
-            e_guess(1:kc-1) = sin(z_int(2:kc)/htot(i,j)*Pi)
+            e_guess(1:kc-1) = sin((z_int(2:kc)/htot(i,j)) *Pi)
             e_guess(1:kc-1) = e_guess(1:kc-1)/sqrt(sum(e_guess(1:kc-1)**2))
 
             ! Perform inverse iteration with tri-diag solver
@@ -441,11 +443,12 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
                        !(including surface and bottom)
             w2avg = 0.0
             do k=1,nzm-1
-              dz(k) = Hc(k)
+              dz(k) = GV%Z_to_m*Hc(k)
               w2avg = w2avg + 0.5*(w_strct(K)**2+w_strct(K+1)**2)*dz(k)
             enddo
-            w2avg = w2avg/htot(i,j)
-            w_strct = w_strct/sqrt(htot(i,j)*w2avg*I_a_int)
+            !### Some mathematical cancellations could occur in the next two lines.
+            w2avg = w2avg / htot(i,j)
+            w_strct = w_strct / sqrt(htot(i,j)*w2avg*I_a_int)
 
             ! Calculate vertical structure function of u (i.e. dw/dz)
             do K=2,nzm-1
@@ -495,45 +498,13 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             endif
 
             ! Store values in control structure
-            CS%w_strct(i,j,1:nzm)     = w_strct
-            CS%u_strct(i,j,1:nzm)     = u_strct
-            CS%W_profile(i,j,1:nzm)   = W_profile
-            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile
-            CS%z_depths(i,j,1:nzm)    = z_int
-            CS%N2(i,j,1:nzm)          = N2
+            CS%w_strct(i,j,1:nzm)     = w_strct(:)
+            CS%u_strct(i,j,1:nzm)     = u_strct(:)
+            CS%W_profile(i,j,1:nzm)   = W_profile(:)
+            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(:)
+            CS%z_depths(i,j,1:nzm)    = GV%Z_to_m*z_int(:)
+            CS%N2(i,j,1:nzm)          = N2(:)
             CS%num_intfaces(i,j)      = nzm
-
-            !----for debugging; delete later----
-            !if (ig == ig_stop .and. jg == jg_stop) then
-              !print *, 'cn(ig,jg)=', cn(i,j)
-              !print *, "e_guess=", e_guess(1:kc-1)
-              !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
-              !print *, 'f0=', sqrt(f2)
-              !print *, 'freq=', freq
-              !print *, 'Kh=', sqrt(Kmag2)
-              !print *, 'Wave_structure: z_int(ig,jg)=',   z_int(1:nzm)
-              !print *, 'Wave_structure: N2(ig,jg)=',      N2(1:nzm)
-              !print *, 'gprime=', gprime(1:nzm)
-              !print *, '1/Hc=', 1/Hc
-              !print *, 'Wave_structure: a_diag(ig,jg)=',  a_diag(1:kc-1)
-              !print *, 'Wave_structure: b_diag(ig,jg)=',  b_diag(1:kc-1)
-              !print *, 'Wave_structure: c_diag(ig,jg)=',  c_diag(1:kc-1)
-              !print *, 'Wave_structure: lam_z(ig,jg)=',   lam_z(1:kc-1)
-              !print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm)
-              !print *, 'En(i,j)=', En(i,j)
-              !print *, 'Wave_structure: W_profile(ig,jg)=', W_profile(1:nzm)
-              !print *,'int_dwdz2 =',int_dwdz2
-              !print *,'int_w2 =',int_w2
-              !print *,'int_N2w2 =',int_N2w2
-              !print *,'KEterm=',KE_term
-              !print *,'PEterm=',PE_term
-              !print *, 'W0=',W0
-              !print *,'Uavg_profile=',Uavg_profile(1:nzm)
-              !open(unit=1,file='out_N2',form='formatted') ; write(1,*) N2 ; close(1)
-              !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
-            !endif
-            !-----------------------------------
-
           else
             ! If not enough layers, default to zero
             nzm = kc+1
@@ -584,8 +555,8 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
   real, dimension(:), intent(out) :: x !< vector of unknown values to solve for.
   ! Local variables
   integer :: nrow                         ! number of rows in A matrix
-  real, allocatable, dimension(:,:) :: A_check ! for solution checking
-  real, allocatable, dimension(:)   :: y_check ! for solution checking
+!  real, allocatable, dimension(:,:) :: A_check ! for solution checking
+!  real, allocatable, dimension(:)   :: y_check ! for solution checking
   real, allocatable, dimension(:) :: c_prime, y_prime, q, alpha
                                           ! intermediate values for solvers
   real    :: Q_prime, beta                ! intermediate values for solver
@@ -597,8 +568,8 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
   allocate(y_prime(nrow))
   allocate(q(nrow))
   allocate(alpha(nrow))
-  allocate(A_check(nrow,nrow))
-  allocate(y_check(nrow))
+!  allocate(A_check(nrow,nrow))
+!  allocate(y_check(nrow))
 
   if (method == 'TDMA_T') then
     ! Standard Thomas algoritim (4th variant).
@@ -648,7 +619,7 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
     ! symmetric, diagonally dominant matrix, with h>0.
     ! Need to add a check for these conditions.
     do k=1,nrow-1
-      if (abs(a(k+1)-c(k)) > 1.e-10) then
+      if (abs(a(k+1)-c(k)) > 1.e-10*(abs(a(k+1))+abs(c(k)))) then
         call MOM_error(WARNING, "tridiag_solver: matrix not symmetric; need symmetry when invoking TDMA_H")
       endif
     enddo
@@ -671,8 +642,8 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
       Q_prime = beta*(h(k)+alpha(k-1)*Q_prime)
     enddo
     if ((h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow)) == 0.0)then
-      call MOM_error(WARNING, "Tridiag_solver: this system is not stable; overriding beta(nrow).")
-      beta = 1/(1e-15) ! place holder for unstable systems - delete later
+      call MOM_error(FATAL, "Tridiag_solver: this system is not stable.") ! ; overriding beta(nrow)
+      ! This has hard-coded dimensions: beta = 1/(1e-15) ! place holder for unstable systems - delete later
     else
       beta = 1/(h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow))
     endif
@@ -686,7 +657,8 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
     !print *, 'x=',x(1:nrow)
   endif
 
-  deallocate(c_prime,y_prime,q,alpha,A_check,y_check)
+  deallocate(c_prime,y_prime,q,alpha)
+! deallocate(A_check,y_check)
 
 end subroutine tridiag_solver
 

@@ -70,7 +70,7 @@ use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
+use MOM_time_manager, only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
@@ -221,7 +221,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! or mass transport since the last
                                                               !! tracer advection, in m3 or kg.
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av  !< The time-mean free surface height
-                                                              !! or column mass, in m or kg m-2.
+                                                              !! or column mass, in H (m or kg m-2).
   type(MOM_dyn_unsplit_RK2_CS),      pointer       :: CS      !< The control structure set up by
                                                               !! initialize_dyn_unsplit_RK2.
   type(VarMix_CS),                   pointer       :: VarMix  !< A pointer to a structure with
@@ -431,7 +431,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   endif
 
   if (GV%Boussinesq) then
-    do j=js,je ; do i=is,ie ; eta_av(i,j) = -G%bathyT(i,j) ; enddo ; enddo
+    do j=js,je ; do i=is,ie ; eta_av(i,j) = -GV%Z_to_H*G%bathyT(i,j) ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie ; eta_av(i,j) = 0.0 ; enddo ; enddo
   endif

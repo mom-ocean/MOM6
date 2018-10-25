@@ -12,14 +12,14 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, MOM_read_data, slasher
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
+use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
 use MOM_variables, only : surface
 
 implicit none ; private
 
-public MESO_wind_forcing, MESO_buoyancy_forcing, MESO_surface_forcing_init
+public MESO_buoyancy_forcing, MESO_surface_forcing_init
 
 !> This control structure is used to store parameters associated with the MESO forcing.
 type, public :: MESO_surface_forcing_CS ; private
@@ -52,71 +52,6 @@ logical :: first_call = .true. !< True until after the first call to the MESO fo
 
 contains
 
-!###   This subroutine sets zero surface wind stresses, but it is not even
-!### used by the MESO experimeents.  This subroutine can be deleted. -RWH
-subroutine MESO_wind_forcing(sfc_state, forces, day, G, CS)
-  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
-                                                    !! describe the surface state of the ocean.
-  type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),               intent(in)    :: day  !< The time of the fluxes
-  type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
-  type(MESO_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned by a previous
-                                                       !! call to MESO_surface_forcing_init
-
-!   This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
-! These are the stresses in the direction of the model grid (i.e. the same
-! direction as the u- and v- velocities.)  They are both in Pa.
-!   In addition, this subroutine can be used to set the surface friction
-! velocity, forces%ustar, in m s-1. This is needed with a bulk mixed layer.
-!
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day - Time of the fluxes.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to MESO_surface_forcing_init
-
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
-  !   When modifying the code, comment out this error message.  It is here
-  ! so that the original (unmodified) version is not accidentally used.
-  call MOM_error(FATAL, "MESO_wind_surface_forcing: " // &
-     "User forcing routine called without modification." )
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  ! Allocate the forcing arrays, if necessary.
-  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
-
-  !  Set the surface wind stresses, in units of Pa.  A positive taux
-  !  accelerates the ocean to the (pseudo-)east.
-
-  !  The i-loop extends to is-1 so that taux can be used later in the
-  ! calculation of ustar - otherwise the lower bound would be Isq.
-  do j=js,je ; do I=is-1,Ieq
-    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0  ! Change this to the desired expression.
-  enddo ; enddo
-  do J=js-1,Jeq ; do i=is,ie
-    forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
-  enddo ; enddo
-
-  !    Set the surface friction velocity, in units of m s-1.  ustar
-  !  is always positive.
-  if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-       sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-            0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
-  enddo ; enddo ; endif
-
-end subroutine MESO_wind_forcing
-
 !> This subroutine sets up the MESO buoyancy forcing, which uses control-theory style
 !! specification restorative buoyancy fluxes at large scales.
 subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
@@ -130,10 +65,6 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   type(MESO_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned by
                                                        !! a previous call to MESO_surface_forcing_init
 
-!    This subroutine specifies the current surface fluxes of buoyancy or
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-
 !    When temperature is used, there are long list of fluxes that need to be
 !  set - essentially the same as for a full coupled model, but most of these
 !  can be simply set to zero.  The net fresh water flux should probably be
@@ -143,17 +74,6 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 !  Evap is usually negative and precip is usually positive.  All heat fluxes
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
-
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day_start - Start time of the fluxes.
-!  (in)      day_interval - Length of time over which these fluxes
-!                           will be applied.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to MESO_surface_forcing_init
 
   real :: Temp_restore   ! The temperature that is being restored toward, in C.
   real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
@@ -293,14 +213,6 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
   type(MESO_surface_forcing_CS), pointer       :: CS   !< A pointer that is set to point to the
                                                        !! control structure for this module
 
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MESO_surface_forcing" ! This module's name.
@@ -382,9 +294,6 @@ end subroutine MESO_surface_forcing_init
 !! simple specifications of the forcing.  For more complicated forms,
 !! it is probably a good idea to read the forcing from input files
 !! using "file" for WIND_CONFIG and BUOY_CONFIG.
-!!
-!!   MESO_wind_forcing should set the surface wind stresses (taux and
-!! tauy) perhaps along with the surface friction velocity (ustar).
 !!
 !!   MESO_buoyancy forcing is used to set the surface buoyancy
 !! forcing, which may include a number of fresh water flux fields

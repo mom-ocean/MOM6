@@ -12,8 +12,7 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_verticalgrid,  only : verticalGrid_type
 use MOM_safe_alloc,    only : safe_alloc_ptr
-use MOM_time_manager,  only : time_type, operator(+), operator(/), get_time,&
-                              time_type_to_real,real_to_time_type
+use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_variables,     only : thermo_var_ptrs, surface
 use data_override_mod, only : data_override_init, data_override
 
@@ -526,11 +525,11 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/GV%g_Earth)
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*GV%m_to_Z))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / GV%g_Earth !bgr bug-fix missing g
+                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*GV%m_to_Z) !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -569,11 +568,11 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/GV%g_Earth)
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*GV%m_to_Z))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / GV%g_Earth
+                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*GV%m_to_Z)
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -771,7 +770,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
       endif
       NUMBANDS = ID
       do B = 1,NumBands
-        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2 / GV%g_Earth
+        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*GV%m_to_Z)
       enddo
     endif
 
@@ -969,7 +968,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL, LA)
     !
     ! peak frequency (PM, Bouws, 1998)
     tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * GV%g_Earth / tmp
+    fp = 0.877 * (GV%g_Earth*GV%m_to_Z) / tmp
     !
     ! mean frequency
     fm = fm_to_fp * fp
@@ -1103,14 +1102,14 @@ subroutine DHH85_mid(GV, ust, zpt, US)
   !/
   omega_min = 0.1 ! Hz
   ! Cut off at 30cm for now...
-  omega_max = 6.5 ! ~sqrt(0.2*GV%g_earth*2*pi/0.3)
+  omega_max = 6.5 ! ~sqrt(0.2*(GV%g_Earth*GV%m_to_Z)*2*pi/0.3)
   domega=0.05
   NOmega = (omega_max-omega_min)/domega
   !
   if (WaveAgePeakFreq) then
-    omega_peak = GV%G_EARTH/WA/u10
+    omega_peak = (GV%g_Earth*GV%m_to_Z)/WA/u10
   else
-    omega_peak = 2. * pi * 0.13 * GV%g_earth / U10
+    omega_peak = 2. * pi * 0.13 * (GV%g_Earth*GV%m_to_Z) / U10
   endif
   !/
   Ann = 0.006 * WaveAge**(-0.55)
@@ -1126,11 +1125,11 @@ subroutine DHH85_mid(GV, ust, zpt, US)
   do oi = 1,nomega-1
     Dnn = exp ( -0.5 * (omega-omega_peak)**2 / Snn**2 / omega_peak**2 )
     ! wavespec units = m2s
-    wavespec = (Ann * GV%g_earth**2 / (omega_peak*omega**4 ) ) &
+    wavespec = (Ann * (GV%g_Earth*GV%m_to_Z)**2 / (omega_peak*omega**4 ) ) &
          *exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
     ! Stokes units m  (multiply by frequency range for units of m/s)
     Stokes = 2.0 * wavespec * omega**3 * &
-         exp( 2.0 * omega**2 * zpt/GV%g_earth)/GV%g_earth
+         exp( 2.0 * omega**2 * zpt/(GV%g_Earth*GV%m_to_Z))/(GV%g_Earth*GV%m_to_Z)
     US=US+Stokes*domega
     omega = omega + domega
   enddo
@@ -1291,7 +1290,7 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
     CT=CT+1
     u10a = u10
     alpha = min(0.028,0.0017 * u10 - 0.005)
-    z0rough = alpha * USTair**2/GV%g_Earth ! Compute z0rough from ustar guess
+    z0rough = alpha * USTair**2/(GV%g_Earth*GV%m_to_Z) ! Compute z0rough from ustar guess
     z0=z0sm+z0rough
     CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
     u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop

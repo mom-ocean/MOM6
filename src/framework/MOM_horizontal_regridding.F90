@@ -19,7 +19,7 @@ use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_string_functions, only : uppercase
-use MOM_time_manager, only : time_type, set_time, get_external_field_size
+use MOM_time_manager, only : time_type, get_external_field_size
 use MOM_time_manager, only : init_external_field, time_interp_external
 use MOM_time_manager, only : get_external_field_axes, get_external_field_missing
 use MOM_variables, only : thermo_var_ptrs
@@ -446,7 +446,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
   allocate(last_row(id))    ; last_row(:)=0.0
 
-  max_depth = maxval(G%bathyT)
+  max_depth = G%Zd_to_m*maxval(G%bathyT)
   call mpp_max(max_depth)
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
@@ -543,7 +543,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) < 1.0) fill(i,j)=1.0
+        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%Zd_to_m*G%bathyT(i,j) .and. mask_out(i,j) < 1.0) &
+          fill(i,j)=1.0
       enddo
     enddo
     call pass_var(fill,G%Domain)
@@ -723,7 +724,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
   allocate(last_row(id))    ; last_row(:)=0.0
 
-  max_depth = maxval(G%bathyT)
+  max_depth = G%Zd_to_m*maxval(G%bathyT)
   call mpp_max(max_depth)
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
@@ -817,7 +818,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) < 1.0) fill(i,j)=1.0
+        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%Zd_to_m*G%bathyT(i,j) .and. mask_out(i,j) < 1.0) &
+          fill(i,j)=1.0
       enddo
     enddo
     call pass_var(fill,G%Domain)
