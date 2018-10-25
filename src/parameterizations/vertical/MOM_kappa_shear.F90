@@ -66,6 +66,8 @@ type, public :: Kappa_shear_CS ; private
   logical :: eliminate_massless !< If true, massless layers are merged with neighboring
                              !! massive layers in this calculation.
                              !  I can think of no good reason why this should be false. - RWH
+  real    :: vel_underflow   !< Velocity components smaller than vel_underflow
+                             !! are set to 0, in m s-1.
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -960,9 +962,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 #endif
 
   ! This call just calculates N2 and S2.
-  call calculate_projected_state(kappa, u, v, T, Sal, 0.0, nzc, &
-                                 dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                 u, v, T, Sal, GV, N2=N2, S2=S2)
+  call calculate_projected_state(kappa, u, v, T, Sal, 0.0, nzc, dz, I_dz_int, &
+                                 dbuoy_dT, dbuoy_dS, u, v, T, Sal, GV, &
+                                 N2=N2, S2=S2, vel_underflow=CS%vel_underflow)
 ! ----------------------------------------------------
 ! Iterate
 ! ----------------------------------------------------
@@ -1030,10 +1032,10 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         ! timestep is found long before the minimum is reached, so the
         ! value of max_KS_it may be unimportant, especially if it is large
         ! enough.
-        call calculate_projected_state(kappa_out, u, v, T, Sal, 0.5*dt_test, nzc, &
-                                       dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                       u_test, v_test, T_test, S_test, GV, N2, S2, &
-                                       ks_int = ks_kappa, ke_int = ke_kappa)
+        call calculate_projected_state(kappa_out, u, v, T, Sal, 0.5*dt_test, nzc, dz, I_dz_int, &
+                                       dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
+                                       GV, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, &
+                                       vel_underflow=CS%vel_underflow)
         valid_dt = .true.
         Idtt = 1.0 / dt_test
         do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
@@ -1057,10 +1059,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       if ((dt_test < dt_rem) .and. valid_dt) then
         dt_inc = 0.5*dt_test
         do itt_dt=1,dt_refinements
-          call calculate_projected_state(kappa_out, u, v, T, Sal, &
-                   0.5*(dt_test+dt_inc), nzc, dz, I_dz_int, dbuoy_dT, &
-                   dbuoy_dS, u_test, v_test, T_test, S_test, GV, N2, S2, &
-                   ks_int = ks_kappa, ke_int = ke_kappa)
+          call calculate_projected_state(kappa_out, u, v, T, Sal, 0.5*(dt_test+dt_inc), &
+                   nzc, dz, I_dz_int, dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
+                   GV, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, vel_underflow=CS%vel_underflow)
           valid_dt = .true.
           Idtt = 1.0 / (dt_test+dt_inc)
           do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
@@ -1111,10 +1112,10 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     ! call cpu_clock_end(id_clock_avg)
     else
     ! call cpu_clock_begin(id_clock_project)
-      call calculate_projected_state(kappa_out, u, v, T, Sal, dt_now, nzc, &
-                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                     u_test, v_test, T_test, S_test, GV, N2=N2, S2=S2, &
-                                     ks_int = ks_kappa, ke_int = ke_kappa)
+      call calculate_projected_state(kappa_out, u, v, T, Sal, dt_now, nzc, dz, I_dz_int, &
+                                     dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
+                                     GV, N2=N2, S2=S2, ks_int=ks_kappa, ke_int=ke_kappa, &
+                                     vel_underflow=CS%vel_underflow)
     ! call cpu_clock_end(id_clock_project)
 
     ! call cpu_clock_begin(id_clock_KQ)
@@ -1131,10 +1132,10 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       enddo
 
     ! call cpu_clock_begin(id_clock_project)
-      call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, &
-                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                     u_test, v_test, T_test, S_test, GV, N2=N2, S2=S2, &
-                                     ks_int = ks_kappa, ke_int = ke_kappa)
+      call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, dz, I_dz_int, &
+                                     dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
+                                     GV, N2=N2, S2=S2, ks_int=ks_kappa, ke_int=ke_kappa, &
+                                     vel_underflow=CS%vel_underflow)
     ! call cpu_clock_end(id_clock_project)
 
     ! call cpu_clock_begin(id_clock_KQ)
@@ -1157,8 +1158,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       ! Update the values of u, v, T, Sal, N2, and S2 for the next iteration.
     ! call cpu_clock_begin(id_clock_project)
       call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, &
-                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                     u, v, T, Sal, GV, N2, S2)
+                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, u, v, T, Sal, &
+                                     GV, N2, S2, vel_underflow=CS%vel_underflow)
     ! call cpu_clock_end(id_clock_project)
     endif
 
@@ -1225,7 +1226,7 @@ end subroutine kappa_shear_column
 !! may also calculate the projected buoyancy frequency and shear.
 subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                      dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                     u, v, T, Sal, GV, N2, S2, ks_int, ke_int)
+                                     u, v, T, Sal, GV, N2, S2, ks_int, ke_int, vel_underflow)
   integer,               intent(in)    :: nz  !< The number of layers (after eliminating massless
                                               !! layers?).
   real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
@@ -1255,17 +1256,22 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   integer, optional,     intent(in)    :: ks_int !< The topmost k-index with a non-zero diffusivity.
   integer, optional,     intent(in)    :: ke_int !< The bottommost k-index with a non-zero
                                               !! diffusivity.
+  real,    optional,     intent(in)    :: vel_underflow !< If present and true, any velocities that
+                                              !! are smaller in magnitude than this value are
+                                              !! set to 0, in m s-1.
 
   ! Local variables
   real, dimension(nz+1) :: c1
   real :: L2_to_Z2       ! A conversion factor from horizontal length units to vertical depth
                          ! units squared, in Z2 m-2.
+  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0, in m s-1.
   real :: a_a, a_b, b1, d1, bd1, b1nz_0
   integer :: k, ks, ke
 
   ks = 1 ; ke = nz
   if (present(ks_int)) ks = max(ks_int-1,1)
   if (present(ke_int)) ke = min(ke_int,nz)
+  underflow_vel = 0.0 ; if (present(vel_underflow)) underflow_vel = vel_underflow
 
   if (ks > ke) return
 
@@ -1308,16 +1314,22 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
     endif
     u(ke) = b1nz_0 * (dz(ke)*u0(ke) + a_a*u(ke-1))
     v(ke) = b1nz_0 * (dz(ke)*v0(ke) + a_a*v(ke-1))
+    if (abs(u(ke)) < underflow_vel) u(ke) = 0.0
+    if (abs(v(ke)) < underflow_vel) v(ke) = 0.0
 
     do k=ke-1,ks,-1
       u(k) = u(k) + c1(k+1)*u(k+1)
       v(k) = v(k) + c1(k+1)*v(k+1)
+      if (abs(u(k)) < underflow_vel) u(k) = 0.0
+      if (abs(v(k)) < underflow_vel) v(k) = 0.0
       T(k) = T(k) + c1(k+1)*T(k+1)
       Sal(k) = Sal(k) + c1(k+1)*Sal(k+1)
     enddo
   else ! dt <= 0.0
     do k=1,nz
       u(k) = u0(k) ; v(k) = v0(k) ; T(k) = T0(k) ; Sal(k) = S0(k)
+      if (abs(u(k)) < underflow_vel) u(k) = 0.0
+      if (abs(v(k)) < underflow_vel) v(k) = 0.0
     enddo
   endif
 
@@ -1325,12 +1337,12 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
     L2_to_Z2 = GV%m_to_Z**2
     S2(1) = 0.0 ; S2(nz+1) = 0.0
     if (ks > 1) &
-      S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * L2_to_Z2*I_dz_int(ks)**2
+      S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * (L2_to_Z2*I_dz_int(ks)**2)
     do K=ks+1,ke
-      S2(K) = ((u(k)-u(k-1))**2 + (v(k)-v(k-1))**2) * L2_to_Z2*I_dz_int(K)**2
+      S2(K) = ((u(k)-u(k-1))**2 + (v(k)-v(k-1))**2) * (L2_to_Z2*I_dz_int(K)**2)
     enddo
     if (ke<nz) &
-      S2(ke+1) = ((u0(ke+1)-u(ke))**2 + (v0(ke+1)-v(ke))**2) * L2_to_Z2*I_dz_int(ke+1)**2
+      S2(ke+1) = ((u0(ke+1)-u(ke))**2 + (v0(ke+1)-v(ke))**2) * (L2_to_Z2*I_dz_int(ke+1)**2)
   endif
 
   if (present(N2)) then
@@ -2078,6 +2090,11 @@ function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
                  "instability.", units="nondim", default=1.0, do_not_log=.true.)
+  call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
+                 "A negligibly small velocity magnitude below which velocity \n"//&
+                 "components are set to 0.  A reasonable value might be \n"//&
+                 "1e-30 m/s, which is less than an Angstrom divided by \n"//&
+                 "the age of the universe.", units="m s-1", default=0.0)
   call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&

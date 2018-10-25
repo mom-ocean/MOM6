@@ -41,7 +41,7 @@ contains
 subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in Z (often m or kg m-2).
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
                                                                  !! to any available thermodynamic
                                                                  !! fields. Absent fields have NULL ptrs.
@@ -56,7 +56,7 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
                                                                   !! layers filled in vertically.
   real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add !< The diapycnal
                                                                   !! diffusivity that is being added at
-                                                                  !! each interface in m2 s-1.
+                                                                  !! each interface in Z2 s-1.
   ! Local variables
   real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers in kg m-3.
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
@@ -119,7 +119,7 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
         endif
         rho_fn = val_weights(Rcv(i,k), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) &
-          Kd_lay(i,j,k) = Kd_lay(i,j,k) + GV%m_to_Z**2 * CS%Kd_add * rho_fn * lat_fn
+          Kd_lay(i,j,k) = Kd_lay(i,j,k) + CS%Kd_add * rho_fn * lat_fn
       enddo ; enddo
     endif
     if (present(Kd_int)) then
@@ -132,7 +132,7 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
         !   rho_int = 0.5*(Rcv(i,k-1) + Rcv(i,k))
         rho_fn = val_weights( 0.5*(Rcv(i,k-1) + Rcv(i,k)), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) then
-          Kd_int(i,j,K) = Kd_int(i,j,K) + GV%m_to_Z**2 * CS%Kd_add * rho_fn * lat_fn
+          Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add * rho_fn * lat_fn
           if (store_Kd_add) Kd_int_add(i,j,K) = CS%Kd_add * rho_fn * lat_fn
         endif
       enddo ; enddo
@@ -181,9 +181,10 @@ function val_weights(val, range) result(ans)
 end function val_weights
 
 !> Set up the module control structure.
-subroutine user_change_diff_init(Time, G, param_file, diag, CS)
+subroutine user_change_diff_init(Time, G, GV, param_file, diag, CS)
   type(time_type),           intent(in)    :: Time       !< The current model time.
   type(ocean_grid_type),     intent(in)    :: G          !< The ocean's grid structure.
+  type(verticalGrid_type),   intent(in)    :: GV         !< The ocean's vertical grid structure
   type(param_file_type),     intent(in)    :: param_file !< A structure indicating the
                                                          !! open file to parse for
                                                          !! model parameter values.
@@ -214,7 +215,7 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of \n"//&
-                 "latitude and density.", units="m2 s-1", default=0.0)
+                 "latitude and density.", default=0.0, units="m2 s-1", scale=GV%m_to_Z**2)
   if (CS%Kd_add /= 0.0) then
     call get_param(param_file, mdl, "USER_KD_ADD_LAT_RANGE", CS%lat_range(:), &
                  "Four successive values that define a range of latitudes \n"//&

@@ -1496,7 +1496,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
     call hchksum(Kd_lay, "after set_diffusivity Kd_lay", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0)
+    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=GV%Z_to_m**2)
   endif
 
 
@@ -1568,7 +1568,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
       call hchksum(Kd_lay, "after KPP Kd_lay", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-      call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0)
+      call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0, scale=GV%Z_to_m**2)
     endif
 
   endif  ! endif for KPP

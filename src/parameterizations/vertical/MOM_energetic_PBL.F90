@@ -773,7 +773,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                                  ( (-Bf_Unstable + 1.e-10*GV%m_to_Z**2) +                 &
                                    2.0 *MSTAR_MIX * U_star**3 / MLD_guess )
           if (CS%USE_LT) then
-            call get_Langmuir_Number( LA, G, GV, abs(GV%Z_to_m*MLD_guess), u_star_mean, i, j, &
+            call get_Langmuir_Number( LA, G, GV, abs(MLD_guess), u_star_mean, i, j, &
                                       H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
             ! 2. Get parameters for modified LA
             MLD_o_Ekman = abs(MLD_guess * iL_Ekman)
