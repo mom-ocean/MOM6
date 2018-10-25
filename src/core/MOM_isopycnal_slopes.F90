@@ -137,27 +137,25 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
   endif
 
   ! Find the maximum and minimum permitted streamfunction.
-!$OMP parallel default(none) shared(is,ie,js,je,pres,GV,h,nz)
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-1,je+1 ; do i=is-1,ie+1
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
     pres(i,j,2) = pres(i,j,1) + GV%H_to_Pa*h(i,j,1)
   enddo ; enddo
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
       pres(i,j,K+1) = pres(i,j,K) + GV%H_to_Pa*h(i,j,k)
     enddo ; enddo
   enddo
-!$OMP end parallel
 
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,GV,pres,T,S, &
-!$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u,slope_x) &
-!$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
-!$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
-!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio)
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,pres,T,S,tv, &
+  !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
+  !$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u,slope_x) &
+  !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
+  !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
+  !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+  !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio)
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -237,14 +235,14 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
     enddo ! I
   enddo ; enddo ! end of j-loop
 
-    ! Calculate the meridional isopycnal slope.
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,GV,pres,T,S, &
-!$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y) &
-!$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
-!$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
-!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio)
+  ! Calculate the meridional isopycnal slope.
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,pres,T,S,tv, &
+  !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
+  !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y) &
+  !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
+  !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
+  !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+  !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio)
   do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
