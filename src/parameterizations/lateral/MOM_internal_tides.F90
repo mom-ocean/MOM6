@@ -18,9 +18,7 @@ use MOM_grid, only          : ocean_grid_type
 use MOM_io, only            : slasher, vardesc, MOM_read_data
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
 use MOM_spatial_means, only : global_area_mean
-use MOM_time_manager, only  : time_type, operator(+), operator(/), operator(-)
-use MOM_time_manager, only  : get_time, get_date, set_time, set_date
-use MOM_time_manager, only  : time_type_to_real
+use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
@@ -350,7 +348,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Extract the energy for mixing due to bottom drag-------------------------------
   if (CS%apply_bottom_drag) then
     do j=jsd,jed ; do i=isd,ied
-      I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
+      ! Note the 1 m dimensional scale here.  Should this be a parameter?
+      I_D_here = 1.0 / (GV%Z_to_m*max(G%bathyT(i,j), 1.0*GV%m_to_Z))
       drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, vel_btTide(i,j)**2 + &
                         tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
     enddo ; enddo
@@ -592,12 +591,7 @@ subroutine sum_En(G, CS, En, label)
   integer :: m,fr,a
   real :: En_sum, tmpForSumming, En_sum_diff, En_sum_pdiff
   character(len=160) :: mesg  ! The text of an error message
-  integer :: seconds
-  real :: Isecs_per_day = 1.0 / 86400.0
   real :: days
-
-  call get_time(CS%Time, seconds)
-  days = real(seconds) * Isecs_per_day
 
   En_sum = 0.0
   tmpForSumming = 0.0
@@ -614,6 +608,7 @@ subroutine sum_En(G, CS, En, label)
   CS%En_sum = En_sum
   !! Print to screen
   !if (is_root_pe()) then
+  !  days = time_type_to_real(CS%Time) / 86400.0
   !  write(mesg,*) trim(label)//': days =', days, ', En_sum=', En_sum, &
   !                ', En_sum_diff=', En_sum_diff, ', Percent change=', En_sum_pdiff, '%'
   !  call MOM_mesg(mesg)
@@ -2318,7 +2313,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
-    h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
+    h2(i,j) = min(0.01*(G%Zd_to_m*G%bathyT(i,j))**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here
     ! will be multiplied by N and En to get into [W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&

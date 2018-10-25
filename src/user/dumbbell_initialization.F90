@@ -55,12 +55,12 @@ subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
     dblen=dblen*1.e3
   endif
 
- do i=G%isc,G%iec
+  do i=G%isc,G%iec
     do j=G%jsc,G%jec
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
       x = ( G%geoLonT(i,j) ) / dblen
       y = ( G%geoLatT(i,j)  ) / G%len_lat
-      D(i,j)=G%max_depth
+      D(i,j) = G%max_depth
       if ((x>=-0.25 .and. x<=0.25) .and. (y <= -0.5*dbfrac .or. y >= 0.5*dbfrac)) then
         D(i,j) = 0.0
       endif
@@ -80,10 +80,10 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
-                          ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
-                          ! positive upward, in m.                       !
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z), usually
+                          ! negative because it is positive upward.
+  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+                          ! positive upward, in depth units (Z).
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
   real    :: delta_h
@@ -98,10 +98,10 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
+  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read)
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+                 units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
   ! WARNING: this routine specifies the interface heights so that the last layer
@@ -134,19 +134,20 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
       ! Equating: z/max_depth = - ( S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light) ) / S_range
       e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * &
                 ( (real(K)-1.5) / real(nz-1) ) ) / S_range
-      e0(K) = nint(2048.*e0(K))/2048. ! Force round numbers ... the above expression has irrational factors ...
-      e0(K) = min(real(1-K)*GV%Angstrom_z, e0(K)) ! Bound by surface
+      ! Force round numbers ... the above expression has irrational factors ...
+      e0(K) = nint(2048.*GV%Z_to_m*e0(K)) / (2048.*GV%Z_to_m)
+      e0(K) = min(real(1-K)*GV%Angstrom_Z, e0(K)) ! Bound by surface
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
     enddo
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom_z
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
+          h(i,j,k) = GV%Angstrom_H
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -154,14 +155,14 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = min_thickness
+          h(i,j,k) = GV%Z_to_H * min_thickness
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -169,8 +170,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = delta_h
+      h(i,j,:) = GV%Z_to_H * G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
 end select
@@ -279,9 +279,9 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
        units="s", default=0.)
   call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, do_not_log=.true.)
   call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, do_not_log=.true.)
-  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
+  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=.true.)
+                 units='m', default=1.0e-3, do_not_log=.true., scale=GV%m_to_Z)
 
   ! no active sponges
   if (sponge_time_scale <= 0.) return
@@ -305,14 +305,14 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
   if (use_ALE) then
     ! construct a uniform grid for the sponge
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = min_thickness
+          h(i,j,k) = GV%Z_to_H * min_thickness
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo

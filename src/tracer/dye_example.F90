@@ -14,7 +14,7 @@ use MOM_io,                 only : file_exists, read_data, slasher, vardesc, var
 use MOM_open_boundary,      only : ocean_OBC_type
 use MOM_restart,            only : query_initialized, MOM_restart_CS
 use MOM_sponge,             only : set_up_sponge_field, sponge_CS
-use MOM_time_manager,       only : time_type, get_time
+use MOM_time_manager,       only : time_type
 use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init,      only : tracer_Z_init
@@ -41,8 +41,8 @@ type, public :: dye_tracer_CS ; private
   real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be injected.
   real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be injected.
   real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be injected.
-  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected (m).
-  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected (m).
+  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected, in Z.
+  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected, in Z.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
 
@@ -135,17 +135,16 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%dye_source_mindepth(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MINDEPTH", CS%dye_source_mindepth, &
                  "This is the minumum depth at which we inject dyes.", &
-                 fail_if_missing=.true.)
-  if (minval(CS%dye_source_mindepth(:)) < -1.e29) &
+                 units="m", scale=GV%m_to_Z, fail_if_missing=.true.)
+  if (minval(CS%dye_source_mindepth(:)) < -1.e29*GV%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINDEPTH")
 
   CS%dye_source_maxdepth(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MAXDEPTH", CS%dye_source_maxdepth, &
                  "This is the maximum depth at which we inject dyes.", &
-                 fail_if_missing=.true.)
-  if (minval(CS%dye_source_maxdepth(:)) < -1.e29) &
+                 units="m", scale=GV%m_to_Z, fail_if_missing=.true.)
+  if (minval(CS%dye_source_maxdepth(:)) < -1.e29*GV%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
-
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
 
@@ -224,12 +223,12 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = -G%bathyT(i,j)
         do k = GV%ke, 1, -1
-          z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_m
+          z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_Z
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0
           endif
-          z_bot = z_bot + h(i,j,k)*GV%H_to_m
+          z_bot = z_bot + h(i,j,k)*GV%H_to_Z
         enddo
       endif
     enddo ; enddo
@@ -307,12 +306,12 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = -G%bathyT(i,j)
         do k=nz,1,-1
-          z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_m
+          z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_Z
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0
           endif
-          z_bot = z_bot + h_new(i,j,k)*GV%H_to_m
+          z_bot = z_bot + h_new(i,j,k)*GV%H_to_Z
         enddo
       endif
     enddo ; enddo
