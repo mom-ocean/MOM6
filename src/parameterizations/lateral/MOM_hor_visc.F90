@@ -85,7 +85,7 @@ type, public :: hor_visc_CS ; private
                       !< The background biharmonic viscosity at h points, in units
                       !! of m4 s-1. The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm_Const2_xx
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm5_const2_xx
                       !< A constant relating the biharmonic viscosity to the
                       !! square of the velocity shear, in m4 s.  This value is
                       !! set to be the magnitude of the Coriolis terms once the
@@ -107,7 +107,7 @@ type, public :: hor_visc_CS ; private
                       !< The background biharmonic viscosity at q points, in units
                       !! of m4 s-1. The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm_Const2_xy
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm5_const2_xy
                       !< A constant relating the biharmonic viscosity to the
                       !! square of the velocity shear, in m4 s.  This value is
                       !! set to be the magnitude of the Coriolis terms once the
@@ -141,16 +141,16 @@ type, public :: hor_visc_CS ; private
   ! The following variables are precalculated time-invariant combinations of
   ! parameters and metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Laplac_Const_xx,  & !< Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xx,  & !< Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xx, & !< Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xx    !< Biharmonic metric-dependent constants (nondim)
+    Laplac2_const_xx,  & !< Laplacian  metric-dependent constants (nondim)
+    Biharm5_const_xx,  & !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_const_xx, & !< Laplacian  metric-dependent constants (nondim)
+    Biharm6_const_xx    !< Biharmonic metric-dependent constants (nondim)
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Laplac_Const_xy,  & !< Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xy,  & !< Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xy, & !< Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xy    !< Biharmonic metric-dependent constants (nondim)
+    Laplac2_const_xy,  & !< Laplacian  metric-dependent constants (nondim)
+    Biharm5_const_xy,  & !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_const_xy, & !< Laplacian  metric-dependent constants (nondim)
+    Biharm6_const_xy    !< Biharmonic metric-dependent constants (nondim)
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
@@ -281,12 +281,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   logical :: use_MEKE_Ku
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k, n
+  real :: inv_PI3, inv_PI6
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   h_neglect  = GV%H_subroundoff
   h_neglect3 = h_neglect**3
+  inv_PI3 = 1.0/((4.0*atan(1.0))**3)
+  inv_PI6 = inv_PI3**2
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
@@ -604,16 +607,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if (CS%use_QG_Leith) then
         call calc_QG_Leith_viscosity(VarMix, G, GV, h, k, vort_xy_dx, vort_xy_dy)
       endif
-  endif
+    endif ! CS%Leith_Kh
 
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
         Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
           0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-        if (pl_h(i,j) > 1) then
+        if ((pl_h(i,j) > 1) .and. (CS%use_beta_in_Leith)) then
           vert_vort_mag = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
         else
           vert_vort_mag = sqrt( &
@@ -633,8 +636,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! Determine the Laplacian viscosity at h points, using the
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
-        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xx(i,j) * Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xx(i,j) * vert_vort_mag)
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%Laplac2_const_xx(i,j) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, CS%Laplac3_const_xx(i,j) * vert_vort_mag*inv_PI3)
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
         ! Older method of bounding for stability
@@ -677,13 +680,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah)) then
           if (CS%Smagorinsky_Ah) then
             if (CS%bound_Coriolis) then
-              AhSm =  Shear_mag * (CS%BIHARM_CONST_xx(i,j) + &
-                                 CS%Biharm_Const2_xx(i,j)*Shear_mag)
+              AhSm =  Shear_mag * (CS%Biharm5_const_xx(i,j) + &
+                                 CS%Biharm5_const2_xx(i,j)*Shear_mag)
             else
-              AhSm = CS%BIHARM_CONST_xx(i,j) * Shear_mag
+              AhSm = CS%Biharm5_const_xx(i,j) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) AhLth = CS%BIHARM5_CONST_xx(i,j) * vert_vort_mag
+          if (CS%Leith_Ah) AhLth = CS%Biharm6_const_xx(i,j) * vert_vort_mag*inv_PI6
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
@@ -799,8 +802,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         ! Determine the Laplacian viscosity at q points, using the
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
-        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xy(I,J) * vert_vort_mag)
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%Laplac2_const_xy(I,J) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, CS%Laplac3_const_xy(I,J) * vert_vort_mag*inv_PI3)
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
         ! Older method of bounding for stability
@@ -846,13 +849,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
           if (CS%Smagorinsky_Ah) then
             if (CS%bound_Coriolis) then
-              AhSm =  Shear_mag * (CS%BIHARM_CONST_xy(I,J) + &
-                                 CS%Biharm_Const2_xy(I,J)*Shear_mag)
+              AhSm =  Shear_mag * (CS%Biharm5_const_xy(I,J) + &
+                                 CS%Biharm5_const2_xy(I,J)*Shear_mag)
             else
-              AhSm = CS%BIHARM_CONST_xy(I,J) * Shear_mag
+              AhSm = CS%Biharm5_const_xy(I,J) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) AhLth = CS%BIHARM5_CONST_xy(I,J) * vert_vort_mag
+          if (CS%Leith_Ah) AhLth = CS%Biharm6_const_xy(I,J) * vert_vort_mag * inv_PI6
           Ah = MAX(MAX(CS%Ah_bg_xy(I,J), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xy(I,J))
@@ -1324,8 +1327,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ALLOC_(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Kh) then
-      ALLOC_(CS%Laplac_Const_xx(isd:ied,jsd:jed))     ; CS%Laplac_Const_xx(:,:) = 0.0
-      ALLOC_(CS%Laplac_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac_Const_xy(:,:) = 0.0
+      ALLOC_(CS%Laplac2_const_xx(isd:ied,jsd:jed))     ; CS%Laplac2_const_xx(:,:) = 0.0
+      ALLOC_(CS%Laplac2_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac2_const_xy(:,:) = 0.0
     endif
     if (CS%Leith_Kh) then
       ALLOC_(CS%Laplac3_const_xx(isd:ied,jsd:jed)) ; CS%Laplac3_const_xx(:,:) = 0.0
@@ -1378,16 +1381,16 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ALLOC_(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Ah) then
-      ALLOC_(CS%Biharm_Const_xx(isd:ied,jsd:jed))     ; CS%Biharm_Const_xx(:,:) = 0.0
-      ALLOC_(CS%Biharm_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const_xy(:,:) = 0.0
+      ALLOC_(CS%Biharm5_const_xx(isd:ied,jsd:jed))     ; CS%Biharm5_const_xx(:,:) = 0.0
+      ALLOC_(CS%Biharm5_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm5_const_xy(:,:) = 0.0
       if (CS%bound_Coriolis) then
-        ALLOC_(CS%Biharm_Const2_xx(isd:ied,jsd:jed))     ; CS%Biharm_Const2_xx(:,:) = 0.0
-        ALLOC_(CS%Biharm_Const2_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const2_xy(:,:) = 0.0
+        ALLOC_(CS%Biharm5_const2_xx(isd:ied,jsd:jed))     ; CS%Biharm5_const2_xx(:,:) = 0.0
+        ALLOC_(CS%Biharm5_const2_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm5_const2_xy(:,:) = 0.0
       endif
     endif
     if (CS%Leith_Ah) then
-        ALLOC_(CS%biharm5_const_xx(isd:ied,jsd:jed)) ; CS%biharm5_const_xx(:,:) = 0.0
-        ALLOC_(CS%biharm5_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm5_const_xy(:,:) = 0.0
+        ALLOC_(CS%biharm6_const_xx(isd:ied,jsd:jed)) ; CS%biharm6_const_xx(:,:) = 0.0
+        ALLOC_(CS%biharm6_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm6_const_xy(:,:) = 0.0
     endif
   endif
 
@@ -1442,8 +1445,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ! Static factors in the Smagorinsky and Leith schemes
       grid_sp_h2 = (2.0*CS%DX2h(i,j)*CS%DY2h(i,j)) / (CS%DX2h(i,j) + CS%DY2h(i,j))
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
-      if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xx(i,j) = Smag_Lap_const * grid_sp_h2
-      if (CS%Leith_Kh)       CS%LAPLAC3_const_xx(i,j) = Leith_Lap_const * grid_sp_h3
+      if (CS%Smagorinsky_Kh) CS%Laplac2_const_xx(i,j) = Smag_Lap_const * grid_sp_h2
+      if (CS%Leith_Kh)       CS%Laplac3_const_xx(i,j) = Leith_Lap_const * grid_sp_h3
       ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xx(i,j) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_h2))
 
@@ -1468,8 +1471,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ! Static factors in the Smagorinsky and Leith schemes
       grid_sp_q2 = (2.0*CS%DX2q(I,J)*CS%DY2q(I,J)) / (CS%DX2q(I,J) + CS%DY2q(I,J))
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
-      if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xy(I,J) = Smag_Lap_const * grid_sp_q2
-      if (CS%Leith_Kh)       CS%LAPLAC3_const_xy(I,J) = Leith_Lap_const * grid_sp_q3
+      if (CS%Smagorinsky_Kh) CS%Laplac2_const_xy(I,J) = Smag_Lap_const * grid_sp_q2
+      if (CS%Leith_Kh)       CS%Laplac3_const_xy(I,J) = Leith_Lap_const * grid_sp_q3
       ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
@@ -1512,16 +1515,16 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
 
       if (CS%Smagorinsky_Ah) then
-        CS%BIHARM_CONST_xx(i,j) = Smag_bi_const * (grid_sp_h2 * grid_sp_h2)
+        CS%Biharm5_const_xx(i,j) = Smag_bi_const * (grid_sp_h3 * grid_sp_h2)
         if (CS%bound_Coriolis) then
           fmax = MAX(abs(G%CoriolisBu(I-1,J-1)), abs(G%CoriolisBu(I,J-1)), &
                      abs(G%CoriolisBu(I-1,J)),   abs(G%CoriolisBu(I,J)))
-          CS%Biharm_Const2_xx(i,j) = (grid_sp_h2 * grid_sp_h2 * grid_sp_h2) * &
+          CS%Biharm5_const2_xx(i,j) = (grid_sp_h2 * grid_sp_h2 * grid_sp_h2) * &
                                   (fmax * BoundCorConst)
         endif
       endif
       if (CS%Leith_Ah) then
-         CS%biharm5_const_xx(i,j) = Leith_bi_const * (grid_sp_h2 * grid_sp_h3)
+         CS%biharm6_const_xx(i,j) = Leith_bi_const * (grid_sp_h3**2)
       endif
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
@@ -1534,14 +1537,14 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
 
       if (CS%Smagorinsky_Ah) then
-        CS%BIHARM_CONST_xy(I,J) = Smag_bi_const * (grid_sp_q2 * grid_sp_q2)
+        CS%Biharm5_const_xy(I,J) = Smag_bi_const * (grid_sp_q3 * grid_sp_q2)
         if (CS%bound_Coriolis) then
-          CS%Biharm_Const2_xy(I,J) = (grid_sp_q2 * grid_sp_q2 * grid_sp_q2) * &
+          CS%Biharm5_const2_xy(I,J) = (grid_sp_q2 * grid_sp_q2 * grid_sp_q2) * &
                                       (abs(G%CoriolisBu(I,J)) * BoundCorConst)
         endif
       endif
       if (CS%Leith_Ah) then
-         CS%biharm5_const_xy(i,j) = Leith_bi_const * (grid_sp_q2 * grid_sp_q3)
+         CS%biharm6_const_xy(i,j) = Leith_bi_const * (grid_sp_q3**2)
       endif
 
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
@@ -1725,10 +1728,10 @@ subroutine hor_visc_end(CS)
       DEALLOC_(CS%Kh_Max_xx) ; DEALLOC_(CS%Kh_Max_xy)
     endif
     if (CS%Smagorinsky_Kh) then
-      DEALLOC_(CS%Laplac_Const_xx) ; DEALLOC_(CS%Laplac_Const_xy)
+      DEALLOC_(CS%Laplac2_const_xx) ; DEALLOC_(CS%Laplac2_const_xy)
     endif
     if (CS%Leith_Kh) then
-      DEALLOC_(CS%Laplac3_Const_xx) ; DEALLOC_(CS%Laplac3_Const_xy)
+      DEALLOC_(CS%Laplac3_const_xx) ; DEALLOC_(CS%Laplac3_const_xy)
     endif
   endif
 
@@ -1740,13 +1743,13 @@ subroutine hor_visc_end(CS)
       DEALLOC_(CS%Ah_Max_xx) ; DEALLOC_(CS%Ah_Max_xy)
     endif
     if (CS%Smagorinsky_Ah) then
-      DEALLOC_(CS%Biharm_Const_xx) ; DEALLOC_(CS%Biharm_Const_xy)
+      DEALLOC_(CS%Biharm5_const_xx) ; DEALLOC_(CS%Biharm5_const_xy)
       if (CS%bound_Coriolis) then
-        DEALLOC_(CS%Biharm_Const2_xx) ; DEALLOC_(CS%Biharm_Const2_xy)
+        DEALLOC_(CS%Biharm5_const2_xx) ; DEALLOC_(CS%Biharm5_const2_xy)
       endif
     endif
     if (CS%Leith_Ah) then
-      DEALLOC_(CS%Biharm5_Const_xx) ; DEALLOC_(CS%Biharm5_Const_xy)
+      DEALLOC_(CS%Biharm6_const_xx) ; DEALLOC_(CS%Biharm6_const_xy)
     endif
   endif
   if (CS%anisotropic) then
