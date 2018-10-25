@@ -87,12 +87,10 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  integer :: i, j, k, is, ie, js, je, nz
-  real    :: x
-  real    :: delta_h
   real    :: min_thickness, S_surf, S_range, S_ref, S_light, S_dense
   character(len=20) :: verticalCoordinate
   logical :: just_read    ! If true, just read parameters but set nothing.
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -103,7 +101,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read)
+                 units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
@@ -137,19 +135,20 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
       ! Equating: z/max_depth = - ( S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light) ) / S_range
       e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * &
                               ( (real(K)-1.5) / real(nz-1) ) ) / S_range
-      e0(K) = nint(2048.*e0(K))/2048. ! Force round numbers ... the above expression has irrational factors ...
-      e0(K) = min(real(1-K)*GV%Angstrom_z, e0(K)) ! Bound by surface
+      ! Force round numbers ... the above expression has irrational factors ...
+      e0(K) = nint(2048.*GV%Z_to_m*e0(K))/(2048.*GV%Z_to_m)
+      e0(K) = min(real(1-K)*GV%Angstrom_Z, e0(K)) ! Bound by surface
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
     enddo
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
+          h(i,j,k) = GV%Angstrom_H
         else
-          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -157,14 +156,14 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = GV%m_to_H * min_thickness
+          h(i,j,k) = GV%Z_to_H * min_thickness
         else
-          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -172,8 +171,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = GV%m_to_H * delta_h
+      h(i,j,:) = GV%Z_to_H * G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
 end select
@@ -251,7 +249,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + GV%H_to_m * h(i,j,k) / G%max_depth
+          xi1 = xi0 + GV%H_to_Z * h(i,j,k) / G%max_depth
           select case ( trim(density_profile) )
             case ('linear')
              !S(i,j,k) = S_surf + S_range * 0.5 * (xi0 + xi1)

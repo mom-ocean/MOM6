@@ -29,7 +29,7 @@ type, public :: wave_speed_CS ; private
                                        !! wave speed. This parameter controls the default behavior of
                                        !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
-                                       !! calculating the equivalent barotropic wave speed. (m)
+                                       !! calculating the equivalent barotropic wave speed. (Z)
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
@@ -58,7 +58,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
                                           !! for the purposes of calculating vertical modal structure.
   real, optional,                   intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
-                                          !! modal structure.
+                                          !! modal structure, in m.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
         optional,                   intent(out) :: modal_structure !< Normalized model structure (non-dim)
 
@@ -66,7 +66,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m s-2.
+    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2.
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it,
@@ -78,13 +78,13 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   real det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
   real :: lam, dlam, lam0
   real :: min_h_frac
-  real :: H_to_pres
-  real :: H_to_m     ! Local copy of a unit conversion factor.
+  real :: H_to_pres  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses in m.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
+  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths, in Z2 m-2.
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
@@ -109,12 +109,14 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
 
+  L2_to_Z2 = GV%m_to_Z**2
+
   l_use_ebt_mode = CS%use_ebt_mode
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
   l_mono_N2_column_fraction = CS%mono_N2_column_fraction
   if (present(mono_N2_column_fraction)) l_mono_N2_column_fraction = mono_N2_column_fraction
-  l_mono_N2_depth = CS%mono_N2_depth
-  if (present(mono_N2_depth)) l_mono_N2_depth = mono_N2_depth
+  l_mono_N2_depth = GV%m_to_Z*CS%mono_N2_depth
+  if (present(mono_N2_depth)) l_mono_N2_depth = GV%m_to_Z*mono_N2_depth
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
   if (calc_modal_structure) then
@@ -124,18 +126,17 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
   H_to_pres = GV%g_Earth * GV%Rho0
-  H_to_m = GV%H_to_m
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,min_h_frac,use_EOS,T,S,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS, &
-!$OMP                                  H_to_pres,H_to_m,cg1,g_Rho0,rescale,I_rescale)  &
+!$OMP                                  H_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2)  &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
@@ -148,7 +149,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*GV%H_to_Z ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -156,20 +157,20 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*GV%H_to_Z > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*H_to_m
-          HxT_here(i) = (h(i,j,k)*H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*GV%H_to_Z
+          HxT_here(i) = (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -179,16 +180,16 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*GV%H_to_Z > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*H_to_m
-          HxR_here(i) = (h(i,j,k)*H_to_m)*GV%Rlay(k)
+          H_here(i) = h(i,j,k)*GV%H_to_Z
+          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*H_to_m)*GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -312,26 +313,29 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           speed2_tot = 0.0
           if (l_use_ebt_mode) then
             Igu(1) = 0. ! Neumann condition for pressure modes
-            sum_hc = Hc(1)*GV%H_to_m
-            N2min = gprime(2)/Hc(1)
+            sum_hc = Hc(1)*GV%H_to_m  !### I believe this conversion factor to be wrong. -RWH
+            N2min = L2_to_Z2*gprime(2)/Hc(1)
             do k=2,kc
               hw = 0.5*(Hc(k-1)+Hc(k))
               gp = gprime(K)
               if (l_mono_N2_column_fraction>0. .or. l_mono_N2_depth>=0.) then
-                if (G%bathyT(i,j)-sum_hc<l_mono_N2_column_fraction*G%bathyT(i,j) .and. gp>N2min*hw) then
+                if (G%bathyT(i,j)-sum_hc < l_mono_N2_column_fraction*G%bathyT(i,j) .and. &
+                    L2_to_Z2*gp > N2min*hw) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction of water column
-                  gp = N2min/hw
-                elseif (l_mono_N2_depth>=0. .and. sum_hc>l_mono_N2_depth .and. gp>N2min*hw) then
+                  gp = N2min/hw  !### THIS IS DIMENSIONALLY INCONSISTENT! -RWH
+                  !### This should be gp = GV%Z_to_m**2* (N2min*hw)
+                elseif (l_mono_N2_depth>=0. .and. sum_hc>l_mono_N2_depth .and. L2_to_Z2*gp>N2min*hw) then
                   ! Filters out regions where N2 increases with depth but only below a certain depth
-                  gp = N2min/hw
+                  gp = N2min/hw  !### THIS IS DIMENSIONALLY INCONSISTENT! -RWH
+                  !### This should be gp = GV%Z_to_m**2* (N2min*hw)
                 else
-                  N2min = gp/hw
+                  N2min = L2_to_Z2 * gp/hw
                 endif
               endif
               Igu(k) = 1.0/(gp*Hc(k))
               Igl(k-1) = 1.0/(gp*Hc(k-1))
               speed2_tot = speed2_tot + gprime(k)*(Hc(k-1)+Hc(k))*0.707
-              sum_hc = sum_hc + Hc(k)*GV%H_to_m
+              sum_hc = sum_hc + Hc(k)*GV%H_to_m  !### I believe this conversion factor to be wrong. -RWH
             enddo
            !Igl(kc) = 0. ! Neumann condition for pressure modes
             Igl(kc) = 2.*Igu(kc) ! Dirichlet condition for pressure modes
@@ -448,9 +452,9 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
               mode_struct(1:kc)=0.
             endif
             ! Note that remapping_core_h requires that the same units be used
-            ! for both the source and target grid thicknesses.
-            call remapping_core_h(CS%remapping_CS, kc, Hc, mode_struct, &
-                                  nz, GV%H_to_m*h(i,j,:), modal_structure(i,j,:))
+            ! for both the source and target grid thicknesses, here in H.
+            call remapping_core_h(CS%remapping_CS, kc, GV%Z_to_H*Hc(:), mode_struct, &
+                                  nz, h(i,j,:), modal_structure(i,j,:), 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
           endif
         else
           cg1(i,j) = 0.0
@@ -505,7 +509,7 @@ subroutine tdma6(n, a, b, c, lam, y)
   do k = n-1, 1, -1
     y(k) = ( yy(k) - c(k) * y(k+1) ) * beta(k)
   enddo
-end subroutine
+end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
 subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
@@ -555,7 +559,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: min_h_frac
-  real :: H_to_pres
+  real :: H_to_pres  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
   real :: H_to_m     ! Local copy of a unit conversion factor.
   real, dimension(SZI_(G)) :: &
     htot, hmin, &    ! Thicknesses in m.
@@ -595,7 +599,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
   H_to_pres = GV%g_Earth * GV%Rho0
@@ -619,7 +623,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*GV%H_to_Z ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -627,20 +631,20 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*GV%H_to_Z > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*H_to_m
-          HxT_here(i) = (h(i,j,k)*H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*GV%H_to_Z
+          HxT_here(i) = (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -650,16 +654,16 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*GV%H_to_Z > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*H_to_m
-          HxR_here(i) = (h(i,j,k)*H_to_m)*GV%Rlay(k)
+          H_here(i) = h(i,j,k)*GV%H_to_Z
+          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*H_to_m)*GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -786,7 +790,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              N2(K) = GV%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
               speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
@@ -794,11 +798,8 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             ! Calcualte depth at bottom
             z_int(kc+1) = z_int(kc)+Hc(kc)
             ! check that thicknesses sum to total depth
-            if (abs(z_int(kc+1)-htot(i)) > 1.e-10) then
-              call MOM_error(WARNING, "wave_structure: mismatch in total depths")
-              print *, "kc=", kc
-              print *, "z_int(kc+1)=", z_int(kc+1)
-              print *, "htot(i)=", htot(i)
+            if (abs(z_int(kc+1)-htot(i)) > 1.e-12*htot(i)) then
+              call MOM_error(FATAL, "wave_structure: mismatch in total depths")
             endif
 
             ! Define the diagonals of the tridiagonal matrix
@@ -954,19 +955,6 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                         call MOM_error(WARNING, "wave_speed: root not found "// &
                                        " after sub_it_max subdivisions of original"// &
                                        " interval.")
-                        !if (ig == 144 .and. jg == 5) then
-                          !print *, "xbl=",xbl
-                          !print *, "xbr=",xbr
-                          !print *, "Wave_speed: kc=",kc
-                          !print *, 'Wave_speed: z_int(ig,jg)=',   z_int(1:kc+1)
-                          !print *, 'Wave_speed: N2(ig,jg)=',      N2(1:kc+1)
-                          !print *, 'Wave_speed: gprime=',         gprime(1:kc+1)
-                          !print *, 'Wave_speed: htot=',           htot(i)
-                          !print *, 'Wave_speed: cn1=',            cn(i,j,1)
-                          !print *, 'Wave_speed: numint=',         numint
-                          !print *, 'Wave_speed: nrootsfound=',    nrootsfound
-                          !stop
-                        !endif
                       endif ! sub_it == sub_it_max
                     enddo ! sub_it-loop-------------------------------------------------
                   endif ! det_l*ddet_l < 0.0
@@ -979,20 +967,6 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                   ! oops, lamMax not large enough - could add code to increase (BDM)
                   ! set unfound modes to zero for now (BDM)
                   cn(i,j,nrootsfound+2:nmodes) = 0.0
-                  !if (ig == 83 .and. jg == 2) then
-                  !  call MOM_error(WARNING, "wave_speed: not all modes found "// &
-                  !                       " within search range: increase numint.")
-                  !  print *, "Increase lamMax at ig=",ig," jg=",jg
-                  !  print *, "where lamMax=", lamMax
-                  !  print *, 'numint=',       numint
-                  !  print *, "nrootsfound=",  nrootsfound
-                  !  print *, "xbl=",xbl
-                  !  print *, "xbr=",xbr
-                    !print *, "kc=",kc
-                    !print *, 'z_int(ig,jg)=',   z_int(1:kc+1)
-                    !print *, 'N2(ig,jg)=',      N2(1:kc+1)
-                    !stop
-                  !endif
                 else
                   ! else shift interval and keep looking until nmodes or numint is reached
                   det_l = det_r
@@ -1132,9 +1106,9 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")
 
-  if (present(use_ebt_mode)) CS%use_ebt_mode=use_ebt_mode
-  if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction=mono_N2_column_fraction
-  if (present(mono_N2_depth)) CS%mono_N2_depth=mono_N2_depth
+  if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
+  if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction
+  if (present(mono_N2_depth)) CS%mono_N2_depth = mono_N2_depth
 
 end subroutine wave_speed_set_param
 
