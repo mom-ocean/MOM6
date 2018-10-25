@@ -393,11 +393,11 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
+    call find_eta(h, tv, G, GV, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
-      call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
+      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
@@ -417,19 +417,17 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
 end subroutine calc_slope_functions
 
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al.
-subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
+subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e  !< Interface position (m)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points (1/s2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points (1/s2)
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
+
   ! Local variables
-  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: S2            ! Interface slope squared (non-dim)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
@@ -438,8 +436,6 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real :: S2max, wNE, wSE, wSW, wNW
-  real :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
-  real :: SN_v_local(SZI_(G), SZJB_(G),SZK_(G))
   real :: H_u(SZIB_(G)), H_v(SZI_(G))
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
@@ -456,12 +452,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
 
   S2max = CS%Visbeck_S_max**2
 
-!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
-!$OMP                               S2_u,S2_v,slope_x,slope_y,   &
-!$OMP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
-!$OMP                       private(E_x,E_y,S2,H_u,H_v,Hdn,Hup,H_geom,N2, &
-!$OMP                       wNE, wSE, wSW, wNW)
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
@@ -471,7 +462,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-!$OMP do
+  !$OMP parallel do default(shared) private(S2,H_u,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do j = js,je
     do I=is-1,ie
       CS%SN_u(I,j) = 0. ; H_u(I) = 0. ; S2_u(I,j) = 0.
@@ -517,7 +508,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo
   enddo
 
-!$OMP do
+  !$OMP parallel do default(shared) private(S2,H_v,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do J = js-1,je
     do i=is,ie
       CS%SN_v(i,J) = 0. ; H_v(i) = 0. ; S2_v(i,J) = 0.
@@ -563,8 +554,6 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo
   enddo
 
-!$OMP end parallel
-
 ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_S2_u > 0) call post_data(CS%id_S2_u, S2_u, CS%diag)
@@ -600,6 +589,8 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
   real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
   real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
+  real :: Z_to_L        ! A conversion factor between from units for e to the
+                        ! units for lateral distances.
   real :: one_meter     ! One meter in thickness units of m or kg m-2.
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
@@ -618,33 +609,25 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
   one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
-  H_cutoff = real(2*nz) * (GV%Angstrom + h_neglect)
-
-!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h,H_cutoff,h_neglect, &
-!$OMP                               one_meter,SN_u_local,SN_v_local,calculate_slopes)   &
-!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
-!$OMP do
-  do j=js-1,je+1 ; do i=is-1,ie+1
-    CS%SN_u(i,j) = 0.0
-    CS%SN_v(i,j) = 0.0
-  enddo ; enddo
+  H_cutoff = real(2*nz) * (GV%Angstrom_H + h_neglect)
+  Z_to_L = GV%Z_to_m
 
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-!$OMP do
+  !$OMP parallel do default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
   do k=nz,CS%VarMix_Ktop,-1
 
     if (calculate_slopes) then
       ! Calculate the interface slopes E_x and E_y and u- and v- points respectively
       do j=js-1,je+1 ; do I=is-1,ie
-        E_x(I,j) = (e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
+        E_x(I,j) = Z_to_L*(e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
         ! Mask slopes where interface intersects topography
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) E_x(I,j) = 0.
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        E_y(i,J) = (e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
+        E_y(i,J) = Z_to_L*(e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
         ! Mask slopes where interface intersects topography
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
       enddo ; enddo
@@ -666,10 +649,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i+1,j,k)*h(i+1,j,k-1) / (h(i+1,j,k) + h(i+1,j,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k) / (GV%H_to_m * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*GV%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
-      SN_u_local(I,j,k) = (H_geom * GV%H_to_m) * S2 * N2
+      SN_u_local(I,j,k) = (H_geom * GV%H_to_Z) * S2 * N2
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       S2 = ( E_y(i,J)**2  + 0.25*( &
@@ -677,52 +660,56 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i,j+1,k)*h(i,j+1,k-1) / (h(i,j+1,k) + h(i,j+1,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k) / (GV%H_to_m * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*GV%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
-      SN_v_local(i,J,k) = (H_geom * GV%H_to_m) * S2 * N2
+      SN_v_local(i,J,k) = (H_geom * GV%H_to_Z) * S2 * N2
     enddo ; enddo
 
   enddo ! k
-!$OMP do
-  do j = js,je
+  !$OMP parallel do default(shared)
+  do j=js,je
+    do I=is-1,ie ; CS%SN_u(I,j) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
-      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom ) )
+      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_m ) then
-        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / &
+                                               (max(G%bathyT(I,j), G%bathyT(I+1,j))) )
       else
         CS%SN_u(I,j) = 0.0
       endif
     enddo
   enddo
-!$OMP do
+  !$OMP parallel do default(shared)
   do J=js-1,je
-    do k=nz,CS%VarMix_Ktop,-1 ; do I=is,ie
+    do i=is,ie ; CS%SN_v(i,J) = 0.0 ; enddo
+    do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
       CS%SN_v(i,J) = CS%SN_v(i,J) + SN_v_local(i,J,k)
     enddo ; enddo
     do i=is,ie
-      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom ) )
+      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_m ) then
-        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / &
+                                               (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
       else
         CS%SN_v(I,j) = 0.0
       endif
     enddo
   enddo
-!$OMP end parallel
 
 end subroutine calc_slope_functions_using_just_e
 
 !> Initializes the variables mixing coefficients container
-subroutine VarMix_init(Time, G, param_file, diag, CS)
+subroutine VarMix_init(Time, G, GV, param_file, diag, CS)
   type(time_type),            intent(in) :: Time !< Current model time
   type(ocean_grid_type),      intent(in) :: G    !< Ocean grid structure
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
@@ -804,6 +791,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
   call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
                  default=.false., do_not_log=.true.)
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE
   CS%calculate_Eady_growth_rate = CS%calculate_Eady_growth_rate .or. use_MEKE
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
                  default=0., do_not_log=.true.)
@@ -839,7 +827,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6)
+                 default=1.0e-6, scale=GV%m_to_Z**2) !### Add units argument.
   endif
 
   if (CS%calculate_Eady_growth_rate) then
