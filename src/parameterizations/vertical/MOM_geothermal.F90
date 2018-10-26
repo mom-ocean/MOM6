@@ -315,7 +315,7 @@ end subroutine geothermal
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
 subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
