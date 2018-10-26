@@ -258,7 +258,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     endif
 
     ! Calculates bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
+    call MEKE_lengthScales(CS, MEKE, G, GV, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
       call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI)
       call hchksum(mass, 'MEKE mass',G%HI,haloshift=1)
@@ -612,8 +612,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
       do while (resid>0.)
         n1 = n1 + 1
         EKE = EKEmax
-        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j), &
-                                  MEKE%Rd_dx_h(i,j), SN, EKE,            &
+        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
+                                  MEKE%Rd_dx_h(i,j), SN, EKE, GV%Z_to_m, &
                                   bottomFac2, barotrFac2, LmixScale,     &
                                   Lrhines, Leady)
         ! TODO: Should include resolution function in Kh
@@ -688,11 +688,12 @@ end subroutine MEKE_equilibrium
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
-subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
+subroutine MEKE_lengthScales(CS, MEKE, G, GV, SN_u, SN_v, &
             EKE, bottomFac2, barotrFac2, LmixScale)
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
   type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: EKE  !< Eddy kinetic energy (m2/s2).
@@ -717,8 +718,8 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
       beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j),  &
-                              MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j),            &
+    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),  &
+                              MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j), GV%Z_to_m, &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
                               Lrhines(i,j), Leady(i,j))
   enddo ; enddo
@@ -730,15 +731,17 @@ end subroutine MEKE_lengthScales
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
-subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN,  &
-            EKE, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady)
+subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN, EKE, Z_to_L, &
+                                bottomFac2, barotrFac2, LmixScale, Lrhines, Leady)
   type(MEKE_CS), pointer       :: CS         !< MEKE control structure.
   real,          intent(in)    :: area       !< Grid cell area (m2)
   real,          intent(in)    :: beta       !< Planetary beta = |grad F| (s-1 m-1)
-  real,          intent(in)    :: depth      !< Ocean depth (m)
+  real,          intent(in)    :: depth      !< Ocean depth (Z)
   real,          intent(in)    :: Rd_dx      !< Resolution Ld/dx (nondim).
   real,          intent(in)    :: SN         !< Eady growth rate (s-1).
   real,          intent(in)    :: EKE        !< Eddy kinetic energy (m s-1).
+  real,          intent(in)    :: Z_to_L     !< A conversion factor from depth units (Z) to
+                                             !! the units for lateral distances (L).
   real,          intent(out)   :: bottomFac2 !< gamma_b^2
   real,          intent(out)   :: barotrFac2 !< gamma_t^2
   real,          intent(out)   :: LmixScale  !< Eddy mixing length (m).
@@ -750,7 +753,7 @@ subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN,  &
   ! Length scale for MEKE derived diffusivity
   Lgrid = sqrt(area)               ! Grid scale
   Ldeform = Lgrid * Rd_dx          ! Deformation scale
-  Lfrict = depth / CS%cdrag        ! Frictional arrest scale
+  Lfrict = (Z_to_L * depth) / CS%cdrag  ! Frictional arrest scale
   ! gamma_b^2 is the ratio of bottom eddy energy to mean column eddy energy
   ! used in calculating bottom drag
   bottomFac2 = CS%MEKE_CD_SCALE**2
