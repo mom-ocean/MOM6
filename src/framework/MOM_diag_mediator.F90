@@ -517,6 +517,8 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   integer :: i, j, k, nz, dl
   real, dimension(:), pointer :: gridLonT_dsamp =>NULL()
   real, dimension(:), pointer :: gridLatT_dsamp =>NULL()
+  real, dimension(:), pointer :: gridLonB_dsamp =>NULL()
+  real, dimension(:), pointer :: gridLatB_dsamp =>NULL()
 
   id_zl = id_zl_native ; id_zi = id_zi_native
   !Axes group for native downsampled diagnostics
@@ -524,29 +526,32 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
      if(dl .ne. 2) call MOM_error(FATAL, "set_axes_info_dsamp: Downsample level other than 2 is not supported yet!")
      allocate(gridLonT_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
      allocate(gridLatT_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
-
      do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonT_dsamp(i) = G%gridLonT(G%isg+dl*i-2); enddo
      do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatT_dsamp(j) = G%gridLatT(G%jsg+dl*j-2); enddo
+     allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
+     allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
+     do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonB_dsamp(i) = G%gridLonB(G%isg+dl*i-2); enddo
+     do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatB_dsamp(j) = G%gridLatB(G%jsg+dl*j-2); enddo
 
-     if (G%symmetric) then
-        call MOM_error(FATAL, "set_axes_info_dsamp: Downsample of symmetric case is not supported yet!")
-     !   id_xq = diag_axis_init('xq', gridLonB_dsamp(G%isgB:G%iegB), G%x_axis_units, 'x', &
-     !             'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
-     !   id_yq = diag_axis_init('yq', gridLatB_dsamp(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-     !             'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
-     else
-        id_xq = diag_axis_init('xq', gridLonT_dsamp, G%x_axis_units, 'x', &
-                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
-        id_yq = diag_axis_init('yq', gridLatT_dsamp, G%y_axis_units, 'y', &
-                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
-     endif
+!I don't see a need for this since isgB=isg and iegB=ieg
+!     if (G%symmetric) then
+!        id_xq = diag_axis_init('xq', gridLonB_dsamp(G%isgB:G%iegB), G%x_axis_units, 'x', &
+!                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+!        id_yq = diag_axis_init('yq', gridLatB_dsamp(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+!                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+!     else
+     id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
+               'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+     id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
+               'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+!     endif
      id_xh = diag_axis_init('xh', gridLonT_dsamp, G%x_axis_units, 'x', &
           'h point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
      id_yh = diag_axis_init('yh', gridLatT_dsamp, G%y_axis_units, 'y', &
           'h point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
 
-     deallocate(gridLonT_dsamp)
-     deallocate(gridLatT_dsamp)
+     deallocate(gridLonT_dsamp,gridLatT_dsamp)
+     deallocate(gridLonB_dsamp,gridLatB_dsamp)
 
      ! Axis groupings for the model layers
      call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%axesTL, dl, &

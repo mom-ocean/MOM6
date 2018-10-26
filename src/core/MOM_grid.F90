@@ -21,7 +21,7 @@ type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL() !< Ocean model domain
   type(MOM_domain_type), pointer :: Domain_aux => NULL() !< A non-symmetric auxiliary domain type.
   type(hor_index_type) :: HI !< Horizontal index ranges
-  type(hor_index_type) :: HId2 !< Horizontal index ranges for level-2-downsampling 
+  type(hor_index_type) :: HId2 !< Horizontal index ranges for level-2-downsampling
 
   integer :: isc !< The start i-index of cell centers within the computational domain
   integer :: iec !< The end i-index of cell centers within the computational domain
@@ -348,8 +348,9 @@ subroutine MOM_grid_init(G, param_file, HI, global_indexing, bathymetry_at_vel)
   call get_domain_extent_dsamp2(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec,&
                                           G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed,&
                                           G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg)
-  
+
   ! Set array sizes for fields that are discretized at tracer cell boundaries.
+  G%HId2%IegB = G%HId2%ieg ; G%HId2%JegB = G%HId2%jeg
   G%HId2%IsdB = G%HId2%isd ; G%HId2%JsdB = G%HId2%jsd
   if (G%symmetric) then
     G%HId2%IsdB = G%HId2%isd-1 ; G%HId2%JsdB = G%HId2%jsd-1
