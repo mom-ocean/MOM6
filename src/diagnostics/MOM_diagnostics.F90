@@ -291,12 +291,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (associated(CS%e_D)) then
     if (associated(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e(i,j,k) + GV%Z_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
       call find_eta(h, tv, G, GV, CS%e_D, eta_bt, eta_to_m=1.0)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e_D(i,j,k) + GV%Z_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     endif
 
@@ -817,7 +817,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
   if (CS%id_col_ht > 0) then
     call find_eta(h, tv, G, GV, z_top, eta_to_m=1.0)
     do j=js,je ; do i=is,ie
-      z_bot(i,j) = z_top(i,j) + G%Zd_to_m*G%bathyT(i,j)
+      z_bot(i,j) = z_top(i,j) + GV%Z_to_m*G%bathyT(i,j)
     enddo ; enddo
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif
@@ -1216,7 +1216,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   ! post total volume of the liquid ocean
   if (IDs%id_volo > 0) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%Zd_to_m*G%bathyT(i,j))
+      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + GV%Z_to_m*G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(work_2d, G)
     call post_data(IDs%id_volo, volo, diag)
@@ -1826,10 +1826,7 @@ subroutine write_static_fields(G, GV, tv, diag)
   type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
 
   ! Local variables
-  real    :: tmp_h(SZI_(G),SZJ_(G))
-  integer :: id, i, j
-
-  tmp_h(:,:) = 0.0
+  integer :: id
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_north')
@@ -1878,45 +1875,30 @@ subroutine write_static_fields(G, GV, tv, diag)
         cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
-  if (id > 0) then
-    call post_data(id, G%areaCu, diag, .true.)
-  endif
+  if (id > 0) call post_data(id, G%areaCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
         'Surface area of y-direction flow (V) cells', 'm2',             &
         cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
-  if (id > 0) then
-    call post_data(id, G%areaCv, diag, .true.)
-  endif
+  if (id > 0) call post_data(id, G%areaCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
         'Surface area of B-grid flow (Q) cells', 'm2',                  &
         cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
-  if (id > 0) then
-    call post_data(id, G%areaBu, diag, .true.)
-  endif
+  if (id > 0) call post_data(id, G%areaBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
         'Depth of the ocean at tracer points', 'm',                      &
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
-        cmor_standard_name='sea_floor_depth_below_geoid',&
-        area=diag%axesT1%id_area, &
-        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
-  if (id > 0) then
-    if (G%Zd_to_m == 1.0) then
-      call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
-    else
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        tmp_h(i,j) = G%bathyT(i,j) * G%Zd_to_m
-      enddo ; enddo
-      call post_data(id, tmp_h, diag, .true., mask=G%mask2dT)
-    endif
-  endif
+        cmor_standard_name='sea_floor_depth_below_geoid', area=diag%axesT1%id_area, &
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean', &
+        conversion=GV%Z_to_m)
+  if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
@@ -1985,13 +1967,10 @@ subroutine write_static_fields(G, GV, tv, diag)
         'Percentage of cell area covered by ocean', '%', &
         cmor_field_name='sftof', cmor_standard_name='SeaAreaFraction', &
         cmor_long_name='Sea Area Fraction', &
-        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
-  if (id > 0) then
-    do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      tmp_h(i,j) = 100. * G%mask2dT(i,j)
-    enddo ; enddo
-    call post_data(id, tmp_h, diag, .true.)
-  endif
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean', &
+        conversion=100.0)
+  if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
+
 
   id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
        'mean ocean density used with the Boussinesq approximation', &
