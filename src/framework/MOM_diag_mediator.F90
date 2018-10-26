@@ -42,7 +42,7 @@ implicit none ; private
 
 #undef __DO_SAFETY_CHECKS__
 #define IMPLIES(A, B) ((.not. (A)) .or. (B))
-#define MAX_DECIM_LEV 2
+#define MAX_DSAMP_LEV 2
 
 public set_axes_info, post_data, register_diag_field, time_type
 public set_masks_for_axes
@@ -68,22 +68,22 @@ interface post_data
   module procedure post_data_3d, post_data_2d, post_data_1d_k, post_data_0d
 end interface post_data
 
-interface decimate_field
-   module procedure decimate_field_2d, decimate_field_3d
-end interface decimate_field
+interface downsample_field
+   module procedure downsample_field_2d, downsample_field_3d
+end interface downsample_field
 
-interface decimate_mask
-   module procedure decimate_mask_2d_p, decimate_mask_3d_p, decimate_mask_2d_a, decimate_mask_3d_a
-end interface decimate_mask
+interface downsample_mask
+   module procedure downsample_mask_2d_p, downsample_mask_3d_p, downsample_mask_2d_a, downsample_mask_3d_a
+end interface downsample_mask
 
-interface decimate_diag_field
-   module procedure decimate_diag_field_2d, decimate_diag_field_3d
-end interface decimate_diag_field
+interface downsample_diag_field
+   module procedure downsample_diag_field_2d, downsample_diag_field_3d
+end interface downsample_diag_field
 
-type, private :: diag_decim 
-  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
-  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes  
-end type diag_decim
+type, private :: diag_dsamp
+   real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
+   real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
+end type diag_dsamp
 
 !> A group of 1D axes that comprise a 1D/2D/3D mesh
 type, public :: axes_grp
@@ -117,7 +117,7 @@ type, public :: axes_grp
   logical :: needs_interpolating = .false. !< If true, indicates that this axes group is for a sampled
                                          !! interface-located field that must be interpolated to
                                          !! these axes. Used for rank>2.
-  integer :: decimation_level = 1 !< If greater than 1, the factor by which this diagnostic/axes/masks be decimated
+  integer :: downsample_level = 1 !< If greater than 1, the factor by which this diagnostic/axes/masks be downsampled
   ! For horizontally averaged diagnositcs (applies to 2d and 3d fields only)
   type(axes_grp), pointer :: xyave_axes => null() !< The associated 1d axes for horizontall area-averaged diagnostics
   ! ID's for cell_measures
@@ -127,7 +127,7 @@ type, public :: axes_grp
   ! For masking
   real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
   real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
-  type(diag_decim), dimension(2:MAX_DECIM_LEV) :: decim !< Decimation container
+  type(diag_dsamp), dimension(2:MAX_DSAMP_LEV) :: dsamp !< Downsample container
 end type axes_grp
 
 !> Contains an array to store a diagnostic target grid
@@ -172,7 +172,7 @@ type, private :: diag_type
   logical :: in_use !< True if this entry is being used.
   integer :: fms_diag_id !< Underlying FMS diag_manager id.
   integer :: fms_xyave_diag_id = -1 !< For a horizontally area-averaged diagnostic.
-  integer :: decimate_diag_id = -1 !< For a horizontally area-decimated diagnostic.
+  integer :: downsample_diag_id = -1 !< For a horizontally area-downsampled diagnostic.
   character(64) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null() !< The axis group for this diagnostic
   type(diag_type), pointer :: next => null() !< Pointer to the next diagnostic
@@ -180,10 +180,10 @@ type, private :: diag_type
   logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated).
                                    !! False for intensive (concentrations).
   integer :: xyz_method = 0 !< A 3 digit integer encoding the diagnostics cell method
-                                   !! It can be used to determine the decimation algorithm 
+                                   !! It can be used to determine the downsample algorithm
 end type diag_type
 
-type diagcs_decim
+type diagcs_dsamp
   integer :: isc !< The start i-index of cell centers within the computational domain
   integer :: iec !< The end i-index of cell centers within the computational domain
   integer :: jsc !< The start j-index of cell centers within the computational domain
@@ -193,7 +193,7 @@ type diagcs_decim
   integer :: jsd !< The start j-index of cell centers within the data domain
   integer :: jed !< The end j-index of cell centers within the data domain
   integer :: isg,ieg,jsg,jeg
-  
+
   type(axes_grp)  :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp)  :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp)  :: axesB1, axesT1, axesCu1, axesCv1
@@ -213,7 +213,7 @@ type diagcs_decim
   real, dimension(:,:,:), pointer :: mask3dBi  => null()
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
-end type diagcs_decim
+end type diagcs_dsamp
 
 !> The following data type a list of diagnostic fields an their variants,
 !! as well as variables that control the handling of model output.
@@ -264,8 +264,8 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
 
-  type(diagcs_decim), dimension(2:MAX_DECIM_LEV) :: decim !< Decimation control container
-  
+  type(diagcs_dsamp), dimension(2:MAX_DSAMP_LEV) :: dsamp !< Downsample control container
+
   !!@}
 
 ! Space for diagnostics is dynamically allocated as it is needed.
@@ -365,9 +365,9 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   endif
   id_zl_native = id_zl ; id_zi_native = id_zi
   ! Vertical axes for the interfaces and layers
-  call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, nz=1, &
+  call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, &
        v_cell_method='point', is_interface=.true.)
-  call define_axes_group(diag_cs, (/ id_zL /), diag_cs%axesZL, nz=1, &
+  call define_axes_group(diag_cs, (/ id_zL /), diag_cs%axesZL, &
        v_cell_method='mean', is_layer=.true.)
 
   ! Axis groupings for the model layers
@@ -412,7 +412,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
 
 
-  !Non-native Non-decimated
+  !Non-native Non-downsampled
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_cs%remap_axesZL(diag_cs%num_diag_coords))
     allocate(diag_cs%remap_axesTL(diag_cs%num_diag_coords))
@@ -498,14 +498,14 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
     endif
   enddo
 
-  !Define the decimated axes
-  call set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
-  
+  !Define the downsampled axes
+  call set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
+
   call diag_grid_storage_init(diag_CS%diag_grid_temp, G, diag_CS)
 
 end subroutine set_axes_info
 
-subroutine set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
+subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_native)
   type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file structure
@@ -515,89 +515,87 @@ subroutine set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
   integer :: i, j, k, nz, dl
-  real, dimension(:), pointer :: gridLonT_zap =>NULL() 
-  real, dimension(:), pointer :: gridLatT_zap =>NULL()
+  real, dimension(:), pointer :: gridLonT_dsamp =>NULL()
+  real, dimension(:), pointer :: gridLatT_dsamp =>NULL()
 
   id_zl = id_zl_native ; id_zi = id_zi_native
-  !Axes group for native decimated diagnostics
-  do dl=2,MAX_DECIM_LEV
-     if(dl .ne. 2) call MOM_error(FATAL, "set_axes_info_decim: Decimation level other than 2 is not supported yet!")
-     allocate(gridLonT_zap(diag_cs%decim(dl)%isg:diag_cs%decim(dl)%ieg))
-     allocate(gridLatT_zap(diag_cs%decim(dl)%jsg:diag_cs%decim(dl)%jeg))
+  !Axes group for native downsampled diagnostics
+  do dl=2,MAX_DSAMP_LEV
+     if(dl .ne. 2) call MOM_error(FATAL, "set_axes_info_dsamp: Downsample level other than 2 is not supported yet!")
+     allocate(gridLonT_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
+     allocate(gridLatT_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
 
-     do i=diag_cs%decim(dl)%isg,diag_cs%decim(dl)%ieg;  gridLonT_zap(i) = G%gridLonT(G%isg+dl*i-2); enddo
-     do j=diag_cs%decim(dl)%jsg,diag_cs%decim(dl)%jeg;  gridLatT_zap(j) = G%gridLatT(G%jsg+dl*j-2); enddo
+     do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonT_dsamp(i) = G%gridLonT(G%isg+dl*i-2); enddo
+     do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatT_dsamp(j) = G%gridLatT(G%jsg+dl*j-2); enddo
 
      if (G%symmetric) then
-        call MOM_error(FATAL, "set_axes_info_decim: Decimation of symmetric case is not supported yet!")
-     !   id_xq = diag_axis_init('xq', gridLonB_zap(G%isgB:G%iegB), G%x_axis_units, 'x', &
-     !             'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-     !   id_yq = diag_axis_init('yq', gridLatB_zap(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-     !             'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+        call MOM_error(FATAL, "set_axes_info_dsamp: Downsample of symmetric case is not supported yet!")
+     !   id_xq = diag_axis_init('xq', gridLonB_dsamp(G%isgB:G%iegB), G%x_axis_units, 'x', &
+     !             'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+     !   id_yq = diag_axis_init('yq', gridLatB_dsamp(G%jsgB:G%jegB), G%y_axis_units, 'y', &
+     !             'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
      else
-        id_xq = diag_axis_init('xq', gridLonT_zap, G%x_axis_units, 'x', &
-                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-        id_yq = diag_axis_init('yq', gridLatT_zap, G%y_axis_units, 'y', &
-                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+        id_xq = diag_axis_init('xq', gridLonT_dsamp, G%x_axis_units, 'x', &
+                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+        id_yq = diag_axis_init('yq', gridLatT_dsamp, G%y_axis_units, 'y', &
+                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
      endif
-     id_xh = diag_axis_init('xh', gridLonT_zap, G%x_axis_units, 'x', &
-          'h point nominal longitude', Domain2=G%Domain%mpp_domain_zap2)
-     id_yh = diag_axis_init('yh', gridLatT_zap, G%y_axis_units, 'y', &
-          'h point nominal latitude', Domain2=G%Domain%mpp_domain_zap2)
+     id_xh = diag_axis_init('xh', gridLonT_dsamp, G%x_axis_units, 'x', &
+          'h point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+     id_yh = diag_axis_init('yh', gridLatT_dsamp, G%y_axis_units, 'y', &
+          'h point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
 
-     deallocate(gridLonT_zap)
-     deallocate(gridLatT_zap)
+     deallocate(gridLonT_dsamp)
+     deallocate(gridLatT_dsamp)
 
      ! Axis groupings for the model layers
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%decim(dl)%axesTL, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%axesTL, dl, &
           x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
           is_h_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%decim(dl)%axesBL, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%dsamp(dl)%axesBL, dl, &
           x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
           is_q_point=.true., is_layer=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%decim(dl)%axesCuL, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%dsamp(dl)%axesCuL, dl, &
           x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
           is_u_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%decim(dl)%axesCvL, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%dsamp(dl)%axesCvL, dl, &
           x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
           is_v_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
 
      ! Axis groupings for the model interfaces
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%decim(dl)%axesTi, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%dsamp(dl)%axesTi, dl, &
           x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
           is_h_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%decim(dl)%axesBi, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%dsamp(dl)%axesBi, dl, &
           x_cell_method='point', y_cell_method='point', v_cell_method='point', &
           is_q_point=.true., is_interface=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%decim(dl)%axesCui, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%dsamp(dl)%axesCui, dl, &
           x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
           is_u_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%decim(dl)%axesCvi, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%dsamp(dl)%axesCvi, dl, &
           x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
           is_v_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
 
      ! Axis groupings for 2-D arrays
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yh /), diag_cs%decim(dl)%axesT1, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh /), diag_cs%dsamp(dl)%axesT1, dl, &
           x_cell_method='mean', y_cell_method='mean', is_h_point=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yq /), diag_cs%decim(dl)%axesB1, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq /), diag_cs%dsamp(dl)%axesB1, dl, &
           x_cell_method='point', y_cell_method='point', is_q_point=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xq, id_yh /), diag_cs%decim(dl)%axesCu1, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh /), diag_cs%dsamp(dl)%axesCu1, dl, &
           x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
-     call define_axes_group_decim(diag_cs, (/ id_xh, id_yq /), diag_cs%decim(dl)%axesCv1, dl, &
+     call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq /), diag_cs%dsamp(dl)%axesCv1, dl, &
           x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
      !Non-native axes
      if (diag_cs%num_diag_coords>0) then
-!        allocate(diag_cs%decim(dl)%remap_axesZL(diag_cs%num_diag_coords))
-!        allocate(diag_cs%decim(dl)%remap_axesZi(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesTL(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesBL(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesCuL(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesCvL(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesTi(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesBi(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesCui(diag_cs%num_diag_coords))
-        allocate(diag_cs%decim(dl)%remap_axesCvi(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesTL(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesBL(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesCuL(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesCvL(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesTi(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesBi(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesCui(diag_cs%num_diag_coords))
+        allocate(diag_cs%dsamp(dl)%remap_axesCvi(diag_cs%num_diag_coords))
      endif
 
      do i=1, diag_cs%num_diag_coords
@@ -612,13 +610,7 @@ subroutine set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
            call diag_remap_get_axes_info(diag_cs%diag_remap_cs(i), nz, id_zL, id_zi)
 
            ! Axes for z layers
-           !This should be the same as non-decimated one which should already be set
-!           call define_axes_group(diag_cs, (/ id_zL /), diag_cs%decim(dl)%remap_axesZL(i), &
-!                nz=nz, vertical_coordinate_number=i, &
-!                v_cell_method='mean', &
-!                is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
-
-           call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%decim(dl)%remap_axesTL(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%remap_axesTL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
                 is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
@@ -626,47 +618,43 @@ subroutine set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
 
            !! \note Remapping for B points is not yet implemented so needs_remapping is not
            !! provided for remap_axesBL
-           call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%decim(dl)%remap_axesBL(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%dsamp(dl)%remap_axesBL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
                 is_q_point=.true., is_layer=.true., is_native=.false.)
 
-           call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%decim(dl)%remap_axesCuL(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%dsamp(dl)%remap_axesCuL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
                 is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
                 xyave_axes=diag_cs%remap_axesZL(i))
 
-           call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%decim(dl)%remap_axesCvL(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%dsamp(dl)%remap_axesCvL(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
                 is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
                 xyave_axes=diag_cs%remap_axesZL(i))
 
            ! Axes for z interfaces
-!           call define_axes_group_decim(diag_cs, (/ id_zi /), diag_cs%decim(dl)%remap_axesZi(i),&
-!                nz=nz, vertical_coordinate_number=i, &
-!                v_cell_method='point', &
-!                is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true.)
-           call define_axes_group_decim(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%decim(dl)%remap_axesTi(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%dsamp(dl)%remap_axesTi(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
                 is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true., &
                 xyave_axes=diag_cs%remap_axesZi(i))
 
            !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
-           call define_axes_group_decim(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%decim(dl)%remap_axesBi(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%dsamp(dl)%remap_axesBi(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='point', v_cell_method='point', &
                 is_q_point=.true., is_interface=.true., is_native=.false.)
 
-           call define_axes_group_decim(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%decim(dl)%remap_axesCui(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%dsamp(dl)%remap_axesCui(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
                 is_u_point=.true., is_interface=.true., is_native=.false., &
                 needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
 
-           call define_axes_group_decim(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%decim(dl)%remap_axesCvi(i), dl, &
+           call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%dsamp(dl)%remap_axesCvi(i), dl, &
                 nz=nz, vertical_coordinate_number=i, &
                 x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
                 is_v_point=.true., is_interface=.true., is_native=.false., &
@@ -674,9 +662,9 @@ subroutine set_axes_info_decim(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
         endif
      enddo
   enddo
-  
-end subroutine set_axes_info_decim
- 
+
+end subroutine set_axes_info_dsamp
+
 
 !> set_masks_for_axes sets up the 2d and 3d masks for diagnostics using the current grid
 !! recorded after calling diag_update_remap_grids()
@@ -774,12 +762,12 @@ subroutine set_masks_for_axes(G, diag_cs)
     endif
   enddo
 
-  !Allocate and initialize the decimated masks for the axes
-  call set_masks_for_axes_decim(G, diag_cs)
-  
+  !Allocate and initialize the downsampled masks for the axes
+  call set_masks_for_axes_dsamp(G, diag_cs)
+
 end subroutine set_masks_for_axes
 
-subroutine set_masks_for_axes_decim(G, diag_cs)
+subroutine set_masks_for_axes_dsamp(G, diag_cs)
   type(ocean_grid_type), target, intent(in) :: G !< The ocean grid type.
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
                                                        !! used for diagnostics
@@ -788,47 +776,47 @@ subroutine set_masks_for_axes_decim(G, diag_cs)
   integer :: dl
   type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
 
-  !Each decimated axis needs both decimated and non-decimated mask
-  !The decimated mask is needed for sending out the diagnostics output via diag_manager
-  !The non-decimated mask is needed for decimating the diagnostics field 
-  do dl=2,MAX_DECIM_LEV
-     if(dl .ne. 2) call MOM_error(FATAL, "set_masks_for_axes_decim: Decimation level other than 2 is not supported yet!")
+  !Each downsampled axis needs both downsampled and non-downsampled mask
+  !The downsampled mask is needed for sending out the diagnostics output via diag_manager
+  !The non-downsampled mask is needed for downsampling the diagnostics field
+  do dl=2,MAX_DSAMP_LEV
+     if(dl .ne. 2) call MOM_error(FATAL, "set_masks_for_axes_dsamp: Downsample level other than 2 is not supported yet!")
      do c=1, diag_cs%num_diag_coords
         ! Level/layer h-points in diagnostic coordinate
         axes => diag_cs%remap_axesTL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTL(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesTL(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesTL(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Level/layer u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCuL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCuL(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesCul(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCuL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesCul(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Level/layer v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvL(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesCvL(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesCvL(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Level/layer q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBL(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBL(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesBL(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesBL(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface h-points in diagnostic coordinate (w-point)
         axes => diag_cs%remap_axesTi(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesTi(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesTi(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTi(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesTi(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCui(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCui(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesCui(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCui(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesCui(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvi(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesCvi(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesCvi(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvi(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesCvi(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBi(c)
-        call decimate_mask(axes%mask3d, diag_cs%decim(dl)%remap_axesBi(c)%decim(dl)%mask3d, dl)!set decimated mask
-        diag_cs%decim(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-decimated mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        diag_cs%dsamp(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-downsampled mask
      enddo
   enddo
-end subroutine set_masks_for_axes_decim
+end subroutine set_masks_for_axes_dsamp
 
 !> Attaches the id of cell areas to axes groups for use with cell_measures
 subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
@@ -1015,8 +1003,8 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
 
 end subroutine define_axes_group
 
-!> Defines a group of decimated "axes" from list of handles
-subroutine define_axes_group_decim(diag_cs, handles, axes, dl, nz, vertical_coordinate_number, &
+!> Defines a group of downsampled "axes" from list of handles
+subroutine define_axes_group_dsamp(diag_cs, handles, axes, dl, nz, vertical_coordinate_number, &
                              x_cell_method, y_cell_method, v_cell_method, &
                              is_h_point, is_q_point, is_u_point, is_v_point, &
                              is_layer, is_interface, &
@@ -1025,7 +1013,7 @@ subroutine define_axes_group_decim(diag_cs, handles, axes, dl, nz, vertical_coor
   type(diag_ctrl), target,    intent(in)  :: diag_cs !< Diagnostics control structure
   integer, dimension(:),      intent(in)  :: handles !< A list of 1D axis handles
   type(axes_grp),             intent(out) :: axes    !< The group of 1D axes
-  integer,                    intent(in)  :: dl      !< Decimation level
+  integer,                    intent(in)  :: dl      !< Downsample level
   integer,          optional, intent(in)  :: nz      !< Number of layers in this diagnostic grid
   integer,          optional, intent(in)  :: vertical_coordinate_number !< Index number for vertical coordinate
   character(len=*), optional, intent(in)  :: x_cell_method !< A x-direction cell method used to construct the
@@ -1087,7 +1075,7 @@ subroutine define_axes_group_decim(diag_cs, handles, axes, dl, nz, vertical_coor
   else
     axes%v_cell_method = ''
   endif
-  axes%decimation_level = dl
+  axes%downsample_level = dl
   if (present(nz)) axes%nz = nz
   if (present(vertical_coordinate_number)) axes%vertical_coordinate_number = vertical_coordinate_number
   if (present(is_h_point)) axes%is_h_point = is_h_point
@@ -1102,7 +1090,7 @@ subroutine define_axes_group_decim(diag_cs, handles, axes, dl, nz, vertical_coor
   if (present(xyave_axes)) axes%xyave_axes => xyave_axes
 
   ! Setup masks for this axes group
-  
+
   axes%mask2d => null()
   if (axes%rank==2) then
     if (axes%is_h_point) axes%mask2d => diag_cs%mask2dT
@@ -1127,31 +1115,31 @@ subroutine define_axes_group_decim(diag_cs, handles, axes, dl, nz, vertical_coor
     endif
   endif
 
-  axes%decim(dl)%mask2d => null()
+  axes%dsamp(dl)%mask2d => null()
   if (axes%rank==2) then
-    if (axes%is_h_point) axes%decim(dl)%mask2d => diag_cs%decim(dl)%mask2dT
-    if (axes%is_u_point) axes%decim(dl)%mask2d => diag_cs%decim(dl)%mask2dCu
-    if (axes%is_v_point) axes%decim(dl)%mask2d => diag_cs%decim(dl)%mask2dCv
-    if (axes%is_q_point) axes%decim(dl)%mask2d => diag_cs%decim(dl)%mask2dBu
+    if (axes%is_h_point) axes%dsamp(dl)%mask2d => diag_cs%dsamp(dl)%mask2dT
+    if (axes%is_u_point) axes%dsamp(dl)%mask2d => diag_cs%dsamp(dl)%mask2dCu
+    if (axes%is_v_point) axes%dsamp(dl)%mask2d => diag_cs%dsamp(dl)%mask2dCv
+    if (axes%is_q_point) axes%dsamp(dl)%mask2d => diag_cs%dsamp(dl)%mask2dBu
   endif
   ! A static 3d mask for non-native coordinates can only be setup when a grid is available
-  axes%decim(dl)%mask3d => null()
+  axes%dsamp(dl)%mask3d => null()
   if (axes%rank==3 .and. axes%is_native) then
     ! Native variables can/should use the native masks copied into diag_cs
     if (axes%is_layer) then
-      if (axes%is_h_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dTL
-      if (axes%is_u_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dCuL
-      if (axes%is_v_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dCvL
-      if (axes%is_q_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dBL
+      if (axes%is_h_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dTL
+      if (axes%is_u_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dCuL
+      if (axes%is_v_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dCvL
+      if (axes%is_q_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dBL
     elseif (axes%is_interface) then
-      if (axes%is_h_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dTi
-      if (axes%is_u_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dCui
-      if (axes%is_v_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dCvi
-      if (axes%is_q_point) axes%decim(dl)%mask3d => diag_cs%decim(dl)%mask3dBi
+      if (axes%is_h_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dTi
+      if (axes%is_u_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dCui
+      if (axes%is_v_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dCvi
+      if (axes%is_q_point) axes%dsamp(dl)%mask3d => diag_cs%dsamp(dl)%mask3dBi
     endif
   endif
-  
-end subroutine define_axes_group_decim
+
+end subroutine define_axes_group_dsamp
 
 !> Set up the array extents for doing diagnostics
 subroutine set_diag_mediator_grid(G, diag_cs)
@@ -1285,14 +1273,14 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
 
   ! Local variables
-  real, dimension(:,:), pointer :: locfield 
+  real, dimension(:,:), pointer :: locfield
   real, dimension(:,:), pointer :: locmask
   character(len=300) :: mesg
   logical :: used, is_stat
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, i, j, chksum
-  real, dimension(:,:), allocatable, target :: locfield_decim
-  real, dimension(:,:), allocatable, target :: locmask_decim
+  real, dimension(:,:), allocatable, target :: locfield_dsamp
+  real, dimension(:,:), allocatable, target :: locmask_dsamp
   integer :: dl
 
   locfield => NULL()
@@ -1353,21 +1341,21 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   if (present(mask)) then
      locmask => mask
   elseif(.NOT. is_stat) then
-     if(associated(diag%axes%mask2d)) locmask => diag%axes%mask2d 
-  endif   
+     if(associated(diag%axes%mask2d)) locmask => diag%axes%mask2d
+  endif
 
   dl=1
-  if(.NOT. is_stat) dl = diag%axes%decimation_level !static field decimation i not supported yet
-  !Decimate the diag field and mask (if present)
+  if(.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
+  !Downsample the diag field and mask (if present)
   if (dl > 1) then
-     call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+     call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
-     locfield => locfield_decim
+     locfield => locfield_dsamp
      if (present(mask)) then
-        call decimate_mask(locmask, locmask_decim, dl)
-        locmask => locmask_decim
-     elseif(associated(diag%axes%decim(dl)%mask2d)) then
-        locmask => diag%axes%decim(dl)%mask2d 
+        call downsample_mask(locmask, locmask_dsamp, dl)
+        locmask => locmask_dsamp
+     elseif(associated(diag%axes%dsamp(dl)%mask2d)) then
+        locmask => diag%axes%dsamp(dl)%mask2d
      endif
   endif
 
@@ -1547,8 +1535,8 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
   integer :: chksum
-  real, dimension(:,:,:), allocatable, target :: locfield_decim
-  real, dimension(:,:,:), allocatable, target :: locmask_decim
+  real, dimension(:,:,:), allocatable, target :: locfield_dsamp
+  real, dimension(:,:,:), allocatable, target :: locmask_dsamp
   integer :: isl,iel,jsl,jel,dl
 
   locfield => NULL()
@@ -1626,22 +1614,22 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   if (present(mask)) then
      locmask => mask
   elseif(associated(diag%axes%mask3d)) then
-     locmask => diag%axes%mask3d 
+     locmask => diag%axes%mask3d
   endif
 
   dl=1
-  if(.NOT. is_stat) dl = diag%axes%decimation_level !static field decimation i not supported yet
-  !Decimate the diag field and mask (if present)
+  if(.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
+  !Downsample the diag field and mask (if present)
   if (dl > 1) then
-     call decimate_diag_field(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+     call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
-     locfield => locfield_decim
+     locfield => locfield_dsamp
      if (present(mask)) then
-        call decimate_mask(locmask, locmask_decim, dl)
-        locmask => locmask_decim
-      elseif(associated(diag%axes%decim(dl)%mask3d)) then
-        locmask => diag%axes%decim(dl)%mask3d 
-     endif     
+        call downsample_mask(locmask, locmask_dsamp, dl)
+        locmask => locmask_dsamp
+      elseif(associated(diag%axes%dsamp(dl)%mask3d)) then
+        locmask => diag%axes%dsamp(dl)%mask3d
+     endif
   endif
 
   if (diag%fms_diag_id>0) then
@@ -1837,7 +1825,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
   diag_cs => axes%diag_cs
   dm_id = -1
- 
+
   if (axes_in%id == diag_cs%axesTL%id) then
      axes => diag_cs%axesTL
   elseif (axes_in%id == diag_cs%axesBL%id) then
@@ -1915,42 +1903,42 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     endif ! axes%rank == 3
   enddo ! i
 
-  !Register decimated diagnostics
-  do dl=2,MAX_DECIM_LEV
+  !Register downsampled diagnostics
+  do dl=2,MAX_DSAMP_LEV
      new_module_name = trim(module_name)//'_d2'
 
      if (axes_in%rank == 3 .or. axes_in%rank == 2 ) then
         axes => null()
         if (axes_in%id == diag_cs%axesTL%id) then
-           axes => diag_cs%decim(dl)%axesTL
+           axes => diag_cs%dsamp(dl)%axesTL
         elseif (axes_in%id == diag_cs%axesBL%id) then
-           axes => diag_cs%decim(dl)%axesBL
+           axes => diag_cs%dsamp(dl)%axesBL
         elseif (axes_in%id == diag_cs%axesCuL%id ) then
-           axes => diag_cs%decim(dl)%axesCuL
+           axes => diag_cs%dsamp(dl)%axesCuL
         elseif (axes_in%id == diag_cs%axesCvL%id) then
-           axes => diag_cs%decim(dl)%axesCvL
+           axes => diag_cs%dsamp(dl)%axesCvL
         elseif (axes_in%id == diag_cs%axesTi%id) then
-           axes => diag_cs%decim(dl)%axesTi
+           axes => diag_cs%dsamp(dl)%axesTi
         elseif (axes_in%id == diag_cs%axesBi%id) then
-           axes => diag_cs%decim(dl)%axesBi
+           axes => diag_cs%dsamp(dl)%axesBi
         elseif (axes_in%id == diag_cs%axesCui%id ) then
-           axes => diag_cs%decim(dl)%axesCui
+           axes => diag_cs%dsamp(dl)%axesCui
         elseif (axes_in%id == diag_cs%axesCvi%id) then
-           axes => diag_cs%decim(dl)%axesCvi
+           axes => diag_cs%dsamp(dl)%axesCvi
         elseif (axes_in%id == diag_cs%axesT1%id) then
-           axes => diag_cs%decim(dl)%axesT1
+           axes => diag_cs%dsamp(dl)%axesT1
         elseif (axes_in%id == diag_cs%axesB1%id) then
-           axes => diag_cs%decim(dl)%axesB1
+           axes => diag_cs%dsamp(dl)%axesB1
         elseif (axes_in%id == diag_cs%axesCu1%id ) then
-           axes => diag_cs%decim(dl)%axesCu1
+           axes => diag_cs%dsamp(dl)%axesCu1
         elseif (axes_in%id == diag_cs%axesCv1%id) then
-           axes => diag_cs%decim(dl)%axesCv1
+           axes => diag_cs%dsamp(dl)%axesCv1
         else
            !Niki: Should we worry about these, e.g., diag_to_Z_CS?
            call MOM_error(WARNING,"register_diag_field: Could not find a proper axes for " &
                 //trim( new_module_name)//"-"//trim(field_name))
         endif
-     endif 
+     endif
      ! Register the native diagnostic
      if (associated(axes)) then
      active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes, &
@@ -1973,21 +1961,21 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
         if (axes_in%rank == 3) then
            remap_axes => null()
            if ((axes_in%id == diag_cs%axesTL%id)) then
-              remap_axes => diag_cs%decim(dl)%remap_axesTL(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesTL(i)
            elseif (axes_in%id == diag_cs%axesBL%id) then
-              remap_axes => diag_cs%decim(dl)%remap_axesBL(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesBL(i)
            elseif (axes_in%id == diag_cs%axesCuL%id ) then
-              remap_axes => diag_cs%decim(dl)%remap_axesCuL(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesCuL(i)
            elseif (axes_in%id == diag_cs%axesCvL%id) then
-              remap_axes => diag_cs%decim(dl)%remap_axesCvL(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesCvL(i)
            elseif (axes_in%id == diag_cs%axesTi%id) then
-              remap_axes => diag_cs%decim(dl)%remap_axesTi(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesTi(i)
            elseif (axes_in%id == diag_cs%axesBi%id) then
-              remap_axes => diag_cs%decim(dl)%remap_axesBi(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesBi(i)
            elseif (axes_in%id == diag_cs%axesCui%id ) then
-              remap_axes => diag_cs%decim(dl)%remap_axesCui(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesCui(i)
            elseif (axes_in%id == diag_cs%axesCvi%id) then
-              remap_axes => diag_cs%decim(dl)%remap_axesCvi(i)
+              remap_axes => diag_cs%dsamp(dl)%remap_axesCvi(i)
            endif
 
            ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
@@ -2326,14 +2314,14 @@ subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_metho
                                                          !! (vertically integrated). Default/absent for intensive.
   integer :: xyz_method
   character(len=9) :: mstr
-  
+
   !This is a simple way to encode the cell method information made from 3 strings
   !(x_cell_method,y_cell_method,v_cell_method) in a 3 digit integer xyz
   !x_cell_method,y_cell_method,v_cell_method can each be 'point' or 'sum' or 'mean'
   !We can encode these with setting  0 for 'point', 1 for 'sum, 2 for 'mean' in
   !the 100s position for x, 10s position for y, 1s position for z
   !E.g., x:sum,y:point,z:mean is 102
-  
+
   xyz_method = 0
 
   mstr = diag%axes%v_cell_method
@@ -2344,7 +2332,7 @@ subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_metho
         mstr='sum'
      else
         mstr='mean'
-     endif       
+     endif
   elseif (present(v_cell_method)) then
      mstr = v_cell_method
   endif
@@ -2353,7 +2341,7 @@ subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_metho
   elseif (trim(mstr)=='mean') then
      xyz_method = xyz_method + 2
   endif
-  
+
   mstr = diag%axes%y_cell_method
   if (present(y_cell_method)) mstr = y_cell_method
   if (trim(mstr)=='sum') then
@@ -2361,7 +2349,7 @@ subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_metho
   elseif (trim(mstr)=='mean') then
      xyz_method = xyz_method + 20
   endif
-  
+
   mstr = diag%axes%x_cell_method
   if (present(x_cell_method)) mstr = x_cell_method
   if (trim(mstr)=='sum') then
@@ -2935,14 +2923,14 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied
   diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
 
-  !Decimation indices for dl=2 (should be generalized to arbitrary dl, perhaps via a G array)
-  diag_cs%decim(2)%isc = G%isc_zap2 - (G%isd_zap2-1) ; diag_cs%decim(2)%iec = G%iec_zap2 - (G%isd_zap2-1)
-  diag_cs%decim(2)%jsc = G%jsc_zap2 - (G%jsd_zap2-1) ; diag_cs%decim(2)%jec = G%jec_zap2 - (G%jsd_zap2-1)
-  diag_cs%decim(2)%isd = G%isd_zap2 ; diag_cs%decim(2)%ied = G%ied_zap2
-  diag_cs%decim(2)%jsd = G%jsd_zap2 ; diag_cs%decim(2)%jed = G%jed_zap2
-  diag_cs%decim(2)%isg = G%isg_zap2 ; diag_cs%decim(2)%ieg = G%ieg_zap2
-  diag_cs%decim(2)%jsg = G%jsg_zap2 ; diag_cs%decim(2)%jeg = G%jeg_zap2
-  
+  !Downsample indices for dl=2 (should be generalized to arbitrary dl, perhaps via a G array)
+  diag_cs%dsamp(2)%isc = G%HId2%isc - (G%HId2%isd-1) ; diag_cs%dsamp(2)%iec = G%HId2%iec - (G%HId2%isd-1)
+  diag_cs%dsamp(2)%jsc = G%HId2%jsc - (G%HId2%jsd-1) ; diag_cs%dsamp(2)%jec = G%HId2%jec - (G%HId2%jsd-1)
+  diag_cs%dsamp(2)%isd = G%HId2%isd ; diag_cs%dsamp(2)%ied = G%HId2%ied
+  diag_cs%dsamp(2)%jsd = G%HId2%jsd ; diag_cs%dsamp(2)%jed = G%HId2%jed
+  diag_cs%dsamp(2)%isg = G%HId2%isg ; diag_cs%dsamp(2)%ieg = G%HId2%ieg
+  diag_cs%dsamp(2)%jsg = G%HId2%jsg ; diag_cs%dsamp(2)%jeg = G%HId2%jeg
+
   ! Initialze available diagnostic log file
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit < 0)) then
     write(this_pe,'(i6.6)') PE_here()
@@ -3133,8 +3121,8 @@ subroutine diag_masks_set(G, nz, diag_cs)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
 
-  !Allocate and initialize the decimated masks
-  call decimate_diag_masks_set(G, nz, diag_cs)  
+  !Allocate and initialize the downsampled masks
+  call downsample_diag_masks_set(G, nz, diag_cs)
 
 end subroutine diag_masks_set
 
@@ -3183,19 +3171,19 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   deallocate(diag_cs%mask3dBi)
   deallocate(diag_cs%mask3dCui)
   deallocate(diag_cs%mask3dCvi)
-  do i=2,MAX_DECIM_LEV
-     deallocate(diag_cs%decim(i)%mask2dT)
-     deallocate(diag_cs%decim(i)%mask2dBu)
-     deallocate(diag_cs%decim(i)%mask2dCu)
-     deallocate(diag_cs%decim(i)%mask2dCv)
-     deallocate(diag_cs%decim(i)%mask3dTL)
-     deallocate(diag_cs%decim(i)%mask3dBL)
-     deallocate(diag_cs%decim(i)%mask3dCuL)
-     deallocate(diag_cs%decim(i)%mask3dCvL)
-     deallocate(diag_cs%decim(i)%mask3dTi)
-     deallocate(diag_cs%decim(i)%mask3dBi)
-     deallocate(diag_cs%decim(i)%mask3dCui)
-     deallocate(diag_cs%decim(i)%mask3dCvi)
+  do i=2,MAX_DSAMP_LEV
+     deallocate(diag_cs%dsamp(i)%mask2dT)
+     deallocate(diag_cs%dsamp(i)%mask2dBu)
+     deallocate(diag_cs%dsamp(i)%mask2dCu)
+     deallocate(diag_cs%dsamp(i)%mask2dCv)
+     deallocate(diag_cs%dsamp(i)%mask3dTL)
+     deallocate(diag_cs%dsamp(i)%mask3dBL)
+     deallocate(diag_cs%dsamp(i)%mask3dCuL)
+     deallocate(diag_cs%dsamp(i)%mask3dCvL)
+     deallocate(diag_cs%dsamp(i)%mask3dTi)
+     deallocate(diag_cs%dsamp(i)%mask3dBi)
+     deallocate(diag_cs%dsamp(i)%mask3dCui)
+     deallocate(diag_cs%dsamp(i)%mask3dCvi)
   enddo
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
@@ -3453,9 +3441,9 @@ subroutine diag_grid_storage_end(grid_storage)
   deallocate(grid_storage%diag_grids)
 end subroutine diag_grid_storage_end
 
-!< Allocate and initialize the masks for decimated diagostics in diag_cs
-!! The decimated masks in the axes would later "point" to these. 
-subroutine decimate_diag_masks_set(G, nz, diag_cs)
+!< Allocate and initialize the masks for downsampled diagostics in diag_cs
+!! The downsampled masks in the axes would later "point" to these.
+subroutine downsample_diag_masks_set(G, nz, diag_cs)
   type(ocean_grid_type), target, intent(in) :: G  !< The ocean grid type.
   integer,                       intent(in) :: nz !< The number of layers in the model's native grid.
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
@@ -3464,50 +3452,50 @@ subroutine decimate_diag_masks_set(G, nz, diag_cs)
   integer :: i,j,k,ii,jj,dl
 
 !print*,'original c extents ',G%isc,G%iec,G%jsc,G%jec
-!print*,'coarse   c extents ',G%isc_zap2,G%iec_zap2,G%jsc_zap2,G%jec_zap2
+!print*,'coarse   c extents ',G%HId2%isc,G%HId2%iec,G%HId2%jsc,G%HId2%jec
 !print*,'original d extents ',G%isd,G%ied,G%jsd,G%jed
-!print*,'coarse   d extents ',G%isd_zap2,G%ied_zap2,G%jsd_zap2,G%jed_zap2
+!print*,'coarse   d extents ',G%HId2%isd,G%HId2%ied,G%HId2%jsd,G%HId2%jed
 ! original c extents            5          52           5          52
 ! coarse   c extents            3          26           3          26
 ! original d extents            1          56           1          56
 ! coarse   d extents            1          28           1          28
-  
-  do dl=2,MAX_DECIM_LEV 
+
+  do dl=2,MAX_DSAMP_LEV
      ! 2d masks
-     call decimate_mask(G%mask2dT, diag_cs%decim(dl)%mask2dT, dl)
-     call decimate_mask(G%mask2dBu,diag_cs%decim(dl)%mask2dBu, dl)
-     call decimate_mask(G%mask2dCu,diag_cs%decim(dl)%mask2dCu, dl)
-     call decimate_mask(G%mask2dCv,diag_cs%decim(dl)%mask2dCv, dl)
+     call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT, dl)
+     call downsample_mask(G%mask2dBu,diag_cs%dsamp(dl)%mask2dBu, dl)
+     call downsample_mask(G%mask2dCu,diag_cs%dsamp(dl)%mask2dCu, dl)
+     call downsample_mask(G%mask2dCv,diag_cs%dsamp(dl)%mask2dCv, dl)
      ! 3d native masks are needed by diag_manager but the native variables
      ! can only be masked 2d - for ocean points, all layers exists.
-     allocate(diag_cs%decim(dl)%mask3dTL(G%isd_zap2:G%ied_zap2,G%jsd_zap2:G%jed_zap2,1:nz))
-     allocate(diag_cs%decim(dl)%mask3dBL(G%IsdB_zap2:G%IedB_zap2,G%JsdB_zap2:G%JedB_zap2,1:nz))
-     allocate(diag_cs%decim(dl)%mask3dCuL(G%IsdB_zap2:G%IedB_zap2,G%jsd_zap2:G%jed_zap2,1:nz))
-     allocate(diag_cs%decim(dl)%mask3dCvL(G%isd_zap2:G%ied_zap2,G%JsdB_zap2:G%JedB_zap2,1:nz))
+     allocate(diag_cs%dsamp(dl)%mask3dTL(G%HId2%isd:G%HId2%ied,G%HId2%jsd:G%HId2%jed,1:nz))
+     allocate(diag_cs%dsamp(dl)%mask3dBL(G%HId2%IsdB:G%HId2%IedB,G%HId2%JsdB:G%HId2%JedB,1:nz))
+     allocate(diag_cs%dsamp(dl)%mask3dCuL(G%HId2%IsdB:G%HId2%IedB,G%HId2%jsd:G%HId2%jed,1:nz))
+     allocate(diag_cs%dsamp(dl)%mask3dCvL(G%HId2%isd:G%HId2%ied,G%HId2%JsdB:G%HId2%JedB,1:nz))
      do k=1,nz
-        diag_cs%decim(dl)%mask3dTL(:,:,k) = diag_cs%decim(dl)%mask2dT(:,:)
-        diag_cs%decim(dl)%mask3dBL(:,:,k) = diag_cs%decim(dl)%mask2dBu(:,:)
-        diag_cs%decim(dl)%mask3dCuL(:,:,k) = diag_cs%decim(dl)%mask2dCu(:,:)
-        diag_cs%decim(dl)%mask3dCvL(:,:,k) = diag_cs%decim(dl)%mask2dCv(:,:)
+        diag_cs%dsamp(dl)%mask3dTL(:,:,k) = diag_cs%dsamp(dl)%mask2dT(:,:)
+        diag_cs%dsamp(dl)%mask3dBL(:,:,k) = diag_cs%dsamp(dl)%mask2dBu(:,:)
+        diag_cs%dsamp(dl)%mask3dCuL(:,:,k) = diag_cs%dsamp(dl)%mask2dCu(:,:)
+        diag_cs%dsamp(dl)%mask3dCvL(:,:,k) = diag_cs%dsamp(dl)%mask2dCv(:,:)
      enddo
-     allocate(diag_cs%decim(dl)%mask3dTi(G%isd_zap2:G%ied_zap2,G%jsd_zap2:G%jed_zap2,1:nz+1))
-     allocate(diag_cs%decim(dl)%mask3dBi(G%IsdB_zap2:G%IedB_zap2,G%JsdB_zap2:G%JedB_zap2,1:nz+1))
-     allocate(diag_cs%decim(dl)%mask3dCui(G%IsdB_zap2:G%IedB_zap2,G%jsd_zap2:G%jed_zap2,1:nz+1))
-     allocate(diag_cs%decim(dl)%mask3dCvi(G%isd_zap2:G%ied_zap2,G%JsdB_zap2:G%JedB_zap2,1:nz+1))
+     allocate(diag_cs%dsamp(dl)%mask3dTi(G%HId2%isd:G%HId2%ied,G%HId2%jsd:G%HId2%jed,1:nz+1))
+     allocate(diag_cs%dsamp(dl)%mask3dBi(G%HId2%IsdB:G%HId2%IedB,G%HId2%JsdB:G%HId2%JedB,1:nz+1))
+     allocate(diag_cs%dsamp(dl)%mask3dCui(G%HId2%IsdB:G%HId2%IedB,G%HId2%jsd:G%HId2%jed,1:nz+1))
+     allocate(diag_cs%dsamp(dl)%mask3dCvi(G%HId2%isd:G%HId2%ied,G%HId2%JsdB:G%HId2%JedB,1:nz+1))
      do k=1,nz+1
-        diag_cs%decim(dl)%mask3dTi(:,:,k) = diag_cs%decim(dl)%mask2dT(:,:)
-        diag_cs%decim(dl)%mask3dBi(:,:,k) = diag_cs%decim(dl)%mask2dBu(:,:)
-        diag_cs%decim(dl)%mask3dCui(:,:,k) = diag_cs%decim(dl)%mask2dCu(:,:)
-        diag_cs%decim(dl)%mask3dCvi(:,:,k) = diag_cs%decim(dl)%mask2dCv(:,:)
+        diag_cs%dsamp(dl)%mask3dTi(:,:,k) = diag_cs%dsamp(dl)%mask2dT(:,:)
+        diag_cs%dsamp(dl)%mask3dBi(:,:,k) = diag_cs%dsamp(dl)%mask2dBu(:,:)
+        diag_cs%dsamp(dl)%mask3dCui(:,:,k) = diag_cs%dsamp(dl)%mask2dCu(:,:)
+        diag_cs%dsamp(dl)%mask3dCvi(:,:,k) = diag_cs%dsamp(dl)%mask2dCv(:,:)
      enddo
   enddo
-end subroutine decimate_diag_masks_set
+end subroutine downsample_diag_masks_set
 
-!> Get the diagnostics-compute indices (to be passed to send_data) based on the shape of 
-!! the diag field (the same way they are deduced for non-decimated fields)
-subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
+!> Get the diagnostics-compute indices (to be passed to send_data) based on the shape of
+!! the diag field (the same way they are deduced for non-downsampled fields)
+subroutine downsample_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   integer,           intent(in) :: f1,f2   !< the sizes of the diag field in x and y
-  integer,           intent(in) :: dl      !< integer decimation level
+  integer,           intent(in) :: dl      !< integer downsample level
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   integer,           intent(out) ::isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   ! Local variables
@@ -3515,71 +3503,71 @@ subroutine decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
   character(len=500) :: mesg
   logical, save :: first_check = .true.
 
-  !Check ONCE that the decimated diag-compute domain is commensurate with the original non-decimated diag-compute domain
-  !This is a major limitation of the current implementation of the decimated diagnostics.
-  !We assume that the compute domain can be subdivided to dl*dl cells, hence avoiding the need of halo updates. 
-  !We want this check to error out only if there was a decimated diagnostics requested and about to post that is
+  !Check ONCE that the downsampled diag-compute domain is commensurate with the original non-downsampled diag-compute domain
+  !This is a major limitation of the current implementation of the downsampled diagnostics.
+  !We assume that the compute domain can be subdivided to dl*dl cells, hence avoiding the need of halo updates.
+  !We want this check to error out only if there was a downsampled diagnostics requested and about to post that is
   !why the check is here and not in the init routines. This check need to be done only once, hence the outer if statement
   if(first_check) then
      if(mod(diag_cs%ie-diag_cs%is+1, dl) .ne. 0 .OR. mod(diag_cs%je-diag_cs%js+1, dl) .ne. 0) then
-        write (mesg,*) "Non-commensurate decimated domain is not supported. "//&
+        write (mesg,*) "Non-commensurate downsampled domain is not supported. "//&
              "Please choose a layout such that NIGLOBAL/Layout_X and NJGLOBAL/Layout_Y are both divisible by dl=",dl, " Current domain extents: ",&
              diag_cs%is,diag_cs%ie, diag_cs%js,diag_cs%je
-        call MOM_error(FATAL,"decimate_diag_indices_get: "//trim(mesg))
+        call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
      endif
      first_check = .false.
   endif
-  
-  cszi = diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc +1 ; dszi = diag_cs%decim(dl)%ied-diag_cs%decim(dl)%isd +1
-  cszj = diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc +1 ; dszj = diag_cs%decim(dl)%jed-diag_cs%decim(dl)%jsd +1
 
-  isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec
-  jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec
+  cszi = diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc +1 ; dszi = diag_cs%dsamp(dl)%ied-diag_cs%dsamp(dl)%isd +1
+  cszj = diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc +1 ; dszj = diag_cs%dsamp(dl)%jed-diag_cs%dsamp(dl)%jsd +1
+
+  isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec
+  jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec
 
   if ( f1 == dszi ) then
-     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec    ! field on Data domain, take compute domain indcies
-  !The rest is not taken with the full MOM6 diag_table   
+     isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec    ! field on Data domain, take compute domain indcies
+  !The rest is not taken with the full MOM6 diag_table
   elseif ( f1 == dszi + 1 ) then
-     isv = diag_cs%decim(dl)%isc ; iev = diag_cs%decim(dl)%iec+1   ! Symmetric data domain
+     isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec+1   ! Symmetric data domain
   elseif ( f1 == cszi) then
-     isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +1  ! Computational domain
+     isv = 1 ; iev = (diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc) +1  ! Computational domain
   elseif ( f1 == cszi + 1 ) then
-     isv = 1 ; iev = (diag_cs%decim(dl)%iec-diag_cs%decim(dl)%isc) +2  ! Symmetric computational domain
+     isv = 1 ; iev = (diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc) +2  ! Symmetric computational domain
   else
      write (mesg,*) " peculiar size ",f1," in i-direction\n"//&
           "does not match one of ", cszi, cszi+1, dszi, dszi+1
-     call MOM_error(FATAL,"decimate_diag_indices_get: "//trim(mesg))
+     call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
   endif
   if ( f2 == dszj ) then
-     jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec     ! Data domain
+     jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec     ! Data domain
   elseif ( f2 == dszj + 1 ) then
-     jsv = diag_cs%decim(dl)%jsc ; jev = diag_cs%decim(dl)%jec+1   ! Symmetric data domain
+     jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec+1   ! Symmetric data domain
   elseif ( f2 == cszj) then
-     jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +1  ! Computational domain
+     jsv = 1 ; jev = (diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc) +1  ! Computational domain
   elseif ( f2 == cszj + 1 ) then
-     jsv = 1 ; jev = (diag_cs%decim(dl)%jec-diag_cs%decim(dl)%jsc) +2  ! Symmetric computational domain
+     jsv = 1 ; jev = (diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc) +2  ! Symmetric computational domain
   else
      write (mesg,*) " peculiar size ",f2," in j-direction\n"//&
           "does not match one of ", cszj, cszj+1, dszj, dszj+1
-     call MOM_error(FATAL,"decimate_diag_indices_get: "//trim(mesg))
+     call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
   endif
-end subroutine decimate_diag_indices_get
+end subroutine downsample_diag_indices_get
 
-!> This subroutine allocates and computes a decimated array from an input array 
-!! It also determines the diagnostics-compurte indices for the decimated array
-!! 3d interface 
-subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+!> This subroutine allocates and computes a downsampled array from an input array
+!! It also determines the diagnostics-compurte indices for the downsampled array
+!! 3d interface
+subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
   real, dimension(:,:,:), pointer :: locfield  !< input array pointer
-  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_decim !< output (decimated) array
+  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_dsamp !< output (downsampled) array
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
-  integer, intent(in) :: dl !< integer decimation level
+  integer, intent(in) :: dl !< integer downsample level
   integer, intent(inout):: isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
   !locals
-  real, dimension(:,:,:), pointer :: locmask  
+  real, dimension(:,:,:), pointer :: locmask
   integer :: f1,f2,isv_o,jsv_o
-  
+
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
@@ -3587,37 +3575,37 @@ subroutine decimate_diag_field_3d(locfield, locfield_decim, dl, diag_cs, diag,is
   f2=size(locfield,2)/dl
   !Save the extents of the original (fine) domain
   isv_o=isv;jsv_o=jsv
-  !Get the shape of the decimated field and overwrite isv,iev,jsv,jev with them
-  call decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
-  !Set the non-decimated mask, it must be associated and initialized
+  !Get the shape of the downsampled field and overwrite isv,iev,jsv,jev with them
+  call downsample_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
+  !Set the non-downsampled mask, it must be associated and initialized
   if (present(mask)) then
      locmask => mask
   elseif (associated(diag%axes%mask3d)) then
      locmask => diag%axes%mask3d
   else
-     call MOM_error(FATAL, "decimate_diag_field_3d: Cannot decimate without a mask!!! ")
+     call MOM_error(FATAL, "downsample_diag_field_3d: Cannot downsample without a mask!!! ")
   endif
-  
-  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs, diag, &
-                      isv_o,jsv_o,isv,iev,jsv,jev)
-  
-end subroutine decimate_diag_field_3d
 
-!> This subroutine allocates and computes a decimated array from an input array 
-!! It also determines the diagnostics-compurte indices for the decimated array
-!! 2d interface 
-subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
+  call downsample_field(locfield, locfield_dsamp, dl, diag%xyz_method, locmask, diag_cs, diag, &
+                      isv_o,jsv_o,isv,iev,jsv,jev)
+
+end subroutine downsample_diag_field_3d
+
+!> This subroutine allocates and computes a downsampled array from an input array
+!! It also determines the diagnostics-compurte indices for the downsampled array
+!! 2d interface
+subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
   real, dimension(:,:), pointer :: locfield !< input array pointer
-  real, dimension(:,:), allocatable, intent(inout) :: locfield_decim !< output (decimated) array
+  real, dimension(:,:), allocatable, intent(inout) :: locfield_dsamp !< output (downsampled) array
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
-  integer, intent(in) :: dl !< integer decimation level
+  integer, intent(in) :: dl !< integer downsample level
   integer, intent(out):: isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
   !locals
-  real, dimension(:,:), pointer :: locmask  
+  real, dimension(:,:), pointer :: locmask
   integer :: f1,f2,isv_o,jsv_o
-  
+
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
@@ -3625,56 +3613,56 @@ subroutine decimate_diag_field_2d(locfield, locfield_decim, dl, diag_cs, diag,is
   f2=size(locfield,2)/dl
   !Save the extents of the original (fine) domain
   isv_o=isv;jsv_o=jsv
-  !Get the shape of the decimated field and overwrite isv,iev,jsv,jev with them
-  call decimate_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
-  !Set the non-decimated mask, it must be associated and initialized
+  !Get the shape of the downsampled field and overwrite isv,iev,jsv,jev with them
+  call downsample_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
+  !Set the non-downsampled mask, it must be associated and initialized
   if (present(mask)) then
      locmask => mask
   elseif (associated(diag%axes%mask2d)) then
      locmask => diag%axes%mask2d
   else
-     call MOM_error(FATAL, "decimate_diag_field_2d: Cannot decimate without a mask!!! ")
+     call MOM_error(FATAL, "downsample_diag_field_2d: Cannot downsample without a mask!!! ")
   endif
-  
-  call decimate_field(locfield, locfield_decim, dl, diag%xyz_method, locmask, diag_cs,diag, &
-                      isv_o,jsv_o,isv,iev,jsv,jev)
-  
-end subroutine decimate_diag_field_2d
 
-!> The decimation algorithm
-!! The decimation method could be deduced (before send_data call)
+  call downsample_field(locfield, locfield_dsamp, dl, diag%xyz_method, locmask, diag_cs,diag, &
+                      isv_o,jsv_o,isv,iev,jsv,jev)
+
+end subroutine downsample_diag_field_2d
+
+!> The downsample algorithm
+!! The downsample method could be deduced (before send_data call)
 !!  from the diag%x_cell_method, diag%y_cell_method and diag%v_cell_method
-!! 
-!! This is the summary of the decimation algoritm for a diagnostic field f:
+!!
+!! This is the summary of the downsample algoritm for a diagnostic field f:
 !!  f(Id,Jd) = \sum_{i,j} f(Id+i,Jd+j) * weight(Id+i,Jd+j) / [ \sum_{i,j} weight(Id+i,Jd+j)]
-!!     i and j run from 0 to dl-1 (dl being the decimation level)
-!!     Id,Jd are the decimated (coarse grid) indices run over the coarsened compute grid,    
+!!     i and j run from 0 to dl-1 (dl being the downsample level)
+!!     Id,Jd are the downsampled (coarse grid) indices run over the coarsened compute grid,
 !!     if and jf are the original (fine grid) indices
 !!
-!!example   x_cell y_cell v_cell algorithm_id    impemented weight(if,jf)            
+!!example   x_cell y_cell v_cell algorithm_id    impemented weight(if,jf)
 !!---------------------------------------------------------------------------------------
-!!theta     mean   mean   mean   MMM =222        G%areaT(if,jf)*h(if,jf)             
-!!u         point  mean   mean   PMM =022        dyCu(if,jf)*h(if,jf)*delta(if,Id)     
-!!?         point  sum    mean   PSM =012        dyCu(if,jf)*h(if,jf)*delta(if,Id)   right?   
-!!v         mean   point  mean   MPM =202        dxCv(if,jf)*h(if,jf)*delta(jf,Jd)   
-!!volcello  sum    sum    sum    SSS =111        1                                   
-!!T_dfxy_co sum    sum    point  SSP =110        1                                   right? T_dfxy_cont_tendency_2d
-!!umo       point  sum    sum    PSS =011        1*delta(if,Id)                      
-!!vmo       sum    point  sum    SPS =101        1*delta(jf,Jd)                      
-!!umo_2d    point  sum    point  PSP =010        1*delta(if,Id)                      right?
-!!vmo_2d    sum    point  point  SPP =100        1*delta(jf,Jd)                      right?
-!!?         point  mean   point  PMP =020        dyCu(if,jf)*delta(if,Id)            right?
-!!?         mean   point  point  MPP =200        dxCv(if,jf)*delta(jf,Jd)            right?
-!!w         mean   mean   point  MMP =220        G%areaT(if,jf)                                       
-!!h*theta   mean   mean   sum    MMS =221        G%areaT(if,jf)                      right?
+!!theta     mean   mean   mean   MMM =222        G%areaT(if,jf)*h(if,jf)
+!!u         point  mean   mean   PMM =022        dyCu(if,jf)*h(if,jf)*delta(if,Id)
+!!v         mean   point  mean   MPM =202        dxCv(if,jf)*h(if,jf)*delta(jf,Jd)
+!!?         point  sum    mean   PSM =012        h(if,jf)*delta(if,Id)
+!!volcello  sum    sum    sum    SSS =111        1
+!!T_dfxy_co sum    sum    point  SSP =110        1
+!!umo       point  sum    sum    PSS =011        1*delta(if,Id)
+!!vmo       sum    point  sum    SPS =101        1*delta(jf,Jd)
+!!umo_2d    point  sum    point  PSP =010        1*delta(if,Id)
+!!vmo_2d    sum    point  point  SPP =100        1*delta(jf,Jd)
+!!?         point  mean   point  PMP =020        dyCu(if,jf)*delta(if,Id)
+!!?         mean   point  point  MPP =200        dxCv(if,jf)*delta(jf,Jd)
+!!w         mean   mean   point  MMP =220        G%areaT(if,jf)
+!!h*theta   mean   mean   sum    MMS =221        G%areaT(if,jf)
 !!
 !!delta is the Kroneker delta
 
-!> This subroutine allocates and computes a decimated array given an input array 
-!! The decimation method is based on the "cell_methods" for the diagnostics as explained
+!> This subroutine allocates and computes a downsampled array given an input array
+!! The downsample method is based on the "cell_methods" for the diagnostics as explained
 !! in the above table
-!! 3d interface 
-subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
+!! 3d interface
+subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
   integer , intent(in) :: dl
@@ -3683,7 +3671,7 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   integer , intent(in) :: isv_o,jsv_o             !< original indices,  In practice  isv_o=jsv_o=1
-  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< decimaed indices
+  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< dsampaed indices
   !locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0
@@ -3692,10 +3680,10 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
   real :: epsilon = 1.0e-20
 
   ks=1 ; ke =size(field_in,3)
-  !Allocate the decimated field on the decimated data domain
-  allocate(field_out(diag_cs%decim(dl)%isd:diag_cs%decim(dl)%ied,diag_cs%decim(dl)%jsd:diag_cs%decim(dl)%jed,ks:ke))
+  !Allocate the downsampled field on the downsampled data domain
+  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed,ks:ke))
 !  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl,ks:ke))
-  !Fill the decimated field on the decimated diagnostics (almost always compuate) domain
+  !Fill the downsampled field on the downsampled diagnostics (almost always compuate) domain
   if(method .eq. MMM) then    !xyz_method = MMM = 222
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
@@ -3717,7 +3705,7 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         ave = 0.0
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
            weight = mask(ii,jj,k)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
@@ -3731,7 +3719,7 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         ave = 0.0
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
            weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
@@ -3746,8 +3734,8 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k)*diag_cs%G%dyCu(ii,jj)*diag_cs%h(ii,jj,k) 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj,k)*diag_cs%G%dyCu(ii,jj)*diag_cs%h(ii,jj,k)
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
@@ -3760,8 +3748,8 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k)*diag_cs%G%dyCu(ii,jj)*diag_cs%h(ii,jj,k) 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj,k)*diag_cs%h(ii,jj,k)
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
@@ -3774,8 +3762,8 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k) 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj,k)
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
@@ -3788,8 +3776,8 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight =mask(ii,jj,k) 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj,k)
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
@@ -3802,20 +3790,20 @@ subroutine decimate_field_3d(field_in, field_out, dl, method, mask, diag_cs, dia
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight = mask(ii,jj,k)*diag_cs%G%dxCv(ii,jj)*diag_cs%h(ii,jj,k) 
+           weight = mask(ii,jj,k)*diag_cs%G%dxCv(ii,jj)*diag_cs%h(ii,jj,k)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
   else
-     write (mesg,*) " unknown sampling method: ",method  
-     call MOM_error(FATAL, "decimate_field_3d: "//trim(mesg)//" "//trim(diag%debug_str))
+     write (mesg,*) " unknown sampling method: ",method
+     call MOM_error(FATAL, "downsample_field_3d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
-     
-end subroutine decimate_field_3d
 
-subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
+end subroutine downsample_field_3d
+
+subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
   real, dimension(:,:) , pointer :: field_in
   real, dimension(:,:) , allocatable :: field_out
   integer , intent(in) :: dl
@@ -3824,54 +3812,40 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   integer , intent(in) :: isv_o,jsv_o             !< original indices,  In practice  isv_o=jsv_o=1
-  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< decimaed indices
+  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< dsampaed indices
   !locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0
   real :: ave,total_weight,weight
   real :: epsilon = 1.0e-20
 
-  !Allocate the decimated field on the decimated data domain
-  allocate(field_out(diag_cs%decim(dl)%isd:diag_cs%decim(dl)%ied,diag_cs%decim(dl)%jsd:diag_cs%decim(dl)%jed))
+  !Allocate the downsampled field on the downsampled data domain
+  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed))
 !  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl))
-  !Fill the decimated field on the decimated diagnostics (almost always compuate) domain
+  !Fill the downsampled field on the downsampled diagnostics (almost always compuate) domain
 
-  if(method .eq. MMM) then    !xyz_method = MMM
+  if(method .eq. MMP) then    !xyz_method = MMP
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
-           weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,1)
-           total_weight = total_weight + weight
-           ave=ave+field_in(ii,jj)*weight
-        enddo; enddo
-        field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo
-  elseif(method .eq. MMP) then    !xyz_method = MMP
-     do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
            weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj)*weight
         enddo; enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. SSP) then    !xyz_method = SSP , e.g., T_dfxy_cont_tendency_2d 
+  elseif(method .eq. SSP) then    !xyz_method = SSP , e.g., T_dfxy_cont_tendency_2d
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
            weight = mask(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj)*weight
@@ -3886,8 +3860,8 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj) 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj)
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
@@ -3900,8 +3874,8 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight =mask(ii,jj) 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj)
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
@@ -3914,8 +3888,8 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj)*diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki? 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj)*diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
@@ -3928,35 +3902,35 @@ subroutine decimate_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight =mask(ii,jj)*diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki? 
-           total_weight = total_weight +weight 
+           weight =mask(ii,jj)*diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
   else
-     write (mesg,*) " unknown sampling method: ",method  
-     call MOM_error(FATAL, "decimate_field_2d: "//trim(mesg)//" "//trim(diag%debug_str))
+     write (mesg,*) " unknown sampling method: ",method
+     call MOM_error(FATAL, "downsample_field_2d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
-     
-end subroutine decimate_field_2d
 
-!> Allocate and compute the decimated masks
-!! The masks are decimated based on a minority rule, i.e., a coarse cell is open (1) 
+end subroutine downsample_field_2d
+
+!> Allocate and compute the downsampled masks
+!! The masks are downsampled based on a minority rule, i.e., a coarse cell is open (1)
 !! if at least one of the sub-cells are open, otherwise it's closed (0)
-subroutine decimate_mask_3d_p(field_in, field_out, dl)
+subroutine downsample_mask_3d_p(field_in, field_out, dl)
   integer , intent(in) :: dl
   real, dimension(:,:,:) , pointer :: field_in, field_out
   integer :: i,j,ii,jj,i0,j0
   integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   integer :: k,ks,ke
   real    :: tot_non_zero
-  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
+  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
   isv_o=1
   jsv_o=1
-  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
+  ks = lbound(field_in,3) ; ke = ubound(field_in,3)
   isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl  
+  jsv_d=1; jev_d=size(field_in,2)/dl
   allocate(field_out(isv_d:iev_d,jsv_d:jev_d,ks:ke))
   field_out(:,:,:) = 0.0
   do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
@@ -3964,40 +3938,40 @@ subroutine decimate_mask_3d_p(field_in, field_out, dl)
      j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
 !    do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
         tot_non_zero = tot_non_zero + field_in(ii,jj,k)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo; enddo; enddo
-end subroutine decimate_mask_3d_p
+end subroutine downsample_mask_3d_p
 
-subroutine decimate_mask_2d_p(field_in, field_out, dl)
+subroutine downsample_mask_2d_p(field_in, field_out, dl)
   integer , intent(in) :: dl
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , pointer :: field_out
   integer :: i,j,ii,jj,i0,j0
   integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   real    :: tot_non_zero
-  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
+  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
   isv_o=1
   jsv_o=1
   isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl  
-  allocate(field_out(isv_d:iev_d,jsv_d:jev_d))  
+  jsv_d=1; jev_d=size(field_in,2)/dl
+  allocate(field_out(isv_d:iev_d,jsv_d:jev_d))
   field_out(:,:) = 0.0
   do j=jsv_d,jev_d ; do i=isv_d,iev_d
      i0 = isv_o+dl*(i-isv_d)
      j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
 !     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
         tot_non_zero = tot_non_zero + field_in(ii,jj)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j)=1.0
   enddo; enddo
-end subroutine decimate_mask_2d_p
+end subroutine downsample_mask_2d_p
 
-subroutine decimate_mask_3d_a(field_in, field_out, dl)
+subroutine downsample_mask_3d_a(field_in, field_out, dl)
   integer , intent(in) :: dl
   real, dimension(:,:,:), pointer :: field_in
   real, dimension(:,:,:), allocatable :: field_out
@@ -4005,51 +3979,51 @@ subroutine decimate_mask_3d_a(field_in, field_out, dl)
   integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   integer :: k,ks,ke
   real    :: tot_non_zero
-  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
+  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
   isv_o=1
   jsv_o=1
-  ks = lbound(field_in,3) ; ke = ubound(field_in,3)  
+  ks = lbound(field_in,3) ; ke = ubound(field_in,3)
   isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl  
+  jsv_d=1; jev_d=size(field_in,2)/dl
   allocate(field_out(isv_d:iev_d,jsv_d:jev_d,ks:ke))
   field_out(:,:,:) = 0.0
   do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
      i0 = isv_o+dl*(i-isv_d)
      j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
-!     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1 
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+!     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
         tot_non_zero = tot_non_zero + field_in(ii,jj,k)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo; enddo; enddo
-end subroutine decimate_mask_3d_a
+end subroutine downsample_mask_3d_a
 
-subroutine decimate_mask_2d_a(field_in, field_out, dl)
+subroutine downsample_mask_2d_a(field_in, field_out, dl)
   integer , intent(in) :: dl
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , allocatable :: field_out
   integer :: i,j,ii,jj,i0,j0
   integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   real    :: tot_non_zero
-  !decimated mask = 0 unless the mask value of one of the decimating cells is 1
+  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
   isv_o=1
   jsv_o=1
   isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl  
+  jsv_d=1; jev_d=size(field_in,2)/dl
   allocate(field_out(isv_d:iev_d,jsv_d:jev_d))
   field_out(:,:) = 0.0
   do j=jsv_d,jev_d ; do i=isv_d,iev_d
      i0 = isv_o+dl*(i-isv_d)
      j0 = jsv_o+dl*(j-jsv_d)
      tot_non_zero = 0.0
-!     do jj=j0,j0+dl-1 ;  do ii=i0,i0+dl-1 
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 
+!     do jj=j0,j0+dl-1 ;  do ii=i0,i0+dl-1
+     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
         tot_non_zero = tot_non_zero + field_in(ii,jj)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j)=1.0
   enddo; enddo
-end subroutine decimate_mask_2d_a
+end subroutine downsample_mask_2d_a
 
 
 end module MOM_diag_mediator

@@ -5,7 +5,7 @@ module MOM_grid
 
 use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
-use MOM_domains, only : get_global_shape, get_domain_extent_zap2
+use MOM_domains, only : get_global_shape, get_domain_extent_dsamp2
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 
@@ -21,6 +21,7 @@ type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL() !< Ocean model domain
   type(MOM_domain_type), pointer :: Domain_aux => NULL() !< A non-symmetric auxiliary domain type.
   type(hor_index_type) :: HI !< Horizontal index ranges
+  type(hor_index_type) :: HId2 !< Horizontal index ranges for level-2-downsampling 
 
   integer :: isc !< The start i-index of cell centers within the computational domain
   integer :: iec !< The end i-index of cell centers within the computational domain
@@ -51,23 +52,6 @@ type, public :: ocean_grid_type
   integer :: IegB !< The end i-index of cell vertices within the global domain
   integer :: JsgB !< The start j-index of cell vertices within the global domain
   integer :: JegB !< The end j-index of cell vertices within the global domain
-
-  integer :: isc_zap2 !< The start i-index of cell centers within the computational domain
-  integer :: iec_zap2 !< The end i-index of cell centers within the computational domain
-  integer :: jsc_zap2 !< The start j-index of cell centers within the computational domain
-  integer :: jec_zap2 !< The end j-index of cell centers within the computational domain
-  integer :: isd_zap2 !< The start i-index of cell centers within the data domain
-  integer :: ied_zap2 !< The end i-index of cell centers within the data domain
-  integer :: jsd_zap2 !< The start j-index of cell centers within the data domain
-  integer :: jed_zap2 !< The end j-index of cell centers within the data domain
-  integer :: IsdB_zap2 !< The start i-index of cell vertices within the data domain
-  integer :: IedB_zap2 !< The end i-index of cell vertices within the data domain
-  integer :: JsdB_zap2 !< The start j-index of cell vertices within the data domain
-  integer :: JedB_zap2 !< The end j-index of cell vertices within the data domain
-  integer :: isg_zap2 !< The start i-index of cell centers within the computational domain
-  integer :: ieg_zap2 !< The end i-index of cell centers within the computational domain
-  integer :: jsg_zap2 !< The start j-index of cell centers within the computational domain
-  integer :: jeg_zap2 !< The end j-index of cell centers within the computational domain
 
   integer :: isd_global !< The value of isd in the global index space (decompoistion invariant).
   integer :: jsd_global !< The value of isd in the global index space (decompoistion invariant).
@@ -361,22 +345,16 @@ subroutine MOM_grid_init(G, param_file, HI, global_indexing, bathymetry_at_vel)
   if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
-  call get_domain_extent_zap2(G%Domain, G%isc_zap2, G%iec_zap2, G%jsc_zap2, G%jec_zap2,&
-                                          G%isd_zap2, G%ied_zap2, G%jsd_zap2, G%jed_zap2,&
-                                          G%isg_zap2, G%ieg_zap2, G%jsg_zap2, G%jeg_zap2)
+  call get_domain_extent_dsamp2(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec,&
+                                          G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed,&
+                                          G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg)
   
   ! Set array sizes for fields that are discretized at tracer cell boundaries.
-!  G%IscB_zap2 = G%isc_zap2 ; G%JscB_zap2 = G%jsc_zap2
-  G%IsdB_zap2 = G%isd_zap2 ; G%JsdB_zap2 = G%jsd_zap2
-!  G%IsgB_zap2 = G%isg_zap2 ; G%JsgB_zap2 = G%jsg_zap2
+  G%HId2%IsdB = G%HId2%isd ; G%HId2%JsdB = G%HId2%jsd
   if (G%symmetric) then
-!    G%IscB_zap2 = G%isc_zap2-1 ; G%JscB_zap2 = G%jsc_zap2-1
-    G%IsdB_zap2 = G%isd_zap2-1 ; G%JsdB_zap2 = G%jsd_zap2-1
-!    G%IsgB_zap2 = G%isg_zap2-1 ; G%JsgB_zap2 = G%jsg_zap2-1
+    G%HId2%IsdB = G%HId2%isd-1 ; G%HId2%JsdB = G%HId2%jsd-1
   endif
-!  G%IecB_zap2 = G%iec_zap2 ; G%JecB_zap2 = G%jec_zap2
-  G%IedB_zap2 = G%ied_zap2 ; G%JedB_zap2 = G%jed_zap2
-!  G%IegB_zap2 = G%ieg_zap2 ; G%JegB_zap2 = G%jeg_zap2
+  G%HId2%IedB = G%HId2%ied ; G%HId2%JedB = G%HId2%jed
 
 end subroutine MOM_grid_init
 
