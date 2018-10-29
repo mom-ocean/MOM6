@@ -1307,7 +1307,6 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   if (CS%debug_energy_req) &
     call diapyc_energy_req_test(h, dt, tv, G, GV, CS%diapyc_en_rec_CSp)
 
-
   call cpu_clock_begin(id_clock_set_diffusivity)
   call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
@@ -3327,7 +3326,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   call regularize_layers_init(Time, G, GV, param_file, diag, CS%regularize_layers_CSp)
 
   if (CS%debug_energy_req) &
-    call diapyc_energy_req_init(Time, G, param_file, diag, CS%diapyc_en_rec_CSp)
+    call diapyc_energy_req_init(Time, G, GV, param_file, diag, CS%diapyc_en_rec_CSp)
 
   ! obtain information about the number of bands for penetrative shortwave
   if (use_temperature) then
