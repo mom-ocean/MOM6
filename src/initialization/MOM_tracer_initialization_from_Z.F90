@@ -120,10 +120,10 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   if (PRESENT(src_var_unit_conversion)) convert = src_var_unit_conversion
 
   call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
-       G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, homog)
+       G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
+       homog, m_to_Z=GV%m_to_Z)
 
   kd = size(z_edges_in,1)-1
-  do k=1,kd+1 ; z_edges_in(k) = GV%m_to_Z*z_edges_in(k) ; enddo
   call pass_var(tr_z,G%Domain)
   call pass_var(mask_z,G%Domain)
 
