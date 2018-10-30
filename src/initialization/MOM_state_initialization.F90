@@ -1824,8 +1824,8 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   elseif (use_temperature) then
-    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, tv%T, ALE_CSp)
-    call set_up_ALE_sponge_field(filename, salin_var, Time, G, tv%S, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, tv%T, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, tv%S, ALE_CSp)
   endif
 
 end subroutine initialize_sponges_file
@@ -2089,16 +2089,17 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   ! value at the northernmost/southernmost latitude.
 
   call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1.0, 1, &
-       G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
+       G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
+       tripolar_n, homogenize, m_to_Z=GV%m_to_Z)
 
   call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1.0, 1, &
-       G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
+       G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
+       tripolar_n, homogenize, m_to_Z=GV%m_to_Z)
 
   kd = size(z_in,1)
 
-  ! Convert the units and sign convention of z_in and Z_edges_in.
-  do k=1,kd ; z_in(k) = GV%m_to_Z*z_in(k) ; enddo
-  do k=1,size(Z_edges_in,1) ; Z_edges_in(k) = -GV%m_to_Z*Z_edges_in(k) ; enddo
+  ! Convert the sign convention of Z_edges_in.
+  do k=1,size(Z_edges_in,1) ; Z_edges_in(k) = -Z_edges_in(k) ; enddo
 
   allocate(rho_z(isd:ied,jsd:jed,kd))
   allocate(area_shelf_h(isd:ied,jsd:jed))
