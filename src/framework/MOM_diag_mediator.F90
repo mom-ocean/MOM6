@@ -73,7 +73,7 @@ interface downsample_field
 end interface downsample_field
 
 interface downsample_mask
-   module procedure downsample_mask_2d_p, downsample_mask_3d_p, downsample_mask_2d_a, downsample_mask_3d_a
+   module procedure downsample_mask_2d, downsample_mask_3d
 end interface downsample_mask
 
 interface downsample_diag_field
@@ -160,6 +160,7 @@ integer :: MMP=220  !< x:mean,y:mean,z:point
 integer :: MMS=221  !< x:mean,y:mean,z:sum
 integer :: SSS=111  !< x:sum,y:sum,z:sum
 integer :: MMM=222  !< x:mean,y:mean,z:mean
+integer :: MSK=-1   !< Use the downsample method of a mask
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
 !!
@@ -193,6 +194,7 @@ type diagcs_dsamp
   integer :: jsd !< The start j-index of cell centers within the data domain
   integer :: jed !< The end j-index of cell centers within the data domain
   integer :: isg,ieg,jsg,jeg
+  integer :: isgB,iegB,jsgB,jegB
 
   type(axes_grp)  :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp)  :: axesBi, axesTi, axesCui, axesCvi
@@ -524,34 +526,38 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   !Axes group for native downsampled diagnostics
   do dl=2,MAX_DSAMP_LEV
      if(dl .ne. 2) call MOM_error(FATAL, "set_axes_info_dsamp: Downsample level other than 2 is not supported yet!")
+     if (G%symmetric) then
+        allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isgB:diag_cs%dsamp(dl)%iegB))
+        allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsgB:diag_cs%dsamp(dl)%jegB))
+        do i=diag_cs%dsamp(dl)%isgB,diag_cs%dsamp(dl)%iegB;  gridLonB_dsamp(i) = G%gridLonB(G%isgB+dl*i); enddo
+        do j=diag_cs%dsamp(dl)%jsgB,diag_cs%dsamp(dl)%jegB;  gridLatB_dsamp(j) = G%gridLatB(G%jsgB+dl*j); enddo
+        id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
+                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+        id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
+                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+        deallocate(gridLonB_dsamp,gridLatB_dsamp)
+     else
+        allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
+        allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
+        do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonB_dsamp(i) = G%gridLonB(G%isg+dl*i-2); enddo
+        do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatB_dsamp(j) = G%gridLatB(G%jsg+dl*j-2); enddo
+        id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
+                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
+        id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
+                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
+        deallocate(gridLonB_dsamp,gridLatB_dsamp)
+     endif
+
      allocate(gridLonT_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
      allocate(gridLatT_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
      do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonT_dsamp(i) = G%gridLonT(G%isg+dl*i-2); enddo
      do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatT_dsamp(j) = G%gridLatT(G%jsg+dl*j-2); enddo
-     allocate(gridLonB_dsamp(diag_cs%dsamp(dl)%isg:diag_cs%dsamp(dl)%ieg))
-     allocate(gridLatB_dsamp(diag_cs%dsamp(dl)%jsg:diag_cs%dsamp(dl)%jeg))
-     do i=diag_cs%dsamp(dl)%isg,diag_cs%dsamp(dl)%ieg;  gridLonB_dsamp(i) = G%gridLonB(G%isg+dl*i-2); enddo
-     do j=diag_cs%dsamp(dl)%jsg,diag_cs%dsamp(dl)%jeg;  gridLatB_dsamp(j) = G%gridLatB(G%jsg+dl*j-2); enddo
-
-!I don't see a need for this since isgB=isg and iegB=ieg
-!     if (G%symmetric) then
-!        id_xq = diag_axis_init('xq', gridLonB_dsamp(G%isgB:G%iegB), G%x_axis_units, 'x', &
-!                  'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
-!        id_yq = diag_axis_init('yq', gridLatB_dsamp(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-!                  'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
-!     else
-     id_xq = diag_axis_init('xq', gridLonB_dsamp, G%x_axis_units, 'x', &
-               'q point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
-     id_yq = diag_axis_init('yq', gridLatB_dsamp, G%y_axis_units, 'y', &
-               'q point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
-!     endif
      id_xh = diag_axis_init('xh', gridLonT_dsamp, G%x_axis_units, 'x', &
           'h point nominal longitude', Domain2=G%Domain%mpp_domain_d2)
      id_yh = diag_axis_init('yh', gridLatT_dsamp, G%y_axis_units, 'y', &
           'h point nominal latitude', Domain2=G%Domain%mpp_domain_d2)
 
      deallocate(gridLonT_dsamp,gridLatT_dsamp)
-     deallocate(gridLonB_dsamp,gridLatB_dsamp)
 
      ! Axis groupings for the model layers
      call define_axes_group_dsamp(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%dsamp(dl)%axesTL, dl, &
@@ -789,35 +795,43 @@ subroutine set_masks_for_axes_dsamp(G, diag_cs)
      do c=1, diag_cs%num_diag_coords
         ! Level/layer h-points in diagnostic coordinate
         axes => diag_cs%remap_axesTL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTL(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
+          G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
         diag_cs%dsamp(dl)%remap_axesTL(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Level/layer u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCuL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCuL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCuL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+          G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
         diag_cs%dsamp(dl)%remap_axesCul(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Level/layer v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvL(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
+          G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
         diag_cs%dsamp(dl)%remap_axesCvL(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Level/layer q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBL(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBL(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
         diag_cs%dsamp(dl)%remap_axesBL(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface h-points in diagnostic coordinate (w-point)
         axes => diag_cs%remap_axesTi(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTi(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTi(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
+          G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
         diag_cs%dsamp(dl)%remap_axesTi(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface u-points in diagnostic coordinate
         axes => diag_cs%remap_axesCui(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCui(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCui(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+          G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
         diag_cs%dsamp(dl)%remap_axesCui(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface v-points in diagnostic coordinate
         axes => diag_cs%remap_axesCvi(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvi(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvi(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
+          G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
         diag_cs%dsamp(dl)%remap_axesCvi(c)%mask3d => axes%mask3d !set non-downsampled mask
         ! Interface q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBi(c)
-        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d, dl)!set downsampled mask
+        call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
+          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)!set downsampled mask
         diag_cs%dsamp(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-downsampled mask
      enddo
   enddo
@@ -1283,7 +1297,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   character(len=300) :: mesg
   logical :: used, is_stat
   integer :: cszi, cszj, dszi, dszj
-  integer :: isv, iev, jsv, jev, i, j, chksum
+  integer :: isv, iev, jsv, jev, i, j, chksum, isv_o,jsv_o
   real, dimension(:,:), allocatable, target :: locfield_dsamp
   real, dimension(:,:), allocatable, target :: locmask_dsamp
   integer :: dl
@@ -1353,11 +1367,12 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   if(.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
   !Downsample the diag field and mask (if present)
   if (dl > 1) then
+     isv_o=isv ; jsv_o=jsv
      call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
      locfield => locfield_dsamp
      if (present(mask)) then
-        call downsample_mask(locmask, locmask_dsamp, dl)
+        call downsample_field_2d(locmask, locmask_dsamp, dl, MSK, locmask, diag_cs,diag,isv_o,jsv_o,isv,iev,jsv,jev)
         locmask => locmask_dsamp
      elseif(associated(diag%axes%dsamp(dl)%mask2d)) then
         locmask => diag%axes%dsamp(dl)%mask2d
@@ -1538,11 +1553,11 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   logical :: staggered_in_x, staggered_in_y
   logical :: is_stat
   integer :: cszi, cszj, dszi, dszj
-  integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
+  integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c, isv_o,jsv_o
   integer :: chksum
   real, dimension(:,:,:), allocatable, target :: locfield_dsamp
   real, dimension(:,:,:), allocatable, target :: locmask_dsamp
-  integer :: isl,iel,jsl,jel,dl
+  integer :: dl
 
   locfield => NULL()
   locmask => NULL()
@@ -1626,11 +1641,12 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   if(.NOT. is_stat) dl = diag%axes%downsample_level !static field downsample i not supported yet
   !Downsample the diag field and mask (if present)
   if (dl > 1) then
+     isv_o=isv ; jsv_o=jsv
      call downsample_diag_field(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
      if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
      locfield => locfield_dsamp
      if (present(mask)) then
-        call downsample_mask(locmask, locmask_dsamp, dl)
+        call downsample_field_3d(locmask, locmask_dsamp, dl, MSK, locmask, diag_cs,diag,isv_o,jsv_o,isv,iev,jsv,jev)
         locmask => locmask_dsamp
       elseif(associated(diag%axes%dsamp(dl)%mask3d)) then
         locmask => diag%axes%dsamp(dl)%mask3d
@@ -2935,6 +2951,8 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   diag_cs%dsamp(2)%jsd = G%HId2%jsd ; diag_cs%dsamp(2)%jed = G%HId2%jed
   diag_cs%dsamp(2)%isg = G%HId2%isg ; diag_cs%dsamp(2)%ieg = G%HId2%ieg
   diag_cs%dsamp(2)%jsg = G%HId2%jsg ; diag_cs%dsamp(2)%jeg = G%HId2%jeg
+  diag_cs%dsamp(2)%isgB = G%HId2%isgB ; diag_cs%dsamp(2)%iegB = G%HId2%iegB
+  diag_cs%dsamp(2)%jsgB = G%HId2%jsgB ; diag_cs%dsamp(2)%jegB = G%HId2%jegB
 
   ! Initialze available diagnostic log file
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit < 0)) then
@@ -3457,20 +3475,29 @@ subroutine downsample_diag_masks_set(G, nz, diag_cs)
   integer :: i,j,k,ii,jj,dl
 
 !print*,'original c extents ',G%isc,G%iec,G%jsc,G%jec
+!print*,'original c extents ',G%iscb,G%iecb,G%jscb,G%jecb
 !print*,'coarse   c extents ',G%HId2%isc,G%HId2%iec,G%HId2%jsc,G%HId2%jec
 !print*,'original d extents ',G%isd,G%ied,G%jsd,G%jed
 !print*,'coarse   d extents ',G%HId2%isd,G%HId2%ied,G%HId2%jsd,G%HId2%jed
-! original c extents            5          52           5          52
+! original c  extents           5          52           5          52
+! original cB-nonsym extents    5          52           5          52
+! original cB-sym    extents    4          52           4          52
 ! coarse   c extents            3          26           3          26
 ! original d extents            1          56           1          56
+! original dB-nonsym extents    1          56           1          56
+! original dB-sym extents       0          56           0          56
 ! coarse   d extents            1          28           1          28
 
   do dl=2,MAX_DSAMP_LEV
-     ! 2d masks
-     call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT, dl)
-     call downsample_mask(G%mask2dBu,diag_cs%dsamp(dl)%mask2dBu, dl)
-     call downsample_mask(G%mask2dCu,diag_cs%dsamp(dl)%mask2dCu, dl)
-     call downsample_mask(G%mask2dCv,diag_cs%dsamp(dl)%mask2dCv, dl)
+     ! 2d mask
+     call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT,  dl,G%isc, G%jsc,  &
+          G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
+     call downsample_mask(G%mask2dBu,diag_cs%dsamp(dl)%mask2dBu, dl,G%IscB,G%JscB, &
+          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
+     call downsample_mask(G%mask2dCu,diag_cs%dsamp(dl)%mask2dCu, dl,G%IscB,G%JscB, &
+          G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
+     call downsample_mask(G%mask2dCv,diag_cs%dsamp(dl)%mask2dCv, dl,G%isc ,G%JscB, &
+          G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
      ! 3d native masks are needed by diag_manager but the native variables
      ! can only be masked 2d - for ocean points, all layers exists.
      allocate(diag_cs%dsamp(dl)%mask3dTL(G%HId2%isd:G%HId2%ied,G%HId2%jsd:G%HId2%jed,1:nz))
@@ -3498,13 +3525,13 @@ end subroutine downsample_diag_masks_set
 
 !> Get the diagnostics-compute indices (to be passed to send_data) based on the shape of
 !! the diag field (the same way they are deduced for non-downsampled fields)
-subroutine downsample_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
-  integer,           intent(in) :: f1,f2   !< the sizes of the diag field in x and y
+subroutine downsample_diag_indices_get(fo1,fo2, dl, diag_cs,isv,iev,jsv,jev)
+  integer,           intent(in) :: fo1,fo2 !< the sizes of the diag field in x and y
   integer,           intent(in) :: dl      !< integer downsample level
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   integer,           intent(out) ::isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
   ! Local variables
-  integer :: dszi,cszi,dszj,cszj
+  integer :: dszi,cszi,dszj,cszj,f1,f2
   character(len=500) :: mesg
   logical, save :: first_check = .true.
 
@@ -3525,10 +3552,15 @@ subroutine downsample_diag_indices_get(f1,f2, dl, diag_cs,isv,iev,jsv,jev)
 
   cszi = diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc +1 ; dszi = diag_cs%dsamp(dl)%ied-diag_cs%dsamp(dl)%isd +1
   cszj = diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc +1 ; dszj = diag_cs%dsamp(dl)%jed-diag_cs%dsamp(dl)%jsd +1
-
   isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec
   jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec
-
+  f1 = fo1/dl
+  f2 = fo2/dl
+  !Correction for the symmetric case
+  if (diag_cs%G%symmetric) then
+     f1 = f1 + mod(fo1,dl)
+     f2 = f2 + mod(fo2,dl)
+  endif
   if ( f1 == dszi ) then
      isv = diag_cs%dsamp(dl)%isc ; iev = diag_cs%dsamp(dl)%iec    ! field on Data domain, take compute domain indcies
   !The rest is not taken with the full MOM6 diag_table
@@ -3576,8 +3608,8 @@ subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag,
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
-  f1=size(locfield,1)/dl
-  f2=size(locfield,2)/dl
+  f1=size(locfield,1)
+  f2=size(locfield,2)
   !Save the extents of the original (fine) domain
   isv_o=isv;jsv_o=jsv
   !Get the shape of the downsampled field and overwrite isv,iev,jsv,jev with them
@@ -3614,8 +3646,8 @@ subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,
   locmask => NULL()
   !Get the correct indices corresponding to input field
   !Shape of the input diag field
-  f1=size(locfield,1)/dl
-  f2=size(locfield,2)/dl
+  f1=size(locfield,1)
+  f2=size(locfield,2)
   !Save the extents of the original (fine) domain
   isv_o=isv;jsv_o=jsv
   !Get the shape of the downsampled field and overwrite isv,iev,jsv,jev with them
@@ -3671,23 +3703,34 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   real, dimension(:,:,:) , pointer :: field_in
   real, dimension(:,:,:) , allocatable :: field_out
   integer , intent(in) :: dl
-  integer,  intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
-  real, dimension(:,:,:), pointer :: mask
+  integer,  intent(in) :: method !< sampling method
+  real,  dimension(:,:,:), pointer :: mask
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   integer , intent(in) :: isv_o,jsv_o             !< original indices,  In practice  isv_o=jsv_o=1
   integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< dsampaed indices
   !locals
   character(len=240) :: mesg
-  integer :: i,j,ii,jj,i0,j0
+  integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   integer :: k,ks,ke
   real :: ave,total_weight,weight
   real :: epsilon = 1.0e-20
 
   ks=1 ; ke =size(field_in,3)
   !Allocate the downsampled field on the downsampled data domain
-  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed,ks:ke))
+!  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed,ks:ke))
 !  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl,ks:ke))
+  f_in1 = size(field_in,1)
+  f_in2 = size(field_in,2)
+  f1 = f_in1/dl
+  f2 = f_in2/dl
+  !Correction for the symmetric case
+  if (diag_cs%G%symmetric) then
+     f1 = f1 + mod(f_in1,dl)
+     f2 = f2 + mod(f_in2,dl)
+  endif
+  allocate(field_out(1:f1,1:f2,ks:ke))
+
   !Fill the downsampled field on the downsampled diagnostics (almost always compuate) domain
   if(method .eq. MMM) then    !xyz_method = MMM = 222
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
@@ -3801,6 +3844,17 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
+  elseif(method .eq. MSK) then !The input field is a mask, subsample
+     field_out(:,:,:) = 0.0
+     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
+        ave = 0.0
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+           ave=ave+field_in(ii,jj,k)
+        enddo; enddo
+        if(ave > 0.0) field_out(i,j,k)=1.0
+     enddo; enddo; enddo
   else
      write (mesg,*) " unknown sampling method: ",method
      call MOM_error(FATAL, "downsample_field_3d: "//trim(mesg)//" "//trim(diag%debug_str))
@@ -3812,7 +3866,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
   real, dimension(:,:) , pointer :: field_in
   real, dimension(:,:) , allocatable :: field_out
   integer , intent(in) :: dl
-  integer, optional, intent(in) :: method !< sampling method, one of 00,01,02,10,20,11,22
+  integer,  intent(in) :: method !< sampling method
   real, dimension(:,:), pointer :: mask
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
@@ -3820,14 +3874,24 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
   integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< dsampaed indices
   !locals
   character(len=240) :: mesg
-  integer :: i,j,ii,jj,i0,j0
+  integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   real :: ave,total_weight,weight
   real :: epsilon = 1.0e-20
 
   !Allocate the downsampled field on the downsampled data domain
-  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed))
+!  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed))
 !  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl))
   !Fill the downsampled field on the downsampled diagnostics (almost always compuate) domain
+  f_in1 = size(field_in,1)
+  f_in2 = size(field_in,2)
+  f1 = f_in1/dl
+  f2 = f_in2/dl
+  !Correction for the symmetric case
+  if (diag_cs%G%symmetric) then
+     f1 = f1 + mod(f_in1,dl)
+     f2 = f2 + mod(f_in2,dl)
+  endif
+  allocate(field_out(1:f1,1:f2))
 
   if(method .eq. MMP) then    !xyz_method = MMP
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
@@ -3913,6 +3977,17 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
+  elseif(method .eq. MSK) then !The input field is a mask, subsample
+     field_out(:,:) = 0.0
+     do j=jsv_d,jev_d ; do i=isv_d,iev_d
+        i0 = isv_o+dl*(i-isv_d)
+        j0 = jsv_o+dl*(j-jsv_d)
+        ave = 0.0
+        do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
+           ave=ave+field_in(ii,jj)
+        enddo; enddo
+        if(ave > 0.0) field_out(i,j)=1.0
+     enddo; enddo
   else
      write (mesg,*) " unknown sampling method: ",method
      call MOM_error(FATAL, "downsample_field_2d: "//trim(mesg)//" "//trim(diag%debug_str))
@@ -3923,113 +3998,52 @@ end subroutine downsample_field_2d
 !> Allocate and compute the downsampled masks
 !! The masks are downsampled based on a minority rule, i.e., a coarse cell is open (1)
 !! if at least one of the sub-cells are open, otherwise it's closed (0)
-subroutine downsample_mask_3d_p(field_in, field_out, dl)
-  integer , intent(in) :: dl
-  real, dimension(:,:,:) , pointer :: field_in, field_out
-  integer :: i,j,ii,jj,i0,j0
-  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
-  integer :: k,ks,ke
-  real    :: tot_non_zero
-  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
-  isv_o=1
-  jsv_o=1
-  ks = lbound(field_in,3) ; ke = ubound(field_in,3)
-  isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl
-  allocate(field_out(isv_d:iev_d,jsv_d:jev_d,ks:ke))
-  field_out(:,:,:) = 0.0
-  do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-     i0 = isv_o+dl*(i-isv_d)
-     j0 = jsv_o+dl*(j-jsv_d)
-     tot_non_zero = 0.0
-!    do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-        tot_non_zero = tot_non_zero + field_in(ii,jj,k)
-     enddo;enddo
-     if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
-  enddo; enddo; enddo
-end subroutine downsample_mask_3d_p
-
-subroutine downsample_mask_2d_p(field_in, field_out, dl)
-  integer , intent(in) :: dl
+subroutine downsample_mask_2d(field_in, field_out, dl, isc_o,jsc_o, isc_d,iec_d,jsc_d,jec_d , isd_d,ied_d,jsd_d,jed_d)
   real, dimension(:,:) , intent(in) :: field_in
   real, dimension(:,:) , pointer :: field_out
+  integer , intent(in) :: dl
+  integer , intent(in) :: isc_o,jsc_o
+  integer , intent(in) :: isc_d,iec_d,jsc_d,jec_d !< downsampled mask compute indices
+  integer , intent(in) :: isd_d,ied_d,jsd_d,jed_d !< downsampled mask data indices
   integer :: i,j,ii,jj,i0,j0
-  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
   real    :: tot_non_zero
   !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
-  isv_o=1
-  jsv_o=1
-  isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl
-  allocate(field_out(isv_d:iev_d,jsv_d:jev_d))
+  allocate(field_out(isd_d:ied_d,jsd_d:jed_d))
   field_out(:,:) = 0.0
-  do j=jsv_d,jev_d ; do i=isv_d,iev_d
-     i0 = isv_o+dl*(i-isv_d)
-     j0 = jsv_o+dl*(j-jsv_d)
+  do j=jsc_d,jec_d ; do i=isc_d,iec_d
+     i0 = isc_o+dl*(i-isc_d)
+     j0 = jsc_o+dl*(j-jsc_d)
      tot_non_zero = 0.0
-!     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
         tot_non_zero = tot_non_zero + field_in(ii,jj)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j)=1.0
   enddo; enddo
-end subroutine downsample_mask_2d_p
+end subroutine downsample_mask_2d
 
-subroutine downsample_mask_3d_a(field_in, field_out, dl)
+subroutine downsample_mask_3d(field_in, field_out, dl, isc_o,jsc_o, isc_d,iec_d,jsc_d,jec_d , isd_d,ied_d,jsd_d,jed_d)
+  real, dimension(:,:,:) , intent(in) :: field_in
+  real, dimension(:,:,:) , pointer :: field_out
   integer , intent(in) :: dl
-  real, dimension(:,:,:), pointer :: field_in
-  real, dimension(:,:,:), allocatable :: field_out
-  integer :: i,j,ii,jj,i0,j0
-  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
-  integer :: k,ks,ke
+  integer , intent(in) :: isc_o,jsc_o
+  integer , intent(in) :: isc_d,iec_d,jsc_d,jec_d !< downsampled mask compute indices
+  integer , intent(in) :: isd_d,ied_d,jsd_d,jed_d !< downsampled mask data indices
+  integer :: i,j,ii,jj,i0,j0,k,ks,ke
   real    :: tot_non_zero
   !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
-  isv_o=1
-  jsv_o=1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)
-  isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl
-  allocate(field_out(isv_d:iev_d,jsv_d:jev_d,ks:ke))
+  allocate(field_out(isd_d:ied_d,jsd_d:jed_d,ks:ke))
   field_out(:,:,:) = 0.0
-  do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-     i0 = isv_o+dl*(i-isv_d)
-     j0 = jsv_o+dl*(j-jsv_d)
+  do k= ks,ke ; do j=jsc_d,jec_d ; do i=isc_d,iec_d
+     i0 = isc_o+dl*(i-isc_d)
+     j0 = jsc_o+dl*(j-jsc_d)
      tot_non_zero = 0.0
-!     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
+     do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
         tot_non_zero = tot_non_zero + field_in(ii,jj,k)
      enddo;enddo
      if(tot_non_zero > 0.0) field_out(i,j,k)=1.0
   enddo; enddo; enddo
-end subroutine downsample_mask_3d_a
-
-subroutine downsample_mask_2d_a(field_in, field_out, dl)
-  integer , intent(in) :: dl
-  real, dimension(:,:) , intent(in) :: field_in
-  real, dimension(:,:) , allocatable :: field_out
-  integer :: i,j,ii,jj,i0,j0
-  integer :: isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d
-  real    :: tot_non_zero
-  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
-  isv_o=1
-  jsv_o=1
-  isv_d=1; iev_d=size(field_in,1)/dl
-  jsv_d=1; jev_d=size(field_in,2)/dl
-  allocate(field_out(isv_d:iev_d,jsv_d:jev_d))
-  field_out(:,:) = 0.0
-  do j=jsv_d,jev_d ; do i=isv_d,iev_d
-     i0 = isv_o+dl*(i-isv_d)
-     j0 = jsv_o+dl*(j-jsv_d)
-     tot_non_zero = 0.0
-!     do jj=j0,j0+dl-1 ;  do ii=i0,i0+dl-1
-     do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-        tot_non_zero = tot_non_zero + field_in(ii,jj)
-     enddo;enddo
-     if(tot_non_zero > 0.0) field_out(i,j)=1.0
-  enddo; enddo
-end subroutine downsample_mask_2d_a
-
+end subroutine downsample_mask_3d
 
 end module MOM_diag_mediator
 
