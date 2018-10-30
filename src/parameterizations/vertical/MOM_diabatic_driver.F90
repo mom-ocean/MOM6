@@ -1015,7 +1015,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call cpu_clock_begin(id_clock_sponge)
     if (associated(CS%ALE_sponge_CSp)) then
       ! ALE sponge
-      call apply_ALE_sponge(h, dt, G, CS%ALE_sponge_CSp, CS%Time)
+      call apply_ALE_sponge(h, dt, G, GV, CS%ALE_sponge_CSp, CS%Time)
     endif
 
     call cpu_clock_end(id_clock_sponge)
@@ -2174,7 +2174,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call cpu_clock_begin(id_clock_sponge)
     if (associated(CS%ALE_sponge_CSp)) then
       ! ALE sponge
-      call apply_ALE_sponge(h, dt, G, CS%ALE_sponge_CSp, CS%Time)
+      call apply_ALE_sponge(h, dt, G, GV, CS%ALE_sponge_CSp, CS%Time)
     else
       ! Layer mode sponge
       if (CS%bulkmixedlayer .and. associated(tv%eqn_of_state)) then
