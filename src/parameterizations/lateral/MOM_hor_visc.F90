@@ -161,6 +161,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
+  integer :: id_Pl_h      = -1
   !!@}
 
 end type hor_visc_CS
@@ -221,7 +222,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction (W/m2)
     Leith_Kh_h, & ! Leith Laplacian viscosity at h-points (m2 s-1)
     Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points (m4 s-1)
-    pl_h          ! Planetary number (nondim)
+    Pl          ! Planetary number (nondim)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain (s-1)
@@ -240,6 +241,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
+    Pl_h, &          ! Planetary number (nondim)
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
     FrictWork, &     ! energy dissipated by lateral friction (W/m2)
     div_xx_h         ! horizontal divergence (s-1)
@@ -273,7 +275,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: RoScl     ! The scaling function for MEKE source term
   real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
   real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
-  real :: beta, u_scale, epsilon, grid_sp_h2, grid_sp_q2
+  real :: beta, u_scale, epsilon, grid_sp_h2, grid_sp_q2, grad_vort_mag, grad_div_mag
   real :: DY_dxBu, DX_dyBu
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
@@ -290,6 +292,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   h_neglect3 = h_neglect**3
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
   inv_PI6 = inv_PI3**2
+  epsilon = 1.e-15
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
@@ -582,7 +585,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
           u_scale = sqrt((0.5*(u(I,j,k)+u(I-1,j,k)))**2 + (0.5*(v(i,J,k)+v(i,J-1,k)))**2)
           grid_sp_h2 = (2.0*CS%DX2h(i,j)*CS%DY2h(i,j)) / (CS%DX2h(i,j) + CS%DY2h(i,j))
-          pl_h(i,j) = beta * grid_sp_h2 / (u_scale + epsilon)
+          grad_vort_mag = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + (0.5*(vort_xy_dy(I,j) +  &
+                         vort_xy_dy(I-1,j)))**2 )
+          Pl(i,j) = beta * MAX(grid_sp_h2 / (u_scale + epsilon), 1.0/(grad_vort_mag + epsilon))
+          if (CS%modified_Leith) then
+            grad_div_mag =sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I-1,j)))**2 + &
+            (0.5 * (div_xx_dy(i,J) + div_xx_dy(i,J-1)))**2)
+            Pl(i,j) =  MAX(Pl(i,j), 10.0* beta/(grad_div_mag + epsilon))
+          endif
         enddo; enddo
 
         do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
@@ -590,7 +600,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                        (0.25*(G%dF_dy(i,j)+G%dF_dy(i+1,j)+G%dF_dy(i,j+1)+G%dF_dy(i+1,j+1))**2) )
           u_scale = sqrt((0.5*(u(I,j,k)+u(I,j+1,k)))**2 + (0.5*(v(i,J,k)+v(i,J+1,k)))**2)
           grid_sp_q2 = (2.0*CS%DX2q(I,J)*CS%DY2q(I,J)) / (CS%DX2q(I,J) + CS%DY2q(I,J))
-          pl_q(I,J) = beta * grid_sp_q2 / (u_scale + epsilon)
+          grad_vort_mag = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J)))**2 + (0.5*(vort_xy_dy(I,j) +  &
+                         vort_xy_dy(I,j+1)))**2 )
+          Pl_q(i,j) = beta * MAX(grid_sp_q2 / (u_scale + epsilon), 1.0/(grad_vort_mag + epsilon))
+          if (CS%modified_Leith) then
+            grad_div_mag =sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I,j+1)))**2 + &
+            (0.5 * (div_xx_dy(i,J) + div_xx_dy(i+1,J)))**2)
+            Pl_q(i,j) =  MAX(Pl_q(i,j),  beta/(grad_div_mag + epsilon))
+          endif
         enddo ; enddo
 
         do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
@@ -616,14 +633,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-        if ((pl_h(i,j) > 1) .and. (CS%use_beta_in_Leith)) then
+        if ((Pl(i,j) > 1) .and. (CS%use_beta_in_Leith)) then
           vert_vort_mag = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
         else
           vert_vort_mag = sqrt( &
           0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
-              (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
-          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)* &
-          div_xx_dx(I-1,j)) + (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
+              (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j)))) + &
+          0.0*mod_Leith* sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I-1,j)))**2 + &
+          (0.5 * (div_xx_dy(i,J) + div_xx_dy(i,J-1)))**2)
         endif
       endif
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
@@ -658,6 +675,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           endif
         endif
 
+        if (CS%id_Pl_h>0) Pl_h(i,j,k) = Pl(i,j)
         if (CS%id_Kh_h>0) Kh_h(i,j,k) = Kh
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
 
@@ -753,16 +771,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-        if (pl_q(I,J) > 1) then
+        if ((Pl_q(I,J) > 1) .and. (CS%use_beta_in_Leith)) then
           vert_vort_mag = sqrt( &
                 (0.25*(G%dF_dx(i,j)+G%dF_dx(i+1,j)+G%dF_dx(i,j+1)+G%dF_dx(i+1,j+1))**2) + &
                 (0.25*(G%dF_dy(i,j)+G%dF_dy(i+1,j)+G%dF_dy(i,j+1)+G%dF_dy(i+1,j+1))**2) )
         else
           vert_vort_mag = sqrt( &
           0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
-              (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
-          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)* &
-          div_xx_dx(I,j+1)) + (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
+              (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1)))) + &
+               0.0*mod_Leith*sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I,j+1)))**2 + &
+              (0.5 * (div_xx_dy(i,J) + div_xx_dy(i+1,J)))**2)
         endif
       endif
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
@@ -1001,6 +1019,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   if (CS%id_vort_xy_q>0) call post_data(CS%id_vort_xy_q, vort_xy_q, CS%diag)
   if (CS%id_Ah_q>0)      call post_data(CS%id_Ah_q, Ah_q, CS%diag)
   if (CS%id_Kh_h>0)      call post_data(CS%id_Kh_h, Kh_h, CS%diag)
+  if (CS%id_Pl_h>0)      call post_data(CS%id_Pl_h, Pl_h, CS%diag)
   if (CS%id_Kh_q>0)      call post_data(CS%id_Kh_q, Kh_q, CS%diag)
 
   if (CS%id_FrictWorkIntz > 0) then
@@ -1663,6 +1682,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
         cmor_field_name='difmxylo',                                             &
         cmor_long_name='Ocean lateral Laplacian viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
+
+    CS%id_Pl_h = register_diag_field('ocean_model', 'Pl', diag%axesTL, Time, &
+        'Planetary number', 'nondim')
 
     CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
         'Laplacian Horizontal Viscosity at q Points', 'm2 s-1')
