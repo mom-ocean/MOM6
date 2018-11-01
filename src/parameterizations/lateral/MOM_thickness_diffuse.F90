@@ -52,6 +52,7 @@ type, public :: thickness_diffuse_CS ; private
                                  !! longer than DT, or 0 (the default) to use DT.
   integer :: nkml                !< number of layers within mixed layer
   logical :: debug               !< write verbose checksums for debugging purposes
+  logical :: QG_Leith_GM         !< If true, uses the QG Leith viscosity as the GM coefficient
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity (W m-2)
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
@@ -1728,6 +1729,9 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  "marginally unstable value in a pure layered model, but \n"//&
                  "much smaller numbers (e.g. 0.1) seem to work better for \n"//&
                  "ALE-based models.", units = "nondimensional", default=0.8)
+  call get_param(param_file, mdl, "USE_QG_LEITH_GM", CS%QG_Leith_GM, &
+               "If true, use the QG Leith viscosity as the GM coefficient.", &
+               default=.false.)
   if (CS%max_Khth_CFL < 0.0) CS%max_Khth_CFL = 0.0
   call get_param(param_file, mdl, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
                  "If defined add 3-d structured enhanced interface height \n"//&

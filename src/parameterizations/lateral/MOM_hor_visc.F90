@@ -587,6 +587,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
       else
 
+        do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+          div_xx_dx(I,j) = 0.0
+        enddo ; enddo
+        do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+          div_xx_dy(i,J) = 0.0
+        enddo ; enddo
         do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
           grad_div_mag_h(i,j) = 0.0
         enddo ; enddo
@@ -616,7 +622,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
       if (CS%use_QG_Leith_visc) then
         call calc_QG_Leith_viscosity(VarMix, G, GV, h, k, vort_xy_dx, vort_xy_dy, &
-                                     grad_div_mag_h, grad_div_mag_q)
+                                     div_xx_dx, div_xx_dy)
       endif
  
       do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
