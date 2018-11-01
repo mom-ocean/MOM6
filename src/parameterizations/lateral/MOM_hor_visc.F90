@@ -161,7 +161,6 @@ type, public :: hor_visc_CS ; private
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
-  integer :: id_Pl_h      = -1
   !!@}
 
 end type hor_visc_CS
@@ -222,7 +221,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction (W/m2)
     Leith_Kh_h, & ! Leith Laplacian viscosity at h-points (m2 s-1)
     Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points (m4 s-1)
-    Pl          ! Planetary number (nondim)
+    beta_h,     & ! Gradient of planetary vorticity at h-points (m-1 s-1)
+    grad_vort_mag_h, & ! Magnitude of vorticity gradient at h-points (m-1 s-1) 
+    grad_div_mag_h     ! Magnitude of divergence gradient at h-points (m-1 s-1)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain (s-1)
@@ -232,7 +233,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     vort_xy, & ! Vertical vorticity (dv/dx - du/dy) (s-1)
     Leith_Kh_q, & ! Leith Laplacian viscosity at q-points (m2 s-1)
     Leith_Ah_q, & ! Leith bi-harmonic viscosity at q-points (m4 s-1)
-    pl_q          ! Planetary number (nondim)
+    beta_q,     & ! Gradient of planetary vorticity at q-points (m-1 s-1)
+    grad_vort_mag_q, & ! Magnitude of vorticity gradient at q-points (m-1 s-1) 
+    grad_div_mag_q     ! Magnitude of divergence gradient at q-points (m-1 s-1)
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
@@ -241,7 +244,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
-    Pl_h, &          ! Planetary number (nondim)
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
     FrictWork, &     ! energy dissipated by lateral friction (W/m2)
     div_xx_h         ! horizontal divergence (s-1)
@@ -275,7 +277,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: RoScl     ! The scaling function for MEKE source term
   real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
   real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
-  real :: beta, u_scale, epsilon, grid_sp_h2, grid_sp_q2, grad_vort_mag, grad_div_mag
+  real :: epsilon
   real :: DY_dxBu, DX_dyBu
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
@@ -681,7 +683,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           endif
         endif
 
-        if (CS%id_Pl_h>0) Pl_h(i,j,k) = Pl(i,j)
         if (CS%id_Kh_h>0) Kh_h(i,j,k) = Kh
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
 
@@ -1019,7 +1020,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   if (CS%id_vort_xy_q>0) call post_data(CS%id_vort_xy_q, vort_xy_q, CS%diag)
   if (CS%id_Ah_q>0)      call post_data(CS%id_Ah_q, Ah_q, CS%diag)
   if (CS%id_Kh_h>0)      call post_data(CS%id_Kh_h, Kh_h, CS%diag)
-  if (CS%id_Pl_h>0)      call post_data(CS%id_Pl_h, Pl_h, CS%diag)
   if (CS%id_Kh_q>0)      call post_data(CS%id_Kh_q, Kh_q, CS%diag)
 
   if (CS%id_FrictWorkIntz > 0) then
@@ -1682,9 +1682,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
         cmor_field_name='difmxylo',                                             &
         cmor_long_name='Ocean lateral Laplacian viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
-
-    CS%id_Pl_h = register_diag_field('ocean_model', 'Pl', diag%axesTL, Time, &
-        'Planetary number', 'nondim')
 
     CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
         'Laplacian Horizontal Viscosity at q Points', 'm2 s-1')
