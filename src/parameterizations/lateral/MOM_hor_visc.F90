@@ -56,7 +56,7 @@ type, public :: hor_visc_CS ; private
   logical :: use_beta_in_Leith !< If true, includes the beta term in the Leith viscosity
   logical :: Leith_Ah        !< If true, use a biharmonic form of 2D Leith
                              !! nonlinear eddy viscosity. AH is the background.
-  logical :: use_QG_Leith    !< If true, use QG Leith nonlinear eddy viscosity.
+  logical :: use_QG_Leith_visc    !< If true, use QG Leith nonlinear eddy viscosity.
                              !! KH is the background value.
   logical :: bound_Coriolis  !< If true & SMAGORINSKY_AH is used, the biharmonic
                              !! viscosity is modified to include a term that
@@ -321,13 +321,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   endif
   legacy_bound = (CS%Smagorinsky_Kh .or. CS%Leith_Kh) .and. &
                  (CS%bound_Kh .and. .not.CS%better_bound_Kh)
-
-  ! Coefficient for modified Leith
-  if (CS%Modified_Leith) then
-    mod_Leith = 1.0
-  else
-    mod_Leith = 0.0
-  endif
 
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
   use_MEKE_Ku = associated(MEKE%Ku)
@@ -621,8 +614,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         enddo ; enddo
       endif ! CS%use_beta_in_Leith
 
-      if (CS%use_QG_Leith) then
-        call calc_QG_Leith_viscosity(VarMix, G, GV, h, k, vort_xy_dx, vort_xy_dy)
+      if (CS%use_QG_Leith_visc) then
+        call calc_QG_Leith_viscosity(VarMix, G, GV, h, k, vort_xy_dx, vort_xy_dy, &
+                                     grad_div_mag_h, grad_div_mag_q)
       endif
  
       do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -1115,7 +1109,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   ! cases where the corresponding parameters are not read.
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
-  CS%use_QG_Leith = .false.
+  CS%use_QG_Leith_visc = .false.
   CS%bound_Coriolis = .false.
   CS%Modified_Leith = .false.
   CS%anisotropic = .false.
@@ -1170,17 +1164,17 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "The nondimensional Laplacian Leith constant, \n"//&
                  "often set to 1.0", units="nondim", default=0.0, &
                   fail_if_missing = CS%Leith_Kh)
-      call get_param(param_file, mdl, "USE_QG_LEITH", CS%use_QG_Leith, &
+      call get_param(param_file, mdl, "USE_QG_LEITH_VISC", CS%use_QG_Leith_visc, &
                  "If true, use QG Leith nonlinear eddy viscosity.", &
                  default=.false.)
-      if (CS%use_QG_Leith .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
+      if (CS%use_QG_Leith_visc .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
                  "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
-                 "LEITH_KH must be True when USE_QG_LEITH=True.")
+                 "LEITH_KH must be True when USE_QG_LEITH_VISC=True.")
     endif
     if (CS%Leith_Kh .or. CS%Leith_Ah .or. get_all) then
       call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
-                 "If true, include the beta term in the QG Leith nonlinear eddy viscosity.", &
-                 default=CS%use_QG_Leith)
+                 "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
+                 default=CS%Leith_Kh)
       call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
                  "If true, add a term to Leith viscosity which is \n"//&
                  "proportional to the gradient of divergence.", &
