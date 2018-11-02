@@ -1972,7 +1972,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Allocate initialize time-invariant MOM variables.
   call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
-  ! This could replace a later call to rescale_grid_bathymetry.
+
   if (dG%Zd_to_m /= GV%Z_to_m) call rescale_dyn_horgrid_bathymetry(dG, GV%Z_to_m)
 
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
@@ -2133,11 +2133,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Initialize dynamically evolving fields, perhaps from restart files.
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize_coord(GV, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv, dG%max_depth*dG%Zd_to_m)
+                            dirs%output_directory, CS%tv, dG%max_depth)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call ALE_init(param_file, GV, dG%max_depth*dG%Zd_to_m, CS%ALE_CSp)
+    call ALE_init(param_file, GV, dG%max_depth, CS%ALE_CSp)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
@@ -2148,9 +2148,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call MOM_grid_init(G, param_file, HI, bathymetry_at_vel=bathy_at_vel)
   call copy_dyngrid_to_MOM_grid(dG, G)
   call destroy_dyn_horgrid(dG)
-
-  ! This could replace an earlier call to rescale_dyn_horgrid_bathymetry just after MOM_initialize_fixed.
-  !  if (G%Zd_to_m /= GV%Z_to_m) call rescale_grid_bathymetry(G, GV%Z_to_m)
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
