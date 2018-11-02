@@ -3609,7 +3609,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   real,                   intent(in)    :: time_step !< The time step for this update, in s.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: hmask !< A mask indicating which tracer points are
+                          intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: h0 !< The initial ice shelf thicknesses in m.
@@ -3850,7 +3850,7 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
   real,                   intent(in)    :: time_step !< The time step for this update, in s.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: hmask !< A mask indicating which tracer points are
+                          intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: h_after_uflux !< The ice shelf thicknesses after
