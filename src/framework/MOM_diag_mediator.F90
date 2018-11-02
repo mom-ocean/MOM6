@@ -143,23 +143,23 @@ type, public :: diag_grid_storage
 end type diag_grid_storage
 
 !> integers to encode the total cell methods
-integer :: PPP=0    !< x:point,y:point,z:point
-integer :: PPS=1    !< x:point,y:point,z:sum
-integer :: PPM=2    !< x:point,y:point,z:mean
-integer :: PSP=10   !< x:point,y:sum,z:point
-integer :: PSS=11   !< x:point,y:sum,z:point
-integer :: PSM=12   !< x:point,y:sum,z:mean
-integer :: PMP=20   !< x:point,y:mean,z:point
-integer :: PMM=22   !< x:point,y:mean,z:mean
-integer :: SPP=100  !< x:sum,y:point,z:point
-integer :: SPS=101  !< x:sum,y:point,z:sum
-integer :: SSP=110  !< x:sum;y:sum,z:point
-integer :: MPP=200  !< x:mean,y:point,z:point
-integer :: MPM=202  !< x:mean,y:point,z:mean
-integer :: MMP=220  !< x:mean,y:mean,z:point
-integer :: MMS=221  !< x:mean,y:mean,z:sum
-integer :: SSS=111  !< x:sum,y:sum,z:sum
-integer :: MMM=222  !< x:mean,y:mean,z:mean
+!integer :: PPP=111   !< x:point,y:point,z:point, this kind of diagnostic is not currently present in diag_table.MOM6
+!integer :: PPS=112   !< x:point,y:point,z:sum  , this kind of diagnostic is not currently present in diag_table.MOM6
+!integer :: PPM=113   !< x:point,y:point,z:mean , this kind of diagnostic is not currently present in diag_table.MOM6
+integer :: PSP=121  !< x:point,y:sum,z:point
+integer :: PSS=122  !< x:point,y:sum,z:point
+integer :: PSM=123  !< x:point,y:sum,z:mean
+integer :: PMP=131  !< x:point,y:mean,z:point
+integer :: PMM=133  !< x:point,y:mean,z:mean
+integer :: SPP=211  !< x:sum,y:point,z:point
+integer :: SPS=212  !< x:sum,y:point,z:sum
+integer :: SSP=221  !< x:sum;y:sum,z:point
+integer :: MPP=311  !< x:mean,y:point,z:point
+integer :: MPM=313  !< x:mean,y:point,z:mean
+integer :: MMP=331  !< x:mean,y:mean,z:point
+integer :: MMS=332  !< x:mean,y:mean,z:sum
+integer :: SSS=222  !< x:sum,y:sum,z:sum
+integer :: MMM=333  !< x:mean,y:mean,z:mean
 integer :: MSK=-1   !< Use the downsample method of a mask
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
@@ -2339,11 +2339,11 @@ subroutine add_xyz_method(diag, axes, x_cell_method, y_cell_method, v_cell_metho
   !This is a simple way to encode the cell method information made from 3 strings
   !(x_cell_method,y_cell_method,v_cell_method) in a 3 digit integer xyz
   !x_cell_method,y_cell_method,v_cell_method can each be 'point' or 'sum' or 'mean'
-  !We can encode these with setting  0 for 'point', 1 for 'sum, 2 for 'mean' in
+  !We can encode these with setting  1 for 'point', 2 for 'sum, 3 for 'mean' in
   !the 100s position for x, 10s position for y, 1s position for z
-  !E.g., x:sum,y:point,z:mean is 102
+  !E.g., x:sum,y:point,z:mean is 213
 
-  xyz_method = 0
+  xyz_method = 111
 
   mstr = diag%axes%v_cell_method
   if (present(v_extensive)) then
@@ -3732,7 +3732,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   allocate(field_out(1:f1,1:f2,ks:ke))
 
   !Fill the downsampled field on the downsampled diagnostics (almost always compuate) domain
-  if(method .eq. MMM) then    !xyz_method = MMM = 222
+  if(method .eq. MMM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3746,7 +3746,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo; enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. SSS) then    !xyz_method = SSS = 111 e.g., volcello
+  elseif(method .eq. SSS) then    !e.g., volcello
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3760,7 +3760,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo; enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. MMP .or. method .eq. MMS) then    !xyz_method = MMP = 220, e.g.,  or T_advection_xy
+  elseif(method .eq. MMP .or. method .eq. MMS) then    !e.g., T_advection_xy
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3774,7 +3774,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo; enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. PMM) then    !xyz_method = PMM = 022
+  elseif(method .eq. PMM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3788,7 +3788,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. PSM) then    !xyz_method = PSM = 012
+  elseif(method .eq. PSM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3802,7 +3802,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. PSS) then    !xyz_method = PSS = 011 e.g. umo
+  elseif(method .eq. PSS) then    !e.g. umo
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3816,7 +3816,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. SPS) then    !xyz_method = SPS = 101 e.g. vmo
+  elseif(method .eq. SPS) then    !e.g. vmo
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3830,7 +3830,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. MPM) then    !xyz_method = MPM = 202
+  elseif(method .eq. MPM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3893,7 +3893,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
   endif
   allocate(field_out(1:f1,1:f2))
 
-  if(method .eq. MMP) then    !xyz_method = MMP
+  if(method .eq. MMP) then
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3907,7 +3907,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
         enddo; enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. SSP) then    !xyz_method = SSP , e.g., T_dfxy_cont_tendency_2d
+  elseif(method .eq. SSP) then    ! e.g., T_dfxy_cont_tendency_2d
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3921,7 +3921,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
         enddo; enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. PSP) then    !xyz_method = PSP = 010, e.g., umo_2d
+  elseif(method .eq. PSP) then    ! e.g., umo_2d
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3935,7 +3935,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. SPP) then    !xyz_method = SPP = 100, e.g., vmo_2d
+  elseif(method .eq. SPP) then    ! e.g., vmo_2d
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3949,7 +3949,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. PMP) then    !xyz_method = PMP = 020
+  elseif(method .eq. PMP) then
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
@@ -3963,7 +3963,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
         enddo
         field_out(i,j)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo
-  elseif(method .eq. MPP) then    !xyz_method = MPP = 200
+  elseif(method .eq. MPP) then
      do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
