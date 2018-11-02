@@ -75,7 +75,7 @@ type, public :: regridding_CS ; private
   !> Interpolation control structure
   type(interp_CS_type) :: interp_CS
 
-  !> Minimum thickness allowed when building the new grid through regridding
+  !> Minimum thickness allowed when building the new grid through regridding, in H.
   real :: min_thickness
 
   !> Reference pressure for potential density calculations (Pa)
@@ -487,7 +487,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mdl, coord_mode,
   endif
 
   ! initialise coordinate-specific control structure
-  call initCoord(CS, coord_mode)
+  call initCoord(CS, GV, coord_mode)
 
   if (main_parameters .and. coord_is_state_dependent) then
     call get_param(param_file, mdl, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
@@ -511,14 +511,14 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mdl, coord_mode,
     ! Set SLight-specific regridding parameters.
     call get_param(param_file, mdl, "SLIGHT_DZ_SURFACE", dz_fixed_sfc, &
                  "The nominal thickness of fixed thickness near-surface\n"//&
-                 "layers with the SLight coordinate.", units="m", default=1.0)
+                 "layers with the SLight coordinate.", units="m", default=1.0, scale=GV%m_to_H)
     call get_param(param_file, mdl, "SLIGHT_NZ_SURFACE_FIXED", nz_fixed_sfc, &
                  "The number of fixed-depth surface layers with the SLight\n"//&
                  "coordinate.", units="nondimensional", default=2)
     call get_param(param_file, mdl, "SLIGHT_SURFACE_AVG_DEPTH", Rho_avg_depth, &
                  "The thickness of the surface region over which to average\n"//&
                  "when calculating the density to use to define the interior\n"//&
-                 "with the SLight coordinate.", units="m", default=1.0)
+                 "with the SLight coordinate.", units="m", default=1.0, scale=GV%m_to_H)
     call get_param(param_file, mdl, "SLIGHT_NLAY_TO_INTERIOR", nlay_sfc_int, &
                  "The number of layers to offset the surface density when\n"//&
                  "defining where the interior ocean starts with SLight.", &
@@ -554,7 +554,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mdl, coord_mode,
     call get_param(param_file, mdl, "ADAPT_TIME_RATIO", adaptTimeRatio, &
          "Ratio of ALE timestep to grid timescale.", units="s", default=1e-1) !### Should the units be "nondim"?
     call get_param(param_file, mdl, "ADAPT_ZOOM_DEPTH", adaptZoom, &
-         "Depth of near-surface zooming region.", units="m", default=200.0)
+         "Depth of near-surface zooming region.", units="m", default=200.0, scale=GV%m_to_H)
     call get_param(param_file, mdl, "ADAPT_ZOOM_COEFF", adaptZoomCoeff, &
          "Coefficient of near-surface zooming diffusivity.", &
          units="nondim", default=0.2)
@@ -592,8 +592,8 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mdl, coord_mode,
       ! Do nothing.
     elseif ( trim(string) ==  "PARAM") then
       call get_param(param_file, mdl, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
-                   trim(message), units="m", fail_if_missing=.true.)
-      call set_regrid_max_depths(CS, z_max, GV%m_to_H)
+                   trim(message), units="m", scale=GV%m_to_H, fail_if_missing=.true.)
+      call set_regrid_max_depths(CS, z_max)
     elseif (index(trim(string),'FILE:')==1) then
       if (string(6:6)=='.' .or. string(6:6)=='/') then
         ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
@@ -661,8 +661,8 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mdl, coord_mode,
       ! Do nothing.
     elseif ( trim(string) ==  "PARAM") then
       call get_param(param_file, mdl, "MAX_LAYER_THICKNESS", h_max, &
-                   trim(message), units="m", fail_if_missing=.true.)
-      call set_regrid_max_thickness(CS, h_max, GV%m_to_H)
+                   trim(message), units="m", fail_if_missing=.true., scale=GV%m_to_H)
+      call set_regrid_max_thickness(CS, h_max)
     elseif (index(trim(string),'FILE:')==1) then
       if (string(6:6)=='.' .or. string(6:6)=='/') then
         ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
@@ -1598,7 +1598,7 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
                     ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
 
-      call build_slight_column(CS%slight_CS, tv%eqn_of_state, GV%H_to_Pa, GV%m_to_H, &
+      call build_slight_column(CS%slight_CS, tv%eqn_of_state, GV%H_to_Pa, &
                           GV%H_subroundoff, nz, depth, h(i, j, :), &
                           tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new, &
                           h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
@@ -1703,16 +1703,13 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
   real      :: total_height
   real      :: delta_h
   real      :: max_depth
-  real      :: min_thickness
   real      :: eta              ! local elevation
   real      :: local_depth
   real      :: x1, y1, x2, y2
   real      :: x, t
 
   nz = GV%ke
-
   max_depth = G%max_depth*GV%Z_to_H
-  min_thickness = CS%min_thickness !### May need *GV%m_to_H ?
 
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
@@ -1760,8 +1757,8 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
 
       ! Modify interface heights to avoid layers of zero thicknesses
       do k = nz,1,-1
-        if ( z_inter(k) < (z_inter(k+1) + min_thickness) ) then
-          z_inter(k) = z_inter(k+1) + min_thickness
+        if ( z_inter(k) < (z_inter(k+1) + CS%min_thickness) ) then
+          z_inter(k) = z_inter(k+1) + CS%min_thickness
         endif
       enddo
 
@@ -1933,11 +1930,12 @@ end function uniformResolution
 
 !> Initialize the coordinate resolutions by calling the appropriate initialization
 !! routine for the specified coordinate mode.
-subroutine initCoord(CS, coord_mode)
-  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
-  character(len=*),    intent(in)    :: coord_mode !< A string indicating the coordinate mode.
-                                            !! See the documenttion for regrid_consts
-                                            !! for the recognized values.
+subroutine initCoord(CS, GV, coord_mode)
+  type(regridding_CS),     intent(inout) :: CS !< Regridding control structure
+  character(len=*),        intent(in)    :: coord_mode !< A string indicating the coordinate mode.
+                                               !! See the documenttion for regrid_consts
+                                               !! for the recognized values.
+  type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
 
   select case (coordinateMode(coord_mode))
   case (REGRIDDING_ZSTAR)
@@ -1951,9 +1949,9 @@ subroutine initCoord(CS, coord_mode)
   case (REGRIDDING_HYCOM1)
     call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, CS%interp_CS)
   case (REGRIDDING_SLIGHT)
-    call init_coord_slight(CS%slight_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
+    call init_coord_slight(CS%slight_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS, GV%m_to_H)
   case (REGRIDDING_ADAPTIVE)
-    call init_coord_adapt(CS%adapt_CS, CS%nk, CS%coordinateResolution)
+    call init_coord_adapt(CS%adapt_CS, CS%nk, CS%coordinateResolution, GV%m_to_H)
   end select
 end subroutine initCoord
 
@@ -2195,16 +2193,16 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
-  real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the new grid (m)
+  real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the new grid (H)
   real,    optional, intent(in) :: old_grid_weight  !< Weight given to old coordinate when time-filtering grid
   character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
   real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic (H units)
   real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic (H units)
   real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density
-  real,    optional, intent(in) :: dz_min_surface   !< The fixed resolution in the topmost SLight_nkml_min layers (m)
+  real,    optional, intent(in) :: dz_min_surface   !< The fixed resolution in the topmost SLight_nkml_min layers (H)
   integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickness layers at the top of the model
   real,    optional, intent(in) :: Rho_ml_avg_depth !< Averaging depth over which to determine mixed layer potential
-                                                    !! density (m)
+                                                    !! density (H)
   real,    optional, intent(in) :: nlay_ML_to_interior !< Number of layers to offset the mixed layer density to find
                                                     !! resolved stratification (nondim)
   logical, optional, intent(in) :: fix_haloclines   !< Detect regions with much weaker stratification in the coordinate
@@ -2215,7 +2213,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward
                                                     !! from the top.
   real,    optional, intent(in) :: adaptTimeRatio   !< Ratio of the ALE timestep to the grid timescale, ND.
-  real,    optional, intent(in) :: adaptZoom        !< Depth of near-surface zooming region, in m.
+  real,    optional, intent(in) :: adaptZoom        !< Depth of near-surface zooming region, in H.
   real,    optional, intent(in) :: adaptZoomCoeff   !< Coefficient of near-surface zooming diffusivity, ND.
   real,    optional, intent(in) :: adaptBuoyCoeff   !< Coefficient of buoyancy diffusivity, ND.
   real,    optional, intent(in) :: adaptAlpha       !< Scaling factor on optimization tendency, ND.
