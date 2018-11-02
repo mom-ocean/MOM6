@@ -26,7 +26,7 @@ use MOM_io,               only : create_file, write_field, close_file
 use MOM_interface_heights,only : find_eta
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
 use MOM_regridding,       only : uniformResolution
-use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
+use MOM_regridding,       only : inflate_vanished_layers_old
 use MOM_regridding,       only : set_target_densities_from_GV, set_target_densities
 use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
@@ -130,7 +130,7 @@ contains
 subroutine ALE_init( param_file, GV, max_depth, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
   type(verticalGrid_type), intent(in) :: GV         !< Ocean vertical grid structure
-  real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in m.
+  real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in Z.
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
@@ -298,7 +298,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
-                                                                   !! last time step (m or Pa)
+                                                                   !! last time step in H (often m or Pa)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field (m/s)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
@@ -1098,7 +1098,7 @@ end subroutine pressure_gradient_ppm
 !> Initializes regridding for the main ALE algorithm
 subroutine ALE_initRegridding(GV, max_depth, param_file, mdl, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
-  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
+  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in Z.
   type(param_file_type),   intent(in)  :: param_file !< parameter file
   character(len=*),        intent(in)  :: mdl        !< Name of calling module
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
@@ -1120,7 +1120,7 @@ function ALE_getCoordinate( CS )
   type(ALE_CS), pointer    :: CS                  !< module control structure
 
   real, dimension(CS%nk+1) :: ALE_getCoordinate
-  ALE_getCoordinate(:) = getCoordinateInterfaces( CS%regridCS )
+  ALE_getCoordinate(:) = getCoordinateInterfaces( CS%regridCS, undo_scaling=.true. )
 
 end function ALE_getCoordinate
 
@@ -1171,7 +1171,7 @@ subroutine ALE_updateVerticalGridType(CS, GV)
   integer :: nk
 
   nk = GV%ke
-  GV%sInterface(1:nk+1) = getCoordinateInterfaces( CS%regridCS )
+  GV%sInterface(1:nk+1) = getCoordinateInterfaces( CS%regridCS, undo_scaling=.true. )
   GV%sLayer(1:nk) = 0.5*( GV%sInterface(1:nk) + GV%sInterface(2:nk+1) )
   GV%zAxisUnits = getCoordinateUnits( CS%regridCS )
   GV%zAxisLongName = getCoordinateShortName( CS%regridCS )
@@ -1196,7 +1196,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate")
-  ds(:)       = getCoordinateResolution( CS%regridCS )
+  ds(:)       = getCoordinateResolution( CS%regridCS, undo_scaling=.true. )
   dsi(1)      = 0.5*ds(1)
   dsi(2:GV%ke) = 0.5*( ds(1:GV%ke-1) + ds(2:GV%ke) )
   dsi(GV%ke+1) = 0.5*ds(GV%ke)
@@ -1225,7 +1225,7 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
   integer :: i, j, k
 
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
-    h(i,j,:) = GV%m_to_H * getStaticThickness( CS%regridCS, 0., G%Zd_to_m*G%bathyT(i,j) )
+    h(i,j,:) = GV%Z_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
   enddo ; enddo
 
 end subroutine ALE_initThicknessToCoord
