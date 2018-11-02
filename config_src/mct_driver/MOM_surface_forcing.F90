@@ -480,7 +480,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, &
   ! adjust the NET fresh-water flux to zero, if flagged
   if (CS%adjust_net_fresh_water_to_zero) then
     do j=js,je ; do i=is,ie
-      net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
+      net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j) + fluxes%meltw(i,j)) + &
           (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
           (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * G%areaT(i,j)
       !   The following contribution appears to be calculating the volume flux of sea-ice
