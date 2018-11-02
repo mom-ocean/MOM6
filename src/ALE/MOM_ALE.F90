@@ -32,8 +32,6 @@ use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultMinThickness
-use MOM_regridding,       only : set_regrid_max_depths
-use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
@@ -205,14 +203,15 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  units="s", default=0.)
   call get_param(param_file, mdl, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
                  "The depth above which no time-filtering is applied. Above this depth\n"//&
-                 "final grid exactly matches the target (new) grid.", units="m", default=0.)
+                 "final grid exactly matches the target (new) grid.", &
+                 units="m", default=0., scale=GV%m_to_H)
   call get_param(param_file, mdl, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
                  "The depth below which full time-filtering is applied with time-scale\n"//&
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
-                 units="m", default=0.)
-  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*GV%m_to_H, &
-                                      depth_of_time_filter_deep=filter_deep_depth*GV%m_to_H)
+                 units="m", default=0., scale=GV%m_to_H)
+  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth, &
+                                      depth_of_time_filter_deep=filter_deep_depth)
   call get_param(param_file, mdl, "REGRID_USE_OLD_DIRECTION", local_logical, &
                  "If true, the regridding ntegrates upwards from the bottom for\n"//&
                  "interface positions, much as the main model does. If false\n"//&
@@ -249,7 +248,7 @@ subroutine ALE_register_diags(Time, G, GV, diag, CS)
   CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
       'Salinity before remapping', 'PSU')
   CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
-      'Interface Heights before remapping', 'm')
+      'Interface Heights before remapping', 'm', conversion=GV%Z_to_m)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
       'Change in interface height due to ALE regridding', 'm')
@@ -329,7 +328,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
   if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
   if (CS%id_e_preale > 0) then
-    call find_eta(h, tv, G, GV, eta_preale, eta_to_m=1.0)
+    call find_eta(h, tv, G, GV, eta_preale)
     call post_data(CS%id_e_preale, eta_preale, CS%diag)
   endif
 
