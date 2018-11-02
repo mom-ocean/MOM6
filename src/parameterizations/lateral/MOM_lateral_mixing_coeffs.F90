@@ -97,6 +97,12 @@ type, public :: VarMix_CS
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     Laplac3_const_v       !< Laplacian  metric-dependent constants (nondim)
 
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
+    KH_u_QGL              !< QG Leith GM coefficient at u-points (m2 s-1)
+
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
+    KH_v_QGL              !< QG Leith GM coefficient at v-points (m2 s-1)
+
   ! Parameters
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
   real :: Visbeck_L_scale !< Fixed length scale in Visbeck formula
@@ -116,8 +122,8 @@ type, public :: VarMix_CS
   real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate (nondim).
 
   ! Leith parameters
-  logical :: use_QG_Leith_GM    !< If true, uses the QG Leith viscosity as the GM coefficient
-  logical :: use_beta_in_QG_Leith ! If true, includes the beta term in the QG Leith GM coefficient
+  logical :: use_QG_Leith_GM      !! If true, uses the QG Leith viscosity as the GM coefficient
+  logical :: use_beta_in_QG_Leith !! If true, includes the beta term in the QG Leith GM coefficient
 
   ! Diagnostics
   !>@{
@@ -733,7 +739,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 end subroutine calc_slope_functions_using_just_e
 
 !> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
-subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, vort_xy_dx, vort_xy_dy, div_xx_dx, div_xx_dy)
+subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_xy_dx, vort_xy_dy)
   type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
@@ -741,10 +747,10 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, vort_xy_dx, vort_xy_dy, div_
 !  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg m-2)
   integer,                                   intent(in)  :: k !< Layer for which to calculate vorticity magnitude
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
   real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: vort_xy_dx !< x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: vort_xy_dy !< y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: div_xx_dx  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
-  real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: div_xx_dy  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
 !  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity at h-points (m2 s-1)
 !  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity at q-points (m2 s-1)
 !  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity at h-points (m4 s-1)
@@ -772,6 +778,10 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, vort_xy_dx, vort_xy_dy, div_
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  real :: inv_PI3
+
+ 
+    inv_PI3 = 1.0/((4.0*atan(1.0))**3)
   ! Add in stretching term for the QG Leith vsicosity
 !  if (CS%use_QG_Leith) then
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
@@ -830,9 +840,11 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, vort_xy_dx, vort_xy_dy, div_
         grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
                              + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2) 
         if (CS%use_beta_in_QG_Leith) then
-          vert_vort_mag = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)**3)
+          KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)**3) & 
+               * CS%Laplac3_const_u(I,j) * inv_PI3
         else
-          vert_vort_mag = grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)
+          KH_u_QG(I,j,k) = (grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)) &
+               * CS%Laplac3_const_u(I,j) * inv_PI3
         endif
       enddo ; enddo
 
@@ -842,9 +854,11 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, vort_xy_dx, vort_xy_dy, div_
         grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
                              + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)  
         if (CS%use_beta_in_QG_Leith) then
-          vert_vort_mag = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)**3)
+          KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)**3) &
+               * CS%Laplac3_const_v(i,J) * inv_PI3
         else
-          vert_vort_mag = grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)
+          KH_v_QG(i,J,k) = (grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) & 
+               * CS%Laplac3_const_v(i,J) * inv_PI3
         endif
       enddo ; enddo
     endif

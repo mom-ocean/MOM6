@@ -117,6 +117,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
                     ! in roundoff and can be neglected, in H.
   real, dimension(:,:), pointer :: cg1 => null() !< Wave speed (m/s)
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct
+  logical :: use_QG_Leith
   integer :: i, j, k, is, ie, js, je, nz
   real :: hu(SZI_(G), SZJ_(G))       ! u-thickness (H)
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness (H)
@@ -146,6 +147,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
     khth_use_ebt_struct = VarMix%khth_use_ebt_struct
+    use_QG_Leith = VarMix%use_QG_Leith_GM
     if (associated(VarMix%cg1)) cg1 => VarMix%cg1
   else
     cg1 => null()
@@ -177,9 +179,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   if (use_VarMix) then
 !$OMP do
-    do j=js,je ; do I=is-1,ie
-      Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
-    enddo ; enddo
+    if (.not. use_QG_Leith) then
+      do j=js,je ; do I=is-1,ie
+        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
+      enddo ; enddo
+    endif
   endif
 
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
@@ -212,6 +216,15 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(I,j))
   enddo ; enddo
 
+  if (use_VarMix) then
+!$OMP do
+    if (use_QG_Leith) then
+      do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
+        KH_u(I,j,K) = VarMix%KH_u_QG(I,j,k-1)
+      enddo ; enddo ; enddo
+    endif
+  endif    
+
   if (khth_use_ebt_struct) then
 !$OMP do
     do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
@@ -231,9 +244,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   if (use_VarMix) then
 !$OMP do
-    do J=js-1,je ; do i=is,ie
-      Khth_Loc(i,j) = Khth_Loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
-    enddo ; enddo
+    if (.not. use_QG_Leith) then
+      do J=js-1,je ; do i=is,ie
+        Khth_Loc(i,j) = Khth_Loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
+      enddo ; enddo
+    endif
   endif
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
 !$OMP do
@@ -267,6 +282,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
       KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc(i,j))
     enddo ; enddo
   endif
+
+  if (use_VarMix) then
+!$OMP do
+    if (use_QG_Leith) then
+      do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
+        KH_v(i,J,K) = VarMix%KH_v_QG(i,J,k-1)
+      enddo ; enddo ; enddo
+    endif
+  endif
+
   if (khth_use_ebt_struct) then
 !$OMP do
     do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
