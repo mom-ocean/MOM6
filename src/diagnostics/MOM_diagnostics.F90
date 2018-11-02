@@ -284,19 +284,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, G, GV, CS%e, eta_bt, eta_to_m=1.0)
+    call find_eta(h, tv, G, GV, CS%e, eta_bt)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
   if (associated(CS%e_D)) then
     if (associated(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e(i,j,k) + GV%Z_to_m*G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, G, GV, CS%e_D, eta_bt, eta_to_m=1.0)
+      call find_eta(h, tv, G, GV, CS%e_D, eta_bt)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e_D(i,j,k) + GV%Z_to_m*G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     endif
 
@@ -772,17 +772,17 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
                                                  !! previous call to diagnostics_init.
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    z_top, &  ! Height of the top of a layer or the ocean, in m.
+    z_top, &  ! Height of the top of a layer or the ocean, in Z.
     z_bot, &  ! Height of the bottom of a layer (for id_mass) or the
-              ! (positive) depth of the ocean (for id_col_ht), in m.
+              ! (positive) depth of the ocean (for id_col_ht), in Z.
     mass, &   ! integrated mass of the water column, in kg m-2.  For
-              ! non-Boussinesq models this is rho*dz. For Boussiensq
+              ! non-Boussinesq models this is rho*dz. For Boussinesq
               ! models, this is either the integral of in-situ density
-              ! (rho*dz for col_mass) or reference dens (Rho_0*dz for mass_wt).
+              ! (rho*dz for col_mass) or reference density (Rho_0*dz for mass_wt).
     btm_pres,&! The pressure at the ocean bottom, or CMIP variable 'pbo'.
               ! This is the column mass multiplied by gravity plus the pressure
               ! at the ocean surface.
-    dpress, &    ! Change in hydrostatic pressure across a layer, in Pa.
+    dpress, & ! Change in hydrostatic pressure across a layer, in Pa.
     tr_int    ! vertical integral of a tracer times density,
               ! (Rho_0 in a Boussinesq model) in TR kg m-2.
   real    :: IG_Earth  ! Inverse of gravitational acceleration, in s2 m-1.
@@ -815,9 +815,9 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
   endif
 
   if (CS%id_col_ht > 0) then
-    call find_eta(h, tv, G, GV, z_top, eta_to_m=1.0)
+    call find_eta(h, tv, G, GV, z_top)
     do j=js,je ; do i=is,ie
-      z_bot(i,j) = z_top(i,j) + GV%Z_to_m*G%bathyT(i,j)
+      z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
     enddo ; enddo
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif
@@ -832,10 +832,10 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
         do k=1,nz
           do j=js,je ; do i=is,ie
             z_top(i,j) = z_bot(i,j)
-            z_bot(i,j) = z_top(i,j) - GV%H_to_m*h(i,j,k)
+            z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, GV%H_to_kg_m2, (GV%g_Earth*GV%m_to_Z), &
+                              z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -1534,11 +1534,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
-      'Interface Height Relative to Mean Sea Level', 'm')
+      'Interface Height Relative to Mean Sea Level', 'm', conversion=GV%Z_to_m)
   if (CS%id_e>0) call safe_alloc_ptr(CS%e,isd,ied,jsd,jed,nz+1)
 
   CS%id_e_D = register_diag_field('ocean_model', 'e_D', diag%axesTi, Time, &
-      'Interface Height above the Seafloor', 'm')
+      'Interface Height above the Seafloor', 'm', conversion=GV%Z_to_m)
   if (CS%id_e_D>0) call safe_alloc_ptr(CS%e_D,isd,ied,jsd,jed,nz+1)
 
   CS%id_Rml = register_diag_field('ocean_model', 'Rml', diag%axesTL, Time, &
@@ -1690,7 +1690,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'The column integrated in situ density', 'kg m-2')
 
   CS%id_col_ht = register_diag_field('ocean_model', 'col_height', diag%axesT1, Time, &
-      'The height of the water column', 'm')
+      'The height of the water column', 'm', conversion=GV%Z_to_m)
   CS%id_pbo = register_diag_field('ocean_model', 'pbo', diag%axesT1, Time, &
       long_name='Sea Water Pressure at Sea Floor', standard_name='sea_water_pressure_at_sea_floor', &
       units='Pa')
