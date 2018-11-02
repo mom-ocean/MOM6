@@ -2123,7 +2123,6 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         if (associated(fluxes%lrunoff))     res(i,j) = res(i,j)+fluxes%lrunoff(i,j)
         if (associated(fluxes%frunoff))     res(i,j) = res(i,j)+fluxes%frunoff(i,j)
         if (associated(fluxes%vprec))       res(i,j) = res(i,j)+fluxes%vprec(i,j)
-        ! GMM, not sure if meltw is needed here. If so, the name prcme is misleading.
         if (associated(fluxes%meltw))       res(i,j) = res(i,j)+fluxes%meltw(i,j)
       enddo ; enddo
       call post_data(handles%id_prcme, res, diag)
