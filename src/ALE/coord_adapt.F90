@@ -18,7 +18,7 @@ type, public :: adapt_CS ; private
   !> Number of layers/levels
   integer :: nk
 
-  !> Nominal near-surface resolution
+  !> Nominal near-surface resolution in H
   real, allocatable, dimension(:) :: coordinateResolution
 
   !> Ratio of optimisation and diffusion timescales
@@ -52,7 +52,7 @@ contains
 subroutine init_coord_adapt(CS, nk, coordinateResolution)
   type(adapt_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,            intent(in) :: nk !< Number of layers in the grid
-  real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution (m)
+  real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution (H)
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_adapt: CS already associated")
   allocate(CS)
@@ -126,7 +126,7 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   zNext(nz+1) = zInt(i,j,nz+1)
 
   ! local depth for scaling diffusivity
-  depth = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
+  depth = G%bathyT(i,j) * GV%Z_to_H
 
   ! initialize del2sigma to zero
   del2sigma(:) = 0.
