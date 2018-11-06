@@ -13,7 +13,7 @@ use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_time_manager,   only : time_type, set_time, time_type_to_real
+use MOM_time_manager,   only : time_type, time_type_to_real
 
 implicit none ; private
 

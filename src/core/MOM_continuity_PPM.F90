@@ -144,7 +144,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   logical :: x_first
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  h_min = GV%Angstrom
+  h_min = GV%Angstrom_H
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_continuity_PPM: Module must be initialized before it is used.")
@@ -312,7 +312,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_x(h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), G, LB, &
-                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
+                                2.0*GV%Angstrom_H, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
     endif
     do I=ish-1,ieh ; visc_rem(I,k) = 1.0 ; enddo
   enddo
@@ -1129,7 +1129,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_y(h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), G, LB, &
-                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
+                                2.0*GV%Angstrom_H, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
     endif
     do i=ish,ieh ; visc_rem(i,k) = 1.0 ; enddo
   enddo
@@ -2221,6 +2221,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   type(continuity_PPM_CS), pointer       :: CS   !< Module's control structure.
 !> This include declares and sets the variable "version".
 #include "version_variable.h"
+  real :: tol_eta_m  ! An unscaled version of tol_eta, in m.
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
 
   if (associated(CS)) then
@@ -2254,8 +2255,8 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
                  "height due to the fluxes through each face.  The total \n"//&
                  "tolerance for SSH is 4 times this value.  The default \n"//&
                  "is 0.5*NK*ANGSTROM, and this should not be set less x\n"//&
-                 "than about 10^-15*MAXIMUM_DEPTH.", units="m", &
-                 default=0.5*G%ke*GV%Angstrom_z)
+                 "than about 10^-15*MAXIMUM_DEPTH.", units="m", scale=GV%m_to_H, &
+                 default=0.5*G%ke*GV%Angstrom_m, unscaled=tol_eta_m)
 
   call get_param(param_file, mdl, "ETA_TOLERANCE_AUX", CS%tol_eta_aux, &
                  "The tolerance for free-surface height discrepancies \n"//&
@@ -2263,7 +2264,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
                  "layer thicknesses when calculating the auxiliary \n"//&
                  "corrected velocities. By default, this is the same as \n"//&
                  "ETA_TOLERANCE, but can be made larger for efficiency.", &
-                 units="m", default=CS%tol_eta)
+                 units="m", default=tol_eta_m, scale=GV%m_to_H)
   call get_param(param_file, mdl, "VELOCITY_TOLERANCE", CS%tol_vel, &
                  "The tolerance for barotropic velocity discrepancies \n"//&
                  "between the barotropic solution and  the sum of the \n"//&
@@ -2298,9 +2299,6 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
 
   id_clock_update = cpu_clock_id('(Ocean continuity update)', grain=CLOCK_ROUTINE)
   id_clock_correct = cpu_clock_id('(Ocean continuity correction)', grain=CLOCK_ROUTINE)
-
-  CS%tol_eta = CS%tol_eta * GV%m_to_H
-  CS%tol_eta_aux = CS%tol_eta_aux * GV%m_to_H
 
 end subroutine continuity_PPM_init
 

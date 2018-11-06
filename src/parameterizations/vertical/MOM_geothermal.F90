@@ -5,6 +5,7 @@ module MOM_geothermal
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
+use MOM_domains,             only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, slasher
@@ -44,7 +45,7 @@ contains
 !! the partial derivative of the coordinate density with temperature is positive
 !! or very small, the layers are simply heated in place.  Any heat that can not
 !! be applied to the ocean is returned (WHERE)?
-subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
+subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid
                                                                 !! structure.
@@ -69,6 +70,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
   type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
                                                                 !! a previous call to
                                                                 !! geothermal_init.
+  integer,                        optional, intent(in)    :: halo !< Halo width over which to work
   ! Local variables
   real, dimension(SZI_(G)) :: &
     heat_rem,  & ! remaining heat (H * degC)
@@ -105,6 +107,9 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  if (present(halo)) then
+    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  endif
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_geothermal: "//&
          "Module must be initialized before it is used.")
@@ -112,7 +117,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 
   nkmb      = GV%nk_rho_varies
   Irho_cp   = 1.0 / (GV%H_to_kg_m2 * tv%C_p)
-  Angstrom  = GV%Angstrom
+  Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
@@ -310,7 +315,7 @@ end subroutine geothermal
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
 subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
@@ -377,6 +382,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
       CS%geo_heat(i,j) = G%mask2dT(i,j) * scale
     enddo ; enddo
   endif
+  call pass_var(CS%geo_heat, G%domain)
 
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
@@ -400,10 +406,11 @@ end subroutine geothermal_end
 
 !> \namespace mom_geothermal
 !!
-!! Geothermal heating can be added either in a layered isopycnal mode, in which the heating raises the density of the layer to the
-!! target density of the layer above, and then moves the water into that layer, or in a simple Eulerian mode, in which the bottommost
-!! GEOTHERMAL_THICKNESS are heated.  Geothermal heating will also provide a buoyant source of bottom TKE that can be used to further
-!! mix the near-bottom water. In cold fresh water lakes where heating increases density, water should be moved into deeper layers, but
-!! this is not implemented yet.
+!! Geothermal heating can be added either in a layered isopycnal mode, in which the heating raises the density
+!! of the layer to the target density of the layer above, and then moves the water into that layer, or in a
+!! simple Eulerian mode, in which the bottommost GEOTHERMAL_THICKNESS are heated.  Geothermal heating will also
+!! provide a buoyant source of bottom TKE that can be used to further mix the near-bottom water. In cold fresh
+!! water lakes where heating increases density, water should be moved into deeper layers, but this is not
+!! implemented yet.
 
 end module MOM_geothermal
