@@ -38,8 +38,8 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
   real :: x, y
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "benchmark_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -107,12 +107,21 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
                      ! interface temperature for a given z and its derivative.
   real :: pi, z
   logical :: just_read
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "benchmark_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "BENCHMARK_ML_DEPTH_IC", ML_depth, &
+                 "Initial mixed layer depth in the benchmark test case.", &
+                 units='m', default=50.0, scale=US%m_to_Z, do_not_log=just_read)
+  call get_param(param_file, mdl, "BENCHMARK_THERMOCLINE_SCALE", thermocline_scale, &
+                 "Initial thermocline depth scale in the benchmark test case.", &
+                 default=500.0, units="m", scale=US%m_to_Z, do_not_log=just_read)
 
   if (just_read) return ! This subroutine has no run-time parameters.
 
@@ -120,8 +129,6 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
 
   k1 = GV%nk_rho_varies + 1
 
-  ML_depth = 50.0 * US%m_to_Z
-  thermocline_scale = 500.0 * US%m_to_Z
   a_exp = 0.9
 
 ! This block calculates T0(k) for the purpose of diagnosing where the
