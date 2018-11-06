@@ -26,11 +26,13 @@ implicit none ; private
 
 public extractFluxes1d, extractFluxes2d, optics_type
 public MOM_forcing_chksum, MOM_mech_forcing_chksum
-public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
+public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d
+public forcing_accumulate, fluxes_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
 public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
 public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcing
-public set_derived_forcing_fields, copy_back_forcing_fields, set_net_mass_forcing
+public set_derived_forcing_fields, copy_back_forcing_fields
+public set_net_mass_forcing, get_net_mass_forcing
 
 !> Structure that contains pointers to the boundary forcing used to drive the
 !! liquid ocean simulated by MOM.
@@ -39,8 +41,6 @@ public set_derived_forcing_fields, copy_back_forcing_fields, set_net_mass_forcin
 !! are three: solo, coupled, and ice-shelf. Alternatively, they are allocated in
 !! MESO_surface_forcing.F90, which is a special case of solo_driver/MOM_surface_forcing.F90.
 type, public :: forcing
-
-  ! Pointers in this module should be initialized to NULL.
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
@@ -152,11 +152,10 @@ type, public :: forcing
 
   logical :: fluxes_used = .true. !< If true, all of the heat, salt, and mass
                                   !! fluxes have been applied to the ocean.
-  real :: dt_buoy_accum  = -1.0   !< The amount of time over which the buoyancy fluxes
+  real :: dt_buoy_accum = -1.0    !< The amount of time over which the buoyancy fluxes
                                   !! should be applied, in s.  If negative, this forcing
                                   !! type variable has not yet been inialized.
 
-  ! heat capacity
   real :: C_p                !< heat capacity of seawater ( J/(K kg) ).
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
@@ -167,7 +166,7 @@ type, public :: forcing
      !! This is not a convenient convention, but imposed on MOM6 by the coupler.
 
   ! For internal error tracking
-  integer :: num_msg = 0 !< Number of messages issues about excessive SW penetration
+  integer :: num_msg = 0 !< Number of messages issued about excessive SW penetration
   integer :: max_msg = 2 !< Maximum number of messages to issue about excessive SW penetration
 
 end type forcing
@@ -211,6 +210,9 @@ type, public :: mech_forcing
   real, pointer, dimension(:,:) :: &
     rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points (m3/s)
     rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points (m3/s)
+  real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
+                                !! have been averaged, in s.
+  logical :: net_mass_src_set = .false. !< If true, an estimate of net_mass_src has been provided.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
                                 !! and various types of ice needs to be accumulated, and the
                                 !! surface pressure explicitly reset to zero at the driver level
@@ -296,7 +298,7 @@ type, public :: forcing_diags
   integer :: id_netFWGlobalAdj    = -1
   integer :: id_netFWGlobalScl    = -1
 
-  ! momentum flux amd forcing diagnostic handles
+  ! momentum flux and forcing diagnostic handles
   integer :: id_taux  = -1
   integer :: id_tauy  = -1
   integer :: id_ustar = -1
@@ -854,9 +856,9 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
-  depthBeforeScalingFluxes = max( GV%Angstrom, 1.e-30*GV%m_to_H )
+  depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = GV%g_Earth / GV%Rho0
+  GoRho       = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 
@@ -1036,6 +1038,11 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, haloshift)
                   haloshift=hshift, symmetric=.true.)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
+  if (associated(forces%ustar)) &
+    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift)
+  if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
+    call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
+                  forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true.)
 
 end subroutine MOM_mech_forcing_chksum
 
@@ -1741,7 +1748,8 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
 end subroutine register_forcing_type_diags
 
-!> Accumulate the forcing over time steps
+!> Accumulate the forcing over time steps, taking input from a mechanical forcing type
+!! and a temporary forcing-flux type.
 subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
   type(forcing),         intent(in)    :: flux_tmp !< A temporary structure with current
                                                  !!thermodynamic forcing fields
@@ -1751,6 +1759,26 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
   real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   real,                  intent(out)   :: wt2  !< The relative weight of the new fluxes
+
+  ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
+  ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
+  ! and increments the amount of time over which the buoyancy forcing should be
+  ! applied, all via a call to fluxes accumulate.
+
+  call fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
+
+end subroutine forcing_accumulate
+
+!> Accumulate the thermodynamic fluxes over time steps
+subroutine fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
+  type(forcing),             intent(in)    :: flux_tmp !< A temporary structure with current
+                                                   !! thermodynamic forcing fields
+  type(forcing),             intent(inout) :: fluxes !< A structure containing time-averaged
+                                                   !! thermodynamic forcing fields
+  real,                      intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
+  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
+  real,                      intent(out)   :: wt2  !< The relative weight of the new fluxes
+  type(mech_forcing), optional, intent(in) :: forces !< A structure with the driving mechanical forces
 
   ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
@@ -1774,15 +1802,29 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
   wt2 = 1.0 - wt1 ! = dt / (fluxes%dt_buoy_accum + dt)
   fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + dt
 
-  ! Copy over the pressure fields.
-  do j=js,je ; do i=is,ie
-    fluxes%p_surf(i,j) = forces%p_surf(i,j)
-    fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
-  enddo ; enddo
+  ! Copy over the pressure fields and accumulate averages of ustar, either from the forcing
+  ! type or from the temporary fluxes type.
+  if (present(forces)) then
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = forces%p_surf(i,j)
+      fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
+
+      fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*forces%ustar(i,j)
+    enddo ; enddo
+  else
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = flux_tmp%p_surf(i,j)
+      fluxes%p_surf_full(i,j) = flux_tmp%p_surf_full(i,j)
+
+      fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*flux_tmp%ustar(i,j)
+    enddo ; enddo
+  endif
 
   ! Average the water, heat, and salt fluxes, and ustar.
   do j=js,je ; do i=is,ie
-    fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*forces%ustar(i,j)
+!### Replace the expression for ustar_gustless with this one...
+!    fluxes%ustar_gustless(i,j) = wt1*fluxes%ustar_gustless(i,j) + wt2*flux_tmp%ustar_gustless(i,j)
+    fluxes%ustar_gustless(i,j) = flux_tmp%ustar_gustless(i,j)
 
     fluxes%evap(i,j) = wt1*fluxes%evap(i,j) + wt2*flux_tmp%evap(i,j)
     fluxes%lprec(i,j) = wt1*fluxes%lprec(i,j) + wt2*flux_tmp%lprec(i,j)
@@ -1866,7 +1908,7 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
     call coupler_type_increment_data(flux_tmp%tr_fluxes, fluxes%tr_fluxes, &
                               scale_factor=wt2, scale_prev=wt1)
 
-end subroutine forcing_accumulate
+end subroutine fluxes_accumulate
 
 !> This subroutine copies the computational domains of common forcing fields
 !! from a mech_forcing type to a (thermodynamic) forcing type.
@@ -1922,8 +1964,11 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
                                                      !! as used to calculate ustar.
 
   real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  real :: Irho0        ! Inverse of the mean density in (m^3/kg)
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  Irho0 = 1.0/Rho0
 
   if (associated(forces%taux) .and. associated(forces%tauy) .and. &
       associated(fluxes%ustar_gustless)) then
@@ -1940,45 +1985,58 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) / Rho0)
+!### Change to:
+!      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
     enddo ; enddo
   endif
 
 end subroutine set_derived_forcing_fields
 
 
-!> This subroutine calculates determines the net mass source to th eocean from
+!> This subroutine calculates determines the net mass source to the ocean from
 !! a (thermodynamic) forcing type and stores it in a mech_forcing type.
 subroutine set_net_mass_forcing(fluxes, forces, G)
   type(forcing),           intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
   type(mech_forcing),      intent(inout) :: forces   !< A structure with the driving mechanical forces
-  type(ocean_grid_type),   intent(in)    :: G        !< grid type
+  type(ocean_grid_type),   intent(in)    :: G        !< The ocean grid type
+
+  if (associated(forces%net_mass_src)) &
+    call get_net_mass_forcing(fluxes, G, forces%net_mass_src)
+
+end subroutine set_net_mass_forcing
+
+!> This subroutine calculates determines the net mass source to the ocean from
+!! a (thermodynamic) forcing type and stores it in a provided array.
+subroutine get_net_mass_forcing(fluxes, G, net_mass_src)
+  type(forcing),                    intent(in)  :: fluxes !< A structure containing thermodynamic forcing fields
+  type(ocean_grid_type),            intent(in)  :: G      !< The ocean grid type
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: net_mass_src !< The net mass flux of water into the ocean
+                                                          !! in kg m-2 s-1.
 
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  if (associated(forces%net_mass_src)) then
-    forces%net_mass_src(:,:) = 0.0
-    if (associated(fluxes%lprec)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%lprec(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%fprec)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%fprec(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%vprec)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%vprec(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%lrunoff)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%lrunoff(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%frunoff)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%frunoff(i,j)
-    enddo ; enddo ; endif
-    if (associated(fluxes%evap)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%evap(i,j)
-    enddo ; enddo ; endif
-  endif
+  net_mass_src(:,:) = 0.0
+  if (associated(fluxes%lprec)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%lprec(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%fprec)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%fprec(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%vprec)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%vprec(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%lrunoff)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%lrunoff(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%frunoff)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%frunoff(i,j)
+  enddo ; enddo ; endif
+  if (associated(fluxes%evap)) then ; do j=js,je ; do i=is,ie
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%evap(i,j)
+  enddo ; enddo ; endif
 
-end subroutine set_net_mass_forcing
+end subroutine get_net_mass_forcing
 
 !> This subroutine copies the computational domains of common forcing fields
 !! from a mech_forcing type to a (thermodynamic) forcing type.
@@ -2001,9 +2059,8 @@ end subroutine copy_back_forcing_fields
 
 !> Offer mechanical forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
-subroutine mech_forcing_diags(forces, fluxes, dt, G, diag, handles)
+subroutine mech_forcing_diags(forces, dt, G, diag, handles)
   type(mech_forcing),    intent(in)    :: forces   !< A structure with the driving mechanical forces
-  type(forcing),         intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
   real,                  intent(in)    :: dt       !< time step
   type(ocean_grid_type), intent(in)    :: G        !< grid type
   type(diag_ctrl),       intent(in)    :: diag     !< diagnostic type
@@ -2018,20 +2075,15 @@ subroutine mech_forcing_diags(forces, fluxes, dt, G, diag, handles)
 
     if ((handles%id_taux > 0) .and. associated(forces%taux)) &
       call post_data(handles%id_taux, forces%taux, diag)
+
     if ((handles%id_tauy > 0) .and. associated(forces%tauy)) &
       call post_data(handles%id_tauy, forces%tauy, diag)
-    if ((handles%id_ustar > 0) .and. associated(fluxes%ustar)) &
-      call post_data(handles%id_ustar, fluxes%ustar, diag)
-    if (handles%id_ustar_berg > 0) &
-      call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
-    if (handles%id_area_berg > 0) &
-      call post_data(handles%id_area_berg, fluxes%area_berg, diag)
-    if (handles%id_mass_berg > 0) &
-      call post_data(handles%id_mass_berg, fluxes%mass_berg, diag)
-    if (handles%id_frac_ice_cover > 0) &
-      call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
-    if (handles%id_ustar_ice_cover > 0) &
-      call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
+
+    if ((handles%id_mass_berg > 0) .and. associated(forces%mass_berg)) &
+      call post_data(handles%id_mass_berg, forces%mass_berg, diag)
+
+    if ((handles%id_area_berg > 0) .and. associated(forces%area_berg)) &
+      call post_data(handles%id_area_berg, forces%area_berg, diag)
 
   endif
 
@@ -2081,7 +2133,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         if (associated(fluxes%frunoff))     res(i,j) = res(i,j)+fluxes%frunoff(i,j)
         if (associated(fluxes%vprec))       res(i,j) = res(i,j)+fluxes%vprec(i,j)
       enddo ; enddo
-      call post_data(handles%id_prcme, res, diag)
+      if (handles%id_prcme > 0) call post_data(handles%id_prcme, res, diag)
       if (handles%id_total_prcme > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_prcme, total_transport, diag)
@@ -2099,7 +2151,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         if (fluxes%vprec(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
         if (fluxes%evap(i,j)  < 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massout, res, diag)
+      if (handles%id_net_massout > 0) call post_data(handles%id_net_massout, res, diag)
       if (handles%id_total_net_massout > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_massout, total_transport, diag)
@@ -2116,7 +2168,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         ! fluxes%cond is not needed because it is derived from %evap > 0
         if (fluxes%evap(i,j)  > 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massin, res, diag)
+      if (handles%id_net_massin > 0) call post_data(handles%id_net_massin, res, diag)
       if (handles%id_total_net_massin > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_massin, total_transport, diag)
@@ -2270,7 +2322,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       if (associated(fluxes%sens))       res(i,j) = res(i,j) + fluxes%sens(i,j)
       if (associated(fluxes%SW))         res(i,j) = res(i,j) + fluxes%SW(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_heat_coupler, res, diag)
+      if (handles%id_net_heat_coupler > 0) call post_data(handles%id_net_heat_coupler, res, diag)
       if (handles%id_total_net_heat_coupler > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_heat_coupler, total_transport, diag)
@@ -2330,7 +2382,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
           if (associated(fluxes%heat_content_massout)) res(i,j) = res(i,j) + fluxes%heat_content_massout(i,j)
       ! endif
       enddo ; enddo
-      call post_data(handles%id_heat_content_surfwater, res, diag)
+      if (handles%id_heat_content_surfwater > 0) call post_data(handles%id_heat_content_surfwater, res, diag)
       if (handles%id_total_heat_content_surfwater > 0) then
         total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_heat_content_surfwater, total_transport, diag)
@@ -2522,8 +2574,19 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
     if ((handles%id_buoy > 0) .and. associated(fluxes%buoy))                         &
       call post_data(handles%id_buoy, fluxes%buoy, diag)
 
+    if ((handles%id_ustar > 0) .and. associated(fluxes%ustar)) &
+      call post_data(handles%id_ustar, fluxes%ustar, diag)
 
-  endif
+    if ((handles%id_ustar_berg > 0) .and. associated(fluxes%ustar_berg)) &
+      call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
+
+    if ((handles%id_frac_ice_cover > 0) .and. associated(fluxes%frac_shelf_h)) &
+      call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
+
+    if ((handles%id_ustar_ice_cover > 0) .and. associated(fluxes%ustar_shelf)) &
+      call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
+
+  endif  ! query_averaging_enabled
 
   call cpu_clock_end(handles%id_clock_forcing)
 end subroutine forcing_diagnostics

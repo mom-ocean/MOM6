@@ -130,13 +130,13 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
-                          ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
-                          ! positive upward, in m.                       !
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z),
+                          !  usually negative because it is positive upward.
+  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+                          ! positive upward, in depth units (Z).
   integer :: i, j, k, is, ie, js, je, nz, tmp1
   real    :: x
-  real    :: delta_h, rho_range
+  real    :: rho_range
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot, rho_sur, rho_bot
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=256) :: mesg  ! The text of an error message
@@ -149,8 +149,8 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
-                 'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read)
+  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
+                 'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
@@ -169,10 +169,10 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
     if (just_read) return ! All run-time parameters have been read, so return.
 
     ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
-    call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
+    call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state)
     ! write(mesg,*) 'Surface density is:', rho_sur
     ! call MOM_mesg(mesg,5)
-    call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
+    call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state)
     ! write(mesg,*) 'Bottom density is:', rho_bot
     ! call MOM_mesg(mesg,5)
     rho_range = rho_bot - rho_sur
@@ -192,14 +192,14 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
 
     ! Calculate thicknesses
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
+          h(i,j,k) = GV%Angstrom_H
         else
-          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -207,14 +207,14 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      eta1D(nz+1) = -G%bathyT(i,j)
       do k=nz,1,-1
         eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = GV%m_to_H * min_thickness
+          h(i,j,k) = GV%Z_to_H * min_thickness
         else
-          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
    enddo ; enddo
@@ -222,8 +222,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = GV%m_to_H * delta_h
+      h(i,j,:) = GV%Z_to_H * G%bathyT(i,j) / dfloat(nz)
     enddo ; enddo
 
   case default
@@ -249,7 +248,9 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
   real      :: x, ds, dt, rho_sur, rho_bot
-  real      :: xi0, xi1, dxi, r, S_sur, T_sur, S_bot, T_bot, S_range, T_range
+  real      :: xi0, xi1 ! Heights in depth units (Z).
+  real      :: S_sur, T_sur, S_bot, T_bot
+  real      :: dT_dz, dS_dz  ! Gradients of T and S in degC/Z and PPT/Z.
   real      :: z          ! vertical position in z space
   character(len=256) :: mesg  ! The text of an error message
   character(len=40) :: verticalCoordinate, density_profile
@@ -290,105 +291,96 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
     case (  REGRIDDING_RHO, REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_SIGMA )
       if (just_read) return ! All run-time parameters have been read, so return.
 
-      S_range = s_sur - s_bot
-      T_range = t_sur - t_bot
-      ! write(mesg,*) 'S_range,T_range',S_range,T_range
-      ! call MOM_mesg(mesg,5)
-
-      S_range = S_range / G%max_depth ! Convert S_range into dS/dz
-      T_range = T_range / G%max_depth ! Convert T_range into dT/dz
+      dS_dz = (s_sur - s_bot) / G%max_depth
+      dT_dz = (t_sur - t_bot) / G%max_depth
       do j=js,je ; do i=is,ie
         xi0 = -G%bathyT(i,j)
         do k = nz,1,-1
-          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m ! Depth in middle of layer
-          S(i,j,k) = S_sur + S_range * xi0
-          T(i,j,k) = T_sur + T_range * xi0
-          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m ! Depth at top of layer
+          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth in middle of layer
+          S(i,j,k) = S_sur + dS_dz * xi0
+          T(i,j,k) = T_sur + dT_dz * xi0
+          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth at top of layer
         enddo
       enddo ; enddo
 
     case ( REGRIDDING_LAYER )
-     call get_param(param_file, mdl, "FIT_SALINITY", fit_salin, &
-                 "If true, accept the prescribed temperature and fit the \n"//&
-                 "salinity; otherwise take salinity and fit temperature.", &
-                 default=.false., do_not_log=just_read)
-     call get_param(param_file, mdl, "DRHO_DS", drho_dS1, &
-                 "Partial derivative of density with salinity.", &
-                 units="kg m-3 PSU-1", fail_if_missing=.not.just_read, do_not_log=just_read)
-     call get_param(param_file, mdl, "DRHO_DT", drho_dT1, &
-                 "Partial derivative of density with temperature.", &
-                 units="kg m-3 K-1", fail_if_missing=.not.just_read, do_not_log=just_read)
-     call get_param(param_file, mdl, "T_REF", T_Ref, &
-                 "A reference temperature used in initialization.", &
-                 units="degC", fail_if_missing=.not.just_read, do_not_log=just_read)
-     call get_param(param_file, mdl, "S_REF", S_Ref, &
-                 "A reference salinity used in initialization.", units="PSU", &
-                 default=35.0, do_not_log=just_read)
-     if (just_read) return ! All run-time parameters have been read, so return.
+      call get_param(param_file, mdl, "FIT_SALINITY", fit_salin, &
+                  "If true, accept the prescribed temperature and fit the \n"//&
+                  "salinity; otherwise take salinity and fit temperature.", &
+                  default=.false., do_not_log=just_read)
+      call get_param(param_file, mdl, "DRHO_DS", drho_dS1, &
+                  "Partial derivative of density with salinity.", &
+                  units="kg m-3 PSU-1", fail_if_missing=.not.just_read, do_not_log=just_read)
+      call get_param(param_file, mdl, "DRHO_DT", drho_dT1, &
+                  "Partial derivative of density with temperature.", &
+                  units="kg m-3 K-1", fail_if_missing=.not.just_read, do_not_log=just_read)
+      call get_param(param_file, mdl, "T_REF", T_Ref, &
+                  "A reference temperature used in initialization.", &
+                  units="degC", fail_if_missing=.not.just_read, do_not_log=just_read)
+      call get_param(param_file, mdl, "S_REF", S_Ref, &
+                  "A reference salinity used in initialization.", units="PSU", &
+                  default=35.0, do_not_log=just_read)
+      if (just_read) return ! All run-time parameters have been read, so return.
 
-     ! write(mesg,*) 'read drho_dS, drho_dT', drho_dS1, drho_dT1
-     ! call MOM_mesg(mesg,5)
+      ! write(mesg,*) 'read drho_dS, drho_dT', drho_dS1, drho_dT1
+      ! call MOM_mesg(mesg,5)
 
-     S_range = s_bot - s_sur
-     T_range = t_bot - t_sur
-     ! write(mesg,*) 'S_range,T_range',S_range,T_range
-     ! call MOM_mesg(mesg,5)
-     S_range = S_range / G%max_depth ! Convert S_range into dS/dz
-     T_range = T_range / G%max_depth ! Convert T_range into dT/dz
+      dS_dz = (s_sur - s_bot) / G%max_depth
+      dT_dz = (t_sur - t_bot) / G%max_depth
 
-     do j=js,je ; do i=is,ie
-       xi0 = 0.0
-       do k = 1,nz
+      do j=js,je ; do i=is,ie
+        xi0 = 0.0
+        do k = 1,nz
           !T0(k) = T_Ref; S0(k) = S_Ref
-          xi1 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m
-          S0(k) = S_sur +  S_range * xi1
-          T0(k) = T_sur +  T_range * xi1
-          xi0 = xi0 + h(i,j,k) * GV%H_to_m
+          xi1 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z
+          S0(k) = S_sur - dS_dz * xi1
+          T0(k) = T_sur - dT_dz * xi1
+          xi0 = xi0 + h(i,j,k) * GV%H_to_Z
           ! write(mesg,*) 'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
           ! call MOM_mesg(mesg,5)
-       enddo
+        enddo
 
-       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
-       ! write(mesg,*) 'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
-       ! call MOM_mesg(mesg,5)
-       call calculate_density(T0(1),S0(1),0.,rho_guess(1),eqn_of_state)
+        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
+        ! write(mesg,*) 'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
+        ! call MOM_mesg(mesg,5)
+        call calculate_density(T0(1),S0(1),0.,rho_guess(1),eqn_of_state)
 
-       if (fit_salin) then
-         ! A first guess of the layers' salinity.
-         do k=nz,1,-1
-            S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS1)
-         enddo
-         ! Refine the guesses for each layer.
-         do itt=1,6
-           call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-           call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-           do k=1,nz
-             S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
-           enddo
-         enddo
+        if (fit_salin) then
+          ! A first guess of the layers' salinity.
+          do k=nz,1,-1
+             S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS1)
+          enddo
+          ! Refine the guesses for each layer.
+          do itt=1,6
+            call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+            call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+            do k=1,nz
+              S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
+            enddo
+          enddo
 
-       else
-         ! A first guess of the layers' temperatures.
-         do k=nz,1,-1
-           T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT1
-         enddo
+        else
+          ! A first guess of the layers' temperatures.
+          do k=nz,1,-1
+            T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT1
+          enddo
 
-         do itt=1,6
-           call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-           call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-           do k=1,nz
-             T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
-           enddo
-         enddo
-       endif
+          do itt=1,6
+            call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+            call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+            do k=1,nz
+              T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+            enddo
+          enddo
+        endif
 
-       do k=1,nz
-         T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
-       enddo
+        do k=1,nz
+          T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
+        enddo
 
-     enddo ; enddo
+      enddo ; enddo
 
-   case default
+    case default
       call MOM_error(FATAL,"isomip_initialize: "// &
       "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
@@ -428,18 +420,17 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
   real :: TNUDG                     ! Nudging time scale, days
-  real      :: S_sur, T_sur;        ! Surface salinity and temerature in sponge
-  real      :: S_bot, T_bot;        ! Bottom salinity and temerature in sponge
-  real      :: t_ref, s_ref         ! reference T and S
-  real      :: rho_sur, rho_bot, rho_range, t_range, s_range
+  real :: S_sur, T_sur              ! Surface salinity and temerature in sponge
+  real :: S_bot, T_bot              ! Bottom salinity and temerature in sponge
+  real :: t_ref, s_ref              ! reference T and S
+  real :: rho_sur, rho_bot, rho_range
+  real :: dT_dz, dS_dz              ! Gradients of T and S in degC/Z and PPT/Z.
 
-  real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
-                                    ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface !
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
-
-                                    ! positive upward, in m.
-  real :: min_depth, dummy1, z, delta_h
+  real :: e0(SZK_(G)+1)             ! The resting interface heights, in Z, usually
+                                    ! negative because it is positive upward.
+  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface, positive upward, in Z.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in Z.
+  real :: min_depth, dummy1, z
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
   character(len=40) :: verticalCoordinate, filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir
@@ -451,6 +442,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call get_param(PF, mdl,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
+  min_thickness = GV%m_to_Z * min_thickness
 
   call get_param(PF, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
@@ -463,59 +455,56 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   call get_param(PF, mdl, "S_REF", s_ref, 'Reference salinity',  default=35.0,&
                  do_not_log=.true.)
 
-  call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, 'Surface salinity in sponge layer.',  default=s_ref)
+  call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, 'Surface salinity in sponge layer.', default=s_ref)
 
-  call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, 'Bottom salinity in sponge layer.',  default=s_ref)
+  call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, 'Bottom salinity in sponge layer.', default=s_ref)
 
-  call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, 'Surface temperature in sponge layer.',  default=t_ref)
+  call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, 'Surface temperature in sponge layer.', default=t_ref)
 
-  call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, 'Bottom temperature in sponge layer.',  default=t_ref)
+  call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, 'Bottom temperature in sponge layer.', default=t_ref)
 
   T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0; RHO(:,:,:) = 0.0
-  S_range = s_sur - s_bot
-  T_range = t_sur - t_bot
 
 !   Set up sponges for ISOMIP configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
 
-   if (associated(CSp)) call MOM_error(FATAL, &
-          "ISOMIP_initialize_sponges called with an associated control structure.")
-   if (associated(ACSp)) call MOM_error(FATAL, &
-          "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
+  if (associated(CSp)) call MOM_error(FATAL, &
+        "ISOMIP_initialize_sponges called with an associated control structure.")
+  if (associated(ACSp)) call MOM_error(FATAL, &
+        "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
 
   !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
   !  wherever there is no sponge, and the subroutines that are called  !
   !  will automatically set up the sponges only where Idamp is positive!
   !  and mask2dT is 1.
 
-   do i=is,ie; do j=js,je
-      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+  do i=is,ie; do j=js,je
+    if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
 
   ! 1 / day
-        dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
-        damp = 1.0/TNUDG * max(0.0,dummy1)
+      dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
+      damp = 1.0/TNUDG * max(0.0,dummy1)
 
-      else ; damp=0.0
-      endif
+    else ; damp=0.0
+    endif
 
   ! convert to 1 / seconds
-      if (G%bathyT(i,j) > min_depth) then
-          Idamp(i,j) = damp/86400.0
-      else ; Idamp(i,j) = 0.0 ; endif
+    if (G%bathyT(i,j) > min_depth) then
+      Idamp(i,j) = damp/86400.0
+    else ; Idamp(i,j) = 0.0 ; endif
 
-
-   enddo ; enddo
+  enddo ; enddo
 
   ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
-  call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
-  !write (*,*)'Surface density in sponge:', rho_sur
+  call calculate_density(t_sur, s_sur, 0.0, rho_sur, tv%eqn_of_state)
+  !write (mesg,*) 'Surface density in sponge:', rho_sur
   ! call MOM_mesg(mesg,5)
-  call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
-  !write (*,*)'Bottom density in sponge:', rho_bot
+  call calculate_density(t_bot, s_bot, 0.0, rho_bot, tv%eqn_of_state)
+  !write (mesg,*) 'Bottom density in sponge:', rho_bot
   ! call MOM_mesg(mesg,5)
   rho_range = rho_bot - rho_sur
-  !write (*,*)'Density range in sponge:', rho_range
+  !write (mesg,*) 'Density range in sponge:', rho_range
   ! call MOM_mesg(mesg,5)
 
   if (use_ALE) then
@@ -536,56 +525,56 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
        ! Calculate thicknesses
        do j=js,je ; do i=is,ie
-         eta1D(nz+1) = -1.0*G%bathyT(i,j)
+         eta1D(nz+1) = -G%bathyT(i,j)
          do k=nz,1,-1
            eta1D(k) = e0(k)
-           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-             eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-             h(i,j,k) = GV%Angstrom_z
+           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
+             eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
+             h(i,j,k) = GV%Angstrom_H
            else
-             h(i,j,k) = eta1D(k) - eta1D(k+1)
+             h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
            endif
          enddo
        enddo ; enddo
 
      case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )   ! Initial thicknesses for z coordinates
        do j=js,je ; do i=is,ie
-         eta1D(nz+1) = -1.0*G%bathyT(i,j)
+         eta1D(nz+1) = -G%bathyT(i,j)
          do k=nz,1,-1
            eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
            if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
              eta1D(k) = eta1D(k+1) + min_thickness
-             h(i,j,k) = min_thickness
+             h(i,j,k) = min_thickness * GV%Z_to_H
            else
-             h(i,j,k) = eta1D(k) - eta1D(k+1)
+             h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
            endif
          enddo
       enddo ; enddo
 
       case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
-       do j=js,je ; do i=is,ie
-         delta_h = G%bathyT(i,j) / dfloat(nz)
-         h(i,j,:) = delta_h
-       enddo ; enddo
+        do j=js,je ; do i=is,ie
+          h(i,j,:) = GV%Z_to_H * (G%bathyT(i,j) / dfloat(nz))
+        enddo ; enddo
 
       case default
          call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &
          "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
     end select
+
     !  This call sets up the damping rates and interface heights.
     !  This sets the inverse damping timescale fields in the sponges.
     call initialize_ALE_sponge(Idamp, G, PF, ACSp, h, nz)
 
-    S_range = S_range / G%max_depth ! Convert S_range into dS/dz
-    T_range = T_range / G%max_depth ! Convert T_range into dT/dz
+    dS_dz = (s_sur - s_bot) / G%max_depth
+    dT_dz = (t_sur - t_bot) / G%max_depth
     do j=js,je ; do i=is,ie
       xi0 = -G%bathyT(i,j)
       do k = nz,1,-1
-        xi0 = xi0 + 0.5 * h(i,j,k) ! Depth in middle of layer
-        S(i,j,k) = S_sur + S_range * xi0
-        T(i,j,k) = T_sur + T_range * xi0
-        xi0 = xi0 + 0.5 * h(i,j,k) ! Depth at top of layer
+        xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth in middle of layer
+        S(i,j,k) = S_sur + dS_dz * xi0
+        T(i,j,k) = T_sur + dT_dz * xi0
+        xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth at top of layer
       enddo
     enddo ; enddo
     ! for debugging
@@ -602,57 +591,57 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
     !  The remaining calls to set_up_sponge_field can be in any order. !
     if ( associated(tv%T) ) then
-      call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
+      call set_up_ALE_sponge_field(T, G, tv%T, ACSp)
     endif
     if ( associated(tv%S) ) then
-      call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
+      call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
     endif
 
   else ! layer mode
-       ! 1) Read eta, salt and temp from IC file
-       call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
-       inputdir = slasher(inputdir)
-       ! GM: get two different files, one with temp and one with salt values
-       ! this is work around to avoid having wrong values near the surface
-       ! because of the FIT_SALINITY option. To get salt values right in the
-       ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
-       ! combined the *correct* temp and salt values in one file instead.
-       call get_param(PF, mdl, "ISOMIP_SPONGE_FILE", state_file, &
-                 "The name of the file with temps., salts. and interfaces to \n"// &
-                 " damp toward.", fail_if_missing=.true.)
-       call get_param(PF, mdl, "SPONGE_PTEMP_VAR", temp_var, &
-                 "The name of the potential temperature variable in \n"//&
-                 "SPONGE_STATE_FILE.", default="Temp")
-       call get_param(PF, mdl, "SPONGE_SALT_VAR", salt_var, &
-                 "The name of the salinity variable in \n"//&
-                 "SPONGE_STATE_FILE.", default="Salt")
-       call get_param(PF, mdl, "SPONGE_ETA_VAR", eta_var, &
-                 "The name of the interface height variable in \n"//&
-                 "SPONGE_STATE_FILE.", default="eta")
+    ! 1) Read eta, salt and temp from IC file
+    call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    ! GM: get two different files, one with temp and one with salt values
+    ! this is work around to avoid having wrong values near the surface
+    ! because of the FIT_SALINITY option. To get salt values right in the
+    ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
+    ! combined the *correct* temp and salt values in one file instead.
+    call get_param(PF, mdl, "ISOMIP_SPONGE_FILE", state_file, &
+              "The name of the file with temps., salts. and interfaces to \n"// &
+              "damp toward.", fail_if_missing=.true.)
+    call get_param(PF, mdl, "SPONGE_PTEMP_VAR", temp_var, &
+              "The name of the potential temperature variable in \n"//&
+              "SPONGE_STATE_FILE.", default="Temp")
+    call get_param(PF, mdl, "SPONGE_SALT_VAR", salt_var, &
+              "The name of the salinity variable in \n"//&
+              "SPONGE_STATE_FILE.", default="Salt")
+    call get_param(PF, mdl, "SPONGE_ETA_VAR", eta_var, &
+              "The name of the interface height variable in \n"//&
+              "SPONGE_STATE_FILE.", default="eta")
 
-       !read temp and eta
-       filename = trim(inputdir)//trim(state_file)
-       if (.not.file_exists(filename, G%Domain)) &
-          call MOM_error(FATAL, " ISOMIP_initialize_sponges: Unable to open "//trim(filename))
-       call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
-       call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
-       call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
+    !read temp and eta
+    filename = trim(inputdir)//trim(state_file)
+    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+          "ISOMIP_initialize_sponges: Unable to open "//trim(filename))
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=GV%m_to_Z)
+    call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+    call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 
-       ! for debugging
-       !i=G%iec; j=G%jec
-       !do k = 1,nz
-       !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
-       !  write(mesg,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
-       !              S(i,j,k),rho_tmp,GV%Rlay(k)
-       !  call MOM_mesg(mesg,5)
-       !enddo
+    ! for debugging
+    !i=G%iec; j=G%jec
+    !do k = 1,nz
+    !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
+    !  write(mesg,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
+    !              S(i,j,k),rho_tmp,GV%Rlay(k)
+    !  call MOM_mesg(mesg,5)
+    !enddo
 
-       ! Set the inverse damping rates so that the model will know where to
-       ! apply the sponges, along with the interface heights.
-       call initialize_sponge(Idamp, eta, G, PF, CSp)
-       ! Apply sponge in tracer fields
-       call set_up_sponge_field(T, tv%T, G, nz, CSp)
-       call set_up_sponge_field(S, tv%S, G, nz, CSp)
+    ! Set the inverse damping rates so that the model will know where to
+    ! apply the sponges, along with the interface heights.
+    call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
+    ! Apply sponge in tracer fields
+    call set_up_sponge_field(T, tv%T, G, nz, CSp)
+    call set_up_sponge_field(S, tv%S, G, nz, CSp)
 
   endif
 

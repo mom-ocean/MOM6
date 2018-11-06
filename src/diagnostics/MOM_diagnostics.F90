@@ -6,7 +6,7 @@ module MOM_diagnostics
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,              only : reproducing_sum
-use MOM_diag_mediator,     only : post_data, post_data_1d_k, get_diag_time_end
+use MOM_diag_mediator,     only : post_data, get_diag_time_end
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
 use MOM_diag_mediator,     only : register_static_field, diag_register_area_ids
 use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
@@ -284,19 +284,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, CS%e, eta_bt)
+    call find_eta(h, tv, G, GV, CS%e, eta_bt, eta_to_m=1.0)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
   if (associated(CS%e_D)) then
     if (associated(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, GV%g_Earth, G, GV, CS%e_D, eta_bt)
+      call find_eta(h, tv, G, GV, CS%e_D, eta_bt, eta_to_m=1.0)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%Zd_to_m*G%bathyT(i,j)
       enddo ; enddo ; enddo
     endif
 
@@ -324,7 +324,14 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! diagnose thickness/volumes of grid cells (meter)
   if (CS%id_thkcello>0 .or. CS%id_volcello>0) then
     if (GV%Boussinesq) then ! thkcello = h for Boussinesq
-      if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, GV%H_to_m*h, CS%diag)
+      if (CS%id_thkcello > 0) then ; if (GV%H_to_m == 1.0) then
+        call post_data(CS%id_thkcello, h, CS%diag)
+      else
+        do k=1,nz; do j=js,je ; do i=is,ie
+          work_3d(i,j,k) = GV%H_to_m*h(i,j,k)
+        enddo ; enddo ; enddo
+        call post_data(CS%id_thkcello, work_3d, CS%diag)
+      endif ; endif
       if (CS%id_volcello > 0) then ! volcello = h*area for Boussinesq
         do k=1,nz; do j=js,je ; do i=is,ie
           work_3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * G%areaT(i,j)
@@ -344,7 +351,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         endif
         do k=1,nz ! Integrate vertically downward for pressure
           do i=is,ie ! Pressure for EOS at the layer center (Pa)
-            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
           ! Store in-situ density (kg/m3) in work_3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
@@ -353,7 +360,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
             work_3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k)) / work_3d(i,j,k)
           enddo
           do i=is,ie ! Pressure for EOS at the bottom interface (Pa)
-            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
         enddo ! k
       enddo ! j
@@ -434,13 +441,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! layer mean potential temperature
   if (CS%id_temp_layer_ave>0) then
     temp_layer_ave = global_layer_mean(tv%T, h, G, GV)
-    call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
+    call post_data(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
   endif
 
   ! layer mean salinity
   if (CS%id_salt_layer_ave>0) then
     salt_layer_ave = global_layer_mean(tv%S, h, G, GV)
-    call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
+    call post_data(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
   call calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
@@ -808,9 +815,9 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
   endif
 
   if (CS%id_col_ht > 0) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, z_top)
+    call find_eta(h, tv, G, GV, z_top, eta_to_m=1.0)
     do j=js,je ; do i=is,ie
-      z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
+      z_bot(i,j) = z_top(i,j) + G%Zd_to_m*G%bathyT(i,j)
     enddo ; enddo
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif
@@ -819,7 +826,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / GV%g_Earth
+        IG_Earth = 1.0 / (GV%g_Earth*GV%m_to_Z)
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
         do k=1,nz
@@ -828,7 +835,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_m*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, GV%H_to_kg_m2, GV%g_Earth, &
+                              z_top, z_bot, 0.0, GV%H_to_kg_m2, (GV%g_Earth*GV%m_to_Z), &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -853,7 +860,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
       !     pbo = (mass * g) + p_surf
       ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = mass(i,j) * GV%g_Earth
+        btm_pres(i,j) = mass(i,j) * (GV%g_Earth*GV%m_to_Z)
         if (associated(p_surf)) then
           btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif
@@ -1209,7 +1216,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   ! post total volume of the liquid ocean
   if (IDs%id_volo > 0) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%bathyT(i,j))
+      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%Zd_to_m*G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(work_2d, G)
     call post_data(IDs%id_volo, volo, diag)
@@ -1822,6 +1829,8 @@ subroutine write_static_fields(G, GV, tv, diag)
   real    :: tmp_h(SZI_(G),SZJ_(G))
   integer :: id, i, j
 
+  tmp_h(:,:) = 0.0
+
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_north')
   if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
@@ -1898,7 +1907,16 @@ subroutine write_static_fields(G, GV, tv, diag)
         cmor_standard_name='sea_floor_depth_below_geoid',&
         area=diag%axesT1%id_area, &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
-  if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
+  if (id > 0) then
+    if (G%Zd_to_m == 1.0) then
+      call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
+    else
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        tmp_h(i,j) = G%bathyT(i,j) * G%Zd_to_m
+      enddo ; enddo
+      call post_data(id, tmp_h, diag, .true., mask=G%mask2dT)
+    endif
+  endif
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
@@ -1952,6 +1970,14 @@ subroutine write_static_fields(G, GV, tv, diag)
         'Open zonal grid spacing at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dx_Cv, diag, .true.)
 
+  id = register_static_field('ocean_model', 'sin_rot', diag%axesT1, &
+        'sine of the clockwise angle of the ocean grid north to true north', 'none')
+  if (id > 0) call post_data(id, G%sin_rot, diag, .true.)
+
+  id = register_static_field('ocean_model', 'cos_rot', diag%axesT1, &
+        'cosine of the clockwise angle of the ocean grid north to true north', 'none')
+  if (id > 0) call post_data(id, G%cos_rot, diag, .true.)
+
 
   ! This static diagnostic is from CF 1.8, and is the fraction of a cell
   ! covered by ocean, given as a percentage (poorly named).
@@ -1961,8 +1987,9 @@ subroutine write_static_fields(G, GV, tv, diag)
         cmor_long_name='Sea Area Fraction', &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) then
-    tmp_h(:,:) = 0.
-    tmp_h(G%isc:G%iec,G%jsc:G%jec) = 100. * G%mask2dT(G%isc:G%iec,G%jsc:G%jec)
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      tmp_h(i,j) = 100. * G%mask2dT(i,j)
+    enddo ; enddo
     call post_data(id, tmp_h, diag, .true.)
   endif
 
