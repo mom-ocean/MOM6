@@ -1251,7 +1251,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 !$OMP                               Rayleigh_u, Rayleigh_v,                         &
 !$OMP                               use_BT_Cont,BTCL_u,uhbt0,BTCL_v,vhbt0,eta,Idt)  &
 !$OMP                       private(u_max_cor,v_max_cor,eta_cor_max,Htot)
-!$OMP do
+  !$OMP do
   do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
   !$OMP do
   do J=js-1,je ; do i=is-1,ie+1 ; av_rem_v(i,J) = 0.0 ; enddo ; enddo
@@ -1311,23 +1311,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Zero out the arrays for various time-averaged quantities.
   if (find_etaav) then
-!$OMP do
+    !$OMP do
     do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
       eta_sum(i,j) = 0.0 ; eta_wtd(i,j) = 0.0
     enddo ; enddo
   else
-!$OMP do
+    !$OMP do
     do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
       eta_wtd(i,j) = 0.0
     enddo ; enddo
    endif
-!$OMP do
+  !$OMP do
   do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
     ubt_sum(I,j) = 0.0 ; uhbt_sum(I,j) = 0.0
     PFu_bt_sum(I,j) = 0.0 ; Coru_bt_sum(I,j) = 0.0
     ubt_wtd(I,j) = 0.0 ; ubt_trans(I,j) = 0.0
   enddo ; enddo
-!$OMP do
+  !$OMP do
   do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
     vbt_sum(i,J) = 0.0 ; vhbt_sum(i,J) = 0.0
     PFv_bt_sum(i,J) = 0.0 ; Corv_bt_sum(i,J) = 0.0
@@ -1335,7 +1335,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo ; enddo
 
   ! Set the mass source, after first initializing the halos to 0.
-!$OMP do
+  !$OMP do
   do j=jsvf-1,jevf+1; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
   if (CS%bound_BT_corr) then ; if (use_BT_Cont .and. CS%BT_cont_bounds) then
     do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
@@ -1364,7 +1364,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j)) &
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j),CS%eta_cor(i,j))
   enddo ; enddo ; endif ; endif
-!$OMP do
+  !$OMP do
   do j=js,je ; do i=is,ie
     eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j))
   enddo ; enddo
