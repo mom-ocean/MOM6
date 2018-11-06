@@ -1770,12 +1770,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
                  "over which to average to find surface properties like \n"//&
                  "SST and SSS or density (but not surface velocities).", &
-                 units="m", default=1.0) !, scale=US%m_to_Z)
+                 units="m", default=1.0, scale=US%m_to_Z)
     call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
                  "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
                  "over which to average to find surface flow properties,\n"//&
                  "SSU, SSV. A non-positive value indicates no averaging.", &
-                 units="m", default=0.) !, scale=US%m_to_Z)
+                 units="m", default=0.0, scale=US%m_to_Z)
   endif
   call get_param(param_file, "MOM", "HFREEZE", CS%HFrz, &
                  "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
@@ -1968,18 +1968,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
 !  dG%g_Earth = (GV%g_Earth*US%m_to_Z)
-  !### These should be merged with the get_param calls, but must follow verticalGridInit.
-  if (.not.bulkmixedlayer) then
-    CS%Hmix = CS%Hmix * US%m_to_Z
-    CS%Hmix_UV = CS%Hmix_UV * US%m_to_Z
-  endif
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
     call clone_MOM_domain(dG%Domain, dG%Domain_aux, symmetric=.false.)
 
   call callTree_waypoint("grids initialized (initialize_MOM)")
-
 
   call MOM_timing_init(CS)
 
