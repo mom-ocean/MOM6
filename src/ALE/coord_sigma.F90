@@ -16,7 +16,7 @@ type, public :: sigma_CS ; private
   !> Minimum thickness allowed for layers
   real :: min_thickness
 
-  !> Target coordinate resolution
+  !> Target coordinate resolution, nondimensional
   real, allocatable, dimension(:) :: coordinateResolution
 end type sigma_CS
 
@@ -51,7 +51,7 @@ end subroutine end_coord_sigma
 !> This subroutine can be used to set the parameters for the coord_sigma module
 subroutine set_sigma_params(CS, min_thickness)
   type(sigma_CS), pointer    :: CS !< Coordinate control structure
-  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness, in m
+  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness, in H
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_sigma_params: CS not associated")
 
@@ -62,9 +62,9 @@ end subroutine set_sigma_params
 !> Build a sigma coordinate column
 subroutine build_sigma_column(CS, depth, totalThickness, zInterface)
   type(sigma_CS),           intent(in)    :: CS !< Coordinate control structure
-  real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real,                     intent(in)    :: totalThickness !< Column thickness (positive in m)
-  real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces in m
+  real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in H, often m)
+  real,                     intent(in)    :: totalThickness !< Column thickness (positive in H)
+  real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces in H
 
   ! Local variables
   integer :: k
