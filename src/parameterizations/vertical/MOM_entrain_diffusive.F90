@@ -9,6 +9,7 @@ use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -41,10 +42,11 @@ contains
 !! the buoyancy flux in a layer and inversely proportional to the density
 !! differences between layers.  The scheme that is used here is described in
 !! detail in Hallberg, Mon. Wea. Rev. 2000.
-subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
+subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
                                  kb_out, Kd_Lay, Kd_int)
   type(ocean_grid_type),      intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  &
                               intent(in)  :: u  !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  &
@@ -381,7 +383,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
         htot(i) = h(i,j,1) - Angstrom
       enddo
       if (associated(fluxes%buoy)) then ; do i=is,ie
-        maxF(i,1) = (dt*fluxes%buoy(i,j)) / (GV%g_prime(2)*GV%m_to_Z)
+        maxF(i,1) = (dt*fluxes%buoy(i,j)) / (GV%g_prime(2)*US%m_to_Z)
       enddo ; endif
     endif
 

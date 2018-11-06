@@ -14,6 +14,7 @@ use MOM_grid,                  only : ocean_grid_type
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
+use MOM_unit_scaling,          only : unit_scale_type
 use MOM_variables,             only : thermo_var_ptrs, cont_diag_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
 
@@ -72,9 +73,10 @@ contains
 !> Calculates thickness diffusion coefficients and applies thickness diffusion to layer
 !! thicknesses, h. Diffusivities are limited to ensure stability.
 !! Also returns along-layer mass fluxes used in the continuity equation.
-subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS)
+subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Vertical grid structure
+  type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness (m or kg/m2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux (m2 H)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux (m2 H)
@@ -160,7 +162,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   enddo ; enddo
 
   ! Calculates interface heights, e, in m.
-  call find_eta(h, tv, G, GV, e, halo_size=1)
+  call find_eta(h, tv, G, GV, US, e, halo_size=1)
 
   ! Set the diffusivities.
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
@@ -303,10 +305,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
   if (use_stored_slopes) then
-    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, MEKE, CS, &
+    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
                                 int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y)
   else
-    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, MEKE, CS, &
+    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
                                 int_slope_u, int_slope_v)
   endif
 
@@ -396,10 +398,11 @@ end subroutine thickness_diffuse
 !> Calculates parameterized layer transports for use in the continuity equation.
 !! Fluxes are limited to give positive definite thicknesses.
 !! Called by thickness_diffuse().
-subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, MEKE, &
+subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, &
                                   CS, int_slope_u, int_slope_v, slope_x, slope_y)
   type(ocean_grid_type),                       intent(in)  :: G      !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)  :: GV     !< Vertical grid structure
+  type(unit_scale_type),                       intent(in)  :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h      !< Layer thickness in H (m or kg/m2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)  :: e      !< Interface positions (Z)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: Kh_u   !< Thickness diffusivity on interfaces
@@ -675,7 +678,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
-              mag_grad2 = drdx**2 + (GV%m_to_Z*drdz)**2
+              mag_grad2 = drdx**2 + (US%m_to_Z*drdz)**2
               if (mag_grad2 > 0.0) then
                 Slope = drdx / sqrt(mag_grad2)
                 slope2_Ratio_u(I,K) = Slope**2 * I_slope_max2
@@ -695,7 +698,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface (m3 s-1).
-            Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*GV%m_to_Z*Slope)
+            Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*US%m_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
             ! the bottom on the receiving side.
@@ -724,7 +727,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               Slope = GV%Z_to_m*((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
-            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*GV%m_to_Z*Slope)
+            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*US%m_to_Z*Slope)
             hN2_u(I,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -921,7 +924,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
-              mag_grad2 = drdy**2 + (GV%m_to_Z*drdz)**2
+              mag_grad2 = drdy**2 + (US%m_to_Z*drdz)**2
               if (mag_grad2 > 0.0) then
                 Slope = drdy / sqrt(mag_grad2)
                 slope2_Ratio_v(i,K) = Slope**2 * I_slope_max2
@@ -941,7 +944,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface (m3 s-1).
-            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*GV%m_to_Z*Slope)
+            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*US%m_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
             ! the bottom on the receiving side.
@@ -970,7 +973,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               Slope = GV%Z_to_m*((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
-            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*GV%m_to_Z*Slope)
+            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*US%m_to_Z*Slope)
             hN2_v(i,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -1679,10 +1682,11 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
 end subroutine vert_fill_TS
 
 !> Initialize the thickness diffusion module/structure
-subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
+subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   type(time_type),         intent(in) :: Time    !< Current model time
   type(ocean_grid_type),   intent(in) :: G       !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV      !< Vertical grid structure
+  type(unit_scale_type),   intent(in) :: US      !< A dimensional unit scaling type
   type(param_file_type),   intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(cont_diag_ptrs),    intent(inout) :: CDp  !< Continuity equation diagnostics
@@ -1742,7 +1746,7 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6, scale=GV%m_to_Z**2)
+                 default=1.0e-6, scale=US%m_to_Z**2)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", CS%use_FGNV_streamfn, &
                  "If true, use the streamfunction formulation of\n"//    &
                  "Ferrari et al., 2010, which effectively emphasizes\n"//&

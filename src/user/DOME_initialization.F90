@@ -14,6 +14,7 @@ use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type
 use MOM_tracer_registry, only : tracer_name_lookup
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -134,9 +135,10 @@ end subroutine DOME_initialize_thickness
 !! number of tracers should be restored within each sponge. The       !
 !! interface height is always subject to damping, and must always be  !
 !! the first registered field.                                        !
-subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
+subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers to any available
                                !! thermodynamic fields, including potential temperature and
                                !! salinity or mixed layer density. Absent fields have NULL ptrs.
@@ -167,7 +169,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 
 !   Set up sponges for DOME configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
@@ -229,7 +231,7 @@ end subroutine DOME_initialize_sponges
 
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
-subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
+subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
@@ -239,6 +241,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                               !! fields have NULL ptrs.
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in) :: US  !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
                               !! to parse for model parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
@@ -271,7 +274,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! The following variables should be transformed into runtime parameters.
-  D_edge = 300.0*GV%m_to_Z  ! The thickness of dense fluid in the inflow.
+  D_edge = 300.0*US%m_to_Z  ! The thickness of dense fluid in the inflow.
   Ri_trans = 1.0/3.0 ! The shear Richardson number in the transition region
                      ! region of the specified shear profile.
 

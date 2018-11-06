@@ -16,6 +16,7 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
 use MOM_shortwave_abs, only : absorbRemainingSW, optics_type, sumSWoverBands
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -645,9 +646,10 @@ end subroutine find_uv_at_h
 
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
-subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, diagPtr, id_N2subML, id_MLDsq)
+subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US, diagPtr, id_N2subML, id_MLDsq)
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
   integer,                 intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: h           !< Layer thickness, in H (usually m or kg m-3)
@@ -678,8 +680,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
   id_SQ = -1 ; if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
 
   Rho_x_gE = GV%g_Earth * GV%Rho0
-  gE_rho0 = GV%m_to_Z**2 * GV%g_Earth / GV%Rho0
-  dz_subML = 50.*GV%m_to_Z
+  gE_rho0 = US%m_to_Z**2 * GV%g_Earth / GV%Rho0
+  dz_subML = 50.*US%m_to_Z
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pRef_MLD(:) = 0. ; pRef_N2(:) = 0.
@@ -761,13 +763,14 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
                                     SkinBuoyFlux )
   type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
   type(ocean_grid_type),   intent(in)    :: G  !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   real,                    intent(in)    :: dt !< Time-step over which forcing is applied (s)
   type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),       pointer       :: optics !< Optical properties container
@@ -1256,7 +1259,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
       do i=is,ie
-        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * GV%m_to_Z**2 * ( &
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * US%m_to_Z**2 * ( &
             dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
       enddo
@@ -1290,10 +1293,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 end subroutine applyBoundaryFluxesInOut
 
 !> This subroutine initializes the parameters and control structure of the diabatic_aux module.
-subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm, use_ePBL)
+subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgorithm, use_ePBL)
   type(time_type),         intent(in)    :: Time !< The current model time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag !< A structure used to regulate diagnostic output
   type(diabatic_aux_CS),   pointer       :: CS   !< A pointer to the control structure for the
@@ -1352,7 +1356,7 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
     if (CS%do_rivermix) &
       call get_param(param_file, mdl, "RIVERMIX_DEPTH", CS%rivermix_depth, &
                  "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
-                 "defined.", units="m", default=0.0, scale=GV%m_to_Z)
+                 "defined.", units="m", default=0.0, scale=US%m_to_Z)
   else ; CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; endif
   if (GV%nkml == 0) then
     call get_param(param_file, mdl, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &

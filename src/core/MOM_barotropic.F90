@@ -23,6 +23,7 @@ use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(-)
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -375,14 +376,15 @@ contains
 !! 0.0 and 1.0 determining the scheme.  In practice, bebt must be of
 !! order 0.2 or greater.  A forwards-backwards treatment of the
 !! Coriolis terms is always used.
-subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
-                  forces, pbce, eta_PF_in, U_Cor, V_Cor, &
-                  accel_layer_u, accel_layer_v, eta_out, uhbtav, vhbtav, G, GV, CS, &
+subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, &
+                  eta_PF_in, U_Cor, V_Cor, accel_layer_u, accel_layer_v, &
+                  eta_out, uhbtav, vhbtav, G, GV, US, CS, &
                   visc_rem_u, visc_rem_v, etaav, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
+  type(unit_scale_type),                     intent(in)  :: US      !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in    !< The initial (3-D) zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in    !< The initial (3-D) meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in  !< The initial barotropic free surface height
@@ -708,7 +710,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   dtbt = dt * Instep
   bebt = CS%bebt
   be_proj = CS%bebt
-  mass_to_Z = GV%m_to_Z / GV%Rho0
+  mass_to_Z = US%m_to_Z / GV%Rho0
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -1459,7 +1461,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
     call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, &
                   G%HI, haloshift=0)
-    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, scale=GV%m_to_Z)
+    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, scale=US%m_to_Z)
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, &
                   G%HI, haloshift=1)
   endif
@@ -2256,9 +2258,10 @@ end subroutine btstep
 
 !> This subroutine automatically determines an optimal value for dtbt based
 !! on some state of the ocean.
-subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
+subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(ocean_grid_type),        intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),      intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),        intent(in)    :: US   !< A dimensional unit scaling type
   type(barotropic_CS),          pointer       :: CS   !< Barotropic control structure.
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: eta  !< The barotropic free surface
                                                       !! height anomaly or column mass anomaly, in H.
@@ -2323,7 +2326,7 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   elseif (CS%Nonlinear_continuity .and. present(eta)) then
     call find_face_areas(Datu, Datv, G, GV, CS, MS, eta=eta, halo=0)
   else
-    call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=0, add_max=add_SSH*GV%m_to_Z)
+    call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=0, add_max=add_SSH*US%m_to_Z)
   endif
 
   det_de = 0.0
@@ -3677,10 +3680,11 @@ end subroutine bt_mass_source
 !> barotropic_init initializes a number of time-invariant fields used in the
 !! barotropic calculation and initializes any barotropic fields that have not
 !! already been initialized.
-subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
+subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, &
                            restart_CS, calc_dtbt, BT_cont, tides_CSp)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -4137,8 +4141,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 
   ! Estimate the maximum stable barotropic time step.
   gtot_estimate = 0.0
-  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K)*GV%m_to_Z ; enddo
-  call set_dtbt(G, GV, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
+  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K)*US%m_to_Z ; enddo
+  call set_dtbt(G, GV, US, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
 
   if (dtbt_input > 0.0) then
     CS%dtbt = dtbt_input

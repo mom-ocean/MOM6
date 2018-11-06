@@ -21,6 +21,7 @@ use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=), operator(<=), operator(>=), operator(<)
 use MOM_time_manager, only : get_calendar_type, time_type_to_real, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -266,9 +267,10 @@ end subroutine MOM_sum_output_end
 
 !>  This subroutine calculates and writes the total model energy, the energy and
 !! mass of each layer, and other globally integrated  physical quantities.
-subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forcing)
+subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_forcing)
   type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u   !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -495,7 +497,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-      call find_eta(h, tv, G, GV, eta)
+      call find_eta(h, tv, G, GV, US, eta)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
@@ -505,7 +507,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
         tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = GV%m_to_Z * (mass_lay(k) / GV%Rho0) ; enddo
+      do k=1,nz ; vol_lay(k) = US%m_to_Z * (mass_lay(k) / GV%Rho0) ; enddo
     endif
   endif ! Boussinesq
 

@@ -19,6 +19,7 @@ use MOM_io, only            : slasher, vardesc, MOM_read_data
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
 use MOM_spatial_means, only : global_area_mean
 use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
+use MOM_unit_scaling, only  : unit_scale_type
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
@@ -151,9 +152,10 @@ contains
 !> Calls subroutines in this file that are needed to refract, propagate,
 !! and dissipate energy density of the internal tide.
 subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
-                              G, GV, CS)
+                              G, GV, US, CS)
   type(ocean_grid_type),            intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h  !< Layer thicknesses, in H
                                                         !! (usually m or kg m-2).
@@ -349,7 +351,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   if (CS%apply_bottom_drag) then
     do j=jsd,jed ; do i=isd,ied
       ! Note the 1 m dimensional scale here.  Should this be a parameter?
-      I_D_here = 1.0 / (GV%Z_to_m*max(G%bathyT(i,j), 1.0*GV%m_to_Z))
+      I_D_here = 1.0 / (GV%Z_to_m*max(G%bathyT(i,j), 1.0*US%m_to_Z))
       drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, vel_btTide(i,j)**2 + &
                         tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
     enddo ; enddo
@@ -381,7 +383,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       ! Calculate modal structure for given mode and frequency
-      call wave_structure(h, tv, G, GV, cn(:,:,m), m, CS%frequency(fr), &
+      call wave_structure(h, tv, G, GV, US, cn(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied

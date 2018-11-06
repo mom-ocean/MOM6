@@ -6,13 +6,14 @@ module MOM_CVMix_ddiff
 use MOM_diag_mediator,  only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,  only : post_data
 use MOM_EOS,            only : calculate_density_derivs
-use MOM_variables,      only : thermo_var_ptrs
 use MOM_error_handler,  only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
+use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_debugging,      only : hchksum
 use MOM_grid,           only : ocean_grid_type
+use MOM_unit_scaling,   only : unit_scale_type
+use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_file_parser,    only : get_param, log_version, param_file_type
 use cvmix_ddiff,        only : cvmix_init_ddiff, CVMix_coeffs_ddiff
 use cvmix_kpp,          only : CVmix_kpp_compute_kOBL_depth
 implicit none ; private
@@ -160,10 +161,11 @@ end function CVMix_ddiff_init
 
 !> Subroutine for computing vertical diffusion coefficients for the
 !! double diffusion mixing parameterization.
-subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
+subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
 
   type(ocean_grid_type),                      intent(in)  :: G    !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV   !< Vertical grid structure.
+  type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
@@ -272,8 +274,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
                             nlev=G%ke,    &
                             max_nlev=G%ke)
     do K=1,G%ke+1
-      Kd_T(i,j,K) = GV%m_to_Z**2 * Kd1_T(K)
-      Kd_S(i,j,K) = GV%m_to_Z**2 * Kd1_S(K)
+      Kd_T(i,j,K) = US%m_to_Z**2 * Kd1_T(K)
+      Kd_S(i,j,K) = US%m_to_Z**2 * Kd1_S(K)
     enddo
 
     ! Do not apply mixing due to convection within the boundary layer

@@ -13,6 +13,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
 use MOM_isopycnal_slopes, only : calc_isoneutral_slopes
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_wave_speed, only : wave_speed, wave_speed_CS, wave_speed_init
@@ -129,11 +130,12 @@ public VarMix_init, calc_slope_functions, calc_resoln_function
 contains
 
 !> Calculates and stores the non-dimensional resolution functions
-subroutine calc_resoln_function(h, tv, G, GV, CS)
+subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness (m or kg/m2)
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
   real :: cg1_q  ! The gravity wave speed interpolated to q points, in m s-1.
@@ -156,15 +158,15 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
         "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
       if (CS%Resoln_use_ebt) then
         ! Both resolution fn and vertical structure are using EBT
-        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
       else
         ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
-        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, use_ebt_mode=.true.)
-        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, use_ebt_mode=.true.)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
       endif
       call pass_var(CS%ebt_struct, G%Domain)
     else
-      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
     endif
 
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
@@ -376,9 +378,10 @@ end subroutine calc_resoln_function
 
 !> Calculates and stores functions of isopycnal slopes, e.g. Sx, Sy, S*N, mostly used in the Visbeck et al.
 !! style scaling of diffusivity
-subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
+subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness (m or kg/m2)
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
   real,                                     intent(in)    :: dt !< Time increment (s)
@@ -393,15 +396,15 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
-    call find_eta(h, tv, G, GV, e, halo_size=2)
+    call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
-      call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
+      call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
       call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
-      call calc_slope_functions_using_just_e(h, G, GV, CS, e, .true.)
+      call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true.)
     endif
   endif
 
@@ -570,10 +573,11 @@ end subroutine calc_Visbeck_coeffs
 
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
-subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
+subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes)
   type(ocean_grid_type),                      intent(inout) :: G  !< Ocean grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness (m or kg/m2)
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                            pointer       :: CS !< Variable mixing coefficients
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position (m)
   logical,                                    intent(in)    :: calculate_slopes !< If true, calculate slopes internally
@@ -649,7 +653,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i+1,j,k)*h(i+1,j,k-1) / (h(i+1,j,k) + h(i+1,j,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k)*GV%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*US%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
       SN_u_local(I,j,k) = (H_geom * GV%H_to_Z) * S2 * N2
@@ -660,7 +664,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i,j+1,k)*h(i,j+1,k-1) / (h(i,j+1,k) + h(i,j+1,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k)*GV%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*US%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
       SN_v_local(i,J,k) = (H_geom * GV%H_to_Z) * S2 * N2
@@ -706,10 +710,11 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 end subroutine calc_slope_functions_using_just_e
 
 !> Initializes the variables mixing coefficients container
-subroutine VarMix_init(Time, G, GV, param_file, diag, CS)
+subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),            intent(in) :: Time !< Current model time
   type(ocean_grid_type),      intent(in) :: G    !< Ocean grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
@@ -827,7 +832,7 @@ subroutine VarMix_init(Time, G, GV, param_file, diag, CS)
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6, scale=GV%m_to_Z**2) !### Add units argument.
+                 default=1.0e-6, scale=US%m_to_Z**2) !### Add units argument.
   endif
 
   if (CS%calculate_Eady_growth_rate) then

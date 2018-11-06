@@ -7,10 +7,11 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
 use MOM_io,            only : slasher
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : EOS_type, calculate_density
-use MOM_string_functions,only : uppercase, extractWord, extract_integer, extract_real
+use MOM_string_functions, only : uppercase, extractWord, extract_integer, extract_real
 
 use MOM_remapping, only : remapping_CS
 use regrid_consts, only : state_dependent, coordinateUnits
@@ -167,9 +168,10 @@ real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
 contains
 
 !> Initialization and configures a regridding control structure based on customizable run-time parameters
-subroutine initialize_regridding(CS, GV, max_depth, param_file, mdl, coord_mode, param_prefix, param_suffix)
-  type(regridding_CS),        intent(inout) :: CS !< Regridding control structure
-  type(verticalGrid_type),    intent(in)    :: GV         !< Ocean vertical grid structure
+subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_mode, param_prefix, param_suffix)
+  type(regridding_CS),        intent(inout) :: CS  !< Regridding control structure
+  type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure
+  type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
   real,                       intent(in)    :: max_depth  !< The maximum depth of the ocean, in Z.
   type(param_file_type),      intent(in)    :: param_file !< Parameter file
   character(len=*),           intent(in)    :: mdl        !< Name of calling module.
@@ -470,7 +472,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mdl, coord_mode,
       call setCoordinateResolution(dz, CS, scale=GV%m_to_H)
       CS%coord_scale = GV%H_to_m
     else
-      call setCoordinateResolution(dz, CS, scale=GV%m_to_Z)
+      call setCoordinateResolution(dz, CS, scale=US%m_to_Z)
       CS%coord_scale = GV%Z_to_m
     endif
   endif

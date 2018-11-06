@@ -11,6 +11,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -54,9 +55,10 @@ end subroutine sloshing_initialize_topography
 !! same thickness but all interfaces (except bottom and sea surface) are
 !! displaced according to a half-period cosine, with maximum value on the
 !! left and minimum value on the right. This sets off a regular sloshing motion.
-subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_params)
+subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -114,14 +116,14 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     enddo
 
     ! 2. Define displacement
-    a0 = 75.0 * GV%m_to_Z ! 75m Displacement amplitude in depth units.
+    a0 = 75.0 * US%m_to_Z ! 75m Displacement amplitude in depth units.
     do k = 1,nz+1
 
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1.0
 
       x = G%geoLonT(i,j) / G%len_lon
       !### Perhaps the '+ weight_z' here should be '* weight_z' - RWH
-      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * GV%m_to_Z
+      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * US%m_to_Z
 
       if ( k == 1 ) then
         displ(k) = 0.0

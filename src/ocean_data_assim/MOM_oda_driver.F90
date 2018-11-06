@@ -33,7 +33,6 @@ use MOM_io, only : slasher, MOM_read_data
 use MOM_diag_mediator, only : diag_ctrl, set_axes_info
 use MOM_error_handler, only : FATAL, WARNING, MOM_error, MOM_mesg, is_root_pe
 use MOM_get_input, only : get_MOM_input, directories
-use MOM_variables, only : thermo_var_ptrs
 use MOM_grid, only : ocean_grid_type, MOM_grid_init
 use MOM_grid_initialize, only : set_grid_metrics
 use MOM_hor_index, only : hor_index_type, hor_index_init
@@ -41,7 +40,6 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_ho
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_fixed_initialization, only : MOM_initialize_fixed, MOM_initialize_topography
 use MOM_coord_initialization, only : MOM_initialize_coord
-use MOM_verticalGrid, only : verticalGrid_type, verticalGridInit
 use MOM_file_parser, only : read_param, get_param, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_ALE, only : ALE_CS, ALE_initThicknessToCoord, ALE_init, ALE_updateVerticalGridType
@@ -49,6 +47,9 @@ use MOM_domains, only : MOM_domains_init, MOM_domain_type, clone_MOM_domain
 use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_regridding, only : regridding_CS, initialize_regridding
 use MOM_regridding, only : regridding_main, set_regrid_params
+use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init
+use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type, verticalGridInit
 
 implicit none ; private
 
@@ -67,6 +68,9 @@ type, public :: ODA_CS ; private
   type(ptr_mpp_domain), pointer, dimension(:) :: domains => NULL() !< Pointer to mpp_domain objects
                                                                        !! for ensemble members
   type(verticalGrid_type), pointer :: GV => NULL() !< vertical grid for DA
+  type(unit_scale_type), pointer :: &
+    US => NULL()    !< structure containing various unit conversion factors for DA
+
   type(domain2d), pointer :: mpp_domain => NULL() !< Pointer to a mpp domain object for DA
   type(grid_type), pointer :: oda_grid !< local tracer grid
   real, pointer, dimension(:,:,:) :: h => NULL() !<layer thicknesses (m or kg/m2) for DA
@@ -142,6 +146,9 @@ subroutine init_oda(Time, G, GV, CS)
 ! if it were desirable to have alternate parameters, e.g. for the grid
 ! for the analysis
   call get_MOM_input(PF,dirs,ensemble_num=0)
+
+  call unit_scaling_init(PF, CS%US)
+
   call get_param(PF, "MOM", "ASSIM_METHOD", assim_method,  &
        "String which determines the data assimilation method" // &
        "Valid methods are: \'EAKF\',\'OI\', and \'NO_ASSIM\'", default='NO_ASSIM')
@@ -205,15 +212,15 @@ subroutine init_oda(Time, G, GV, CS)
   allocate(HI)
   call hor_index_init(CS%Grid%Domain, HI, PF, &
                       local_indexing=.false.)  ! Use global indexing for DA
-  call verticalGridInit( PF, CS%GV )
+  call verticalGridInit( PF, CS%GV, CS%US )
   allocate(dG)
-  call create_dyn_horgrid(dG,HI)
+  call create_dyn_horgrid(dG, HI)
   call clone_MOM_domain(CS%Grid%Domain, dG%Domain,symmetric=.false.)
   call set_grid_metrics(dG,PF)
   call MOM_initialize_topography(dg%bathyT,dG%max_depth,dG,PF)
-  call MOM_initialize_coord(CS%GV, PF, .false., &
+  call MOM_initialize_coord(CS%GV, CS%US, PF, .false., &
            dirs%output_directory, tv_dummy, dG%max_depth)
-  call ALE_init(PF, CS%GV, dG%max_depth, CS%ALE_CS)
+  call ALE_init(PF, CS%GV, CS%US, dG%max_depth, CS%ALE_CS)
   call MOM_grid_init(CS%Grid, PF, global_indexing=.true.)
   call ALE_updateVerticalGridType(CS%ALE_CS,CS%GV)
   call copy_dyngrid_to_MOM_grid(dG, CS%Grid)
@@ -230,7 +237,7 @@ subroutine init_oda(Time, G, GV, CS)
   call get_param(PF, 'oda_driver', "REGRIDDING_COORDINATE_MODE", coord_mode, &
        "Coordinate mode for vertical regridding.", &
        default="ZSTAR", fail_if_missing=.false.)
-  call initialize_regridding(CS%regridCS, CS%GV, dG%max_depth,PF,'oda_driver',coord_mode,'','')
+  call initialize_regridding(CS%regridCS, CS%GV, CS%US, dG%max_depth,PF,'oda_driver',coord_mode,'','')
   call initialize_remapping(CS%remapCS,'PLM')
   call set_regrid_params(CS%regridCS, min_thickness=0.)
   call mpp_get_data_domain(G%Domain%mpp_domain,isd,ied,jsd,jed)
@@ -242,7 +249,7 @@ subroutine init_oda(Time, G, GV, CS)
   allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%T(:,:,:)=0.0
   allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%S(:,:,:)=0.0
 
-  call set_axes_info(CS%Grid,CS%GV,PF,CS%diag_cs,set_vertical=.true.)
+  call set_axes_info(CS%Grid, CS%GV, CS%US, PF, CS%diag_cs, set_vertical=.true.)
   do n=1,CS%ensemble_size
     write(fldnam,'(a,i2.2)') 'temp_prior_',n
     CS%Ocean_prior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time, &
