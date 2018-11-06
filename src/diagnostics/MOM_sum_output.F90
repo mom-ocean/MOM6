@@ -501,7 +501,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
-      vol_tot = GV%Z_to_m*reproducing_sum(tmp1, sums=vol_lay)
+      vol_tot = US%Z_to_m*reproducing_sum(tmp1, sums=vol_lay)
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
@@ -631,7 +631,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
           hint = Z_0APE(K) + (hbelow - G%bathyT(i,j))
           hbot = Z_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * GV%Z_to_m*(GV%Rho0*GV%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * US%Z_to_m*(GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -640,14 +640,14 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
         do k=nz,1,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(Z_0APE(K) - G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * GV%Z_to_m*(GV%Rho0*GV%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * US%Z_to_m*(GV%Rho0*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
     endif
 
     PE_tot = reproducing_sum(PE_pt, sums=PE)
-    do k=1,nz+1 ; H_0APE(K) = GV%Z_to_m*Z_0APE(K) ; enddo
+    do k=1,nz+1 ; H_0APE(K) = US%Z_to_m*Z_0APE(K) ; enddo
   else
     PE_tot = 0.0
     do k=1,nz+1 ; PE(K) = 0.0 ; H_0APE(K) = 0.0 ; enddo

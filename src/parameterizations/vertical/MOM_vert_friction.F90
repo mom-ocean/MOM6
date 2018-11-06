@@ -138,10 +138,11 @@ contains
 !! There is an additional stress term on the right-hand side
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
-subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
+subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                     taux_bot, tauy_bot, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: u      !< Zonal velocity in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -418,7 +419,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   enddo ! end of v-component J loop
 
-  call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
+  call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
@@ -1010,7 +1011,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     call uvchksum("vertvisc_coef h_[uv]", CS%h_u, &
                   CS%h_v, G%HI,haloshift=0, scale=GV%H_to_m)
     call uvchksum("vertvisc_coef a_[uv]", CS%a_u, &
-                  CS%a_v, G%HI, haloshift=0, scale=GV%Z_to_m)
+                  CS%a_v, G%HI, haloshift=0, scale=US%Z_to_m)
     if (allocated(hML_u) .and. allocated(hML_v)) &
       call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, &
                     G%HI, haloshift=0, scale=GV%H_to_m)
@@ -1107,7 +1108,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   !   The maximum coupling coefficent was originally introduced to avoid
   ! truncation error problems in the tridiagonal solver. Effectively, the 1e-10
   ! sets the maximum coupling coefficient increment to 1e10 m per timestep.
-  I_amax = (1.0e-10*GV%Z_to_m) * dt
+  I_amax = (1.0e-10*US%Z_to_m) * dt
 
   do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
   do_OBCs = .false.
@@ -1351,9 +1352,10 @@ end subroutine find_coupling_coef
 !> Velocity components which exceed a threshold for physically
 !! reasonable values are truncated. Optionally, any column with excessive
 !! velocities may be sent to a diagnostic reporting subroutine.
-subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
+subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: u      !< Zonal velocity in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -1467,7 +1469,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
     do j=js,je; do I=Isq,Ieq ; if (dowrite(I,j)) then
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
-      call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
+      call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
                vel_report(I,j), forces%taux(I,j)*dt_Rho0, a=CS%a_u, hv=CS%h_u)
     endif ; enddo ; enddo
   endif
@@ -1552,7 +1554,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
     do J=Jsq,Jeq; do i=is,ie ; if (dowrite(i,J)) then
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
-      call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
+      call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
                vel_report(i,J), forces%tauy(i,J)*dt_Rho0, a=CS%a_v, hv=CS%h_v)
     endif ; enddo ; enddo
   endif
@@ -1738,19 +1740,19 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
-     'Slow varying vertical viscosity', 'm2 s-1', conversion=GV%Z_to_m**2)
+     'Slow varying vertical viscosity', 'm2 s-1', conversion=US%Z_to_m**2)
 
   CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
-     'Total vertical viscosity at u-points', 'm2 s-1', conversion=GV%Z_to_m**2)
+     'Total vertical viscosity at u-points', 'm2 s-1', conversion=US%Z_to_m**2)
 
   CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
-     'Total vertical viscosity at v-points', 'm2 s-1', conversion=GV%Z_to_m**2)
+     'Total vertical viscosity at v-points', 'm2 s-1', conversion=US%Z_to_m**2)
 
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
-     'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=GV%Z_to_m)
+     'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m)
 
   CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
-     'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=GV%Z_to_m)
+     'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m)
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
      'Thickness at Zonal Velocity Points for Viscosity', thickness_units)

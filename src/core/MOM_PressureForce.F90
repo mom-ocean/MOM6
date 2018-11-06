@@ -96,10 +96,11 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
 end subroutine Pressureforce
 
 !> Initialize the pressure force control structure
-subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(time_type), target, intent(in)    :: Time !< Current model time
   type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< Vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_CS),  pointer       :: CS   !< Pressure force control structure
@@ -127,13 +128,13 @@ subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
                  default=.false., do_not_log=.true., debuggingParam=.true.)
 
   if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
-    call PressureForce_blk_AFV_init(Time, G, GV, param_file, diag, &
+    call PressureForce_blk_AFV_init(Time, G, GV, US, param_file, diag, &
              CS%PressureForce_blk_AFV_CSp, tides_CSp)
   elseif (CS%Analytic_FV_PGF) then
-    call PressureForce_AFV_init(Time, G, GV, param_file, diag, &
+    call PressureForce_AFV_init(Time, G, GV, US, param_file, diag, &
              CS%PressureForce_AFV_CSp, tides_CSp)
   else
-    call PressureForce_Mont_init(Time, G, GV, param_file, diag, &
+    call PressureForce_Mont_init(Time, G, GV, US, param_file, diag, &
              CS%PressureForce_Mont_CSp, tides_CSp)
   endif
 

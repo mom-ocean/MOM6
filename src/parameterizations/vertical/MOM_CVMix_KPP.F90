@@ -173,12 +173,13 @@ contains
 
 !> Initialize the CVMix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
-logical function KPP_init(paramFile, G, GV, diag, Time, CS, passive, Waves)
+logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
 
   ! Arguments
   type(param_file_type),   intent(in)    :: paramFile !< File parser
   type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
-  type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(verticalGrid_type), intent(in)    :: GV        !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US        !< A dimensional unit scaling type
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
   type(time_type),         intent(in)    :: Time      !< Model time
   type(KPP_CS),            pointer       :: CS        !< Control structure
@@ -497,7 +498,7 @@ logical function KPP_init(paramFile, G, GV, diag, Time, CS, passive, Waves)
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
-      'Diffusivity passed to KPP', 'm2/s', conversion=GV%Z_to_m**2)
+      'Diffusivity passed to KPP', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
@@ -619,8 +620,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
     call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
     call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=GV%Z_to_m**2)
-    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=US%Z_to_m**2)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=US%Z_to_m**2)
   endif
 #endif
 
@@ -676,9 +677,9 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
          Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
          Kviscosity(:)     = 0. ! Viscosity (m2/s)
       else
-         Kdiffusivity(:,1) = GV%Z_to_m**2 * Kt(i,j,:)
-         Kdiffusivity(:,2) = GV%Z_to_m**2 * Ks(i,j,:)
-         Kviscosity(:) = GV%Z_to_m**2 * Kv(i,j,:)
+         Kdiffusivity(:,1) = US%Z_to_m**2 * Kt(i,j,:)
+         Kdiffusivity(:,2) = US%Z_to_m**2 * Ks(i,j,:)
+         Kviscosity(:) = US%Z_to_m**2 * Kv(i,j,:)
       endif
 
       call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity (m2/s)
@@ -824,14 +825,14 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
             Kt(i,j,k) = Kt(i,j,k) + US%m_to_Z**2 * Kdiffusivity(k,1)
             Ks(i,j,k) = Ks(i,j,k) + US%m_to_Z**2 * Kdiffusivity(k,2)
             Kv(i,j,k) = Kv(i,j,k) + US%m_to_Z**2 * Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2 * Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, G%ke+1
             if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = US%m_to_Z**2 * Kdiffusivity(k,1)
             if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = US%m_to_Z**2 * Kdiffusivity(k,2)
             if (Kviscosity(k) /= 0.) Kv(i,j,k) = US%m_to_Z**2 * Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2 * Kv(i,j,k)
           enddo
         endif
       endif
@@ -844,8 +845,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-    call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=US%Z_to_m**2)
+    call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=US%Z_to_m**2)
   endif
 #endif
 

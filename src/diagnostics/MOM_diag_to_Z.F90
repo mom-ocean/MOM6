@@ -86,9 +86,10 @@ integer, parameter :: NO_ZSPACE = -1 !< Flag to enable z-space?
 contains
 
 !> Return the global horizontal mean in z-space
-function global_z_mean(var, G, GV, CS, tracer)
+function global_z_mean(var, G, GV, US, CS, tracer)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   type(diag_to_Z_CS),      pointer     :: CS   !< Control structure returned by
                                                !! previous call to diag_to_Z_init.
   real, dimension(SZI_(G), SZJ_(G), CS%nk_zspace), &
@@ -115,7 +116,7 @@ function global_z_mean(var, G, GV, CS, tracer)
     if (var(i,j,k) == CS%missing_tr(tracer)) valid_point = 0.
     if (depth_weight == 0.) valid_point = 0.
 
-    weight(i,j,k) = GV%Z_to_m * depth_weight * ( (valid_point * (G%areaT(i,j) * G%mask2dT(i,j))) )
+    weight(i,j,k) = US%Z_to_m * depth_weight * ( (valid_point * (G%areaT(i,j) * G%mask2dT(i,j))) )
 
     ! If the point is flagged, set the variable itself to zero to avoid NaNs
     if (valid_point == 0.) then
@@ -485,7 +486,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
     do m=1,CS%num_tr_used
       if (CS%id_tr(m) > 0) call post_data(CS%id_tr(m), CS%tr_z(m)%p, CS%diag)
       if (CS%id_tr_xyave(m) > 0) then
-        layer_ave = global_z_mean(CS%tr_z(m)%p, G, GV, CS, m)
+        layer_ave = global_z_mean(CS%tr_z(m)%p, G, GV, US, CS, m)
         call post_data(CS%id_tr_xyave(m), layer_ave, CS%diag)
       endif
     enddo

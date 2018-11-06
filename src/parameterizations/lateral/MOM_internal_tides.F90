@@ -351,7 +351,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   if (CS%apply_bottom_drag) then
     do j=jsd,jed ; do i=isd,ied
       ! Note the 1 m dimensional scale here.  Should this be a parameter?
-      I_D_here = 1.0 / (GV%Z_to_m*max(G%bathyT(i,j), 1.0*US%m_to_Z))
+      I_D_here = 1.0 / (US%Z_to_m*max(G%bathyT(i,j), 1.0*US%m_to_Z))
       drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, vel_btTide(i,j)**2 + &
                         tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
     enddo ; enddo

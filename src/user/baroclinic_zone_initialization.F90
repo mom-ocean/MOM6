@@ -6,6 +6,7 @@ module baroclinic_zone_initialization
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -21,10 +22,11 @@ public baroclinic_zone_init_temperature_salinity
 contains
 
 !> Reads the parameters unique to this module
-subroutine bcz_params(G, GV, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
+subroutine bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
                       delta_T, dTdx, L_zone, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G          !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US    !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< Parameter file handle
   real,                    intent(out) :: S_ref      !< Reference salinity (ppt)
   real,                    intent(out) :: dSdz       !< Salinity stratification (ppt/Z)
@@ -48,7 +50,7 @@ subroutine bcz_params(G, GV, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', units='ppt', &
                  default=35., do_not_log=just_read)
   call get_param(param_file, mdl, "DSDZ", dSdz, 'Salinity stratification', &
-                 units='ppt/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
+                 units='ppt/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl,"DELTA_S",delta_S,'Salinity difference across baroclinic zone', &
                  units='ppt', default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl,"DSDX",dSdx,'Meridional salinity difference', &
@@ -56,7 +58,7 @@ subroutine bcz_params(G, GV, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz
   call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature',units='C', &
                  default=10., do_not_log=just_read)
   call get_param(param_file, mdl, "DTDZ", dTdz, 'Temperature stratification', &
-                 units='C/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
+                 units='C/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl,"DELTA_T",delta_T,'Temperature difference across baroclinic zone', &
                  units='C', default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl,"DTDX",dTdx,'Meridional temperature difference', &
@@ -68,10 +70,11 @@ subroutine bcz_params(G, GV, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz
 end subroutine bcz_params
 
 !> Initialization of temperature and salinity with the baroclinic zone initial conditions
-subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file, &
+subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_file, &
                                                      just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< The model thicknesses in H (m or kg m-2)
@@ -91,7 +94,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file,
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call bcz_params(G, GV, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone, just_read_params)
+  call bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

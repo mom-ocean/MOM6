@@ -2135,10 +2135,11 @@ end subroutine find_maxF_kb
 
 !> This subroutine initializes the parameters and memory associated with the
 !! entrain_diffusive module.
-subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
+subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
@@ -2191,9 +2192,9 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H)
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
-      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=GV%Z_to_m**2)
+      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z_to_m**2)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
-      'Work actually done by diapycnal diffusion across each interface', 'W m-2', conversion=GV%Z_to_m)
+      'Work actually done by diapycnal diffusion across each interface', 'W m-2', conversion=US%Z_to_m)
 
 end subroutine entrain_diffusive_init
 

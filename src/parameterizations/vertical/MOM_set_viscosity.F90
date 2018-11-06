@@ -263,7 +263,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
-  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * GV%Z_to_m**2 * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%Z_to_m**2 * GV%Z_to_H
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
@@ -892,12 +892,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   if (CS%debug) then
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=GV%Z_to_m)
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=US%Z_to_m)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=GV%Z_to_m**2)
+        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=US%Z_to_m**2)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
         call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
-                      visc%bbl_thick_v, G%HI, haloshift=0, scale=GV%Z_to_m)
+                      visc%bbl_thick_v, G%HI, haloshift=0, scale=US%Z_to_m)
   endif
 
 end subroutine set_viscous_BBL
@@ -1126,7 +1126,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     Jsq = js-1 ; Isq = is-1
   endif ; endif
 
-  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * GV%Z_to_m**2 * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%Z_to_m**2 * GV%Z_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_Z = US%m_to_Z * sqrt(CS%cdrag)
@@ -1994,21 +1994,21 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
-       diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=GV%Z_to_m)
+       diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
-       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=GV%Z_to_m**2)
+       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=US%Z_to_m**2)
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
-       diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=GV%Z_to_m)
+       diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
-       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=GV%Z_to_m**2)
+       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=US%Z_to_m**2)
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
-       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=GV%Z_to_m)
+       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=US%Z_to_m)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
-       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=GV%Z_to_m)
+       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=US%Z_to_m)
   endif
 
   if (use_CVMix_ddiff .or. differential_diffusion) then

@@ -52,14 +52,15 @@ character(len=40)  :: mdl = "MOM_CVMix_conv"     !< This module's name.
 contains
 
 !> Initialized the CVMix convection mixing routine.
-logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
+logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
 
   type(time_type),         intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),   intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(CVMix_conv_cs),    pointer        :: CS         !< This module's control structure.
+  type(CVMix_conv_cs),     pointer       :: CS         !< This module's control structure.
   ! Local variables
   real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
   logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
@@ -133,9 +134,9 @@ logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
   CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2')
   CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
-      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
-      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
 
   call CVMix_init_conv(convect_diff=CS%kd_conv_const, &
                        convect_visc=CS%kv_conv_const, &

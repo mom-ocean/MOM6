@@ -93,10 +93,10 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
                  'Layer 2 surface temperature', units='C', default=20.0, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_DTDZ", LowerLayerdTdZ,     &
                  'Initial temperature stratification in layer 2', &
-                 units='C/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
+                 units='C/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_DSDZ", LowerLayerdSdZ,  &
                  'Initial salinity stratification in layer 2', &
-                 units='PPT/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
+                 units='PPT/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_MINTEMP",LowerLayerMinTemp, &
                  'Layer 2 minimum temperature', units='C', default=4.0, do_not_log=just_read)
 
