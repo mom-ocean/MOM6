@@ -264,6 +264,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Kd, &           ! The diapycnal diffusivity, in m2 s-1.
     pres, &         ! Interface pressures in Pa.
+    pres_Z, &       ! Interface pressures with a rescaling factor to convert interface height
+                    ! movements into changes in column potential energy, in J m-2 Z-1.
     hb_hs           ! The distance from the bottom over the thickness of the
                     ! water column, nondim.
   real, dimension(SZI_(G)) :: &
@@ -285,12 +287,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
   real, dimension(SZI_(G),SZK_(GV)) :: &
     dT_to_dColHt, & ! Partial derivatives of the total column height with the temperature
-    dS_to_dColHt, & ! and salinity changes within a layer, in m K-1 and m ppt-1.
+    dS_to_dColHt, & ! and salinity changes within a layer, in Z K-1 and Z ppt-1.
     dT_to_dPE, &    ! Partial derivatives of column potential energy with the temperature
     dS_to_dPE, &    ! and salinity changes within a layer, in J m-2 K-1 and J m-2 ppt-1.
     dT_to_dColHt_a, & ! Partial derivatives of the total column height with the temperature
     dS_to_dColHt_a, & ! and salinity changes within a layer, including the implicit effects
-                    ! of mixing with layers higher in the water colun, in m K-1 and m ppt-1.
+                    ! of mixing with layers higher in the water colun, in Z K-1 and Z ppt-1.
     dT_to_dPE_a, &  ! Partial derivatives of column potential energy with the temperature
     dS_to_dPE_a     ! and salinity changes within a layer, including the implicit effects
                     ! of mixing with layers higher in the water column, in
@@ -528,9 +530,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     reset_diags = .false.  ! This is the second call to mixedlayer.
 
   if (reset_diags) then
-!!OMP parallel default(none) shared(is,ie,js,je,CS)
     if (CS%TKE_diagnostics) then
-!!OMP do
+!!OMP parallel do default(none) shared(is,ie,js,je,CS)
       do j=js,je ; do i=is,ie
         CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_MKE(i,j) = 0.0
         CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_forcing(i,j) = 0.0
@@ -538,23 +539,23 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         CS%diag_TKE_conv_decay(i,j) = 0.0 !; CS%diag_TKE_unbalanced_forcing(i,j) = 0.0
       enddo ; enddo
     endif
+!!OMP parallel do default(none) shared(CS)
     if (CS%Mixing_Diagnostics) then
       CS%Mixing_Length(:,:,:) = 0.0
       CS%Velocity_Scale(:,:,:) = 0.0
     endif
-!!OMP end parallel
   endif
 
 
 !!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
 !!OMP                                  CS,G,GV,fluxes,IdtdR0,                    &
 !!OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
-!!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar,     &
+!!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar,      &
 !!OMP                                  max_itt,Kd_int)                           &
 !!OMP                           private(i,j,k,h,u,v,T,S,Kd,mech_TKE_k,conv_PErel_k, &
 !!OMP                                   U_Star,absf,mech_TKE,conv_PErel,nstar_k, &
 !!OMP                                   h_sum,I_hs,h_bot,hb_hs,T0,S0,num_itts,   &
-!!OMP                                   pres,dMass,dPres,dT_to_dPE,dS_to_dPE,    &
+!!OMP                                   pres,pres_Z,dMass,dPres,dT_to_dPE,dS_to_dPE, &
 !!OMP                                   dT_to_dColHt,dS_to_dColHt,Kddt_h,hp_a,   &
 !!OMP                                   Th_a,Sh_a,Th_b,Sh_b,dT_to_dPE_a,htot,    &
 !!OMP                                   dT_to_dColHt_a,dS_to_dColHt_a,uhtot,vhtot, &
@@ -608,13 +609,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     fluxes%frac_shelf_h(i,j) * GV%m_to_Z*fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+
       ! Computing Bf w/ limiters.
       Bf_Stable = max(0.0, buoy_Flux(i,j)) ! Positive for stable
       Bf_Unstable = min(0.0, buoy_flux(i,j)) ! Negative for unstable
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                     (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+                        (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
         if (CS%omega_frac > 0.0) &
           absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
       endif
@@ -624,6 +626,20 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       ! Inverse of Ekman and Obukhov
       iL_Ekman   = absf(i) / U_star
       iL_Obukhov = buoy_flux(i,j)*vonkar / (U_star**3)
+      if (CS%USE_LT) then
+        Ekman_o_Obukhov_stab = abs(max(0., iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)))
+        Ekman_o_Obukhov_un = abs(min(0., iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)))
+        !### Consider recoding this as...
+        ! Max_ratio = 1.0e16
+        ! Ekman_Obukhov = Max_ratio
+        ! if (abs(buoy_flux(i,j)*vonkar) < Max_ratio*(absf(i) * U_star**2)) &
+        !   Ekman_Obukhov = buoy_flux(i,j)*vonkar / (absf(i) * U_star**2)
+        ! if (buoy_flux(i,j) > 0.0) then
+        !   Ekman_o_Obukhov_stab = Ekman_Obukhov ; Ekman_o_Obukhov_un = 0.0
+        ! else
+        !   Ekman_o_Obukhov_un = Ekman_Obukhov ; Ekman_o_Obukhov_stab = 0.0
+        ! endif
+      endif
 
       if (CS%Mstar_Mode == CS%CONST_MSTAR) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0) * GV%Z_to_m**3 * U_star**3
@@ -663,16 +679,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         hb_hs(i,K) = h_bot * I_hs
       enddo
 
-      pres(i,1) = 0.0
+      pres(i,1) = 0.0 ; pres_Z(i,1) = 0.0
       do k=1,nz
         dMass = GV%H_to_kg_m2 * h(i,k)
         dPres = (GV%g_Earth*GV%m_to_Z) * dMass  ! This is equivalent to GV%H_to_Pa * h(i,k)
         dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
         dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
-        dT_to_dColHt(i,k) = dMass * dSV_dT(i,j,k)
-        dS_to_dColHt(i,k) = dMass * dSV_dS(i,j,k)
+        dT_to_dColHt(i,k) = dMass * GV%m_to_Z * dSV_dT(i,j,k)
+        dS_to_dColHt(i,k) = dMass * GV%m_to_Z * dSV_dS(i,j,k)
 
         pres(i,K+1) = pres(i,K) + dPres
+        pres_Z(i,K+1) = GV%Z_to_m * pres(i,K+1)
       enddo
 
 !    endif ; enddo
@@ -722,6 +739,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         ! First solve for the TKE to PE length scale
           if (CS%MSTAR_MODE == CS%MLD_o_OBUKHOV) then
             MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
+            !### MLD_over_Stab = (MLD_guess * (VonKar * (C_MO*BF_Stable -  C_EK*U_star**2*absf(i)))) / &
+            !###               U_star**3 - CS%MSTAR_XINT
             if ((MLD_over_Stab) <= 0.0) then
               !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
               MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
@@ -745,26 +764,19 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             endif
           elseif (CS%MSTAR_MODE == CS%EKMAN_o_OBUKHOV) then
             !### Please refrain from using the construct A / B / C in place of A/(B*C).
+            ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
             mstar_STAB = CS%MSTAR_COEF*sqrt(Bf_Stable  / U_star**2 / (absf(i)+1.e-10))
+            !### Should be mstar_STAB = CS%MSTAR_COEF*sqrt(Bf_Stable / (U_star**2 * (absf(i)+1.e-10)))
+            ! The limit for rotation (Ekman length) limited mixin
             mstar_ROT =  CS%C_EK * log(max(1., U_star / (absf(i)+1.e-10) / MLD_guess))
-            if ( CS%MSTAR_CAP <= 0.0) then !No cap.
-              MSTAR_MIX = max(mstar_STAB,& ! 1st term if balance of rotation and stabilizing
-                                    ! the balance is f(L_Ekman,L_Obukhov)
-                              min(& ! 2nd term for forced stratification limited
-                                 1.25,& !.5/von Karman (Obukhov limit)
-                                 ! 3rd term for rotation (Ekman length) limited
-                                 mstar_ROT))
-            else
-              MSTAR_MIX = min( & ! Sets a cap. The cap should be large and just
-                               !  meant to be a safety net.
-                           CS%MSTAR_CAP, &
-                           max(mstar_STAB,& ! 1st term if balance of rotation and stabilizing
-                                 ! the balance is f(L_Ekman,L_Obukhov)
-                              min(& ! 2nd term for forced stratification limited
-                                 1.25,& !.5/von Karman (Obukhov limit)
-                                 ! 3rd term for rotation (Ekman length) limited
-                                 mstar_ROT)))
-            endif!cap for mstar_mode==2
+            !### Consider rewriting the expression for mstar_ROT as:
+            ! mstar_Rot = 0.0
+            ! if (Ustar > absf(i) * MLD_guess) &
+            !   mstar_ROT = CS%C_EK * log(U_star / (absf(i) * MLD_guess))
+            ! Here 1.25 is .5/von Karman, which gives the Obukhov limit.
+            MSTAR_MIX = max(mstar_STAB, min(1.25, mstar_ROT))
+
+            if (CS%MSTAR_CAP > 0.0) MSTAR_MIX = min(CS%MSTAR_CAP, MSTAR_MIX)
           endif!mstar_mode==1 or ==2
           ! Adjustment for unstable buoyancy flux.
           !  Convection reduces mechanical mixing because there
@@ -772,6 +784,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * (-BF_Unstable + 1.e-10*GV%m_to_Z**2) / &
                                  ( (-Bf_Unstable + 1.e-10*GV%m_to_Z**2) +                 &
                                    2.0 *MSTAR_MIX * U_star**3 / MLD_guess )
+          ! MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * ((-BF_Unstable + 1.e-10*GV%m_to_Z**2)*MLD_guess) / &
+          !                       ( (-Bf_Unstable + 1.e-10*GV%m_to_Z**2)*MLD_guess + &
+          !                         2.0*MSTAR_MIX * U_star**3 )
           if (CS%USE_LT) then
             call get_Langmuir_Number( LA, G, GV, abs(MLD_guess), u_star_mean, i, j, &
                                       H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
@@ -779,8 +794,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             MLD_o_Ekman = abs(MLD_guess * iL_Ekman)
             MLD_o_Obukhov_stab = abs(max(0., MLD_guess*iL_Obukhov))
             MLD_o_Obukhov_un = abs(min(0., MLD_guess*iL_Obukhov))
-            Ekman_o_Obukhov_stab = abs(max(0., iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)))
-            Ekman_o_Obukhov_un = abs(min(0., iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)))
             ! 3. Adjust LA based on various parameters.
             !    Assumes linear factors based on length scale ratios to adjust LA
             !    Note when these coefficients are set to 0 recovers simple LA.
@@ -792,10 +805,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             if (CS%LT_Enhance_Form==1) then
               !Original w'/ust scaling w/ Van Roekel et al. 2012 scaling
               !  NOTE we know now that this is not the right way to scale M.
-              ENHANCE_M = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
+              ENHANCE_M = (1. + (1.4*LA)**(-2) + (5.4*LA)**(-4))**(1.5)
             elseif (CS%LT_Enhance_Form==2) then
               ! Enhancement is multiplied (added mst_lt set to 0)
-              ENHANCE_M = min(CS%Max_Enhance_M,(1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP))
+              ENHANCE_M = min(CS%Max_Enhance_M, (1. + CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP))
               MSTAR_LT = 0.0
             elseif (CS%LT_ENHANCE_Form == 3) then
               ! or Enhancement is additive (multiplied enhance_m set to 1)
@@ -1050,7 +1063,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             if (TKE_here > 0.0) then
               vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
               hbs_here = GV%H_to_Z * min(hb_hs(i,K), MixLen_shape(K))
-              Mixing_Length_Used(k) = MAX(CS%min_mix_len,((h_tt*hbs_here)*vstar) / &
+              Mixing_Length_Used(k) = MAX(CS%min_mix_len, ((h_tt*hbs_here)*vstar) / &
                   ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar))
               !Note setting Kd_guess0 to Mixing_Length_Used(K) here will
               ! change the answers.  Therefore, skipping that.
@@ -1070,7 +1083,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               call find_PE_chg_orig(Kddt_h_g0, h(i,k), hp_a(i), dTe_term, dSe_term, &
                        dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
                        dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
-                       pres(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                       pres_Z(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
                        dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                        PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
                        dPEc_dKd_0=dPEc_dKd_Kd0 )
@@ -1078,7 +1091,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               call find_PE_chg(0.0, Kddt_h_g0, hp_a(i), h(i,k), &
                          Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                          dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), dT_to_dPE(i,k), dS_to_dPE(i,k), &
-                         pres(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
+                         pres_Z(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                          dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
                          PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
                          dPEc_dKd_0=dPEc_dKd_Kd0 )
@@ -1121,14 +1134,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                   call find_PE_chg_orig(Kd(i,k)*dt_h, h(i,k), hp_a(i), dTe_term, dSe_term, &
                            dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
                            dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
-                           pres(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                           pres_Z(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
                            dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                            PE_chg=dPE_conv)
                 else
                   call find_PE_chg(0.0, Kd(i,k)*dt_h, hp_a(i), h(i,k), &
                            Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                            dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), dT_to_dPE(i,k), dS_to_dPE(i,k), &
-                           pres(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
+                           pres_Z(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                            dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
                            PE_chg=dPE_conv)
                 endif
@@ -1208,14 +1221,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                   call find_PE_chg_orig(Kddt_h_guess, h(i,k), hp_a(i), dTe_term, dSe_term, &
                            dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
                            dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
-                           pres(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                           pres_Z(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
                            dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                            PE_chg=PE_chg, dPEc_dKd=dPEc_dKd )
                 else
                   call find_PE_chg(0.0, Kddt_h_guess, hp_a(i), h(i,k), &
                            Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                            dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), dT_to_dPE(i,k), dS_to_dPE(i,k), &
-                           pres(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
+                           pres_Z(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
                            dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
                            PE_chg=dPE_conv)
                 endif
@@ -1457,7 +1470,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       if (allocated(CS%Ekman_Obukhov)) CS%Ekman_Obukhov(i,j) = iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)
       if (allocated(CS%La)) CS%La(i,j) = LA
       if (allocated(CS%La_mod)) CS%La_mod(i,j) = LAmod
-    else
+    else ! End of the ocean-point part of the i-loop
       ! For masked points, Kd_int must still be set (to 0) because it has intent out.
       do K=1,nz+1
         Kd(i,K) = 0.
@@ -1468,7 +1481,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       if (present(dS_expected)) then
         do k=1,nz ; dS_expected(i,j,k) = 0.0 ; enddo
       endif
-    endif ; enddo ; ! Close of i-loop - Note unusual loop order!
+    endif ; enddo ! Close of i-loop - Note unusual loop order!
 
     if (CS%id_Hsfc_used > 0) then
       do i=is,ie ; Hsfc_used(i,j) = h(i,1)*GV%H_to_Z ; enddo
@@ -1532,7 +1545,7 @@ end subroutine energetic_PBL
 !! for several changes in an interfaces's diapycnal diffusivity times a timestep.
 subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                        dT_to_dPE_a, dS_to_dPE_a, dT_to_dPE_b, dS_to_dPE_b, &
-                       pres, dT_to_dColHt_a, dS_to_dColHt_a, dT_to_dColHt_b, dS_to_dColHt_b, &
+                       pres_Z, dT_to_dColHt_a, dS_to_dColHt_a, dT_to_dColHt_b, dS_to_dColHt_b, &
                        PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0, ColHt_cor)
   real, intent(in)  :: Kddt_h0  !< The previously used diffusivity at an interface times
                                 !! the time step and  divided by the average of the
@@ -1576,25 +1589,25 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                                 !! a layer's salinity change to the change in column
                                 !! potential energy, including all implicit diffusive changes
                                 !! in the salinities of all the layers below, in J m-2 ppt-1.
-  real, intent(in)  :: pres     !< The hydrostatic interface pressure, which is used to relate
+  real, intent(in)  :: pres_Z   !< The rescaled hydrostatic interface pressure, which relates
                                 !! the changes in column thickness to the energy that is radiated
-                                !! as gravity waves and unavailable to drive mixing, in Pa.
+                                !! as gravity waves and unavailable to drive mixing, in J m-2 Z-1.
   real, intent(in)  :: dT_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! height, including all implicit diffusive changes
-                                !! in the temperatures of all the layers above, in m K-1.
+                                !! in the temperatures of all the layers above, in Z K-1.
   real, intent(in)  :: dS_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                 !! a layer's salinity change to the change in column
                                 !! height, including all implicit diffusive changes
-                                !! in the salinities of all the layers above, in m ppt-1.
+                                !! in the salinities of all the layers above, in Z ppt-1.
   real, intent(in)  :: dT_to_dColHt_b !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! height, including all implicit diffusive changes
-                                !! in the temperatures of all the layers below, in m K-1.
+                                !! in the temperatures of all the layers below, in Z K-1.
   real, intent(in)  :: dS_to_dColHt_b !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                 !! a layer's salinity change to the change in column
                                 !! height, including all implicit diffusive changes
-                                !! in the salinities of all the layers below, in m ppt-1.
+                                !! in the salinities of all the layers below, in Z ppt-1.
 
   real, optional, intent(out) :: PE_chg   !< The change in column potential energy from applying
                                           !! Kddt_h at the present interface, in J m-2.
@@ -1642,11 +1655,11 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
     y1 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
     PE_chg = PEc_core * y1
     ColHt_chg = ColHt_core * y1
-    if (ColHt_chg < 0.0) PE_chg = PE_chg - pres * ColHt_chg
-    if (present(ColHt_cor)) ColHt_cor = -pres * min(ColHt_chg, 0.0)
+    if (ColHt_chg < 0.0) PE_chg = PE_chg - pres_Z * ColHt_chg
+    if (present(ColHt_cor)) ColHt_cor = -pres_Z * min(ColHt_chg, 0.0)
   elseif (present(ColHt_cor)) then
     y1 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
-    ColHt_cor = -pres * min(ColHt_core * y1, 0.0)
+    ColHt_cor = -pres_Z * min(ColHt_core * y1, 0.0)
   endif
 
   if (present(dPEc_dKd)) then
@@ -1654,7 +1667,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
     y1 = 1.0 / (bdt1 + dKddt_h * hps)**2
     dPEc_dKd = PEc_core * y1
     ColHt_chg = ColHt_core * y1
-    if (ColHt_chg < 0.0) dPEc_dKd = dPEc_dKd - pres * ColHt_chg
+    if (ColHt_chg < 0.0) dPEc_dKd = dPEc_dKd - pres_Z * ColHt_chg
   endif
 
   if (present(dPE_max)) then
@@ -1662,7 +1675,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
     y1 = 1.0 / (bdt1 * hps)
     dPE_max = PEc_core * y1
     ColHt_chg = ColHt_core * y1
-    if (ColHt_chg < 0.0) dPE_max = dPE_max - pres * ColHt_chg
+    if (ColHt_chg < 0.0) dPE_max = dPE_max - pres_Z * ColHt_chg
   endif
 
   if (present(dPEc_dKd_0)) then
@@ -1670,7 +1683,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
     y1 = 1.0 / bdt1**2
     dPEc_dKd_0 = PEc_core * y1
     ColHt_chg = ColHt_core * y1
-    if (ColHt_chg < 0.0) dPEc_dKd_0 = dPEc_dKd_0 - pres * ColHt_chg
+    if (ColHt_chg < 0.0) dPEc_dKd_0 = dPEc_dKd_0 - pres_Z * ColHt_chg
   endif
 
 end subroutine find_PE_chg
@@ -1680,7 +1693,7 @@ end subroutine find_PE_chg
 !! using the original form used in the first version of ePBL.
 subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                        dT_km1_t2, dS_km1_t2, dT_to_dPE_k, dS_to_dPE_k, &
-                       dT_to_dPEa, dS_to_dPEa, pres, dT_to_dColHt_k, &
+                       dT_to_dPEa, dS_to_dPEa, pres_Z, dT_to_dColHt_k, &
                        dS_to_dColHt_k, dT_to_dColHta, dS_to_dColHta, &
                        PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0)
   real, intent(in)  :: Kddt_h   !< The diffusivity at an interface times the time step and
@@ -1699,9 +1712,9 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                                  !! temperature change in the layer above the interface, in K.
   real, intent(in)  :: dS_km1_t2 !< A diffusivity-independent term related to the
                                  !! salinity change in the layer above the interface, in ppt.
-  real, intent(in)  :: pres      !< The hydrostatic interface pressure, which is used to relate
+  real, intent(in)  :: pres_Z    !< The rescaled hydrostatic interface pressure, which relates
                                  !! the changes in column thickness to the energy that is radiated
-                                 !! as gravity waves and unavailable to drive mixing, in Pa.
+                                 !! as gravity waves and unavailable to drive mixing, in J m-2 Z-1.
   real, intent(in)  :: dT_to_dPE_k !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! potential energy, including all implicit diffusive changes
@@ -1721,19 +1734,19 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real, intent(in)  :: dT_to_dColHt_k !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! height, including all implicit diffusive changes
-                                 !! in the temperatures of all the layers below, in m K-1.
+                                 !! in the temperatures of all the layers below, in Z K-1.
   real, intent(in)  :: dS_to_dColHt_k !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                  !! a layer's salinity change to the change in column
                                  !! height, including all implicit diffusive changes
-                                 !! in the salinities of all the layers below, in m ppt-1.
+                                 !! in the salinities of all the layers below, in Z ppt-1.
   real, intent(in)  :: dT_to_dColHta !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! height, including all implicit diffusive changes
-                                 !! in the temperatures of all the layers above, in m K-1.
+                                 !! in the temperatures of all the layers above, in Z K-1.
   real, intent(in)  :: dS_to_dColHta !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                  !! a layer's salinity change to the change in column
                                  !! height, including all implicit diffusive changes
-                                 !! in the salinities of all the layers above, in m ppt-1.
+                                 !! in the salinities of all the layers above, in Z ppt-1.
 
   real, optional, intent(out) :: PE_chg   !< The change in column potential energy from applying
                                           !! Kddt_h at the present interface, in J m-2.
@@ -1787,7 +1800,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
              (dS_to_dPE_k * dS_k + dS_to_dPEa * dS_km1)
     ColHt_chg = (dT_to_dColHt_k * dT_k + dT_to_dColHta * dT_km1) + &
                 (dS_to_dColHt_k * dS_k + dS_to_dColHta * dS_km1)
-    if (ColHt_chg < 0.0) PE_chg = PE_chg - pres * ColHt_chg
+    if (ColHt_chg < 0.0) PE_chg = PE_chg - pres_Z * ColHt_chg
   endif
 
   if (present(dPEc_dKd)) then
@@ -1804,7 +1817,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                (dS_to_dPE_k * ddS_k_dKd + dS_to_dPEa * ddS_km1_dKd)
     dColHt_dKd = (dT_to_dColHt_k * ddT_k_dKd + dT_to_dColHta * ddT_km1_dKd) + &
                  (dS_to_dColHt_k * ddS_k_dKd + dS_to_dColHta * ddS_km1_dKd)
-    if (dColHt_dKd < 0.0) dPEc_dKd = dPEc_dKd - pres * dColHt_dKd
+    if (dColHt_dKd < 0.0) dPEc_dKd = dPEc_dKd - pres_Z * dColHt_dKd
   endif
 
   if (present(dPE_max)) then
@@ -1815,7 +1828,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
     dColHt_max = (dT_to_dColHta * dT_km1_t2 + dS_to_dColHta * dS_km1_t2) + &
               ((dT_to_dColHt_k + dT_to_dColHta) * dTe_term + &
                (dS_to_dColHt_k + dS_to_dColHta) * dSe_term) / (b_den_1 + h_k)
-    if (dColHt_max < 0.0) dPE_max = dPE_max - pres*dColHt_max
+    if (dColHt_max < 0.0) dPE_max = dPE_max - pres_Z*dColHt_max
   endif
 
   if (present(dPEc_dKd_0)) then
@@ -1824,7 +1837,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                  (dT_to_dPE_k * dTe_term + dS_to_dPE_k * dSe_term) / (h_k*b_den_1)
     dColHt_dKd = (dT_to_dColHta * dT_km1_t2 + dS_to_dColHta * dS_km1_t2) / (b_den_1) + &
                  (dT_to_dColHt_k * dTe_term + dS_to_dColHt_k * dSe_term) / (h_k*b_den_1)
-    if (dColHt_dKd < 0.0) dPEc_dKd_0 = dPEc_dKd_0 - pres*dColHt_dKd
+    if (dColHt_dKd < 0.0) dPEc_dKd_0 = dPEc_dKd_0 - pres_Z*dColHt_dKd
   endif
 
 end subroutine find_PE_chg_orig
