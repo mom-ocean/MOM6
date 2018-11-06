@@ -870,26 +870,23 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
   numberOfGroundings = 0
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,optics,fluxes,dt,    &
-!$OMP                                  H_limit_fluxes,                                   &
-!$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
-!$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
-!$OMP                                  minimum_forcing_depth,evap_CFL_limit,             &
-!$OMP                                  calculate_buoyancy,netPen,SkinBuoyFlux,GoRho,     &
-!$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
-!$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
-!$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
-!$OMP                                  IforcingDepthScale,                               &
-!$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
-!$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
-!$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
-!$OMP                                  drhodt,drhods,pen_sw_bnd_rate,SurfPressure,       &
-!$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)        &
-!$OMP                     firstprivate(start,npts)
-
-
-  ! Work in vertical slices for efficiency
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,US,optics,fluxes,dt, &
+  !$OMP                                  H_limit_fluxes,numberOfGroundings,iGround,jGround,&
+  !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
+  !$OMP                                  minimum_forcing_depth,evap_CFL_limit,             &
+  !$OMP                                  calculate_buoyancy,netPen,SkinBuoyFlux,GoRho,     &
+  !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
+  !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
+  !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
+  !$OMP                                  IforcingDepthScale,                               &
+  !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
+  !$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
+  !$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
+  !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,SurfPressure,       &
+  !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)        &
+  !$OMP                     firstprivate(start,npts)
   do j=js,je
+  ! Work in vertical slices for efficiency
 
     ! Copy state into 2D-slice arrays
     do k=1,nz ; do i=is,ie
