@@ -11,6 +11,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -70,9 +71,10 @@ subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
 end subroutine dumbbell_initialize_topography
 
 !> Initializes the layer thicknesses to be uniform in the dumbbell test case
-subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_params)
+subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in m.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -100,7 +102,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
+                 units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
@@ -246,9 +248,10 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 end subroutine dumbbell_initialize_temperature_salinity
 
 !> Initialize the restoring sponges for the dumbbell test case
-subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
+subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G !< Horizontal grid control structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid control structure
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamic variables
   type(param_file_type),   intent(in) :: param_file !< Parameter file structure
   logical,                 intent(in) :: use_ALE !< ALE flag
@@ -281,7 +284,7 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
   call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, do_not_log=.true.)
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=.true., scale=GV%m_to_Z)
+                 units='m', default=1.0e-3, do_not_log=.true., scale=US%m_to_Z)
 
   ! no active sponges
   if (sponge_time_scale <= 0.) return

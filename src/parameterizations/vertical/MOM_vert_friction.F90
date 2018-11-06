@@ -16,6 +16,7 @@ use MOM_open_boundary, only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_PointAccel, only : write_u_accel, write_v_accel, PointAccel_init
 use MOM_PointAccel, only : PointAccel_CS
 use MOM_time_manager, only : time_type, time_type_to_real, operator(-)
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state
@@ -563,9 +564,10 @@ end subroutine vertvisc_remnant
 !> Calculate the coupling coefficients (CS%a_u and CS%a_v)
 !! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 !! applying the implicit vertical viscosity via vertvisc().
-subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
+subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u      !< Zonal velocity in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -755,7 +757,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     endif
 
     call find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
-                            dt, j, G, GV, CS, visc, forces, work_on_u=.true., OBC=OBC)
+                            dt, j, G, GV, US, CS, visc, forces, work_on_u=.true., OBC=OBC)
     if (allocated(hML_u)) then
       do i=isq,ieq ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
     endif
@@ -770,7 +772,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
           call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
-                                  kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
+                                  kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
                                   visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
@@ -798,7 +800,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
             endif ; enddo
           enddo
           call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
-                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
+                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
                                   visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
         endif
         do I=Isq,Ieq ; if (do_i_shelf(I)) CS%a1_shelf_u(I,j) = a_shelf(I,1) ; enddo
@@ -924,7 +926,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     endif
 
     call find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
-                            dt, j, G, GV, CS, visc, forces, work_on_u=.false., OBC=OBC)
+                            dt, j, G, GV, US, CS, visc, forces, work_on_u=.false., OBC=OBC)
     if ( allocated(hML_v)) then
        do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
     endif
@@ -938,7 +940,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
           call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
-                                  kv_bbl, z_i, h_ml, dt, j, G, GV, CS, visc, &
+                                  kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, visc, &
                                   forces, work_on_u=.false., OBC=OBC, shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
@@ -966,7 +968,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
             endif ; enddo
           enddo
           call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
-                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
+                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
                                   visc, forces, work_on_u=.false., OBC=OBC, shelf=.true.)
         endif
         do i=is,ie ; if (do_i_shelf(i)) CS%a1_shelf_v(i,J) = a_shelf(i,1) ; enddo
@@ -1034,9 +1036,10 @@ end subroutine vertvisc_coef
 !! interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
 !! adjacent layer thicknesses are used to calculate a[k] near the bottom.
 subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
-                              dt, j, G, GV, CS, visc, forces, work_on_u, OBC, shelf)
+                              dt, j, G, GV, US, CS, visc, forces, work_on_u, OBC, shelf)
   type(ocean_grid_type),     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),   intent(in)  :: GV !< Ocean vertical grid structure
+  type(unit_scale_type),     intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZK_(GV)+1), &
                              intent(out) :: a_cpl !< Coupling coefficient across interfaces, in Z s-1
   real, dimension(SZIB_(G),SZK_(GV)), &
@@ -1292,11 +1295,11 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     do i=is,ie ; if (do_i(i)) then
       if (GV%nkml>0) nk_visc(i) = real(GV%nkml+1)
       if (work_on_u) then
-        u_star(I) = 0.5*GV%m_to_Z*(forces%ustar(i,j) + forces%ustar(i+1,j))
+        u_star(I) = 0.5*US%m_to_Z*(forces%ustar(i,j) + forces%ustar(i+1,j))
         absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
         if (CS%dynamic_viscous_ML) nk_visc(I) = visc%nkml_visc_u(I,j) + 1
       else
-        u_star(i) = 0.5*GV%m_to_Z*(forces%ustar(i,j) + forces%ustar(i,j+1))
+        u_star(i) = 0.5*US%m_to_Z*(forces%ustar(i,j) + forces%ustar(i,j+1))
         absf(i) = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
         if (CS%dynamic_viscous_ML) nk_visc(i) = visc%nkml_visc_v(i,J) + 1
       endif
@@ -1307,16 +1310,16 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     if (do_OBCS) then ; if (work_on_u) then
       do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
-          u_star(I) = GV%m_to_Z*forces%ustar(i,j)
+          u_star(I) = US%m_to_Z*forces%ustar(i,j)
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
-          u_star(I) = GV%m_to_Z*forces%ustar(i+1,j)
+          u_star(I) = US%m_to_Z*forces%ustar(i+1,j)
       endif ; enddo
     else
       do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
-          u_star(i) = GV%m_to_Z*forces%ustar(i,j)
+          u_star(i) = US%m_to_Z*forces%ustar(i,j)
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
-          u_star(i) = GV%m_to_Z*forces%ustar(i,j+1)
+          u_star(i) = US%m_to_Z*forces%ustar(i,j+1)
       endif ; enddo
     endif ; endif
 
@@ -1557,7 +1560,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 end subroutine vertvisc_limit_vel
 
 !> Initialize the vertical friction module
-subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
+subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                          ntrunc, CS)
   type(ocean_internal_state), &
                    target, intent(in)    :: MIS    !< The "MOM Internal State", a set of pointers
@@ -1566,6 +1569,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   type(time_type), target, intent(in)    :: Time   !< Current model time
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< File to parse for parameters
   type(diag_ctrl), target, intent(inout) :: diag   !< Diagnostic control structure
   type(accel_diag_ptrs),   intent(inout) :: ADp    !< Acceleration diagnostic pointers
@@ -1662,18 +1666,18 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", fail_if_missing=.true., scale=GV%m_to_Z**2, unscaled=Kv_dflt)
+                 units="m2 s-1", fail_if_missing=.true., scale=US%m_to_Z**2, unscaled=Kv_dflt)
 
   if (GV%nkml < 1) call get_param(param_file, mdl, "KVML", CS%Kvml, &
                  "The kinematic viscosity in the mixed layer.  A typical \n"//&
                  "value is ~1e-2 m2 s-1. KVML is not used if \n"//&
                  "BULKMIXEDLAYER is true.  The default is set by KV.", &
-                 units="m2 s-1", default=Kv_dflt, scale=GV%m_to_Z**2)
+                 units="m2 s-1", default=Kv_dflt, scale=US%m_to_Z**2)
   if (.not.CS%bottomdraglaw) call get_param(param_file, mdl, "KVBBL", CS%Kvbbl, &
                  "The kinematic viscosity in the benthic boundary layer. \n"//&
                  "A typical value is ~1e-2 m2 s-1. KVBBL is not used if \n"//&
                  "BOTTOMDRAGLAW is true.  The default is set by KV.", &
-                 units="m2 s-1", default=Kv_dflt, scale=GV%m_to_Z**2)
+                 units="m2 s-1", default=Kv_dflt, scale=US%m_to_Z**2)
   call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
                  "The thickness of a bottom boundary layer with a \n"//&
                  "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or \n"//&

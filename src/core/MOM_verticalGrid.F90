@@ -5,6 +5,7 @@ module MOM_verticalGrid
 
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_unit_scaling, only : unit_scale_type
 
 implicit none ; private
 
@@ -64,9 +65,10 @@ end type verticalGrid_type
 contains
 
 !> Allocates and initializes the ocean model vertical grid structure.
-subroutine verticalGridInit( param_file, GV )
+subroutine verticalGridInit( param_file, GV, US )
   type(param_file_type),   intent(in) :: param_file !< Parameter file handle/type
   type(verticalGrid_type), pointer    :: GV         !< The container for vertical grid data
+  type(unit_scale_type),   intent(in) :: US         !< A dimensional unit scaling type
   ! This routine initializes the verticalGrid_type structure (GV).
   ! All memory is allocated but not necessarily set to meaningful values until later.
 
@@ -127,7 +129,6 @@ subroutine verticalGridInit( param_file, GV )
   Z_rescale_factor = 1.0
   if (Z_power /= 0) Z_rescale_factor = 2.0**Z_power
   GV%Z_to_m = 1.0 * Z_rescale_factor
-  GV%m_to_Z = 1.0 / Z_rescale_factor
   GV%g_Earth = GV%g_Earth * GV%Z_to_m
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
@@ -155,11 +156,11 @@ subroutine verticalGridInit( param_file, GV )
     GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
   endif
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
-  GV%H_to_Pa = (GV%g_Earth*GV%m_to_Z) * GV%H_to_kg_m2
+  GV%H_to_Pa = (GV%g_Earth*US%m_to_Z) * GV%H_to_kg_m2
 
-  GV%H_to_Z = GV%H_to_m * GV%m_to_Z
+  GV%H_to_Z = GV%H_to_m * US%m_to_Z
   GV%Z_to_H = GV%Z_to_m * GV%m_to_H
-  GV%Angstrom_Z = GV%m_to_Z * GV%Angstrom_m
+  GV%Angstrom_Z = US%m_to_Z * GV%Angstrom_m
 
 ! Log derivative values.
   call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor)
@@ -178,7 +179,6 @@ end subroutine verticalGridInit
 subroutine fix_restart_scaling(GV)
   type(verticalGrid_type), intent(inout) :: GV   !< The ocean's vertical grid structure
 
-  GV%m_to_Z_restart = GV%m_to_Z
   GV%m_to_H_restart = GV%m_to_H
 end subroutine fix_restart_scaling
 

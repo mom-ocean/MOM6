@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -102,9 +103,10 @@ end function spike
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_ref)
+subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state, P_ref)
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
   real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being
                                                               !! initialized, in H.
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
@@ -126,7 +128,7 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
 
   call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_thickness: setting thickness", 5)
   call get_param(param_file, mdl, "INIT_THICKNESS_PROFILE", h_profile, &
-                 "Profile of initial layer thicknesses.", units="m", scale=GV%m_to_Z, &
+                 "Profile of initial layer thicknesses.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
 
   ! e0 is the notional position of interfaces

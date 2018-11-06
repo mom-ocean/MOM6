@@ -7,17 +7,18 @@ use MOM_diag_mediator,      only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,      only : safe_alloc_ptr, post_data
 use MOM_diag_to_Z,          only : diag_to_Z_CS, register_Zint_diag
 use MOM_diag_to_Z,          only : calc_Zint_diags
-use MOM_EOS,                only : calculate_density
-use MOM_variables,          only : thermo_var_ptrs, p3d
-use MOM_error_handler,      only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_debugging,          only : hchksum
-use MOM_grid,               only : ocean_grid_type
-use MOM_verticalGrid,       only : verticalGrid_type
-use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping_core_h
+use MOM_EOS,                only : calculate_density
+use MOM_error_handler,      only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions,   only : uppercase, lowercase
+use MOM_grid,               only : ocean_grid_type
 use MOM_io,                 only : slasher, MOM_read_data, vardesc, var_desc, field_size
+use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping_core_h
+use MOM_string_functions,   only : uppercase, lowercase
+use MOM_unit_scaling,       only : unit_scale_type
+use MOM_variables,          only : thermo_var_ptrs, p3d
+use MOM_verticalGrid,       only : verticalGrid_type
 use CVMix_tidal,            only : CVMix_init_tidal, CVMix_compute_Simmons_invariant
 use CVMix_tidal,            only : CVMix_coeffs_tidal, CVMix_tidal_params_type
 use CVMix_tidal,            only : CVMix_compute_Schmittner_invariant, CVMix_compute_SchmittnerCoeff
@@ -204,10 +205,11 @@ integer,        parameter :: SCHMITTNER   = 2
 contains
 
 !> Initializes internal tidal dissipation scheme for diapycnal mixing
-logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp, CS)
+logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_CSp, CS)
   type(time_type),          intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),    intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type),  intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),    intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),    intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target,  intent(inout) :: diag       !< Diagnostics control structure.
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< pointer to the Z-diagnostics control
@@ -378,7 +380,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "When the Polzin decay profile is used, this is the \n"//&
                  "minimum vertical decay scale for the vertical profile\n"//&
                  "of internal tide dissipation with the Polzin (2009) formulation", &
-                 units="m", default=0.0, scale=GV%m_to_Z)
+                 units="m", default=0.0, scale=US%m_to_Z)
   endif
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
@@ -386,7 +388,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "The decay scale away from the bottom for tidal TKE with \n"//&
                  "the new coding when INT_TIDE_DISSIPATION is used.", &
                  !units="m", default=0.0)
-                 units="m", default=500.0, scale=GV%m_to_Z)  ! TODO: confirm this new default
+                 units="m", default=500.0, scale=US%m_to_Z)  ! TODO: confirm this new default
     call get_param(param_file, mdl, "MU_ITIDES", CS%Mu_itides, &
                  "A dimensionless turbulent mixing efficiency used with \n"//&
                  "INT_TIDE_DISSIPATION, often 0.2.", units="nondim", default=0.2)
@@ -397,7 +399,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  units="nondim", default=0.3333)
     call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
                  "Turn off internal tidal dissipation when the total \n"//&
-                 "ocean depth is less than this value.", units="m", default=0.0, scale=GV%m_to_Z)
+                 "ocean depth is less than this value.", units="m", default=0.0, scale=US%m_to_Z)
   endif
 
   if ( (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) .and. &
@@ -448,7 +450,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=GV%m_to_Z**2)
+    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
 
     do j=js,je ; do i=is,ie
       if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
@@ -645,10 +647,11 @@ end function tidal_mixing_init
 !> Depending on whether or not CVMix is active, calls the associated subroutine to compute internal
 !! tidal dissipation and to add the effect of internal-tide-driven mixing to the layer or interface
 !! diffusivities.
-subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
+subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, CS, &
                                   N2_lay, N2_int, Kd_lay, Kd_int, Kd_max, Kv)
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
+  type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy
@@ -678,9 +681,9 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
-      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd_lay, Kv)
+      call calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
     else
-      call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
+      call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, CS, &
                                     N2_lay, Kd_lay, Kd_int, Kd_max)
     endif
   endif
@@ -689,14 +692,14 @@ end subroutine calculate_tidal_mixing
 
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
 !! mixing to the interface diffusivities.
-subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd_lay, Kv)
+subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
   integer,                 intent(in)    :: j     !< The j-index to work on
   type(ocean_grid_type),   intent(in)    :: G     !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   type(tidal_mixing_cs),   pointer       :: CS    !< This module's control structure.
-  real, dimension(SZI_(G),SZK_(G)+1), &
-                           intent(in)    :: N2_int !< The squared buoyancy frequency at the
-                                                                   !! interfaces, in s-2.
+  real, dimension(SZI_(G),SZK_(G)+1), intent(in) :: N2_int !< The squared buoyancy
+                                                  !! frequency at the interfaces, in s-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -772,13 +775,13 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd_lay, Kv)
 
       ! Update diffusivity
       do k=1,G%ke
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*GV%m_to_Z**2*(Kd_tidal(k) + Kd_tidal(k+1)) ! Rescale from m2 s-1 to Z2 s-1.
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*US%m_to_Z**2*(Kd_tidal(k) + Kd_tidal(k+1)) ! Rescale from m2 s-1 to Z2 s-1.
       enddo
 
       ! Update viscosity with the proper unit conversion.
       if (associated(Kv)) then
         do k=1,G%ke+1
-          Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * Kv_tidal(k)   ! Rescale from m2 s-1 to Z2 s-1.
+          Kv(i,j,k) = Kv(i,j,k) + US%m_to_Z**2 * Kv_tidal(k)   ! Rescale from m2 s-1 to Z2 s-1.
         enddo
       endif
 
@@ -870,13 +873,13 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd_lay, Kv)
 
       ! Update diffusivity
       do k=1,G%ke
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*GV%m_to_Z**2*(Kd_tidal(k) + Kd_tidal(k+1)) ! Rescale from m2 s-1 to Z2 s-1.
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*US%m_to_Z**2*(Kd_tidal(k) + Kd_tidal(k+1)) ! Rescale from m2 s-1 to Z2 s-1.
       enddo
 
       ! Update viscosity
       if (associated(Kv)) then
         do k=1,G%ke+1
-          Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * Kv_tidal(k)   ! Rescale from m2 s-1 to Z2 s-1.
+          Kv(i,j,k) = Kv(i,j,k) + US%m_to_Z**2 * Kv_tidal(k)   ! Rescale from m2 s-1 to Z2 s-1.
         enddo
       endif
 
@@ -914,10 +917,11 @@ end subroutine calculate_CVMix_tidal
 !! low modes (rays) of the internal tide ("lowmode"), and (3) local dissipation of internal lee waves.
 !! Will eventually need to add diffusivity due to other wave-breaking processes (e.g. Bottom friction,
 !! Froude-number-depending breaking, PSI, etc.).
-subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
+subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, CS, &
                                     N2_lay, Kd_lay, Kd_int, Kd_max)
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
+  type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy frequency
@@ -1058,7 +1062,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       !### In the code below 1.0e-14 is a dimensional constant in s-3
       if ((CS%tideamp(i,j) > 0.0) .and. &
           (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14) ) then
-        z0_polzin(i) = GV%m_to_Z * CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
+        z0_polzin(i) = US%m_to_Z * CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
                        CS%Nbotref_Polzin**2 * CS%tideamp(i,j) / &
                      ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 )
         if (z0_polzin(i) < CS%Polzin_min_decay_scale) &
@@ -1084,21 +1088,21 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
       if ( CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
         ! For the Polzin formulation, this if loop prevents the vertical
         ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14*GV%m_to_Z) then  !### Avoid using this dimensional constant.
+        if (htot_WKB(i) > 1.0e-14*US%m_to_Z) then  !### Avoid using this dimensional constant.
           Inv_int(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
         endif
       endif
       if ( CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09) ) then
         ! For the Polzin formulation, this if loop prevents the vertical
         ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14*GV%m_to_Z) then !### Avoid using this dimensional constant.
+        if (htot_WKB(i) > 1.0e-14*US%m_to_Z) then !### Avoid using this dimensional constant.
           Inv_int_lee(i) = ( z0_polzin_scaled(i)*CS%Decay_scale_factor_lee / htot_WKB(i) ) + 1.0
         endif
       endif
       if ( CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
         ! For the Polzin formulation, this if loop prevents the vertical
         ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14*GV%m_to_Z) then !### Avoid using this dimensional constant.
+        if (htot_WKB(i) > 1.0e-14*US%m_to_Z) then !### Avoid using this dimensional constant.
           Inv_int_low(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
         endif
       endif
