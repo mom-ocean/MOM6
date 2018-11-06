@@ -354,8 +354,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                                    visc%TKE_turb, visc%Kv_shear_Bu, dt, G, GV, US, CS%kappaShear_CSp)
       if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
       if (CS%debug) then
-        call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear", G%HI, scale=GV%Z_to_m**2)
-        call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu", G%HI, scale=GV%Z_to_m**2)
+        call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear", G%HI, scale=US%Z_to_m**2)
+        call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu", G%HI, scale=US%Z_to_m**2)
         call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb", G%HI)
       endif
     else
@@ -364,8 +364,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
                                  visc%Kv_shear, dt, G, GV, US, CS%kappaShear_CSp)
       if (CS%debug) then
-        call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear", G%HI, scale=GV%Z_to_m**2)
-        call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear", G%HI, scale=GV%Z_to_m**2)
+        call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear", G%HI, scale=US%Z_to_m**2)
+        call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear", G%HI, scale=US%Z_to_m**2)
         call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb", G%HI)
       endif
     endif
@@ -375,8 +375,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear, G, GV, US, CS%CVMix_shear_CSp)
     if (CS%debug) then
-      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear", G%HI, scale=GV%Z_to_m**2)
-      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear", G%HI, scale=GV%Z_to_m**2)
+      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear", G%HI, scale=US%Z_to_m**2)
+      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear", G%HI, scale=US%Z_to_m**2)
     endif
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0.0 ! needed if calculate_kappa_shear is not enabled
@@ -387,7 +387,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! another explicit parameterization of Kd.
 
   ! set surface diffusivities (CS%bkgnd_mixing_csp%Kd_sfc)
-  call sfc_bkgnd_mixing(G, GV, CS%bkgnd_mixing_csp)
+  call sfc_bkgnd_mixing(G, US, CS%bkgnd_mixing_csp)
 
   !$OMP parallel do default(shared) private(dRho_int, N2_lay, N2_int, N2_bot, KT_extra, &
   !$OMP                                     KS_extra, TKE_to_Kd,maxTKE, dissip, kb)
@@ -523,34 +523,34 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
     if (associated(dd%Kd_work)) then
       do k=1,nz ; do i=is,ie
-        dd%Kd_Work(i,j,k) = GV%Rho0 * GV%Z_to_m**3*Kd_lay(i,j,k) * N2_lay(i,k) * &
+        dd%Kd_Work(i,j,k) = GV%Rho0 * US%Z_to_m**3*Kd_lay(i,j,k) * N2_lay(i,k) * &
                             GV%H_to_Z*h(i,j,k)  ! Watt m-2 s or kg s-3
       enddo ; enddo
     endif
   enddo ! j-loop
 
   if (CS%debug) then
-    call hchksum(Kd_lay ,"Kd_lay", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Kd_lay ,"Kd_lay", G%HI, haloshift=0, scale=US%Z_to_m**2)
 
-    if (CS%useKappaShear) call hchksum(visc%Kd_shear, "Turbulent Kd", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    if (CS%useKappaShear) call hchksum(visc%Kd_shear, "Turbulent Kd", G%HI, haloshift=0, scale=US%Z_to_m**2)
 
     if (CS%use_CVMix_ddiff) then
-      call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-      call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+      call hchksum(visc%Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T", G%HI, haloshift=0, scale=US%Z_to_m**2)
+      call hchksum(visc%Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, scale=US%Z_to_m**2)
     endif
 
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &
-                    G%HI, 0, symmetric=.true., scale=GV%Z_to_m**2)
+                    G%HI, 0, symmetric=.true., scale=US%Z_to_m**2)
     endif
 
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
       call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, &
-                    visc%bbl_thick_v, G%HI, 0, symmetric=.true., scale=GV%Z_to_m)
+                    visc%bbl_thick_v, G%HI, 0, symmetric=.true., scale=US%Z_to_m)
     endif
 
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
-      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true., scale=GV%Z_to_m)
+      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true., scale=US%Z_to_m)
     endif
 
   endif
@@ -730,7 +730,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = GV%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m3 Z-2 s-2.
+      hN2pO2 = US%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m3 Z-2 s-2.
       if (hN2pO2>0.) then
         TKE_to_Kd(i,k) = 1.0 / hN2pO2 ! Units of Z2 s2 m-3.
       else; TKE_to_Kd(i,k) = 0.; endif
@@ -852,7 +852,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
       ! dRho_int should already be non-negative, so the max is redundant?
       dh_max = maxEnt(i,k) * (1.0 + dsp1_ds(i,k))
       dRho_lay = 0.5 * max(dRho_int(i,K) + dRho_int(i,K+1), 0.0)
-      maxTKE(i,k) = I_dt*GV%Z_to_m * ((GV%g_Earth * I_Rho0) * &
+      maxTKE(i,k) = I_dt*US%Z_to_m * ((GV%g_Earth * I_Rho0) * &
           (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K), 0.0))) * &
                    ((GV%H_to_Z*h(i,j,k) + dh_max) * maxEnt(i,k))
       TKE_to_Kd(i,k) = US%m_to_Z**3 / (G_Rho0 * dRho_lay + &
@@ -1289,7 +1289,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
       else ; TKE_to_layer = 0.0 ; endif
 
       ! TKE_Ray has been initialized to 0 above.
-      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * GV%Z_to_m * G%IareaT(i,j) * &
+      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * US%Z_to_m * G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
@@ -1471,7 +1471,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
-            0.5*CS%BBL_effic * GV%Z_to_m * G%IareaT(i,j) * &
+            0.5*CS%BBL_effic * US%Z_to_m * G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
@@ -1495,7 +1495,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
       ! TKE associated with Kd_wall, in m3 s-2.
       ! This calculation if for the volume spanning the interface.
-      TKE_Kd_wall = GV%Z_to_m**3*Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
+      TKE_Kd_wall = US%Z_to_m**3*Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
 
       ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
       if (TKE_Kd_wall > 0.) then
@@ -1642,7 +1642,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
       endif
 
       TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-z1)
-      if (TKE_ml_flux(i) * I_decay(i) < 0.1*CS%Kd_min*GV%Z_to_m**3*Omega2) then
+      if (TKE_ml_flux(i) * I_decay(i) < 0.1*CS%Kd_min*US%Z_to_m**3*Omega2) then
         do_i(i) = .false.
       else ; do_any = .true. ; endif
     endif ; enddo
@@ -1653,9 +1653,10 @@ end subroutine add_MLrad_diffusivity
 
 !> This subroutine calculates several properties related to bottom
 !! boundary layer turbulence.
-subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
+subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1778,7 +1779,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
                   G%areaCu(I,j)*(ustar(I)*ustar(I))) + &
                  (G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
                   G%areaCv(i,J)*(vstar(i,J)*vstar(i,J))) ) )
-      visc%TKE_BBL(i,j) = GV%Z_to_m * &
+      visc%TKE_BBL(i,j) = US%Z_to_m * &
                  (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
                     G%areaCu(I,j) * (ustar(I)*u2_bbl(I))) + &
                    (G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
@@ -2069,7 +2070,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &
-       'Bottom Boundary Layer Diffusivity', 'm2 s-1', conversion=GV%Z_to_m**2)
+       'Bottom Boundary Layer Diffusivity', 'm2 s-1', conversion=US%Z_to_m**2)
   call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will\n"//&
                  "work for arbitrary vertical coordinates. If false,\n"//&
@@ -2091,7 +2092,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "may be used.", units="m2 s-1", scale=US%m_to_Z**2, fail_if_missing=.true.)
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
-                 units="m2 s-1", default=0.01*CS%Kd*GV%Z_to_m**2, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=0.01*CS%Kd*US%Z_to_m**2, scale=US%m_to_Z**2)
   call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
                  "The maximum permitted increment for the diapycnal \n"//&
                  "diffusivity from TKE-based parameterizations, or a \n"//&
@@ -2119,7 +2120,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "If BULKMIXEDLAYER is false, KDML is the elevated \n"//&
                  "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
-                 units="m2 s-1", default=CS%Kd*GV%Z_to_m**2, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=CS%Kd*US%Z_to_m**2, scale=US%m_to_Z**2)
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
@@ -2157,7 +2158,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     CS%dissip_N2 = CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
-      'Diapycnal diffusivity of layers (as set)', 'm2 s-1', conversion=GV%Z_to_m**2)
+      'Diapycnal diffusivity of layers (as set)', 'm2 s-1', conversion=US%Z_to_m**2)
 
 
   if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation .or. &
@@ -2168,7 +2169,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     CS%id_maxTKE = register_diag_field('ocean_model', 'maxTKE', diag%axesTL, Time, &
            'Maximum layer TKE', 'm3 s-3')
     CS%id_TKE_to_Kd = register_diag_field('ocean_model', 'TKE_to_Kd', diag%axesTL, Time, &
-           'Convert TKE to Kd', 's2 m', conversion=GV%Z_to_m**2)
+           'Convert TKE to Kd', 's2 m', conversion=US%Z_to_m**2)
     CS%id_N2 = register_diag_field('ocean_model', 'N2', diag%axesTi, Time, &
          'Buoyancy frequency squared', 's-2', cmor_field_name='obvfsq', &
           cmor_long_name='Square of seawater buoyancy frequency', &
@@ -2176,14 +2177,14 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
 
     if (CS%user_change_diff) &
       CS%id_Kd_user = register_diag_field('ocean_model', 'Kd_user', diag%axesTi, Time, &
-           'User-specified Extra Diffusivity', 'm2 s-1', conversion=GV%Z_to_m**2)
+           'User-specified Extra Diffusivity', 'm2 s-1', conversion=US%Z_to_m**2)
 
     if (associated(diag_to_Z_CSp)) then
       vd = var_desc("N2", "s-2", &
                     "Buoyancy frequency, interpolated to z", z_grid='z')
       CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
       if (CS%user_change_diff) &
-        CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=GV%Z_to_m**2)
+        CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
     endif
   endif
 
@@ -2205,23 +2206,23 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
     CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=GV%Z_to_m**2)
+         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z_to_m**2)
 
     CS%id_KS_extra = register_diag_field('ocean_model', 'KS_extra', diag%axesTi, Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=GV%Z_to_m**2)
+         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z_to_m**2)
 
     if (associated(diag_to_Z_CSp)) then
       vd = var_desc("KT_extra", "m2 s-1", &
                     "Double-Diffusive Temperature Diffusivity, interpolated to z", &
                     z_grid='z')
-      CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=GV%Z_to_m**2)
+      CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
       vd = var_desc("KS_extra", "m2 s-1", &
                     "Double-Diffusive Salinity Diffusivity, interpolated to z", &
                     z_grid='z')
-      CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=GV%Z_to_m**2)
+      CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
       vd = var_desc("Kd_BBL", "m2 s-1", &
                     "Bottom Boundary Layer Diffusivity", z_grid='z')
-      CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=GV%Z_to_m**2)
+      CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
     endif
   endif ! old double-diffusion
 
@@ -2240,10 +2241,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
 
   ! CVMix shear-driven mixing
-  CS%use_CVMix_shear = CVMix_shear_init(Time, G, GV, param_file, CS%diag, CS%CVMix_shear_csp)
+  CS%use_CVMix_shear = CVMix_shear_init(Time, G, GV, US, param_file, CS%diag, CS%CVMix_shear_csp)
 
   ! CVMix double diffusion mixing
-  CS%use_CVMix_ddiff = CVMix_ddiff_init(Time, G, GV, param_file, CS%diag, CS%CVMix_ddiff_csp)
+  CS%use_CVMix_ddiff = CVMix_ddiff_init(Time, G, GV, US, param_file, CS%diag, CS%CVMix_ddiff_csp)
   if (CS%use_CVMix_ddiff) &
     id_clock_CVMix_ddiff = cpu_clock_id('(Double diffusion via CVMix)', grain=CLOCK_MODULE)
 

@@ -915,8 +915,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                  dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
 !        do i=is,ie
-!          dT_to_dPE(i,k) = I_G_Earth * GV%Z_to_m * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
-!          dS_to_dPE(i,k) = I_G_Earth * GV%Z_to_m * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
+!          dT_to_dPE(i,k) = I_G_Earth * US%Z_to_m * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
+!          dS_to_dPE(i,k) = I_G_Earth * US%Z_to_m * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
 !        enddo
       enddo
       pen_TKE_2d(:,:) = 0.0

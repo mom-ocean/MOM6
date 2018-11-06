@@ -15,6 +15,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : vardesc, var_desc
 use MOM_restart,       only : MOM_restart_CS, register_restart_field, query_initialized
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : vertvisc_type
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_MEKE_types,    only : MEKE_type
@@ -88,10 +89,11 @@ contains
 
 !> Integrates forward-in-time the MEKE eddy energy equation.
 !! See \ref section_MEKE_equations.
-subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
+subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, hv)
   type(MEKE_type),                          pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
+  type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness in H (m or kg m-2).
   real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
@@ -215,13 +217,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
       do j=js,je ; do I=is-1,ie
         drag_vel_u(I,j) = 0.0
         if ((G%mask2dCu(I,j) > 0.0) .and. (visc%bbl_thick_u(I,j) > 0.0)) &
-          drag_vel_u(I,j) = GV%Z_to_m*visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
+          drag_vel_u(I,j) = US%Z_to_m*visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
       enddo ; enddo
 !$OMP do
       do J=js-1,je ; do i=is,ie
         drag_vel_v(i,J) = 0.0
         if ((G%mask2dCv(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
-          drag_vel_v(i,J) = GV%Z_to_m*visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
+          drag_vel_v(i,J) = US%Z_to_m*visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
       enddo ; enddo
 
 !$OMP do
@@ -253,12 +255,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 !$OMP end parallel
 
     if (CS%initialize) then
-      call MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
+      call MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass)
       CS%initialize = .false.
     endif
 
     ! Calculates bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales(CS, MEKE, G, GV, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
+    call MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
       call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI)
       call hchksum(mass, 'MEKE mass',G%HI,haloshift=1)
@@ -568,9 +570,10 @@ end subroutine step_forward_MEKE
 !> Calculates the equilibrium solutino where the source depends only on MEKE diffusivity
 !! and there is no lateral diffusion of MEKE.
 !! Results is in MEKE%MEKE.
-subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
+subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass)
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
+  type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
   type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
@@ -613,7 +616,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
         n1 = n1 + 1
         EKE = EKEmax
         call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
-                                  MEKE%Rd_dx_h(i,j), SN, EKE, GV%Z_to_m, &
+                                  MEKE%Rd_dx_h(i,j), SN, EKE, US%Z_to_m, &
                                   bottomFac2, barotrFac2, LmixScale,     &
                                   Lrhines, Leady)
         ! TODO: Should include resolution function in Kh
@@ -688,12 +691,13 @@ end subroutine MEKE_equilibrium
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
-subroutine MEKE_lengthScales(CS, MEKE, G, GV, SN_u, SN_v, &
+subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
             EKE, bottomFac2, barotrFac2, LmixScale)
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
   type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
-  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
+!  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
+  type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: EKE  !< Eddy kinetic energy (m2/s2).
@@ -719,7 +723,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, SN_u, SN_v, &
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),  &
-                              MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j), GV%Z_to_m, &
+                              MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j), US%Z_to_m, &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
                               Lrhines(i,j), Leady(i,j))
   enddo ; enddo

@@ -796,7 +796,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
              " in file "// trim(SurfBandFileName)//" in MOM_wave_interface")
       endif
       NUMBANDS = ID
-      do B = 1,NumBands ; CS%WaveNum_Cen(b) = GV%Z_to_m*CS%WaveNum_Cen(b) ; enddo
+      do B = 1,NumBands ; CS%WaveNum_Cen(b) = US%Z_to_m*CS%WaveNum_Cen(b) ; enddo
     elseif (PartitionMode==1) then
       rcode_fr = NF90_GET_VAR(ncid, dim_id(1), CS%Freq_Cen, start, counter)
       if (rcode_fr /= 0) then
@@ -1032,7 +1032,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
     ! is also included
     kstar = kphil * 2.56
     ! surface layer
-    z0 = abs(GV%Z_to_m*hbl)
+    z0 = abs(US%Z_to_m*hbl)
     z0i = 1.0 / z0
     ! term 1 to 4
     r1 = ( 0.151 / kphil * z0i -0.84 ) * &

@@ -771,10 +771,11 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
 end subroutine PressureForce_blk_AFV_Bouss
 
 !> Initializes the finite volume pressure gradient control structure
-subroutine PressureForce_blk_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_blk_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(time_type), target,    intent(in)    :: Time !< Current model time
   type(ocean_grid_type),      intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),    intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_blk_AFV_CS), pointer       :: CS !< Finite volume PGF control structure
@@ -832,7 +833,7 @@ subroutine PressureForce_blk_AFV_init(Time, G, GV, param_file, diag, CS, tides_C
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
-        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=GV%Z_to_m)
+        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
   endif
 
   CS%GFS_scale = 1.0

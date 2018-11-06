@@ -151,8 +151,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       endif
 
       do K=1,G%ke+1
-        Kvisc(K) = GV%Z_to_m**2 * kv(i,j,K)
-        Kdiff(K) = GV%Z_to_m**2 * kd(i,j,K)
+        Kvisc(K) = US%Z_to_m**2 * kv(i,j,K)
+        Kdiff(K) = US%Z_to_m**2 * kd(i,j,K)
       enddo
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
@@ -183,10 +183,11 @@ end subroutine calculate_CVMix_shear
 !! \note *This is where we test to make sure multiple internal shear
 !!       mixing routines (including JHL) are not enabled at the same time.
 !! (returns) CVMix_shear_init - True if module is to be used, False otherwise
-logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
+logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current time.
-  type(ocean_grid_type),   intent(in)    :: G !< Grid structure.
+  type(ocean_grid_type),   intent(in)    :: G  !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure.
   type(CVMix_shear_cs),    pointer       :: CS !< This module's control structure.
@@ -283,9 +284,9 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
   endif
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
-      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_kv = register_diag_field('ocean_model', 'kv_shear_CVMix', diag%axesTi, Time, &
-      'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s', conversion=US%Z_to_m**2)
 
 end function CVMix_shear_init
 

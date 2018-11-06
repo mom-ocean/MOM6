@@ -325,11 +325,11 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                     L2_to_Z2*gp > N2min*hw) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction of water column
                   gp = N2min/hw  !### THIS IS DIMENSIONALLY INCONSISTENT! -RWH
-                  !### This should be gp = GV%Z_to_m**2* (N2min*hw)
+                  !### This should be gp = US%Z_to_m**2* (N2min*hw)
                 elseif (l_mono_N2_depth>=0. .and. sum_hc>l_mono_N2_depth .and. L2_to_Z2*gp>N2min*hw) then
                   ! Filters out regions where N2 increases with depth but only below a certain depth
                   gp = N2min/hw  !### THIS IS DIMENSIONALLY INCONSISTENT! -RWH
-                  !### This should be gp = GV%Z_to_m**2* (N2min*hw)
+                  !### This should be gp = US%Z_to_m**2* (N2min*hw)
                 else
                   N2min = L2_to_Z2 * gp/hw
                 endif

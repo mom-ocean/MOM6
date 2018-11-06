@@ -150,7 +150,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
-                 units="m2 s-1", default=0.01*CS%Kd*GV%Z_to_m**2, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=0.01*CS%Kd*US%Z_to_m**2, scale=US%m_to_Z**2)
 
   ! The following is needed to set one of the choices of vertical background mixing
 
@@ -170,7 +170,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  "If BULKMIXEDLAYER is false, KDML is the elevated \n"//&
                  "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
-                 units="m2 s-1", default=CS%Kd*GV%Z_to_m**2, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=CS%Kd*US%Z_to_m**2, scale=US%m_to_Z**2)
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
@@ -314,17 +314,17 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   ! Register diagnostics
   CS%diag => diag
   CS%id_kd_bkgnd = register_diag_field('ocean_model', 'Kd_bkgnd', diag%axesTi, Time, &
-      'Background diffusivity added by MOM_bkgnd_mixing module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Background diffusivity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_kv_bkgnd = register_diag_field('ocean_model', 'Kv_bkgnd', diag%axesTi, Time, &
-      'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z_to_m**2)
 
 end subroutine bkgnd_mixing_init
 
 !> Get surface vertical background diffusivities/viscosities.
-subroutine sfc_bkgnd_mixing(G, GV, CS)
+subroutine sfc_bkgnd_mixing(G, US, CS)
 
   type(ocean_grid_type),          intent(in)    :: G  !< Grid structure.
-  type(verticalGrid_type),        intent(in)    :: GV  !< Vertical grid structure.
+  type(unit_scale_type),          intent(in)    :: US !< A dimensional unit scaling type
   type(bkgnd_mixing_cs), pointer, intent(inout) :: CS !< The control structure returned by
                                                       !! a previous call to bkgnd_mixing_init.
   ! local variables
@@ -369,7 +369,7 @@ subroutine sfc_bkgnd_mixing(G, GV, CS)
     enddo ; enddo
   endif
 
-  if (CS%debug) call hchksum(CS%Kd_sfc,"After sfc_bkgnd_mixing: Kd_sfc",G%HI,haloshift=0, scale=GV%Z_to_m**2)
+  if (CS%debug) call hchksum(CS%Kd_sfc,"After sfc_bkgnd_mixing: Kd_sfc",G%HI,haloshift=0, scale=US%Z_to_m**2)
 
 end subroutine sfc_bkgnd_mixing
 

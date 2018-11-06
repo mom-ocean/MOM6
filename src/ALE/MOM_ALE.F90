@@ -228,9 +228,10 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
 end subroutine ALE_init
 
 !> Initialize diagnostics for the ALE module.
-subroutine ALE_register_diags(Time, G, GV, diag, CS)
+subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   type(time_type),target,     intent(in)  :: Time  !< Time structure
   type(ocean_grid_type),      intent(in)  :: G     !< Grid structure
+  type(unit_scale_type),      intent(in)  :: US    !< A dimensional unit scaling type
   type(verticalGrid_type),    intent(in)  :: GV    !< Ocean vertical grid structure
   type(diag_ctrl), target,    intent(in)  :: diag  !< Diagnostics control structure
   type(ALE_CS), pointer                   :: CS    !< Module control structure
@@ -250,7 +251,7 @@ subroutine ALE_register_diags(Time, G, GV, diag, CS)
   CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
       'Salinity before remapping', 'PSU')
   CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
-      'Interface Heights before remapping', 'm', conversion=GV%Z_to_m)
+      'Interface Heights before remapping', 'm', conversion=US%Z_to_m)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
       'Change in interface height due to ALE regridding', 'm')
