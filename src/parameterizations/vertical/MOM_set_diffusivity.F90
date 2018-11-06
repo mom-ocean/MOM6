@@ -1708,7 +1708,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
 
   cdrag_sqrt = sqrt(CS%cdrag)
 
-!$OMP parallel default(none) shared(cdrag_sqrt,is,ie,js,je,nz,visc,CS,G,GV,vstar,h,v, &
+!$OMP parallel default(none) shared(cdrag_sqrt,is,ie,js,je,nz,visc,CS,G,GV,US,vstar,h,v, &
 !$OMP                               v2_bbl,u) &
 !$OMP                       private(do_i,vhtot,htot,domore,hvel,uhtot,ustar,u2_bbl)
 !$OMP do

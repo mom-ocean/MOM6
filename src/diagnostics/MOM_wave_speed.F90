@@ -609,18 +609,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   H_to_m = GV%H_to_m
 
   min_h_frac = tol1 / real(nz)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,min_h_frac,use_EOS,T,S,   &
-!$OMP                                  H_to_pres,H_to_m,tv,cn,g_Rho0,nmodes)           &
-!$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
-!$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
-!$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
-!$OMP                                  Rc,speed2_tot,Igl,Igu,dlam,                     &
-!$OMP                                  det,ddet,ig,jg,z_int,N2,row,nrows,lam_1,        &
-!$OMP                                  lamMin,speed2_min,lamMax,lamInc,numint,det_l,   &
-!$OMP                                  ddet_l,xr,xl,det_r,xbl,xbr,ddet_r,xl_sub,       &
-!$OMP                                  ig_need_sub,jg_need_sub,sub_rootfound,nsub,     &
-!$OMP                                  det_sub,ddet_sub,lam_n,                         &
-!$OMP                                  a_diag,b_diag,c_diag,nrootsfound)
+  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
+  !$OMP                                     H_to_pres,H_to_m,tv,cn,g_Rho0,nmodes)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can

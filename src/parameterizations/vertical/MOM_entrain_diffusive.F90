@@ -248,22 +248,22 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
     pres(:) = 0.0
   endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,dt,Kd_int,CS,h,tv, &
-!$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
-!$OMP                                  ea,eb,correct_density,Kd_eff,diff_work,     &
-!$OMP                                  g_2dt, kb_out)                              &
-!$OMP                     firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min)             &
-!$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
-!$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &
-!$OMP                                  zeros,maxF_kb,maxF,ea_kbp1,eakb,Sref,       &
-!$OMP                                  maxF_correct,do_any,                        &
-!$OMP                                  err_min_eakb0,err_max_eakb0,eakb_maxF,      &
-!$OMP                                  min_eakb,err_eakb0,F,minF,hm,fk,F_kb_maxent,&
-!$OMP                                  F_kb,is1,ie1,kb_min_act,dFdfm_kb,b1,dFdfm,  &
-!$OMP                                  Fprev,fm,fr,c1,reiterate,eb_kmb,did_i,      &
-!$OMP                                  h_avail,h_guess,dS_kb,Rcv,F_cor,dS_kb_eff,  &
-!$OMP                                  Rho_cor,ea_cor,h1,Idt,Kd_here,pressure,     &
-!$OMP                                  T_eos,S_eos,dRho_dT,dRho_dS,dRho,dS_anom_lim)
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,US,dt,CS,h,tv,   &
+  !$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
+  !$OMP                                  ea,eb,correct_density,Kd_int,Kd_eff,        &
+  !$OMP                                  diff_work,g_2dt, kb_out)                    &
+  !$OMP                     firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min)             &
+  !$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
+  !$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &
+  !$OMP                                  zeros,maxF_kb,maxF,ea_kbp1,eakb,Sref,       &
+  !$OMP                                  maxF_correct,do_any,                        &
+  !$OMP                                  err_min_eakb0,err_max_eakb0,eakb_maxF,      &
+  !$OMP                                  min_eakb,err_eakb0,F,minF,hm,fk,F_kb_maxent,&
+  !$OMP                                  F_kb,is1,ie1,kb_min_act,dFdfm_kb,b1,dFdfm,  &
+  !$OMP                                  Fprev,fm,fr,c1,reiterate,eb_kmb,did_i,      &
+  !$OMP                                  h_avail,h_guess,dS_kb,Rcv,F_cor,dS_kb_eff,  &
+  !$OMP                                  Rho_cor,ea_cor,h1,Idt,Kd_here,pressure,     &
+  !$OMP                                  T_eos,S_eos,dRho_dT,dRho_dS,dRho,dS_anom_lim)
   do j=js,je
     do i=is,ie ; kb(i) = 1 ; enddo
 
