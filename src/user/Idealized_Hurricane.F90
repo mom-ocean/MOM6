@@ -268,8 +268,8 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
         YY = YC + CS%dy_from_center
         XX = XC
       else
-        LAT = G%geoLatCu(I,j)*1000. !KM_to_m
-        LON = G%geoLonCu(I,j)*1000. !KM_to_m
+        LAT = G%geoLatCu(I,j)*1000. ! Convert Lat from km to m.
+        LON = G%geoLonCu(I,j)*1000. ! Convert Lon from km to m.
         YY = LAT - YC
         XX = LON - XC
       endif
@@ -291,13 +291,12 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
         YY = YC + CS%dy_from_center
         XX = XC
       else
-        LAT = G%geoLatCv(i,J)*1000. !KM_to_m
-        LON = G%geoLonCv(i,J)*1000. !KM_to_m
+        LAT = G%geoLatCv(i,J)*1000. ! Convert Lat from km to m.
+        LON = G%geoLonCv(i,J)*1000. ! Convert Lon from km to m.
         YY = LAT - YC
         XX = LON - XC
       endif
-      call idealized_hurricane_wind_profile(&
-           CS,f,YY,XX,Uocn,Vocn,TX,TY)
+      call idealized_hurricane_wind_profile(CS, f, YY, XX, Uocn, Vocn, TX, TY)
       forces%tauy(i,J) = G%mask2dCv(i,J) * TY
     enddo
   enddo
@@ -316,7 +315,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
 end subroutine idealized_hurricane_wind_forcing
 
 !> Calculate the wind speed at a location as a function of time.
-subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
+subroutine idealized_hurricane_wind_profile(CS, absf, YY, XX, UOCN, VOCN, Tx, Ty)
   ! Author: Brandon Reichl
   ! Date: Nov-20-2014
   !       Aug-14-2018 Generalized for non-SCM configuration
@@ -436,8 +435,8 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   endif
 
   ! Compute stress vector
-  TX = CS%rho_A * Cd * sqrt(du**2+dV**2) * dU
-  TY = CS%rho_A * Cd * sqrt(du**2+dV**2) * dV
+  TX = CS%rho_A * Cd * sqrt(du**2 + dV**2) * dU
+  TY = CS%rho_A * Cd * sqrt(du**2 + dV**2) * dV
 
   return
 end subroutine idealized_hurricane_wind_profile
