@@ -41,7 +41,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
 
   ! real,                              optional, intent(in)    :: eta_to_m !< The conversion factor from the units
-  !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; GV%Z_to_m by default.
+  !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; US%Z_to_m by default.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -105,7 +105,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   nz = G%ke ; IsdB = G%IsdB
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  Z_to_L = GV%Z_to_m ; H_to_Z = GV%H_to_Z
+  Z_to_L = US%Z_to_m ; H_to_Z = GV%H_to_Z
   ! if (present(eta_to_m)) then
   !   Z_to_L = eta_to_m ; H_to_Z = GV%H_to_m / eta_to_m
   ! endif

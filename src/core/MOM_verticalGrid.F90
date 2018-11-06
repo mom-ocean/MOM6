@@ -53,12 +53,9 @@ type, public :: verticalGrid_type
   real :: m_to_H        !< A constant that translates distances in m to the units of thickness.
   real :: H_to_m        !< A constant that translates distances in the units of thickness to m.
   real :: H_to_Pa       !< A constant that translates the units of thickness to pressure in Pa.
-  real :: m_to_Z        !< A constant that translates distances in m to the units of depth.
-  real :: Z_to_m        !< A constant that translates distances in the units of depth to m.
   real :: H_to_Z        !< A constant that translates thickness units to the units of depth.
   real :: Z_to_H        !< A constant that translates depth units to thickness units.
 
-  real :: m_to_Z_restart = 0.0 !< A copy of the m_to_Z that is used in restart files.
   real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type
 
@@ -73,8 +70,8 @@ subroutine verticalGridInit( param_file, GV, US )
   ! All memory is allocated but not necessarily set to meaningful values until later.
 
   ! Local variables
-  integer :: nk, H_power, Z_power
-  real    :: H_rescale_factor, Z_rescale_factor
+  integer :: nk, H_power
+  real    :: H_rescale_factor
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=16) :: mdl = 'MOM_verticalGrid'
@@ -120,16 +117,7 @@ subroutine verticalGridInit( param_file, GV, US )
                  "units of thickness into m.", units="m H-1", default=1.0)
     GV%H_to_m = GV%H_to_m * H_rescale_factor
   endif
-  call get_param(param_file, mdl, "Z_RESCALE_POWER", Z_power, &
-                 "An integer power of 2 that is used to rescale the model's \n"//&
-                 "intenal units of depths and heights.  Valid values range from -300 to 300.", &
-                 units="nondim", default=0, debuggingParam=.true.)
-  if (abs(Z_power) > 300) call MOM_error(FATAL, "verticalGridInit: "//&
-                 "Z_RESCALE_POWER is outside of the valid range of -300 to 300.")
-  Z_rescale_factor = 1.0
-  if (Z_power /= 0) Z_rescale_factor = 2.0**Z_power
-  GV%Z_to_m = 1.0 * Z_rescale_factor
-  GV%g_Earth = GV%g_Earth * GV%Z_to_m
+  GV%g_Earth = GV%g_Earth * US%Z_to_m
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
   call get_param(param_file, mdl, "NK", nk, &
@@ -159,7 +147,7 @@ subroutine verticalGridInit( param_file, GV, US )
   GV%H_to_Pa = (GV%g_Earth*US%m_to_Z) * GV%H_to_kg_m2
 
   GV%H_to_Z = GV%H_to_m * US%m_to_Z
-  GV%Z_to_H = GV%Z_to_m * GV%m_to_H
+  GV%Z_to_H = US%Z_to_m * GV%m_to_H
   GV%Angstrom_Z = US%m_to_Z * GV%Angstrom_m
 
 ! Log derivative values.

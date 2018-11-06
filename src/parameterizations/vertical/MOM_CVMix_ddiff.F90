@@ -58,14 +58,15 @@ character(len=40)  :: mdl = "MOM_CVMix_ddiff"     !< This module's name.
 contains
 
 !> Initialized the CVMix double diffusion module.
-logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
+logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
 
   type(time_type),         intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),   intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(CVMix_ddiff_cs),    pointer        :: CS        !< This module's control structure.
+  type(CVMix_ddiff_cs),    pointer       :: CS         !< This module's control structure.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -137,10 +138,10 @@ logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=GV%Z_to_m**2)
+         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z_to_m**2)
 
   CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=GV%Z_to_m**2)
+         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z_to_m**2)
 
   CS%id_R_rho = register_diag_field('ocean_model','R_rho',diag%axesTi,Time, &
          'Double-diffusion density ratio', 'nondim')

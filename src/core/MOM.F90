@@ -846,7 +846,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     endif
     if (CS%time_in_thermo_cycle > 0.0) then
       call enable_averaging(CS%time_in_thermo_cycle, Time_local, CS%diag)
-      call post_surface_thermo_diags(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_thermo_cycle, &
+      call post_surface_thermo_diags(CS%sfc_IDs, G, GV, CS%US, CS%diag, CS%time_in_thermo_cycle, &
                                     sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
     endif
     call disable_averaging(CS%diag)
@@ -1030,7 +1030,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   call diag_update_remap_grids(CS%diag)
 
   if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
-                                         CS%visc, dt, G, GV, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
+                                         CS%visc, dt, G, GV, CS%US, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
   call disable_averaging(CS%diag)
 
   ! Advance the dynamics time by dt.
@@ -1982,7 +1982,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
-  if (dG%Zd_to_m /= GV%Z_to_m) call rescale_dyn_horgrid_bathymetry(dG, GV%Z_to_m)
+  if (dG%Zd_to_m /= US%Z_to_m) call rescale_dyn_horgrid_bathymetry(dG, US%Z_to_m)
 
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
 
@@ -2289,7 +2289,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call set_masks_for_axes(G, diag)
 
   ! Diagnose static fields AND associate areas/volumes with axes
-  call write_static_fields(G, GV, CS%tv, CS%diag)
+  call write_static_fields(G, GV, US, CS%tv, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
   ! Register the volume cell measure (must be one of first diagnostics)
@@ -2349,7 +2349,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call pass_var(CS%visc%MLD, G%domain, halo=1)
   endif
 
-  call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
+  call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, US, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
   call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
 
@@ -2387,7 +2387,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
-    call ALE_register_diags(Time, G, GV, diag, CS%ALE_CSp)
+    call ALE_register_diags(Time, G, GV, US, diag, CS%ALE_CSp)
   endif
 
   ! This subroutine initializes any tracer packages.
@@ -2812,7 +2812,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) / depth(i)
         endif
         !### Verify that this is no longer needed.
-        ! sfc_state%Hml(i,j) = GV%Z_to_m * depth(i)
+        ! sfc_state%Hml(i,j) = US%Z_to_m * depth(i)
       enddo
     enddo ! end of j loop
 

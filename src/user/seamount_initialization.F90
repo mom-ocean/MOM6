@@ -138,7 +138,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_p
       e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * &
                               ( (real(K)-1.5) / real(nz-1) ) ) / S_range
       ! Force round numbers ... the above expression has irrational factors ...
-      e0(K) = nint(2048.*GV%Z_to_m*e0(K))/(2048.*GV%Z_to_m)
+      e0(K) = nint(2048.*US%Z_to_m*e0(K))/(2048.*US%Z_to_m)
       e0(K) = min(real(1-K)*GV%Angstrom_Z, e0(K)) ! Bound by surface
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
     enddo

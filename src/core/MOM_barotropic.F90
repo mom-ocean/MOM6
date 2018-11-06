@@ -3956,7 +3956,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "An estimate of how much higher SSH might get, for use \n"//&
                  "in calculating the safe external wave speed. The \n"//&
                  "default is the minimum of 10 m or 5% of MAXIMUM_DEPTH.", &
-                 units="m", default=min(10.0,0.05*G%max_depth*GV%Z_to_m))
+                 units="m", default=min(10.0,0.05*G%max_depth*US%Z_to_m))
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &

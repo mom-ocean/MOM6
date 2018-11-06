@@ -277,7 +277,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     h_tr(k) = h_in(k)
     htot = htot + h_tr(k)
     pres(K+1) = pres(K) + GV%H_to_Pa * h_tr(k)
-    pres_Z(K+1) = GV%Z_to_m * pres(K+1)
+    pres_Z(K+1) = US%Z_to_m * pres(K+1)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
     Z_int(K+1) = Z_int(K) - h_tr(k)
   enddo
@@ -1262,10 +1262,11 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 end subroutine find_PE_chg_orig
 
 !> Initialize parameters and allocate memory associated with the diapycnal energy requirement module.
-subroutine diapyc_energy_req_init(Time, G, GV, param_file, diag, CS)
+subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),            intent(in)    :: Time        !< model time
   type(ocean_grid_type),      intent(in)    :: G           !< model grid structure
   type(verticalGrid_type),    intent(in)    :: GV          !< ocean vertical grid structure
+  type(unit_scale_type),      intent(in)    :: US          !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file  !< file to parse for parameter values
   type(diag_ctrl),    target, intent(inout) :: diag        !< structure to regulate diagnostic output
   type(diapyc_energy_req_CS), pointer       :: CS          !< module control structure
@@ -1306,10 +1307,10 @@ subroutine diapyc_energy_req_init(Time, G, GV, param_file, diag, CS)
   CS%id_Kddt = register_diag_field('ocean_model', 'EnReqTest_Kddt', diag%axesZi, Time, &
                  "Implicit diffusive coupling coefficient", "m", conversion=GV%H_to_m)
   CS%id_Kd = register_diag_field('ocean_model', 'EnReqTest_Kd', diag%axesZi, Time, &
-                 "Diffusivity in test", "m2 s-1", conversion=GV%Z_to_m**2)
+                 "Diffusivity in test", "m2 s-1", conversion=US%Z_to_m**2)
   CS%id_h   = register_diag_field('ocean_model', 'EnReqTest_h_lay', diag%axesZL, Time, &
                  "Test column layer thicknesses", "m", conversion=GV%H_to_m)
-  CS%id_zInt   = register_diag_field('ocean_model', 'EnReqTest_z_int', diag%axesZi, Time, &
+  CS%id_zInt = register_diag_field('ocean_model', 'EnReqTest_z_int', diag%axesZi, Time, &
                  "Test column layer interface heights", "m", conversion=GV%H_to_m)
   CS%id_CHCt = register_diag_field('ocean_model', 'EnReqTest_CHCt', diag%axesZi, Time, &
                  "Column Height Correction to Energy Requirements, top-down", "J m-2")
