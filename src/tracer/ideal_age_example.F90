@@ -14,7 +14,7 @@ use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
+use MOM_time_manager, only : time_type, time_type_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
@@ -317,7 +317,6 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   real :: sfc_val  ! The surface value for the tracers.
   real :: Isecs_per_year  ! The number of seconds in a year.
   real :: year            ! The time in years.
-  integer :: secs, days   ! Integer components of the time type.
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -342,8 +341,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   Isecs_per_year = 1.0 / (365.0*86400.0)
   !   Set the surface value of tracer 1 to increase exponentially
   ! with a 30 year time scale.
-  call get_time(CS%Time, secs, days)
-  year = (86400.0*days + real(secs)) * Isecs_per_year
+  year = time_type_to_real(CS%Time) * Isecs_per_year
 
   do m=1,CS%ntr
     if (CS%sfc_growth_rate(m) == 0.0) then

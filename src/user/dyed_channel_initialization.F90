@@ -11,7 +11,7 @@ use MOM_grid,            only : ocean_grid_type
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_open_boundary,   only : OBC_registry_type, register_OBC
-use MOM_time_manager,    only : time_type, set_time, time_type_to_real
+use MOM_time_manager,    only : time_type, time_type_to_real
 use MOM_tracer_registry, only : tracer_registry_type, tracer_name_lookup
 use MOM_tracer_registry, only : tracer_type
 use MOM_variables,       only : thermo_var_ptrs
