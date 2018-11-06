@@ -92,7 +92,7 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  h(:,:,1) = 0.0 * GV%m_to_H
+  h(:,:,1) = 0.0 ! h should be set in units of H.
 
   if (first_call) call write_user_log(param_file)
 
