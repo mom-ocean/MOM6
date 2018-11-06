@@ -1917,7 +1917,7 @@ function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
-     x_cell_method, y_cell_method, area_cell_method)
+     x_cell_method, y_cell_method, area_cell_method, conversion)
   integer :: register_static_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
@@ -1943,6 +1943,7 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
   character(len=*), optional, intent(in) :: area_cell_method !< Specifies the cell method for area
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
 
   ! Local variables
   real :: MOM_missing_value
@@ -1971,6 +1972,7 @@ function register_static_field(module_name, field_name, axes, &
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    if (present(conversion)) diag%conversion_factor = conversion
     if (present(x_cell_method)) then
       call get_diag_axis_name(axes%handles(1), axis_name)
       call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
@@ -2013,6 +2015,7 @@ function register_static_field(module_name, field_name, axes, &
       call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      if (present(conversion)) cmor_diag%conversion_factor = conversion
       if (present(x_cell_method)) then
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
