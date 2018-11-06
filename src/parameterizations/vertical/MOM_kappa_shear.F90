@@ -361,7 +361,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   enddo ! end of j-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI, scale=GV%Z_to_m**2)
+    call hchksum(kappa_io, "kappa", G%HI, scale=US%Z_to_m**2)
     call hchksum(tke_io, "tke", G%HI)
   endif
 
@@ -693,7 +693,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   enddo ! end of J-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI, scale=GV%Z_to_m**2)
+    call hchksum(kappa_io, "kappa", G%HI, scale=US%Z_to_m**2)
     call Bchksum(tke_io, "tke", G%HI)
   endif
 
@@ -911,7 +911,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   if (use_temperature) then
     pressure(1) = surface_pres
     do K=2,nzc
-      pressure(K) = pressure(K-1) + gR0*GV%Z_to_m*dz(k-1)
+      pressure(K) = pressure(K-1) + gR0*US%Z_to_m*dz(k-1)
       T_int(K) = 0.5*(T(k-1) + T(k))
       Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
     enddo
@@ -999,7 +999,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 
   ! call cpu_clock_begin(id_clock_KQ)
     call find_kappa_tke(N2, S2, kappa, Idz, dz_Int, I_L2_bdry, f2, &
-                        nzc, CS, GV, K_Q, tke, kappa_out, kappa_src, local_src)
+                        nzc, CS, GV, US, K_Q, tke, kappa_out, kappa_src, local_src)
   ! call cpu_clock_end(id_clock_KQ)
 
   ! call cpu_clock_begin(id_clock_avg)
@@ -1125,7 +1125,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     ! call cpu_clock_begin(id_clock_KQ)
       do K=1,nzc+1 ; K_Q_tmp(K) = K_Q(K) ; enddo
       call find_kappa_tke(N2, S2, kappa_out, Idz, dz_Int, I_L2_bdry, f2, &
-                          nzc, CS, GV, K_Q_tmp, tke_pred, kappa_pred)
+                          nzc, CS, GV, US, K_Q_tmp, tke_pred, kappa_pred)
     ! call cpu_clock_end(id_clock_KQ)
 
       ks_kappa = GV%ke+1 ; ke_kappa = 0
@@ -1144,7 +1144,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 
     ! call cpu_clock_begin(id_clock_KQ)
       call find_kappa_tke(N2, S2, kappa_out, Idz, dz_Int, I_L2_bdry, f2, &
-                          nzc, CS, GV, K_Q, tke_pred, kappa_pred)
+                          nzc, CS, GV, US, K_Q, tke_pred, kappa_pred)
     ! call cpu_clock_end(id_clock_KQ)
 
     ! call cpu_clock_begin(id_clock_avg)
@@ -1368,7 +1368,7 @@ end subroutine calculate_projected_state
 
 !> This subroutine calculates new, consistent estimates of TKE and kappa.
 subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
-                          nz, CS, GV, K_Q, tke, kappa, kappa_src, local_src)
+                          nz, CS, GV, US, K_Q, tke, kappa, kappa_src, local_src)
   integer,               intent(in)    :: nz  !< The number of layers to work on.
   real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces,
                                               !! in s-2.
@@ -1383,6 +1383,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real,                  intent(in)    :: f2  !< The squared Coriolis parameter, in s-2.
   type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), intent(inout) :: K_Q !< The shear-driven diapycnal diffusivity divided by
                                               !! the turbulent kinetic energy per unit mass at
                                               !! interfaces, in s.
@@ -1492,7 +1493,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   q0 = CS%TKE_bg ; kappa0 = CS%kappa_0 ; TKE_min = max(CS%TKE_bg,1.0E-20)
   Ri_crit = CS%Rino_crit
   Ilambda2 = 1.0 / CS%lambda**2
-  Z2_to_L2 = GV%Z_to_m**2
+  Z2_to_L2 = US%Z_to_m**2
   kappa_trunc = 0.01*kappa0  ! ### CHANGE THIS HARD-WIRING LATER?
   do_Newton = .false. ; abort_Newton = .false.
   tol_err = CS%kappa_tol_err
@@ -1722,7 +1723,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         cK(K+1) = bK * Idz(k)
         cKcomp = bK * (Idz(k-1)*cKcomp + decay_term_k) ! = 1-cK(K+1)
         dKdQ(K) = bK * (Idz(k-1)*dKdQ(K-1)*cQ(K) + &
-                      GV%Z_to_m*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
+                      US%Z_to_m*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
         dK(K) = bK * (kap_src + Idz(k-1)*dK(K-1) + Idz(k-1)*dKdQ(K-1)*dQ(K-1))
 
         ! Truncate away negligibly small values of kappa.
@@ -1853,7 +1854,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                              Idz(k)*(kappa_prev(k)-kappa_prev(k+1)))
         K_err_lin = -Idz(k-1)*(dK(K-1)-dK(K)) + Idz(k)*(dK(K)-dK(K+1)) + &
                      dz_Int(K)*I_Ld2(K)*dK(K) - kap_src - &
-                     GV%Z_to_m*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
+                     US%Z_to_m*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
 
         tke_src = dz_Int(K) * (Z2_to_L2*(kappa_prev(K) + kappa0)*S2(K) - &
                      Z2_to_L2*kappa_prev(K)*N2(K) - (TKE_prev(K) - q0)*TKE_decay(K)) - &
@@ -2126,14 +2127,14 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',diag%axesTi,Time, &
-      'Shear-driven Diapycnal Diffusivity', 'm2 s-1', conversion=GV%Z_to_m**2)
+      'Shear-driven Diapycnal Diffusivity', 'm2 s-1', conversion=US%Z_to_m**2)
   CS%id_TKE = register_diag_field('ocean_model','TKE_shear',diag%axesTi,Time, &
       'Shear-driven Turbulent Kinetic Energy', 'm2 s-2')
 #ifdef ADD_DIAGNOSTICS
   CS%id_ILd2 = register_diag_field('ocean_model','ILd2_shear',diag%axesTi,Time, &
       'Inverse kappa decay scale at interfaces', 'm-2', conversion=US%m_to_Z**2)
   CS%id_dz_Int = register_diag_field('ocean_model','dz_Int_shear',diag%axesTi,Time, &
-      'Finite volume thickness of interfaces', 'm', conversion=GV%Z_to_m)
+      'Finite volume thickness of interfaces', 'm', conversion=US%Z_to_m)
 #endif
 
 end function kappa_shear_init

@@ -434,7 +434,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS%set_diff_CSp)
+  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
 
   ! Frazil formation keeps the temperature above the freezing point.
@@ -589,8 +589,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-    call hchksum(Kd_salt, "after set_diffusivity Kd_salt", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=US%Z_to_m**2)
+    call hchksum(Kd_salt, "after set_diffusivity Kd_salt", G%HI, haloshift=0, scale=US%Z_to_m**2)
   endif
 
   if (CS%useKPP) then
@@ -630,8 +630,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       call MOM_state_chksum("after KPP", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
-      call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-      call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+      call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z_to_m**2)
+      call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z_to_m**2)
     endif
 
   endif  ! endif for KPP
@@ -738,12 +738,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, GV)
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, US)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy ePBL's MLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     elseif (associated(visc%MLD)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, GV)
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US)
       call pass_var(visc%MLD, G%domain, halo=1)
     endif
 
@@ -768,7 +768,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       call hchksum(eb_t, "after ePBL eb_t",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(ea_s, "after ePBL ea_s",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(eb_s, "after ePBL eb_s",G%HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+      call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%Z_to_m**2)
     endif
 
   else
@@ -1313,7 +1313,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call diapyc_energy_req_test(h, dt, tv, G, GV, US, CS%diapyc_en_rec_CSp)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS%set_diff_CSp)
+  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
 
   ! Frazil formation keeps the temperature above the freezing point.
@@ -1499,8 +1499,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd_lay, "after set_diffusivity Kd_lay", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Kd_lay, "after set_diffusivity Kd_lay", G%HI, haloshift=0, scale=US%Z_to_m**2)
+    call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z_to_m**2)
   endif
 
 
@@ -1571,8 +1571,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       call MOM_state_chksum("after KPP", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
-      call hchksum(Kd_lay, "after KPP Kd_lay", G%HI, haloshift=0, scale=GV%Z_to_m**2)
-      call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+      call hchksum(Kd_lay, "after KPP Kd_lay", G%HI, haloshift=0, scale=US%Z_to_m**2)
+      call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0, scale=US%Z_to_m**2)
     endif
 
   endif  ! endif for KPP
@@ -1719,7 +1719,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
       if (associated(visc%MLD)) then
-        call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, GV)
+        call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US)
         call pass_var(visc%MLD, G%domain, halo=1)
         Hml(:,:) = visc%MLD(:,:)
       endif
@@ -1749,7 +1749,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       if (CS%debug) then
         call hchksum(ea, "after ePBL ea",G%HI,haloshift=0, scale=GV%H_to_m)
         call hchksum(eb, "after ePBL eb",G%HI,haloshift=0, scale=GV%H_to_m)
-        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%Z_to_m**2)
       endif
 
     else
@@ -3001,19 +3001,19 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       Time, "Advective diapycnal salnity flux across interfaces", &
       "psu m s-1")
   CS%id_MLD_003 = register_diag_field('ocean_model', 'MLD_003', diag%axesT1, Time, &
-      'Mixed layer depth (delta rho = 0.03)', 'm', conversion=GV%Z_to_m, &
+      'Mixed layer depth (delta rho = 0.03)', 'm', conversion=US%Z_to_m, &
       cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', &
       cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
   CS%id_mlotstsq = register_diag_field('ocean_model','mlotstsq',diag%axesT1, Time, &
       long_name='Square of Ocean Mixed Layer Thickness Defined by Sigma T', &
       standard_name='square_of_ocean_mixed_layer_thickness_defined_by_sigma_t', &
-      units='m2', conversion=GV%Z_to_m**2)
+      units='m2', conversion=US%Z_to_m**2)
   CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
-      'Mixed layer depth (delta rho = 0.125)', 'm', conversion=GV%Z_to_m)
+      'Mixed layer depth (delta rho = 0.125)', 'm', conversion=US%Z_to_m)
   CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
       'Squared buoyancy frequency below mixed layer', 's-2')
   CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &
-      'Mixed layer depth (used defined)', 'm', conversion=GV%Z_to_m)
+      'Mixed layer depth (used defined)', 'm', conversion=US%Z_to_m)
   call get_param(param_file, mdl, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
                  "The density difference used to determine a diagnostic mixed\n"//&
                  "layer depth, MLD_user, following the definition of Levitus 1982. \n"//&
@@ -3065,26 +3065,26 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
-      'Total diapycnal diffusivity at interfaces', 'm2 s-1', conversion=GV%Z_to_m**2)
+      'Total diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z_to_m**2)
   if (CS%use_energetic_PBL) then
       CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
-          'ePBL diapycnal diffusivity at interfaces', 'm2 s-1', conversion=GV%Z_to_m**2)
+          'ePBL diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z_to_m**2)
   endif
 
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
-      'Total diapycnal diffusivity for heat at interfaces', 'm2 s-1', conversion=GV%Z_to_m**2, &
+      'Total diapycnal diffusivity for heat at interfaces', 'm2 s-1', conversion=US%Z_to_m**2, &
        cmor_field_name='difvho',                                                   &
        cmor_standard_name='ocean_vertical_heat_diffusivity',                       &
        cmor_long_name='Ocean vertical heat diffusivity')
   CS%id_Kd_salt = register_diag_field('ocean_model', 'Kd_salt', diag%axesTi, Time, &
-      'Total diapycnal diffusivity for salt at interfaces', 'm2 s-1',  conversion=GV%Z_to_m**2, &
+      'Total diapycnal diffusivity for salt at interfaces', 'm2 s-1',  conversion=US%Z_to_m**2, &
        cmor_field_name='difvso',                                                   &
        cmor_standard_name='ocean_vertical_salt_diffusivity',                       &
        cmor_long_name='Ocean vertical salt diffusivity')
 
   ! CS%useKPP is set to True if KPP-scheme is to be used, False otherwise.
   ! KPP_init() allocated CS%KPP_Csp and also sets CS%KPPisPassive
-  CS%useKPP = KPP_init(param_file, G, GV, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
+  CS%useKPP = KPP_init(param_file, G, GV, US, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
   if (CS%useKPP) then
     allocate( CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1) )   ; CS%KPP_NLTheat(:,:,:)   = 0.
     allocate( CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTscalar(:,:,:) = 0.
@@ -3283,9 +3283,9 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise
   ! False.
-  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, param_file, diag, CS%CVMix_conv_csp)
+  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_csp)
 
-  call entrain_diffusive_init(Time, G, GV, param_file, diag, CS%entrain_diffusive_CSp)
+  call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive_CSp)
 
   ! initialize the geothermal heating module
   if (CS%use_geothermal) &
@@ -3333,7 +3333,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   call regularize_layers_init(Time, G, GV, param_file, diag, CS%regularize_layers_CSp)
 
   if (CS%debug_energy_req) &
-    call diapyc_energy_req_init(Time, G, GV, param_file, diag, CS%diapyc_en_rec_CSp)
+    call diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS%diapyc_en_rec_CSp)
 
   ! obtain information about the number of bands for penetrative shortwave
   if (use_temperature) then

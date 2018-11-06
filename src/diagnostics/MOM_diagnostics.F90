@@ -1166,11 +1166,12 @@ end subroutine post_surface_dyn_diags
 
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
-subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
+subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv, &
                                     ssh, ssh_ibc)
   type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in) :: US  !< A dimensional unit scaling type
   type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
   real,                     intent(in) :: dt_int !< total time step associated with these diagnostics, in s.
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
@@ -1219,7 +1220,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   ! post total volume of the liquid ocean
   if (IDs%id_volo > 0) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + GV%Z_to_m*G%bathyT(i,j))
+      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + US%Z_to_m*G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(work_2d, G)
     call post_data(IDs%id_volo, volo, diag)
@@ -1394,7 +1395,7 @@ end subroutine post_transport_diagnostics
 
 !> This subroutine registers various diagnostics and allocates space for fields
 !! that other diagnostis depend upon.
-subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS, tv)
+subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag, CS, tv)
   type(ocean_internal_state), intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers to
                                                     !! the fields and accelerations that make up the
                                                     !! ocean's internal physical state.
@@ -1405,6 +1406,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(time_type),            intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file !< A structure to parse for run-time
                                                     !! parameters.
   type(diag_ctrl), target,    intent(inout) :: diag !< Structure to regulate diagnostic output.
@@ -1413,25 +1415,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(thermo_var_ptrs),      intent(in)    :: tv   !< A structure pointing to various
                                                     !! thermodynamic variables.
 
-! Arguments
-!  (in)     MIS    - For "MOM Internal State" a set of pointers to the fields and
-!                    accelerations that make up the ocean's internal physical
-!                    state.
-!  (inout)  ADp    - structure with pointers to momentum equation terms
-!  (inout)  CDp    - structure with pointers to continuity equation terms
-!  (in)     Time   - current model time
-!  (in)     G      - ocean grid structure
-!  (in)     GV     - The ocean's vertical grid structure.
-!  (in) param_file - structure indicating the open file to parse for
-!                     model parameter values
-!  (in)     diag   - structure to regulate diagnostic output
-!  (in/out) CS     - pointer set to point to control structure for this module
-
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-
-  character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
+  ! Local variables
   real :: omega, f2_min, convert_H
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: use_temperature
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
@@ -1537,11 +1525,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
-      'Interface Height Relative to Mean Sea Level', 'm', conversion=GV%Z_to_m)
+      'Interface Height Relative to Mean Sea Level', 'm', conversion=US%Z_to_m)
   if (CS%id_e>0) call safe_alloc_ptr(CS%e,isd,ied,jsd,jed,nz+1)
 
   CS%id_e_D = register_diag_field('ocean_model', 'e_D', diag%axesTi, Time, &
-      'Interface Height above the Seafloor', 'm', conversion=GV%Z_to_m)
+      'Interface Height above the Seafloor', 'm', conversion=US%Z_to_m)
   if (CS%id_e_D>0) call safe_alloc_ptr(CS%e_D,isd,ied,jsd,jed,nz+1)
 
   CS%id_Rml = register_diag_field('ocean_model', 'Rml', diag%axesTL, Time, &
@@ -1693,7 +1681,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'The column integrated in situ density', 'kg m-2')
 
   CS%id_col_ht = register_diag_field('ocean_model', 'col_height', diag%axesT1, Time, &
-      'The height of the water column', 'm', conversion=GV%Z_to_m)
+      'The height of the water column', 'm', conversion=US%Z_to_m)
   CS%id_pbo = register_diag_field('ocean_model', 'pbo', diag%axesT1, Time, &
       long_name='Sea Water Pressure at Sea Floor', standard_name='sea_water_pressure_at_sea_floor', &
       units='Pa')
@@ -1822,9 +1810,10 @@ subroutine register_transport_diags(Time, G, GV, IDs, diag)
 end subroutine register_transport_diags
 
 !> Offers the static fields in the ocean grid type for output via the diag_manager.
-subroutine write_static_fields(G, GV, tv, diag)
+subroutine write_static_fields(G, GV, US, tv, diag)
   type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
 
@@ -1900,7 +1889,7 @@ subroutine write_static_fields(G, GV, tv, diag)
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
         cmor_standard_name='sea_floor_depth_below_geoid', area=diag%axesT1%id_area, &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean', &
-        conversion=GV%Z_to_m)
+        conversion=US%Z_to_m)
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &

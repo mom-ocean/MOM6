@@ -216,7 +216,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   CS%nk = 0
   CS%regridding_scheme = coordinateMode(coord_mode)
   coord_is_state_dependent = state_dependent(coord_mode)
-  maximum_depth = GV%Z_to_m*max_depth
+  maximum_depth = US%Z_to_m*max_depth
 
   if (main_parameters) then
     ! Read coordinate units parameter (main model = REGRIDDING_COORDINATE_UNITS)
@@ -473,7 +473,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       CS%coord_scale = GV%H_to_m
     else
       call setCoordinateResolution(dz, CS, scale=US%m_to_Z)
-      CS%coord_scale = GV%Z_to_m
+      CS%coord_scale = US%Z_to_m
     endif
   endif
 

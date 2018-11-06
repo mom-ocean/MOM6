@@ -810,10 +810,11 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, GFS_scale, pbce, alpha_star)
 end subroutine Set_pbce_nonBouss
 
 !> Initialize the Montgomery-potential form of PGF control structure
-subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(time_type), target, intent(in)    :: Time !< Current model time
   type(ocean_grid_type),   intent(in)    :: G  !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_Mont_CS),  pointer  :: CS !< Montgomery PGF control structure
@@ -865,7 +866,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
-        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=GV%Z_to_m)
+        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
   endif
 
   CS%GFS_scale = 1.0

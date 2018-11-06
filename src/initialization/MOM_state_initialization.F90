@@ -361,7 +361,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
-                                           tv%S, h, G, GV, PF, just_read_params=just_read)
+                                           tv%S, h, G, GV, US, PF, just_read_params=just_read)
         case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
                                     tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &

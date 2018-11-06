@@ -444,7 +444,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                        !(including surface and bottom)
             w2avg = 0.0
             do k=1,nzm-1
-              dz(k) = GV%Z_to_m*Hc(k)
+              dz(k) = US%Z_to_m*Hc(k)
               w2avg = w2avg + 0.5*(w_strct(K)**2+w_strct(K+1)**2)*dz(k)
             enddo
             !### Some mathematical cancellations could occur in the next two lines.
@@ -503,7 +503,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             CS%u_strct(i,j,1:nzm)     = u_strct(:)
             CS%W_profile(i,j,1:nzm)   = W_profile(:)
             CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(:)
-            CS%z_depths(i,j,1:nzm)    = GV%Z_to_m*z_int(:)
+            CS%z_depths(i,j,1:nzm)    = US%Z_to_m*z_int(:)
             CS%N2(i,j,1:nzm)          = N2(:)
             CS%num_intfaces(i,j)      = nzm
           else

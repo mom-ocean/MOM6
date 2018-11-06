@@ -284,7 +284,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP end parallel
 
   if (CS%detangle_interfaces) then
-    call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, &
+    call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, US, &
                            CS, int_slope_u, int_slope_v)
   endif
 
@@ -292,7 +292,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     call uvchksum("Kh_[uv]", Kh_u, Kh_v, G%HI,haloshift=0)
     call uvchksum("int_slope_[uv]", int_slope_u, int_slope_v, G%HI, haloshift=0)
     call hchksum(h, "thickness_diffuse_1 h", G%HI, haloshift=1, scale=GV%H_to_m)
-    call hchksum(e, "thickness_diffuse_1 e", G%HI, haloshift=1, scale=GV%Z_to_m)
+    call hchksum(e, "thickness_diffuse_1 e", G%HI, haloshift=1, scale=US%Z_to_m)
     if (use_stored_slopes) then
       call uvchksum("VarMix%slope_[xy]", VarMix%slope_x, VarMix%slope_y, &
                     G%HI, haloshift=0)
@@ -521,7 +521,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
   G_rho0 = GV%g_Earth / GV%Rho0
-  N2_floor = CS%N2_floor*GV%Z_to_m**2
+  N2_floor = CS%N2_floor*US%Z_to_m**2
 
   use_EOS = associated(tv%eqn_of_state)
   present_int_slope_u = PRESENT(int_slope_u)
@@ -692,7 +692,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! that ignore density gradients along layers.
             if (present_int_slope_u) then
               Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
-                      int_slope_u(I,j,K) * GV%Z_to_m*((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
+                      int_slope_u(I,j,K) * US%Z_to_m*((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
               slope2_Ratio_u(I,K) = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio_u(I,K)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
@@ -724,7 +724,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_x) then
               Slope = slope_x(I,j,k)
             else
-              Slope = GV%Z_to_m*((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
+              Slope = US%Z_to_m*((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
             Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*US%m_to_Z*Slope)
@@ -938,7 +938,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! that ignore density gradients along layers.
             if (present_int_slope_v) then
               Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
-                      int_slope_v(i,J,K) * GV%Z_to_m*((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
+                      int_slope_v(i,J,K) * US%Z_to_m*((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
               slope2_Ratio_v(i,K) = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio_v(i,K)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
@@ -970,7 +970,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_y) then
               Slope = slope_y(i,J,k)
             else
-              Slope = GV%Z_to_m*((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
+              Slope = US%Z_to_m*((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
             Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*US%m_to_Z*Slope)
@@ -1182,10 +1182,11 @@ subroutine streamfn_solver(nk, c2_h, hN2, sfn)
 end subroutine streamfn_solver
 
 !> Modifies thickness diffusivities to untangle layer structures
-subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, CS, &
+subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, US, CS, &
                              int_slope_u, int_slope_v)
   type(ocean_grid_type),                       intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< Vertical grid structure
+  type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thickness (H)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface positions (Z)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kh_u !< Thickness diffusivity on interfaces
@@ -1344,7 +1345,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 
   ! Limit the diffusivities
 
-  I_4t = GV%Z_to_m*Kh_scale / (4.0*dt)
+  I_4t = US%Z_to_m*Kh_scale / (4.0*dt)
 
   do n=1,2
     if (n==1) then ; jsh = js ; ish = is-1
@@ -1387,7 +1388,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
            ! dH = I_4t * (h(i+1,j,k) - h(i,j,k)) / denom
 
           adH = abs(dH)
-          sign = 1.0*GV%Z_to_m ; if (dH < 0) sign = -1.0*GV%Z_to_m
+          sign = 1.0*US%Z_to_m ; if (dH < 0) sign = -1.0*US%Z_to_m
           sl_K = sign * (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
           sl_Kp1 = sign * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IdxCu(I,j)
 
@@ -1410,7 +1411,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
            ! dH = I_4t * (h(i,j+1,k) - h(i,j,k)) / denom
 
           adH = abs(dH)
-          sign = 1.0*GV%Z_to_m ; if (dH < 0) sign = -1.0*GV%Z_to_m
+          sign = 1.0*US%Z_to_m ; if (dH < 0) sign = -1.0*US%Z_to_m
           sl_K = sign * (e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J)
           sl_Kp1 = sign * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IdyCv(i,J)
 
@@ -1823,10 +1824,10 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
            'Parameterized Meridional Overturning Streamfunction', 'm3 s-1')
   CS%id_sfn_unlim_x =  register_diag_field('ocean_model', 'GM_sfn_unlim_x', diag%axesCui, Time, &
            'Parameterized Zonal Overturning Streamfunction before limiting/smoothing', &
-           'm3 s-1', conversion=GV%Z_to_m)
+           'm3 s-1', conversion=US%Z_to_m)
   CS%id_sfn_unlim_y =  register_diag_field('ocean_model', 'GM_sfn_unlim_y', diag%axesCvi, Time, &
            'Parameterized Meridional Overturning Streamfunction before limiting/smoothing', &
-           'm3 s-1', conversion=GV%Z_to_m)
+           'm3 s-1', conversion=US%Z_to_m)
 
 end subroutine thickness_diffuse_init
 

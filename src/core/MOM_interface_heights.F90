@@ -46,7 +46,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   integer,                          optional, intent(in)  :: halo_size !< width of halo points on
                                                                  !! which to calculate eta.
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
-             !! the units of eta to m; by default this is GV%Z_to_m.
+             !! the units of eta to m; by default this is US%Z_to_m.
 
   ! Local variables
   real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)
@@ -66,7 +66,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   if ((isv<G%isd) .or. (iev>G%ied) .or. (jsv<G%jsd) .or. (jev>G%jed)) &
     call MOM_error(FATAL,"find_eta called with an overly large halo_size.")
 
-  Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = GV%Z_to_m / eta_to_m
+  Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = US%Z_to_m / eta_to_m
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_kg_m2 * (US%m_to_Z * Z_to_eta)
   I_gEarth = Z_to_eta / GV%g_Earth
@@ -161,7 +161,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   integer,                          optional, intent(in)  :: halo_size !< width of halo points on
                                                                  !! which to calculate eta.
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
-             !! the units of eta to m; by default this is GV%Z_to_m.
+             !! the units of eta to m; by default this is US%Z_to_m.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     p     ! The pressure in Pa.
@@ -176,7 +176,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
 
-  Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = GV%Z_to_m / eta_to_m
+  Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = US%Z_to_m / eta_to_m
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_kg_m2 * (US%m_to_Z * Z_to_eta)
   I_gEarth = Z_to_eta / GV%g_Earth
