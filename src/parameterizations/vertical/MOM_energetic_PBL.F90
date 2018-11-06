@@ -550,7 +550,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
 
 !!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
-!!OMP                                  CS,G,GV,fluxes,IdtdR0,                    &
+!!OMP                                  CS,G,GV,US,fluxes,IdtdR0,                 &
 !!OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
 !!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar,      &
 !!OMP                                  max_itt,Kd_int)                           &

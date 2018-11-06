@@ -204,7 +204,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 #ifdef ADD_DIAGNOSTICS
   !$OMP                                I_Ld2_3d,dz_Int_3d, &
 #endif
-  !$OMP                                tv,G,GV,CS,kappa_io,dz_massless,k0dt,p_surf,dt,tke_io,kv_io)
+  !$OMP                                tv,G,GV,US,CS,kappa_io,dz_massless,k0dt,p_surf,dt,tke_io,kv_io)
   do j=js,je
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h(i,j,k)*GV%H_to_Z
@@ -501,7 +501,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 #ifdef ADD_DIAGNOSTICS
   !$OMP                                I_Ld2_3d,dz_Int_3d, &
 #endif
-  !$OMP                                tv,G,GV,CS,kappa_io,dz_massless,k0dt,p_surf,dt,tke_io,kv_io)
+  !$OMP                                tv,G,GV,US,CS,kappa_io,dz_massless,k0dt,p_surf,dt,tke_io,kv_io)
   do J=JsB,JeB
     J2 = mod(J,2)+1 ; J2m1 = 3-J2 ! = mod(J-1,2)+1
 

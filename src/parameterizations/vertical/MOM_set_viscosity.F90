@@ -356,7 +356,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   if (.not.use_BBL_EOS) Rml_vel(:,:) = 0.0
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,visc,G,GV,CS,Rml,is,ie,js,je,nz,nkmb,    &
+  !$OMP parallel do default(private) shared(u,v,h,tv,visc,G,GV,US,CS,Rml,is,ie,js,je,nz,nkmb, &
   !$OMP                                     nkml,Isq,Ieq,Jsq,Jeq,h_neglect,Rho0x400_G,C2pi_3, &
   !$OMP                                     U_bg_sq,cdrag_sqrt_Z,cdrag_sqrt,K2,use_BBL_EOS,   &
   !$OMP                                     OBC,maxitt,Vol_quit,D_u,D_v,mask_u,mask_v)
@@ -1183,7 +1183,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     endif
   enddo ; endif
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,CS,use_EOS,dt_Rho0, &
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     h_neglect,h_tiny,g_H_Rho0,js,je,OBC,Isq,Ieq,nz,  &
   !$OMP                                     U_bg_sq,mask_v,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml)
   do j=js,je  ! u-point loop
@@ -1418,7 +1418,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
   enddo ! j-loop at u-points
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,CS,use_EOS,dt_Rho0, &
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     h_neglect,h_tiny,g_H_Rho0,is,ie,OBC,Jsq,Jeq,nz, &
   !$OMP                                     U_bg_sq,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml,mask_u)
   do J=Jsq,Jeq  ! v-point loop
