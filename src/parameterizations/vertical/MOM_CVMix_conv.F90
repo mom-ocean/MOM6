@@ -3,16 +3,17 @@ module MOM_CVMix_conv
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,      only : hchksum
 use MOM_diag_mediator,  only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,  only : post_data
 use MOM_EOS,            only : calculate_density
-use MOM_variables,      only : thermo_var_ptrs
 use MOM_error_handler,  only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
-use MOM_debugging,      only : hchksum
-use MOM_grid,           only : ocean_grid_type
-use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_file_parser,    only : get_param, log_version, param_file_type
+use MOM_grid,           only : ocean_grid_type
+use MOM_unit_scaling,   only : unit_scale_type
+use MOM_variables,      only : thermo_var_ptrs
+use MOM_verticalGrid,   only : verticalGrid_type
 use CVMix_convection,   only : CVMix_init_conv, CVMix_coeffs_conv
 use CVMix_kpp,          only : CVMix_kpp_compute_kOBL_depth
 
@@ -145,10 +146,11 @@ end function CVMix_conv_init
 
 !> Subroutine for calculating enhanced diffusivity/viscosity
 !! due to convection via CVMix
-subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
+subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
 
   type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
+  type(unit_scale_type),                      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
   type(CVMix_conv_cs),                            pointer :: CS !< The control structure returned
@@ -168,7 +170,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k
 
-  g_o_rho0 = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  g_o_rho0 = (GV%g_Earth*US%m_to_Z) / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
@@ -228,8 +230,8 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
                                OBL_ind=kOBL)
 
       do K=1,G%ke+1
-        CS%kv_conv(i,j,K) = GV%m_to_Z**2 * kv_col(K)
-        CS%kd_conv(i,j,K) = GV%m_to_Z**2 * kd_col(K)
+        CS%kv_conv(i,j,K) = US%m_to_Z**2 * kv_col(K)
+        CS%kd_conv(i,j,K) = US%m_to_Z**2 * kd_col(K)
       enddo
       ! Do not apply mixing due to convection within the boundary layer
       do k=1,kOBL

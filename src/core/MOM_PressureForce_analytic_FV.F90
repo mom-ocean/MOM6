@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_PressureForce_Mont, only : set_pbce_Bouss, set_pbce_nonBouss
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -57,9 +58,10 @@ contains
 
 !> Thin interface between the model and the Boussinesq and non-Boussinesq
 !! pressure force routines.
-subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure
+  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness (m or kg/m2)
   type(thermo_var_ptrs),                     intent(inout) :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration (m/s2)
@@ -76,9 +78,9 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, e
                                                            !! contributions or compressibility compensation.
 
   if (GV%Boussinesq) then
-    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   else
-    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   endif
 
 end subroutine PressureForce_AFV
@@ -93,9 +95,10 @@ end subroutine PressureForce_AFV
 !! ie to ie, je to je range before this subroutine is called:
 !!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
 !!  T[je+1], and S[je+1].
-subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
+  type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration (m/s2)
@@ -316,7 +319,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth
     enddo ; enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) - g_Earth_z * e_tidal(i,j)
@@ -434,9 +437,10 @@ end subroutine PressureForce_AFV_nonBouss
 !! ie to ie, je to je range before this subroutine is called:
 !!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
 !!  T[je+1], and S[je+1].
-subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
+  type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration (m/s2)
@@ -541,7 +545,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
         e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
+    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
   endif
 
 !    Here layer interface heights, e, are calculated.

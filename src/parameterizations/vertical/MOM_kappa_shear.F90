@@ -11,6 +11,7 @@ use MOM_debugging, only : hchksum, Bchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -87,9 +88,10 @@ contains
 
 !> Subroutine for calculating shear-driven diffusivity and TKE in tracer columns
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
-                                 kv_io, dt, G, GV, CS, initialize_all)
+                                 kv_io, dt, G, GV, US, CS, initialize_all)
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
@@ -293,14 +295,14 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
       if (new_kappa) then
-        do K=1,nzc+1 ; kappa(K) = GV%m_to_Z**2*1.0 ; enddo
+        do K=1,nzc+1 ; kappa(K) = US%m_to_Z**2*1.0 ; enddo
       else
         do K=1,nzc+1 ; kappa(K) = kappa_2d(i,K) ; enddo
       endif
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
-                              tke_avg, tv, CS, GV)
+                              tke_avg, tv, CS, GV, US)
 
     ! call cpu_clock_begin(id_clock_setup)
     ! Extrapolate from the vertically reduced grid back to the original layers.
@@ -375,9 +377,10 @@ end subroutine Calculate_kappa_shear
 
 !> Subroutine for calculating shear-driven diffusivity and TKE in corner columns
 subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_io, tke_io, &
-                                   kv_io, dt, G, GV, CS, initialize_all)
+                                   kv_io, dt, G, GV, US, CS, initialize_all)
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(unit_scale_type),    intent(in)   :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   &
@@ -619,14 +622,14 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
       if (new_kappa) then
-        do K=1,nzc+1 ; kappa(K) = GV%m_to_Z**2*1.0 ; enddo
+        do K=1,nzc+1 ; kappa(K) = US%m_to_Z**2*1.0 ; enddo
       else
         do K=1,nzc+1 ; kappa(K) = kappa_2d(I,K,J2) ; enddo
       endif
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
-                              tke_avg, tv, CS, GV)
+                              tke_avg, tv, CS, GV, US)
 
     ! call cpu_clock_begin(Id_clock_setup)
     ! Extrapolate from the vertically reduced grid back to the original layers.
@@ -707,8 +710,9 @@ end subroutine Calc_kappa_shear_vertex
 !> This subroutine calculates shear-driven diffusivity and TKE in a single column
 subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
-                              tke_avg, tv, CS, GV)
+                              tke_avg, tv, CS, GV, US)
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZK_(GV)+1), &
                      intent(inout) :: kappa !< The time-weighted average of kappa, in Z2 s-1.
   real, dimension(SZK_(GV)+1), &
@@ -817,7 +821,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   integer :: k, itt, itt_dt
 
   Ri_crit = CS%Rino_crit
-  gR0 = GV%Rho0*(GV%g_Earth*GV%m_to_Z) ; g_R0 = (GV%g_Earth*GV%m_to_Z**2)/GV%Rho0
+  gR0 = GV%Rho0*(GV%g_Earth*US%m_to_Z) ; g_R0 = (GV%g_Earth*US%m_to_Z**2)/GV%Rho0
   k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
@@ -963,7 +967,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 
   ! This call just calculates N2 and S2.
   call calculate_projected_state(kappa, u, v, T, Sal, 0.0, nzc, dz, I_dz_int, &
-                                 dbuoy_dT, dbuoy_dS, u, v, T, Sal, GV, &
+                                 dbuoy_dT, dbuoy_dS, u, v, T, Sal, GV, US, &
                                  N2=N2, S2=S2, vel_underflow=CS%vel_underflow)
 ! ----------------------------------------------------
 ! Iterate
@@ -1034,7 +1038,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         ! enough.
         call calculate_projected_state(kappa_out, u, v, T, Sal, 0.5*dt_test, nzc, dz, I_dz_int, &
                                        dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
-                                       GV, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, &
+                                       GV, US, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, &
                                        vel_underflow=CS%vel_underflow)
         valid_dt = .true.
         Idtt = 1.0 / dt_test
@@ -1061,7 +1065,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         do itt_dt=1,dt_refinements
           call calculate_projected_state(kappa_out, u, v, T, Sal, 0.5*(dt_test+dt_inc), &
                    nzc, dz, I_dz_int, dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
-                   GV, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, vel_underflow=CS%vel_underflow)
+                   GV, US, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, vel_underflow=CS%vel_underflow)
           valid_dt = .true.
           Idtt = 1.0 / (dt_test+dt_inc)
           do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
@@ -1114,7 +1118,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     ! call cpu_clock_begin(id_clock_project)
       call calculate_projected_state(kappa_out, u, v, T, Sal, dt_now, nzc, dz, I_dz_int, &
                                      dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
-                                     GV, N2=N2, S2=S2, ks_int=ks_kappa, ke_int=ke_kappa, &
+                                     GV, US, N2=N2, S2=S2, ks_int=ks_kappa, ke_int=ke_kappa, &
                                      vel_underflow=CS%vel_underflow)
     ! call cpu_clock_end(id_clock_project)
 
@@ -1134,7 +1138,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     ! call cpu_clock_begin(id_clock_project)
       call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, dz, I_dz_int, &
                                      dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
-                                     GV, N2=N2, S2=S2, ks_int=ks_kappa, ke_int=ke_kappa, &
+                                     GV, US, N2=N2, S2=S2, ks_int=ks_kappa, ke_int=ke_kappa, &
                                      vel_underflow=CS%vel_underflow)
     ! call cpu_clock_end(id_clock_project)
 
@@ -1159,7 +1163,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     ! call cpu_clock_begin(id_clock_project)
       call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, &
                                      dz, I_dz_int, dbuoy_dT, dbuoy_dS, u, v, T, Sal, &
-                                     GV, N2, S2, vel_underflow=CS%vel_underflow)
+                                     GV, US, N2, S2, vel_underflow=CS%vel_underflow)
     ! call cpu_clock_end(id_clock_project)
     endif
 
@@ -1210,7 +1214,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
           if (abs(dkappa_it1(K,itt-1)) > 1e-20) &
             d_dkappa_it1(K,itt) = dkappa_it1(K,itt) / dkappa_it1(K,itt-1)
         endif
-        dkappa_norm(K,itt) = dkap(K) / max(0.5*(kappa_pred(K) + kappa_out(K)), GV%m_to_Z**2*1e-100)
+        dkappa_norm(K,itt) = dkap(K) / max(0.5*(kappa_pred(K) + kappa_out(K)), US%m_to_Z**2*1e-100)
       enddo
     endif
 #endif
@@ -1226,7 +1230,7 @@ end subroutine kappa_shear_column
 !! may also calculate the projected buoyancy frequency and shear.
 subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                      dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                     u, v, T, Sal, GV, N2, S2, ks_int, ke_int, vel_underflow)
+                                     u, v, T, Sal, GV, US, N2, S2, ks_int, ke_int, vel_underflow)
   integer,               intent(in)    :: nz  !< The number of layers (after eliminating massless
                                               !! layers?).
   real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
@@ -1248,6 +1252,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   real, dimension(nz),   intent(inout) :: T   !< The temperature after dt, in C.
   real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt, in PSU.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), optional, &
                          intent(inout) :: N2  !< The buoyancy frequency squared at interfaces,
                                               !! in s-2.
@@ -1334,7 +1339,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   endif
 
   if (present(S2)) then
-    L2_to_Z2 = GV%m_to_Z**2
+    L2_to_Z2 = US%m_to_Z**2
     S2(1) = 0.0 ; S2(nz+1) = 0.0
     if (ks > 1) &
       S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * (L2_to_Z2*I_dz_int(ks)**2)
@@ -1978,10 +1983,11 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 end subroutine find_kappa_tke
 
 !> This subroutineinitializesthe parameters that regulate shear-driven mixing
-function kappa_shear_init(Time, G, GV, param_file, diag, CS)
+function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
@@ -2040,7 +2046,7 @@ function kappa_shear_init(Time, G, GV, param_file, diag, CS)
                  "The background diffusivity that is used to smooth the \n"//&
                  "density and shear profiles before solving for the \n"//&
                  "diffusivities. Defaults to value of KD.", &
-                 units="m2 s-1", default=KD_normal, scale=GV%m_to_Z**2)
+                 units="m2 s-1", default=KD_normal, scale=US%m_to_Z**2)
   call get_param(param_file, mdl, "FRI_CURVATURE", CS%FRi_curvature, &
                  "The nondimensional curvature of the function of the \n"//&
                  "Richardson number in the kappa source term in the \n"//&
@@ -2125,7 +2131,7 @@ function kappa_shear_init(Time, G, GV, param_file, diag, CS)
       'Shear-driven Turbulent Kinetic Energy', 'm2 s-2')
 #ifdef ADD_DIAGNOSTICS
   CS%id_ILd2 = register_diag_field('ocean_model','ILd2_shear',diag%axesTi,Time, &
-      'Inverse kappa decay scale at interfaces', 'm-2', conversion=GV%m_to_Z**2)
+      'Inverse kappa decay scale at interfaces', 'm-2', conversion=US%m_to_Z**2)
   CS%id_dz_Int = register_diag_field('ocean_model','dz_Int_shear',diag%axesTi,Time, &
       'Finite volume thickness of interfaces', 'm', conversion=GV%Z_to_m)
 #endif

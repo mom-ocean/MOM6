@@ -10,6 +10,7 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, EOS_type
@@ -50,9 +51,10 @@ character(len=40)  :: mdl = "MOM_CVMix_shear"  !< This module's name.
 contains
 
 !> Subroutine for calculating (internal) vertical diffusivities/viscosities
-subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
+subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
+  type(unit_scale_type),                      intent(in)  :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
@@ -74,7 +76,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
   real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
-  GoRho = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  GoRho = (GV%g_Earth*US%m_to_Z) / GV%Rho0
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -160,8 +162,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
       do K=1,G%ke+1
-        kv(i,j,K) = GV%m_to_Z**2 * Kvisc(K)
-        kd(i,j,K) = GV%m_to_Z**2 * Kdiff(K)
+        kv(i,j,K) = US%m_to_Z**2 * Kvisc(K)
+        kd(i,j,K) = US%m_to_Z**2 * Kdiff(K)
       enddo
     enddo
   enddo

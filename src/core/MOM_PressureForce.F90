@@ -17,6 +17,7 @@ use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_
 use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_end
 use MOM_PressureForce_Mont, only : PressureForce_Mont_CS
 use MOM_tidal_forcing, only : tidal_forcing_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ALE, only: ALE_CS
@@ -43,9 +44,10 @@ end type PressureForce_CS
 contains
 
 !> A thin layer between the model and the Boussinesq and non-Boussinesq pressure force routines.
-subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
@@ -67,26 +69,26 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
 
   if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
     if (GV%Boussinesq) then
-      call PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, &
+      call PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, &
                CS%PressureForce_blk_AFV_CSp, ALE_CSp, p_atm, pbce, eta)
     else
-      call PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, &
+      call PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, &
                CS%PressureForce_blk_AFV_CSp, p_atm, pbce, eta)
     endif
   elseif (CS%Analytic_FV_PGF) then
     if (GV%Boussinesq) then
-      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_AFV_CSp, &
+      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_AFV_CSp, &
                                    ALE_CSp, p_atm, pbce, eta)
     else
-      call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_AFV_CSp, &
+      call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_AFV_CSp, &
                                       ALE_CSp, p_atm, pbce, eta)
     endif
   else
     if (GV%Boussinesq) then
-      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_Mont_CSp, &
+      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_Mont_CSp, &
                                     p_atm, pbce, eta)
     else
-      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_Mont_CSp, &
+      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_Mont_CSp, &
                                        p_atm, pbce, eta)
     endif
   endif

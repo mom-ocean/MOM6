@@ -53,6 +53,7 @@ use MOM_open_boundary,         only : open_boundary_test_extern_h
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
+use MOM_unit_scaling,          only : unit_scale_type
 use MOM_vert_friction,         only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_vert_friction,         only : updateCFLtruncationValue
@@ -229,9 +230,10 @@ contains
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                  Time_local, dt, forces, p_surf_begin, p_surf_end, &
                  uh, vh, uhtr, vhtr, eta_av, &
-                 G, GV, CS, calc_dtbt, VarMix, MEKE, Waves)
+                 G, GV, US, CS, calc_dtbt, VarMix, MEKE, Waves)
   type(ocean_grid_type),             intent(inout) :: G            !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
+  type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                              target, intent(inout) :: u            !< zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -404,7 +406,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! pbce = dM/deta
   if (CS%begw == 0.0) call enable_averaging(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_pres)
-  call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, CS%PressureForce_CSp, &
+  call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
     Pa_to_eta = 1.0 / GV%H_to_Pa
@@ -419,7 +421,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2)")
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, US, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
   if (associated(CS%OBC) .and. CS%debug_OBC) &
     call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
@@ -472,14 +474,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   enddo
 
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, &
+  call set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
     call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0, symmetric=sym)
   endif
-  call vertvisc_coef(up, vp, h, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   if (showCallTree) call callTree_wayPoint("done with vertvisc_coef (step_MOM_dyn_split_RK2)")
@@ -525,14 +527,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   u_init => u ; v_init => v
   call cpu_clock_begin(id_clock_btstep)
-  if (calc_dtbt) call set_dtbt(G, GV, CS%barotropic_CSp, eta, CS%pbce)
+  if (calc_dtbt) call set_dtbt(G, GV, US, CS%barotropic_CSp, eta, CS%pbce)
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
-  call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
-              forces, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
-              CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, CS%barotropic_CSp,&
-              CS%visc_rem_u, CS%visc_rem_v, OBC=CS%OBC, &
-              BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
+  call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, &
+              u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, &
+              G, GV, US, CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
+              OBC=CS%OBC, BT_cont=CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
   if (showCallTree) call callTree_leave("btstep()")
@@ -575,7 +576,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%debug) then
     call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym)
   endif
-  call vertvisc_coef(up, vp, h, forces, visc, dt_pred, G, GV, CS%vertvisc_CSp, &
+  call vertvisc_coef(up, vp, h, forces, visc, dt_pred, G, GV, US, CS%vertvisc_CSp, &
                      CS%OBC)
   call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
@@ -653,9 +654,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     ! PFu = d/dx M(hp,T,S)
     ! pbce = dM/deta
     call cpu_clock_begin(id_clock_pres)
-    call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, &
-                       CS%PressureForce_CSp, CS%ALE_CSp, &
-                       p_surf, CS%pbce, CS%eta_PF)
+    call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
+                       CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
     call cpu_clock_end(id_clock_pres)
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
@@ -729,11 +729,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the corrector step call to btstep.
-  call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
-              forces, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
-              CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, &
-              CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
-              etaav=eta_av, OBC=CS%OBC, &
+  call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, &
+              CS%eta_PF, u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, &
+              eta_pred, CS%uhbt, CS%vhbt, G, GV, US, CS%barotropic_CSp, &
+              CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, OBC=CS%OBC, &
               BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
@@ -774,7 +773,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! u <- u + dt d/dz visc d/dz u
   ! u_av <- u_av + dt d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves)
   if (G%nonblocking_updates) then
@@ -951,12 +950,13 @@ end subroutine register_restarts_dyn_split_RK2
 
 !> This subroutine initializes all of the variables that are used by this
 !! dynamic core, including diagnostics and the cpu clocks.
-subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_file, &
+subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                       visc, dirs, ntrunc, calc_dtbt)
   type(ocean_grid_type),            intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
+  type(unit_scale_type),            intent(in)    :: US         !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                     intent(inout) :: u          !< zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1096,7 +1096,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   call PressureForce_init(Time, G, GV, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
-  call vertvisc_init(MIS, Time, G, GV, param_file, diag, CS%ADp, dirs, &
+  call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
     "initialize_dyn_split_RK2 called with setVisc_CSp unassociated.")
@@ -1128,7 +1128,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
-  call barotropic_init(u, v, h, CS%eta, Time, G, GV, param_file, diag, &
+  call barotropic_init(u, v, h, CS%eta, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
                        CS%tides_CSp)
 

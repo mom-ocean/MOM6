@@ -10,6 +10,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -29,15 +30,16 @@ public Phillips_initialize_topography
 contains
 
 !> Initialize the thickness field for the Phillips model test case.
-subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
-  type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
+subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G          !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h         !< The thickness that is being initialized, in H.
-  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
-                                                      !! to parse for model parameter values.
+                           intent(out) :: h          !< The thickness that is being initialized, in H.
+  type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file
+                                                     !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                     !! only read parameters without changing h.
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces, in depth units (Z).
   real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in depth units (Z).
@@ -65,7 +67,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
-                 "zonal-mean jet.", units="m", scale=GV%m_to_Z, &
+                 "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -109,17 +111,18 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
 end subroutine Phillips_initialize_thickness
 
 !> Initialize the velocity fields for the Phillips model test case
-subroutine Phillips_initialize_velocity(u, v, G, GV, param_file, just_read_params)
+subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out) :: u  !< i-component of velocity [m/s]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out) :: v  !< j-component of velocity [m/s]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file to
-                                                        !! parse for modelparameter values.
+                                                     !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                     !! only read parameters without changing h.
 
   real :: damp_rate, jet_width, jet_height, x_2, y_2
   real :: velocity_amplitude, pi
@@ -139,7 +142,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, param_file, just_read_param
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
-                 "zonal-mean jet.", units="m", scale=GV%m_to_Z, &
+                 "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -185,9 +188,10 @@ end subroutine Phillips_initialize_velocity
 !> Sets up the the inverse restoration time (Idamp), and the values towards which the interface
 !! heights and an arbitrary number of tracers should be restored within each sponge for the Phillips
 !! model test case
-subroutine Phillips_initialize_sponges(G, GV, tv, param_file, CSp, h)
+subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
+  type(unit_scale_type), intent(in) :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
                                             !! to any available thermodynamic
                                             !! fields, potential temperature and
@@ -239,7 +243,7 @@ subroutine Phillips_initialize_sponges(G, GV, tv, param_file, CSp, h)
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
-                 "zonal-mean jet.", units="m", scale=GV%m_to_Z, &
+                 "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
 
   half_depth = G%max_depth*half_strat

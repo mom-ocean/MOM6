@@ -89,6 +89,7 @@ use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_vert_friction, only : vertvisc, vertvisc_coef
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
@@ -182,11 +183,11 @@ contains
 
 !> Step the MOM6 dynamics using an unsplit quasi-2nd order Runge-Kutta scheme
 subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, forces, &
-                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
+                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, &
                   VarMix, MEKE)
   type(ocean_grid_type),             intent(inout) :: G       !< The ocean's grid structure.
-  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid
-                                                              !! structure.
+  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid structure.
+  type(unit_scale_type),             intent(in)    :: US      !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_in !< The input and output zonal
                                                               !! velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_in !< The input and output meridional
@@ -303,14 +304,14 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.5*p_surf_begin(i,j) + 0.5*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, &
+  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, US, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
   call pass_vector(CS%PFu, CS%PFv, G%Domain, clock=id_clock_pass)
   call pass_vector(CS%CAu, CS%CAv, G%Domain, clock=id_clock_pass)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h_in, CS%update_OBC_CSp, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, US, tv, h_in, CS%update_OBC_CSp, Time_local)
   endif; endif
   if (associated(CS%OBC)) then
     call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
@@ -337,10 +338,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_pred, G, GV, &
+  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_pred, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
@@ -393,11 +394,11 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! up[n] <- up* + dt d/dz visc d/dz up
 ! u[n] <- u*[n] + dt d/dz visc d/dz u[n]
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
-  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, &
+  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u_in, v_in, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp,&
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
@@ -503,13 +504,13 @@ subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
 end subroutine register_restarts_dyn_unsplit_RK2
 
 !> Initialize parameters and allocate memory associated with the unsplit RK2 dynamics module.
-subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS, &
+subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                                       restart_CS, Accel_diag, Cont_diag, MIS, &
                                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                                       visc, dirs, ntrunc)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
-                                                                   !! structure.
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity,
                                                                    !! in m s-1.
@@ -616,7 +617,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   call PressureForce_init(Time, G, GV, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
-  call vertvisc_init(MIS, Time, G, GV, param_file, diag, CS%ADp, dirs, &
+  call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
     "initialize_dyn_unsplit_RK2 called with setVisc_CSp unassociated.")
