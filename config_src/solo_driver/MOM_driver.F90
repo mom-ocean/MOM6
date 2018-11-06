@@ -56,6 +56,7 @@ program MOM_main
   use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
   use MOM_time_manager,    only : NO_CALENDAR
   use MOM_tracer_flow_control, only : tracer_flow_control_CS
+  use MOM_unit_scaling,    only : unit_scale_type
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
@@ -89,6 +90,8 @@ program MOM_main
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid
   type(verticalGrid_type), pointer :: GV
+  ! A pointer to a structure containing dimensional unit scaling factors.
+  type(unit_scale_type), pointer :: US
 
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
@@ -312,7 +315,7 @@ program MOM_main
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
 
-  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, C_p=fluxes%C_p)
+  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p=fluxes%C_p)
   Master_Time = Time
 
   call callTree_waypoint("done initialize_MOM")
@@ -335,7 +338,7 @@ program MOM_main
   call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
-    call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
+    call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
   else
     call MOM_wave_interface_init_lite(param_file)
   endif
@@ -491,7 +494,7 @@ program MOM_main
     fluxes%dt_buoy_accum = dt_forcing
 
     if (use_waves) then
-      call Update_Surface_Waves(grid,GV,time,time_step_ocean,waves_csp)
+      call Update_Surface_Waves(grid, GV, US, time, time_step_ocean, waves_csp)
     endif
 
     if (ns==1) then

@@ -11,6 +11,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -73,9 +74,10 @@ end subroutine seamount_initialize_topography
 
 !> Initialization of thicknesses.
 !! This subroutine initializes the layer thicknesses to be uniform.
-subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_params)
+subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -101,7 +103,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
+                 units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 

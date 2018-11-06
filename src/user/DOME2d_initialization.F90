@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -84,9 +85,10 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
 end subroutine DOME2d_initialize_topography
 
 !> Initialize thicknesses according to coordinate mode
-subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params )
+subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_params )
   type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -115,7 +117,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
     call MOM_mesg("MOM_initialization.F90, DOME2d_initialize_thickness: setting thickness")
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
-                 default=1.e-3, units="m", do_not_log=.true., scale=GV%m_to_Z)
+                 default=1.e-3, units="m", do_not_log=.true., scale=US%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &

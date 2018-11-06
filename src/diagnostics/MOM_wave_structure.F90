@@ -17,6 +17,7 @@ use MOM_EOS,           only : calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : log_version, param_file_type, get_param
 use MOM_grid,          only : ocean_grid_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -82,28 +83,28 @@ contains
 !!   For n=1,2,3,...
 !!     Solve (A-lam*I)e = e_guess for e
 !!     Set e_guess=e/|e| and repeat, with each iteration refining the estimate of e
-subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid
-                                                                !! structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H
-                                                                !! (usually m or kg m-2).
-  type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure pointing to various
-                                                                !! thermodynamic variables.
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn   !< The (non-rotational) mode
-                                                                !! internal gravity wave speed,
-                                                                !! in m s-1.
+subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halos)
+  type(ocean_grid_type),                    intent(in)  :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),                  intent(in)  :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thicknesses, in H
+                                                              !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                    intent(in)  :: tv !< A structure pointing to various
+                                                              !! thermodynamic variables.
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode
+                                                              !! internal gravity wave speed,
+                                                              !! in m s-1.
   integer,                                  intent(in)  :: ModeNum !< Mode number
   real,                                     intent(in)  :: freq !< Intrinsic wave frequency, in s-1.
-  type(wave_structure_CS),                  pointer     :: CS   !< The control structure returned
-                                                                !! by a previous call to
-                                                                !! wave_structure_init.
+  type(wave_structure_CS),                  pointer     :: CS !< The control structure returned
+                                                              !! by a previous call to
+                                                              !! wave_structure_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                                  optional, intent(in)  :: En   !< Internal wave energy density,
-                                                                !! in Jm-2.
+                                  optional, intent(in)  :: En !< Internal wave energy density,
+                                                              !! in Jm-2.
   logical,optional,                         intent(in)  :: full_halos !< If true, do the calculation
-                                                                !! over the entire computational
-                                                                !! domain.
+                                                              !! over the entire computational
+                                                              !! domain.
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
@@ -367,7 +368,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = GV%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              N2(K) = US%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
             N2(1) = N2(2) ; N2(kc+1) = N2(kc)
@@ -388,7 +389,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             ! Frist, populate interior rows
             do K=3,kc-1
               row = K-1 ! indexing for TD matrix rows
-              gp_unscaled = GV%m_to_Z*gprime(K)
+              gp_unscaled = US%m_to_Z*gprime(K)
               lam_z(row) = lam*gp_unscaled
               a_diag(row) = gp_unscaled*(-Igu(K))
               b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
@@ -400,14 +401,14 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             enddo
             ! Populate top row of tridiagonal matrix
             K=2 ; row = K-1 ;
-            gp_unscaled = GV%m_to_Z*gprime(K)
+            gp_unscaled = US%m_to_Z*gprime(K)
             lam_z(row) = lam*gp_unscaled
             a_diag(row) = 0.0
             b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
             c_diag(row) = gp_unscaled*(-Igl(K))
             ! Populate bottom row of tridiagonal matrix
             K=kc ; row = K-1
-            gp_unscaled = GV%m_to_Z*gprime(K)
+            gp_unscaled = US%m_to_Z*gprime(K)
             lam_z(row) = lam*gp_unscaled
             a_diag(row) = gp_unscaled*(-Igu(K))
             b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)

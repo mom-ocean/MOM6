@@ -4,6 +4,7 @@ module MOM_isopycnal_slopes
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : int_specific_vol_dp, calculate_density_derivs
@@ -17,10 +18,11 @@ public calc_isoneutral_slopes
 contains
 
 !> Calculate isopycnal slopes, and optionally return N2 used in calculation.
-subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
+subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
                                   slope_x, slope_y, N2_u, N2_v, halo) !, eta_to_m)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (in Z or units
                                                                      !! given by 1/eta_to_m)
@@ -114,7 +116,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = (GV%g_Earth*L_to_Z*GV%m_to_Z) / GV%Rho0
+  G_Rho0 = (GV%g_Earth*L_to_Z*US%m_to_Z) / GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.

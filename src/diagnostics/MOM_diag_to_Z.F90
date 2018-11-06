@@ -6,17 +6,18 @@ module MOM_diag_to_Z
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domains,       only : pass_var
 use MOM_coms,          only : reproducing_sum
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
 use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_diag_mediator, only : ocean_register_diag
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : slasher, vardesc, query_vardesc, modify_vardesc
 use MOM_spatial_means, only : global_layer_mean
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : p3d, p2d
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -138,9 +139,10 @@ function global_z_mean(var, G, GV, CS, tracer)
 end function global_z_mean
 
 !> This subroutine maps tracers and velocities into depth space for diagnostics.
-subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
+subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -202,7 +204,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
 
   ! Update the halos
   if (ice_shelf) then
-    do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; ssh(i,j) = GV%m_to_Z*ssh_in(i,j) ; enddo ; enddo
+    do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; ssh(i,j) = US%m_to_Z*ssh_in(i,j) ; enddo ; enddo
     call pass_var(ssh, G%Domain)
   endif
 
@@ -242,8 +244,8 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
         h_f(k2,I) = Angstrom ; u_f(k2,I) = 0.0
         ! GM: D_pt is always slightly larger (by 1E-6 or so) than shelf_depth, so
         ! I consider that the ice shelf is grounded for diagnostic purposes when
-        ! shelf_depth(I) + 1.0E-3*GV%m_to_Z > D_pt(i)
-        if (ice_shelf .and. (shelf_depth(I) + 1.0E-3*GV%m_to_Z > D_pt(i))) nk_valid(I)=0
+        ! shelf_depth(I) + 1.0E-3*US%m_to_Z > D_pt(i)
+        if (ice_shelf .and. (shelf_depth(I) + 1.0E-3*US%m_to_Z > D_pt(i))) nk_valid(I)=0
       endif ; enddo
 
 
@@ -337,7 +339,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
         h_f(k2,i) = Angstrom ; v_f(k2,i) = 0.0
-        if (ice_shelf .and. shelf_depth(i) + 1.0E-3*GV%m_to_Z > D_pt(i)) nk_valid(I)=0
+        if (ice_shelf .and. shelf_depth(i) + 1.0E-3*US%m_to_Z > D_pt(i)) nk_valid(I)=0
       endif ; enddo
 
       do i=is,ie ; if (nk_valid(i) > 0) then
@@ -422,7 +424,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, CS)
         if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 2.0*Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = h(i,j,k)
-          if (ice_shelf .and. shelf_depth(I) + 1.0E-3*GV%m_to_Z > D_pt(i)) nk_valid(I)=0
+          if (ice_shelf .and. shelf_depth(I) + 1.0E-3*US%m_to_Z > D_pt(i)) nk_valid(I)=0
           do m=1,CS%num_tr_used ; tr_f(k2,m,i) = CS%tr_model(m)%p(i,j,k) ; enddo
         endif
       enddo ; enddo
@@ -953,10 +955,11 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 end subroutine register_Z_tracer_low
 
 !> This subroutine sets parameters that control Z-space diagnostic output.
-subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
+subroutine MOM_diag_to_Z_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Struct to regulate diagnostic output.
   type(diag_to_Z_CS),      pointer       :: CS   !< Pointer to point to control structure for
@@ -999,7 +1002,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
     in_dir = slasher(in_dir)
     call get_Z_depths(trim(in_dir)//trim(zgrid_file), "zw", CS%Z_int, "zt", &
                       z_axis, zint_axis, CS%nk_zspace)
-    do K=1,CS%nk_zspace+1 ; CS%Z_int(K) = GV%m_to_Z*CS%Z_int(K) ; enddo
+    do K=1,CS%nk_zspace+1 ; CS%Z_int(K) = US%m_to_Z*CS%Z_int(K) ; enddo
     call log_param(param_file, mdl, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
                    trim(in_dir)//trim(zgrid_file))
     call log_param(param_file, mdl, "!NK_ZSPACE (from file)", CS%nk_zspace, &

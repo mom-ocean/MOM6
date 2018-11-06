@@ -8,6 +8,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 implicit none ; private
@@ -19,9 +20,10 @@ public external_gwave_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the external_gwave experiment.
-subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_params)
+subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -50,7 +52,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
                  "The vertical displacement of the SSH anomaly. ", units="m", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read, scale=GV%m_to_Z)
+                 fail_if_missing=.not.just_read, do_not_log=just_read, scale=US%m_to_Z)
   call get_param(param_file, mdl, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
                  "The lateral width of the SSH anomaly. ", units="coordinate", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
