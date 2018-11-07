@@ -9,6 +9,7 @@ use MOM_diag_mediator, only : diag_ctrl, Time_type, post_data, register_diag_fie
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_specific_vol_derivs, calculate_density
@@ -40,9 +41,10 @@ contains
 
 !> This subroutine helps test the accuracy of the diapycnal mixing energy requirement code
 !! by writing diagnostics, possibly using an intensely mixing test profile of diffusivity
-subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
+subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   type(ocean_grid_type),          intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),          intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke), &
                                   intent(in)    :: h_3d !< Layer thickness before entrainment, in H.
   type(thermo_var_ptrs),          intent(inout) :: tv   !< A structure containing pointers to any
@@ -88,7 +90,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
         h_bot(K) = h_bot(K+1) + h_col(k)
       enddo
 
-      ustar = 0.01*GV%m_to_Z ! Change this to being an input parameter?
+      ustar = 0.01*US%m_to_Z ! Change this to being an input parameter?
       absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                    (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
       Kd(1) = 0.0 ; Kd(nz+1) = 0.0
@@ -99,7 +101,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
       enddo
     endif
     may_print = is_root_PE() .and. (i==ie) .and. (j==je)
-    call diapyc_energy_req_calc(h_col, T0, S0, Kd, energy_Kd, dt, tv, G, GV, &
+    call diapyc_energy_req_calc(h_col, T0, S0, Kd, energy_Kd, dt, tv, G, GV, US, &
                                 may_print=may_print, CS=CS)
   endif ; enddo ; enddo
 
@@ -112,9 +114,10 @@ end subroutine diapyc_energy_req_test
 !! The various estimates are taken because they will later be used as templates
 !! for other bits of code
 subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
-                                  G, GV, may_print, CS)
+                                  G, GV, US, may_print, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
                                                   !! in H (m or kg m-2).
   real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures, in degC.
@@ -274,7 +277,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     h_tr(k) = h_in(k)
     htot = htot + h_tr(k)
     pres(K+1) = pres(K) + GV%H_to_Pa * h_tr(k)
-    pres_Z(K+1) = GV%Z_to_m * pres(K+1)
+    pres_Z(K+1) = US%Z_to_m * pres(K+1)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
     Z_int(K+1) = Z_int(K) - h_tr(k)
   enddo
@@ -298,8 +301,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     dPres = GV%H_to_Pa * h_tr(k)
     dT_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dT(k)
     dS_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dS(k)
-    dT_to_dColHt(k) = dMass * GV%m_to_Z * dSV_dT(k) * CS%ColHt_scaling
-    dS_to_dColHt(k) = dMass * GV%m_to_Z * dSV_dS(k) * CS%ColHt_scaling
+    dT_to_dColHt(k) = dMass * US%m_to_Z * dSV_dT(k) * CS%ColHt_scaling
+    dS_to_dColHt(k) = dMass * US%m_to_Z * dSV_dS(k) * CS%ColHt_scaling
   enddo
 
 !  PE_chg_k(1) = 0.0 ; PE_chg_k(nz+1) = 0.0
@@ -934,7 +937,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((GV%g_Earth*GV%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*US%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
@@ -945,7 +948,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((GV%g_Earth*GV%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*US%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo
@@ -1259,10 +1262,11 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 end subroutine find_PE_chg_orig
 
 !> Initialize parameters and allocate memory associated with the diapycnal energy requirement module.
-subroutine diapyc_energy_req_init(Time, G, GV, param_file, diag, CS)
+subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),            intent(in)    :: Time        !< model time
   type(ocean_grid_type),      intent(in)    :: G           !< model grid structure
   type(verticalGrid_type),    intent(in)    :: GV          !< ocean vertical grid structure
+  type(unit_scale_type),      intent(in)    :: US          !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file  !< file to parse for parameter values
   type(diag_ctrl),    target, intent(inout) :: diag        !< structure to regulate diagnostic output
   type(diapyc_energy_req_CS), pointer       :: CS          !< module control structure
@@ -1303,10 +1307,10 @@ subroutine diapyc_energy_req_init(Time, G, GV, param_file, diag, CS)
   CS%id_Kddt = register_diag_field('ocean_model', 'EnReqTest_Kddt', diag%axesZi, Time, &
                  "Implicit diffusive coupling coefficient", "m", conversion=GV%H_to_m)
   CS%id_Kd = register_diag_field('ocean_model', 'EnReqTest_Kd', diag%axesZi, Time, &
-                 "Diffusivity in test", "m2 s-1", conversion=GV%Z_to_m**2)
+                 "Diffusivity in test", "m2 s-1", conversion=US%Z_to_m**2)
   CS%id_h   = register_diag_field('ocean_model', 'EnReqTest_h_lay', diag%axesZL, Time, &
                  "Test column layer thicknesses", "m", conversion=GV%H_to_m)
-  CS%id_zInt   = register_diag_field('ocean_model', 'EnReqTest_z_int', diag%axesZi, Time, &
+  CS%id_zInt = register_diag_field('ocean_model', 'EnReqTest_z_int', diag%axesZi, Time, &
                  "Test column layer interface heights", "m", conversion=GV%H_to_m)
   CS%id_CHCt = register_diag_field('ocean_model', 'EnReqTest_CHCt', diag%axesZi, Time, &
                  "Column Height Correction to Energy Requirements, top-down", "J m-2")
