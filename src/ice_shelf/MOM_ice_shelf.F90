@@ -1377,6 +1377,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   call destroy_dyn_horgrid(dG)
 
+  !### Rescale the topography in the grid, and record the units.
+
   ! Set up the restarts.
   call restart_init(param_file, CS%restart_CSp, "Shelf.res")
   call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &

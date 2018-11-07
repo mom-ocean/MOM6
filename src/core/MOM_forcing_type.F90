@@ -856,9 +856,9 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
-  depthBeforeScalingFluxes = max( GV%Angstrom, 1.e-30*GV%m_to_H )
+  depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = GV%g_Earth / GV%Rho0
+  GoRho       = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 
@@ -2355,7 +2355,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       ! endif
         if (associated(fluxes%heat_added))         res(i,j) = res(i,j) + fluxes%heat_added(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_heat_surface, res, diag)
+      if (handles%id_net_heat_surface > 0) call post_data(handles%id_net_heat_surface, res, diag)
 
       if (handles%id_total_net_heat_surface > 0) then
         total_transport = global_area_integral(res,G)

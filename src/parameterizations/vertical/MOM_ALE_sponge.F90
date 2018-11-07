@@ -18,10 +18,11 @@ use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
-use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
+use MOM_verticalGrid, only : verticalGrid_type
 ! GMM - Planned extension:  Support for time varying sponge targets.
 
 implicit none ; private
@@ -139,7 +140,8 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                                                              !! to parse for model parameter values (in).
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
                                                      !! structure for this module (in/out).
-  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge input layers.
+  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge
+                                                     !! input layers, in thickness units (H).
 
 
 ! This include declares and sets the variable "version".
@@ -330,7 +332,7 @@ end function get_ALE_sponge_nz_data
 subroutine get_ALE_sponge_thicknesses(G, data_h, sponge_mask, CS)
   type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
   real, allocatable, dimension(:,:,:), &
-                         intent(inout) :: data_h !< The thicknesses of the sponge input layers.
+                         intent(inout) :: data_h !< The thicknesses of the sponge input layers, in H.
   logical, dimension(SZI_(G),SZJ_(G)), &
                          intent(out)   :: sponge_mask !< A logical mask that is true where
                                                  !! sponges are being applied.
@@ -579,20 +581,22 @@ end subroutine set_up_ALE_sponge_field_fixed
 
 !> This subroutine stores the reference profile at h points for the variable
 !! whose address is given by filename and fieldname.
-subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, CS)
-  character(len=*),      intent(in) :: filename !< The name of the file with the
-                                                !! time varying field data
-  character(len=*),      intent(in) :: fieldname !< The name of the field in the file
-                                                !! with the time varying field data
-  type(time_type),       intent(in) :: Time  !< The current model time
-  type(ocean_grid_type), intent(in) :: G     !< Grid structure (in).
+subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, f_ptr, CS)
+  character(len=*),        intent(in) :: filename !< The name of the file with the
+                                                  !! time varying field data
+  character(len=*),        intent(in) :: fieldname !< The name of the field in the file
+                                                  !! with the time varying field data
+  type(time_type),         intent(in) :: Time  !< The current model time
+  type(ocean_grid_type),   intent(in) :: G     !< Grid structure (in).
+  type(verticalGrid_type), intent(in) :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                 target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
-  type(ALE_sponge_CS),   pointer    :: CS    !< Sponge control structure (in/out).
+                   target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
+  type(ALE_sponge_CS),     pointer    :: CS    !< Sponge control structure (in/out).
 
+  ! Local variables
   real, allocatable, dimension(:,:,:) :: sp_val !< Field to be used in the sponge
   real, allocatable, dimension(:,:,:) :: mask_z !< Field mask for the sponge data
-  real, allocatable, dimension(:), target :: z_in, z_edges_in
+  real, allocatable, dimension(:), target :: z_in, z_edges_in ! Heights in Z.
   real :: missing_value
   integer :: j, k, col
   integer :: isd,ied,jsd,jed
@@ -602,9 +606,9 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
   character(len=256) :: mesg ! String for error messages
 
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: hsrc
+  real, dimension(:), allocatable :: hsrc ! Source thicknesses in Z
   real, dimension(:), allocatable :: tmpT1d
-  real :: zTopOfCell, zBottomOfCell
+  real :: zTopOfCell, zBottomOfCell ! Heights in Z
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   if (.not.associated(CS)) return
@@ -647,9 +651,8 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
   ! In the future, this should be generalized using an interface to return the
   ! modulo attribute of the zonal axis (mjh).
 
- ! call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in,&
- !                                    missing_value,.true.,&
- !                                    .false.,.false.)
+ ! call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
+ !                                     missing_value, .true., .false., .false., m_to_Z=GV%m_to_Z)
 
 ! Do not think halo updates are needed (mjh)
 !  call pass_var(sp_val,G%Domain)
@@ -682,7 +685,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
     hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(CS%col_i(col),CS%col_j(col)) )
     CS%Ref_val(CS%fldno)%h(1:nz_data,col) = 0.
     CS%Ref_val(CS%fldno)%p(1:nz_data,col) = -1.e24
-    CS%Ref_val(CS%fldno)%h(1:nz_data,col) = hsrc(1:nz_data)
+    CS%Ref_val(CS%fldno)%h(1:nz_data,col) = GV%Z_to_H*hsrc(1:nz_data)
 !    CS%Ref_val(CS%fldno)%p(1:nz_data,col) = tmpT1d(1:nz_data)
   enddo
 
@@ -736,7 +739,8 @@ end subroutine set_up_ALE_sponge_vel_field_fixed
 
 !> This subroutine stores the reference profile at uand v points for the variable
 !! whose address is given by u_ptr and v_ptr.
-subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v,fieldname_v, Time, G, CS, u_ptr, v_ptr)
+subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename_v, fieldname_v, &
+                                               Time, G, CS, u_ptr, v_ptr)
   character(len=*), intent(in)    :: filename_u  !< File name for u field
   character(len=*), intent(in)    :: fieldname_u !< Name of u variable in file
   character(len=*), intent(in)    :: filename_v  !< File name for v field
@@ -793,8 +797,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
   ! modulo attribute of the zonal axis (mjh).
 
   call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id,Time, 1.0,G,u_val,mask_u,z_in,z_edges_in,&
-                                     missing_value,.true.,&
-                                     .false.,.false.)
+                                     missing_value,.true.,.false.,.false., m_to_Z=1.0/G%Zd_to_m)
 
 !!! TODO: add a velocity interface! (mjh)
 
@@ -803,9 +806,8 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
   ! In the future, this should be generalized using an interface to return the
   ! modulo attribute of the zonal axis (mjh).
 
-  call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,v_val,mask_v,z_in,z_edges_in,&
-                                     missing_value,.true.,&
-                                     .false.,.false.)
+  call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,v_val,mask_v,z_in,z_edges_in, &
+                                     missing_value,.true.,.false.,.false., m_to_Z=1.0/G%Zd_to_m)
 
   ! stores the reference profile
   allocate(CS%Ref_val_u%p(fld_sz(3),CS%num_col_u))
@@ -832,10 +834,11 @@ end subroutine set_up_ALE_sponge_vel_field_varying
 
 !> This subroutine applies damping to the layers thicknesses, temp, salt and a variety of tracers
 !! for every column where there is damping.
-subroutine apply_ALE_sponge(h, dt, G, CS, Time)
+subroutine apply_ALE_sponge(h, dt, G, GV, CS, Time)
   type(ocean_grid_type),     intent(inout) :: G  !< The ocean's grid structure (in).
+  type(verticalGrid_type),   intent(in)    :: GV !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(inout) :: h  !< Layer thickness, in m (in)
+                             intent(inout) :: h  !< Layer thickness, in H (in)
   real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_sponge (in).
@@ -844,6 +847,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
   real :: damp                                  ! The timestep times the local damping coefficient.  ND.
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp).  Nondimensional.
   real :: Idt                                   ! 1.0/dt, in s-1.
+  real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
   real, dimension(SZK_(G)) :: tmp_val1          ! data values remapped to model grid
   real :: hu(SZIB_(G), SZJ_(G), SZK_(G))        ! A temporary array for h at u pts
@@ -853,10 +857,17 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
   real, allocatable, dimension(:), target :: z_in, z_edges_in
   real :: missing_value
+  real :: h_neglect, h_neglect_edge
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
+
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   if (CS%new_sponges) then
     if (.not. present(Time)) &
@@ -871,8 +882,8 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
       sp_val(:,:,:)=0.0
       mask_z(:,:,:)=0.0
 
-      call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in,&
-                                     missing_value,.true., .false.,.false.)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
+                                          missing_value,.true., .false.,.false., m_to_Z=GV%m_to_Z)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)
@@ -883,7 +894,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
         CS%Ref_val(m)%p(1:nz_data,c) = sp_val(i,j,1:nz_data)
         do k=2,nz_data
 !          if (mask_z(i,j,k)==0.) &
-          if (CS%Ref_val(m)%h(k,c) <= 0.001) &
+          if (CS%Ref_val(m)%h(k,c) <= 0.001*GV%m_to_H) &
             ! some confusion here about why the masks are not correct returning from horiz_interp
             ! reverting to using a minimum thickness criteria
             CS%Ref_val(m)%p(k,c) = CS%Ref_val(m)%p(k-1,c)
@@ -907,13 +918,11 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
       I1pdamp = 1.0 / (1.0 + damp)
       tmp_val2(1:nz_data) = CS%Ref_val(m)%p(1:nz_data,c)
       if (CS%new_sponges) then
-        call remapping_core_h(CS%remap_cs, &
-           nz_data, CS%Ref_val(m)%h(1:nz_data,c), tmp_val2, &
-           CS%nz, h(i,j,:), tmp_val1)
+        call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val(m)%h(1:nz_data,c), tmp_val2, &
+                 CS%nz, h(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
       else
-        call remapping_core_h(CS%remap_cs, &
-           nz_data, CS%Ref_h%p(1:nz_data,c), tmp_val2, &
-           CS%nz, h(i,j,:), tmp_val1)
+        call remapping_core_h(CS%remap_cs,nz_data, CS%Ref_h%p(1:nz_data,c), tmp_val2, &
+                 CS%nz, h(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
       endif
       !Backward Euler method
       CS%var(m)%p(i,j,1:CS%nz) = I1pdamp * (CS%var(m)%p(i,j,1:CS%nz) + tmp_val1 * damp)
@@ -924,7 +933,8 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
   ! for debugging
   !c=CS%num_col
   !do m=1,CS%fldno
-  !   write(*,*)'APPLY SPONGE,m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1',m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1
+  !   write(*,*) 'APPLY SPONGE,m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1',&
+  !               m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1
   !enddo
 
   if (CS%sponge_uv) then
@@ -942,9 +952,8 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
       allocate(sp_val(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       allocate(mask_z(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
 ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in,&
-                                     missing_value,.true.,&
-                                     .false.,.false.)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
+                                     missing_value, .true., .false., .false., m_to_Z=GV%m_to_Z)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)
@@ -962,9 +971,8 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
       allocate(sp_val(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       allocate(mask_z(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
 ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in,&
-                                     missing_value,.true.,&
-                                     .false.,.false.)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
+                                     missing_value, .true., .false., .false., m_to_Z=GV%m_to_Z)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)
@@ -989,13 +997,11 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
        if (CS%new_sponges) nz_data = CS%Ref_val(m)%nz_data
        tmp_val2(1:nz_data) = CS%Ref_val_u%p(1:nz_data,c)
        if (CS%new_sponges) then
-         call remapping_core_h(CS%remap_cs, &
-                  nz_data, CS%Ref_val_u%h(:,c), tmp_val2, &
-                  CS%nz, hu(i,j,:), tmp_val1)
+         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val_u%h(:,c), tmp_val2, &
+                  CS%nz, hu(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
        else
-         call remapping_core_h(CS%remap_cs, &
-                  nz_data, CS%Ref_hu%p(:,c), tmp_val2, &
-                  CS%nz, hu(i,j,:), tmp_val1)
+         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_hu%p(:,c), tmp_val2, &
+                  CS%nz, hu(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
        endif
        !Backward Euler method
        CS%var_u%p(i,j,:) = I1pdamp * (CS%var_u%p(i,j,:) + tmp_val1 * damp)
@@ -1012,13 +1018,11 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
        I1pdamp = 1.0 / (1.0 + damp)
        tmp_val2(1:nz_data) = CS%Ref_val_v%p(1:nz_data,c)
        if (CS%new_sponges) then
-         call remapping_core_h(CS%remap_cs, &
-                  CS%nz_data, CS%Ref_val_v%h(:,c), tmp_val2, &
-                  CS%nz, hv(i,j,:), tmp_val1)
+         call remapping_core_h(CS%remap_cs, CS%nz_data, CS%Ref_val_v%h(:,c), tmp_val2, &
+                  CS%nz, hv(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
        else
-         call remapping_core_h(CS%remap_cs, &
-                  CS%nz_data, CS%Ref_hv%p(:,c), tmp_val2, &
-                  CS%nz, hv(i,j,:), tmp_val1)
+         call remapping_core_h(CS%remap_cs, CS%nz_data, CS%Ref_hv%p(:,c), tmp_val2, &
+                  CS%nz, hv(i,j,:), tmp_val1, h_neglect, h_neglect_edge)
        endif
        !Backward Euler method
        CS%var_v%p(i,j,:) = I1pdamp * (CS%var_v%p(i,j,:) + tmp_val1 * damp)

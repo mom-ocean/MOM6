@@ -26,14 +26,12 @@ use MOM_io,               only : create_file, write_field, close_file
 use MOM_interface_heights,only : find_eta
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
 use MOM_regridding,       only : uniformResolution
-use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
+use MOM_regridding,       only : inflate_vanished_layers_old
 use MOM_regridding,       only : set_target_densities_from_GV, set_target_densities
 use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultMinThickness
-use MOM_regridding,       only : set_regrid_max_depths
-use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
@@ -130,7 +128,7 @@ contains
 subroutine ALE_init( param_file, GV, max_depth, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
   type(verticalGrid_type), intent(in) :: GV         !< Ocean vertical grid structure
-  real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in m.
+  real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in Z.
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
@@ -205,14 +203,15 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  units="s", default=0.)
   call get_param(param_file, mdl, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
                  "The depth above which no time-filtering is applied. Above this depth\n"//&
-                 "final grid exactly matches the target (new) grid.", units="m", default=0.)
+                 "final grid exactly matches the target (new) grid.", &
+                 units="m", default=0., scale=GV%m_to_H)
   call get_param(param_file, mdl, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
                  "The depth below which full time-filtering is applied with time-scale\n"//&
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
-                 units="m", default=0.)
-  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*GV%m_to_H, &
-                                      depth_of_time_filter_deep=filter_deep_depth*GV%m_to_H)
+                 units="m", default=0., scale=GV%m_to_H)
+  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth, &
+                                      depth_of_time_filter_deep=filter_deep_depth)
   call get_param(param_file, mdl, "REGRID_USE_OLD_DIRECTION", local_logical, &
                  "If true, the regridding ntegrates upwards from the bottom for\n"//&
                  "interface positions, much as the main model does. If false\n"//&
@@ -249,7 +248,7 @@ subroutine ALE_register_diags(Time, G, GV, diag, CS)
   CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
       'Salinity before remapping', 'PSU')
   CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
-      'Interface Heights before remapping', 'm')
+      'Interface Heights before remapping', 'm', conversion=GV%Z_to_m)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
       'Change in interface height due to ALE regridding', 'm')
@@ -298,7 +297,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
-                                                                   !! last time step (m or Pa)
+                                                                   !! last time step in H (often m or Pa)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field (m/s)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
@@ -329,7 +328,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
   if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
   if (CS%id_e_preale > 0) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, eta_preale)
+    call find_eta(h, tv, G, GV, eta_preale)
     call post_data(CS%id_e_preale, eta_preale, CS%diag)
   endif
 
@@ -1098,7 +1097,7 @@ end subroutine pressure_gradient_ppm
 !> Initializes regridding for the main ALE algorithm
 subroutine ALE_initRegridding(GV, max_depth, param_file, mdl, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
-  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
+  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in Z.
   type(param_file_type),   intent(in)  :: param_file !< parameter file
   character(len=*),        intent(in)  :: mdl        !< Name of calling module
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
@@ -1120,7 +1119,7 @@ function ALE_getCoordinate( CS )
   type(ALE_CS), pointer    :: CS                  !< module control structure
 
   real, dimension(CS%nk+1) :: ALE_getCoordinate
-  ALE_getCoordinate(:) = getCoordinateInterfaces( CS%regridCS )
+  ALE_getCoordinate(:) = getCoordinateInterfaces( CS%regridCS, undo_scaling=.true. )
 
 end function ALE_getCoordinate
 
@@ -1171,7 +1170,7 @@ subroutine ALE_updateVerticalGridType(CS, GV)
   integer :: nk
 
   nk = GV%ke
-  GV%sInterface(1:nk+1) = getCoordinateInterfaces( CS%regridCS )
+  GV%sInterface(1:nk+1) = getCoordinateInterfaces( CS%regridCS, undo_scaling=.true. )
   GV%sLayer(1:nk) = 0.5*( GV%sInterface(1:nk) + GV%sInterface(2:nk+1) )
   GV%zAxisUnits = getCoordinateUnits( CS%regridCS )
   GV%zAxisLongName = getCoordinateShortName( CS%regridCS )
@@ -1196,7 +1195,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate")
-  ds(:)       = getCoordinateResolution( CS%regridCS )
+  ds(:)       = getCoordinateResolution( CS%regridCS, undo_scaling=.true. )
   dsi(1)      = 0.5*ds(1)
   dsi(2:GV%ke) = 0.5*( ds(1:GV%ke-1) + ds(2:GV%ke) )
   dsi(GV%ke+1) = 0.5*ds(GV%ke)
@@ -1225,7 +1224,7 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
   integer :: i, j, k
 
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
-    h(i,j,:) = GV%m_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
+    h(i,j,:) = GV%Z_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
   enddo ; enddo
 
 end subroutine ALE_initThicknessToCoord

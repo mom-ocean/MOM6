@@ -47,7 +47,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
     tr_in   ! The z-space array of tracer concentrations that is read in.
   real, allocatable, dimension(:) :: &
     z_edges, &  ! The depths of the cell edges or cell centers (depending on
-                ! the value of has_edges) in the input z* data.
+                ! the value of has_edges) in the input z* data, in depth units (Z).
     tr_1d, &    ! A copy of the input tracer concentrations in a column.
     wt, &   ! The fractional weight for each layer in the range between
             ! k_top and k_bot, nondim.
@@ -55,14 +55,14 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
     z2      ! of a z-cell that contributes to a layer, relative to the cell
             ! center and normalized by the cell thickness, nondim.
             ! Note that -1/2 <= z1 <= z2 <= 1/2.
-  real    :: e(SZK_(G)+1)  ! The z-star interface heights in m.
+  real    :: e(SZK_(G)+1)  ! The z-star interface heights in Z.
   real    :: landval    ! The tracer value to use in land points.
   real    :: sl_tr      ! The normalized slope of the tracer
                         ! within the cell, in tracer units.
   real    :: htot(SZI_(G)) ! The vertical sum of h, in m or kg m-2.
   real    :: dilate     ! The amount by which the thicknesses are dilated to
                         ! create a z-star coordinate, nondim or in m3 kg-1.
-  real    :: missing  ! The missing value for the tracer.
+  real    :: missing    ! The missing value for the tracer.
 
   logical :: has_edges, use_missing, zero_surface
   character(len=80) :: loc_msg
@@ -81,7 +81,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 
   ! Find out the number of input levels and read the depth of the edges,
   ! also modifying their sign convention to be monotonically decreasing.
-  call read_Z_edges(filename, tr_name, z_edges, nz_in, has_edges, use_missing, missing)
+  call read_Z_edges(filename, tr_name, z_edges, nz_in, has_edges, use_missing, &
+                    missing, scale=1.0/G%Zd_to_m)
   if (nz_in < 1) then
     tracer_Z_init = .false.
     return
@@ -269,7 +270,7 @@ end function tracer_Z_init
 !> This subroutine reads the vertical coordinate data for a field from a NetCDF file.
 !! It also might read the missing value attribute for that same field.
 subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
-                        use_missing, missing)
+                        use_missing, missing, scale)
   character(len=*), intent(in)    :: filename !< The name of the file to read from.
   character(len=*), intent(in)    :: tr_name !< The name of the tracer in the file.
   real, dimension(:), allocatable, &
@@ -280,6 +281,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   logical,          intent(inout) :: use_missing !< If false on input, see whether the tracer has a
                                              !! missing value, and if so return true
   real,             intent(inout) :: missing !< The missing value, if one has been found
+  real,             intent(in)    :: scale   !< A scaling factor for z_edges into new units.
 
   !   This subroutine reads the vertical coordinate data for a field from a
   ! NetCDF file.  It also might read the missing value attribute for that same field.
@@ -387,6 +389,8 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   do k=2,nz_edge ; if (z_edges(k) >= z_edges(k-1)) monotonic = .false. ; enddo
   if (.not.monotonic) &
     call MOM_error(WARNING,mdl//" "//trim(dim_msg)//" is not monotonic.")
+
+  if (scale /= 1.0) then ; do k=1,nz_edge ; z_edges(k) = scale*z_edges(k) ; enddo ; endif
 
 end subroutine read_Z_edges
 
