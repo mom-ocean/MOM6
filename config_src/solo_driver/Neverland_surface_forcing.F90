@@ -12,7 +12,7 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
+use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -48,15 +48,15 @@ contains
 !! Neverland forcing configuration.
 subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
-                                                    !! describe the surface state of the ocean.
+                                                         !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
-  type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
-  type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
-  ! Local variable
+  type(time_type),               intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),         intent(inout) :: G      !< Grid structure.
+  type(Neverland_surface_forcing_CS), pointer  :: CS     !< Control structure for this module.
+
+  ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
   real :: x, y
   real :: PI
   real :: tau_max, off
@@ -110,26 +110,26 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
 end subroutine Neverland_wind_forcing
 
 !> Returns the value of a cosine-bell function evaluated at x/L
- real function cosbell(x,L)
+real function cosbell(x,L)
 
-   real , intent(in) :: x       !< non-dimensional position
-   real , intent(in) :: L       !< non-dimensional width
-   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
+  real , intent(in) :: x       !< non-dimensional position
+  real , intent(in) :: L       !< non-dimensional width
+  real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
-   PI      = 4.0*atan(1.0)
-   cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
- end function cosbell
+  PI      = 4.0*atan(1.0)
+  cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
+end function cosbell
 
 !> Returns the value of a sin-spike function evaluated at x/L
- real function spike(x,L)
+real function spike(x,L)
 
-   real , intent(in) :: x       !< non-dimensional position
-   real , intent(in) :: L       !< non-dimensional width
-   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
+  real , intent(in) :: x       !< non-dimensional position
+  real , intent(in) :: L       !< non-dimensional width
+  real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
-   PI    = 4.0*atan(1.0)
-   spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
- end function spike
+  PI    = 4.0*atan(1.0)
+  spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
+end function spike
 
 
 !> Surface fluxes of buoyancy for the Neverland configurations.
@@ -218,7 +218,7 @@ subroutine Neverland_surface_forcing_init(Time, G, param_file, diag, CS)
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   ! Local variables
-  character(len=40)  :: mod = "Neverland_surface_forcing" ! This module's name.
+  character(len=40) :: mdl = "Neverland_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "Neverland_surface_forcing_init called with an associated "// &
@@ -229,31 +229,31 @@ subroutine Neverland_surface_forcing_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
 
-  call get_param(param_file, mod, "G_EARTH", CS%G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-! call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
+! call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
 !                "The background gustiness in the winds.", units="Pa", &
 !                default=0.02)
 
-  call get_param(param_file, mod, "RESTOREBUOY", CS%restorebuoy, &
+  call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
 
   if (CS%restorebuoy) then
-    call get_param(param_file, mod, "FLUXCONST", CS%flux_const, &
+    call get_param(param_file, mdl, "FLUXCONST", CS%flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&
                  "to the relative surface anomalies (akin to a piston \n"//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &

@@ -36,7 +36,7 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
                                                      !! structure.
   real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
-                                                     !! each interface, in m s-2.
+                                                     !! each interface, in m2 Z-1 s-2.
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
                                                      !! open file to parse for model
                                                      !! parameter values.
@@ -44,8 +44,8 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
                                                      !! equation of state.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_set_coord: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_set_coord: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
   Rlay(:) = 0.0
   g_prime(:) = 0.0
 
@@ -62,8 +62,8 @@ subroutine USER_initialize_topography(D, G, param_file, max_depth)
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_topography: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_topography: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   D(:,:) = 0.0
 
@@ -85,8 +85,8 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
   logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_thickness: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_thickness: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -112,8 +112,8 @@ subroutine USER_initialize_velocity(u, v, G, param_file, just_read_params)
   logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_velocity: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_velocity: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -137,14 +137,14 @@ subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, jus
                                                             !! parameter values.
   type(EOS_type),                            pointer     :: eqn_of_state !< Integer that selects the
                                                             !! equation of state.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will only
+                                                           !! read parameters without changing T & S.
 
   logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_init_temperature_salinity: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_init_temperature_salinity: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -158,24 +158,24 @@ subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, jus
 end subroutine USER_init_temperature_salinity
 
 !> Set up the sponges.
-subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
-  type(ocean_grid_type), intent(in) :: G               !< Ocean grid structure.
-  logical,               intent(in) :: use_temperature !< Whether to use potential
-                                                       !! temperature.
-  type(thermo_var_ptrs), intent(in) :: tv              !< A structure containing pointers
+subroutine USER_initialize_sponges(G, GV, use_temp, tv, param_file, CSp, h)
+  type(ocean_grid_type),   intent(in) :: G             !< Ocean grid structure.
+  type(verticalGrid_type), intent(in) :: GV            !< The ocean's vertical grid structure.
+  logical,                 intent(in) :: use_temp      !< If true, temperature and salinity are state variables.
+  type(thermo_var_ptrs),   intent(in) :: tv            !< A structure containing pointers
                                                        !! to any available thermodynamic
                                                        !! fields, potential temperature and
                                                        !! salinity or mixed layer density.
                                                        !! Absent fields have NULL ptrs.
-  type(param_file_type), intent(in) :: param_file      !< A structure indicating the
+  type(param_file_type),   intent(in) :: param_file    !< A structure indicating the
                                                        !! open file to parse for model
                                                        !! parameter values.
-  type(sponge_CS),       pointer    :: CSp             !< A pointer to the sponge control
-                                                       !! structure.
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)), intent(in) :: h !< Layer thicknesses.
+  type(sponge_CS),         pointer    :: CSp           !< A pointer to the sponge control structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h             !< Layer thicknesses, in units of H (m or kg m-2).
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_sponges: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_sponges: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   if (first_call) call write_user_log(param_file)
 
@@ -207,8 +207,8 @@ subroutine USER_set_rotation(G, param_file)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_set_rotation: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_set_rotation: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   if (first_call) call write_user_log(param_file)
 
@@ -237,10 +237,10 @@ end subroutine write_user_log
 !!  here are:
 !!  - u - Zonal velocity in m s-1.
 !!  - v - Meridional velocity in m s-1.
-!!  - h - Layer thickness in m.  (Must be positive.)
-!!  - G%bathyT - Basin depth in m.  (Must be positive.)
+!!  - h - Layer thickness in H.  (Must be positive.)
+!!  - G%bathyT - Basin depth in Z.  (Must be positive.)
 !!  - G%CoriolisBu - The Coriolis parameter, in s-1.
-!!  - GV%g_prime - The reduced gravity at each interface, in m s-2.
+!!  - GV%g_prime - The reduced gravity at each interface, in m2 Z-1 s-2.
 !!  - GV%Rlay - Layer potential density (coordinate variable), kg m-3.
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!  - T - Temperature in C.
