@@ -42,7 +42,7 @@ type, public :: regularize_layers_CS ; private
   real    :: h_def_tol4      !< The value of the relative thickness deficit at which to do
                              !! detrainment from the buffer layers to the interior at full
                              !! force, now 50% of the way from h_def_tol1 to 1.
-  real    :: Hmix_min        !< The minimum mixed layer thickness in m.
+  real    :: Hmix_min        !< The minimum mixed layer thickness in H.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
@@ -337,20 +337,20 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
     do K=1,nz_filt ; do i=is,ie ; if (do_i(i)) then
       if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else
         e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom_H)
 
       endif
       if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else
         e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom_H)
       endif
       if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else
         e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom_H)
       endif
       if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else
         e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom_H)
       endif
 
       wt = max(0.0, min(1.0, I_dtol*(def_rat_h(i,j)-CS%h_def_tol1)))
@@ -386,10 +386,10 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
       do k=nkmb+1,nz
         cols_left = .false.
         do i=is,ie ; if (more_ent_i(i)) then
-          if (h_2d(i,k) - GV%Angstrom > h_neglect) then
-            if (e_2d(i,nkmb+1)-e_filt(i,nkmb+1) > h_2d(i,k) - GV%Angstrom) then
-              h_add = h_2d(i,k) - GV%Angstrom
-              h_2d(i,k) = GV%Angstrom
+          if (h_2d(i,k) - GV%Angstrom_H > h_neglect) then
+            if (e_2d(i,nkmb+1)-e_filt(i,nkmb+1) > h_2d(i,k) - GV%Angstrom_H) then
+              h_add = h_2d(i,k) - GV%Angstrom_H
+              h_2d(i,k) = GV%Angstrom_H
             else
               h_add = e_2d(i,nkmb+1)-e_filt(i,nkmb+1)
               h_2d(i,k) = h_2d(i,k) - h_add
@@ -644,7 +644,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
           h_predicted = h_2d_init(i,k) + ((d_ea(i,k) - d_eb(i,k-1)) + &
                                           (d_eb(i,k) - d_ea(i,k+1)))
         endif
-        if (abs(h(i,j,k) - h_predicted) > MAX(1e-9*abs(h_predicted),GV%Angstrom)) &
+        if (abs(h(i,j,k) - h_predicted) > MAX(1e-9*abs(h_predicted),GV%Angstrom_H)) &
           call MOM_error(FATAL, "regularize_surface: d_ea mismatch.")
       endif ; enddo ; enddo
       do i=is,ie ; if (do_i(i)) then
@@ -773,7 +773,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   endif
   nkmb = GV%nk_rho_varies
   h_neglect = GV%H_subroundoff
-  Hmix_min = CS%Hmix_min * GV%m_to_H
+  Hmix_min = CS%Hmix_min
 
   ! Determine which zonal faces are problematic.
   do j=js,je ; do I=is-1,ie
@@ -876,9 +876,10 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
 end subroutine find_deficit_ratios
 
 !> Initializes the regularize_layers control structure
-subroutine regularize_layers_init(Time, G, param_file, diag, CS)
+subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for
                                                  !! run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate
@@ -916,7 +917,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
 
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
                  "The minimum mixed layer depth if the mixed layer depth \n"//&
-                 "is determined dynamically.", units="m", default=0.0)
+                 "is determined dynamically.", units="m", default=0.0, scale=GV%m_to_H)
   call get_param(param_file, mdl, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
                  "The value of the relative thickness deficit at which \n"//&
                  "to start modifying the layer structure when \n"//&

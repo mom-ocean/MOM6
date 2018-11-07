@@ -35,10 +35,13 @@ type, public :: surface
     SST, &         !< The sea surface temperature in C.
     SSS, &         !< The sea surface salinity in psu.
     sfc_density, & !< The mixed layer density in kg m-3.
-    Hml, &         !< The mixed layer depth in m.
-    u, &           !< The mixed layer zonal velocity in m s-1.
-    v, &           !< The mixed layer meridional velocity in m s-1.
-    sea_lev, &     !< The sea level in m. If a reduced surface gravity is used, it is compensated in sea_lev.
+    Hml, &      !< The mixed layer depth in m.
+    u, &        !< The mixed layer zonal velocity in m s-1.
+    v, &        !< The mixed layer meridional velocity in m s-1.
+    sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
+                !! used, that is compensated for in sea_lev.
+    melt_potential, & !< instantaneous amount of heat that can be used to melt sea ice,
+                      !! in J m-2. This is computed w.r.t. surface freezing temperature.
     ocean_mass, &  !< The total mass of the ocean in kg m-2.
     ocean_heat, &  !< The total heat content of the ocean in C kg m-2.
     ocean_salt, &  !< The total salt content of the ocean in kgSalt m-2.
@@ -192,11 +195,11 @@ type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
                              !! that is captured in Kd_shear.
   real, pointer, dimension(:,:) :: &
-    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points, in m.
-    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points, in m.
-    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in m2 s-1.
-    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in m2 s-1.
-    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in m s-1.
+    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points, in Z.
+    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points, in Z.
+    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in Z2 s-1.
+    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in Z2 s-1.
+    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in Z s-1.
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
                              !! energy, currently in units of m3 s-3, but will later be changed to W m-2.
@@ -204,13 +207,13 @@ type, public :: vertvisc_type
     taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves, in Pa.
     tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves, in Pa.
   real, pointer, dimension(:,:) :: tbl_thick_shelf_u => NULL()
-                !< Thickness of the viscous top boundary layer under ice shelves at u-points, in m.
+                !< Thickness of the viscous top boundary layer under ice shelves at u-points, in Z.
   real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
-                !< Thickness of the viscous top boundary layer under ice shelves at v-points, in m.
+                !< Thickness of the viscous top boundary layer under ice shelves at v-points, in Z.
   real, pointer, dimension(:,:) :: kv_tbl_shelf_u => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at u-points, in m2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at u-points, in Z2 s-1.
   real, pointer, dimension(:,:) :: kv_tbl_shelf_v => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at v-points, in m2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at v-points, in Z2 s-1.
   real, pointer, dimension(:,:) :: nkml_visc_u => NULL()
                 !< The number of layers in the viscous surface mixed layer at u-points (nondimensional).
                 !! This is not an integer because there may be fractional layers, and it is stored in
@@ -219,31 +222,31 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: nkml_visc_v => NULL()
                 !< The number of layers in the viscous surface mixed layer at v-points (nondimensional).
   real, pointer, dimension(:,:) :: &
-    MLD => NULL()       !< Instantaneous active mixing layer depth (H units).
+    MLD => NULL()      !< Instantaneous active mixing layer depth (H units).
   real, pointer, dimension(:,:,:) :: &
-    Ray_u => NULL(), &  !< The Rayleigh drag velocity to be applied to each layer at u-points, in m s-1.
-    Ray_v => NULL()     !< The Rayleigh drag velocity to be applied to each layer at v-points, in m s-1.
+    Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points, in Z s-1.
+    Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points, in Z s-1.
   real, pointer, dimension(:,:,:) :: Kd_extra_T => NULL()
                 !< The extra diffusivity of temperature due to double diffusion relative to the
-                !! diffusivity of density, in m2 s-1.
+                !! diffusivity of density, in Z2 s-1.
   real, pointer, dimension(:,:,:) :: Kd_extra_S => NULL()
                 !< The extra diffusivity of salinity due to double diffusion relative to the
-                !! diffusivity of density, in m2 s-1.
+                !! diffusivity of density, in Z2 s-1.
   ! One of Kd_extra_T and Kd_extra_S is always 0. Kd_extra_S is positive for salt fingering;
   ! Kd_extra_T is positive for double diffusive convection.  They are only allocated if
   ! DOUBLE_DIFFUSION is true.
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
-                !! in tracer columns, in m2 s-1.
+                !! in tracer columns, in Z2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_shear => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers
-                !! in tracer columns, in m2 s-1.
+                !! in tracer columns, in Z2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_shear_Bu => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers in
-                !! corner columns, in m2 s-1.
+                !! corner columns, in Z2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_slow  => NULL()
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
-                !! background, convection etc).
+                !! background, convection etc), in Z2 s-1.
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
                 !< The turbulent kinetic energy per unit mass at the interfaces, in m2 s-2.
                 !! This may be at the tracer or corner points
@@ -289,20 +292,22 @@ contains
 !> Allocates the fields for the surface (return) properties of
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
-                                  gas_fields_ocn)
-  type(ocean_grid_type), intent(in)    :: G               !< ocean grid structure
-  type(surface),         intent(inout) :: sfc_state       !< ocean surface state type to be allocated.
-  logical,     optional, intent(in)    :: use_temperature !< If true, allocate the space for thermodynamic variables.
-  logical,     optional, intent(in)    :: do_integrals    !< If true, allocate the space for vertically
-                                                          !! integrated fields.
+                                  gas_fields_ocn, use_meltpot)
+  type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
+  type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
+  logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
+  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically
+                                                           !! integrated fields.
   type(coupler_1d_bc_type), &
                optional, intent(in)    :: gas_fields_ocn  !< If present, this type describes the ocean
                                               !! ocean and surface-ice fields that will participate
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
+  logical,     optional, intent(in)    :: use_meltpot      !< If true, allocate the space for melt potential
 
-  logical :: use_temp, alloc_integ
+  ! local variables
+  logical :: use_temp, alloc_integ, use_melt_potential
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -312,6 +317,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 
   use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
+  use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
 
   if (sfc_state%arrays_allocated) return
 
@@ -325,6 +331,10 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   allocate(sfc_state%Hml(isd:ied,jsd:jed)) ; sfc_state%Hml(:,:) = 0.0
   allocate(sfc_state%u(IsdB:IedB,jsd:jed)) ; sfc_state%u(:,:) = 0.0
   allocate(sfc_state%v(isd:ied,JsdB:JedB)) ; sfc_state%v(:,:) = 0.0
+
+  if (use_melt_potential) then
+    allocate(sfc_state%melt_potential(isd:ied,jsd:jed)) ; sfc_state%melt_potential(:,:) = 0.0
+  endif
 
   if (alloc_integ) then
     ! Allocate structures for the vertically integrated ocean_mass, ocean_heat, and ocean_salt.
@@ -350,6 +360,7 @@ subroutine deallocate_surface_state(sfc_state)
 
   if (.not.sfc_state%arrays_allocated) return
 
+  if (allocated(sfc_state%melt_potential)) deallocate(sfc_state%melt_potential)
   if (allocated(sfc_state%SST)) deallocate(sfc_state%SST)
   if (allocated(sfc_state%SSS)) deallocate(sfc_state%SSS)
   if (allocated(sfc_state%sfc_density)) deallocate(sfc_state%sfc_density)
