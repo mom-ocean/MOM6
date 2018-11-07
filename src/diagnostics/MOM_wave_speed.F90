@@ -80,9 +80,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
   real :: lam, dlam, lam0
   real :: min_h_frac
-  real :: H_to_pres  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
+  real :: Z_to_Pa  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &  ! Thicknesses in m.
+    htot, hmin, &  ! Thicknesses in Z.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
@@ -129,16 +129,16 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
+  Z_to_Pa = GV%g_Earth * GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = GV%g_Earth * GV%Rho0
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,min_h_frac,use_EOS,T,S,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
-!$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS, &
-!$OMP                                  H_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2)  &
+!$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
+!$OMP                                  Z_to_Pa,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2)  &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
@@ -205,7 +205,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
       if (use_EOS) then
         pres(1) = 0.0
         do k=2,kf(i)
-          pres(k) = pres(k-1) + H_to_pres*Hf(k-1,i)
+          pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
           T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
           S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
         enddo
@@ -315,21 +315,18 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
           speed2_tot = 0.0
           if (l_use_ebt_mode) then
             Igu(1) = 0. ! Neumann condition for pressure modes
-            sum_hc = Hc(1)*GV%H_to_m  !### I believe this conversion factor to be wrong. -RWH
+            sum_hc = Hc(1)
             N2min = L2_to_Z2*gprime(2)/Hc(1)
             do k=2,kc
               hw = 0.5*(Hc(k-1)+Hc(k))
               gp = gprime(K)
               if (l_mono_N2_column_fraction>0. .or. l_mono_N2_depth>=0.) then
-                if (G%bathyT(i,j)-sum_hc < l_mono_N2_column_fraction*G%bathyT(i,j) .and. &
-                    L2_to_Z2*gp > N2min*hw) then
-                  ! Filters out regions where N2 increases with depth but only in a lower fraction of water column
-                  gp = N2min/hw  !### THIS IS DIMENSIONALLY INCONSISTENT! -RWH
-                  !### This should be gp = US%Z_to_m**2* (N2min*hw)
-                elseif (l_mono_N2_depth>=0. .and. sum_hc>l_mono_N2_depth .and. L2_to_Z2*gp>N2min*hw) then
-                  ! Filters out regions where N2 increases with depth but only below a certain depth
-                  gp = N2min/hw  !### THIS IS DIMENSIONALLY INCONSISTENT! -RWH
-                  !### This should be gp = US%Z_to_m**2* (N2min*hw)
+                if ( ((G%bathyT(i,j)-sum_hc < l_mono_N2_column_fraction*G%bathyT(i,j)) .or. &
+                      ((l_mono_N2_depth >= 0.) .and. (sum_hc > l_mono_N2_depth))) .and. &
+                     (L2_to_Z2*gp > N2min*hw) ) then
+                  ! Filters out regions where N2 increases with depth but only in a lower fraction
+                  ! of the water column or below a certain depth.
+                  gp = US%Z_to_m**2 * (N2min*hw)
                 else
                   N2min = L2_to_Z2 * gp/hw
                 endif
@@ -337,7 +334,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               Igu(k) = 1.0/(gp*Hc(k))
               Igl(k-1) = 1.0/(gp*Hc(k-1))
               speed2_tot = speed2_tot + gprime(k)*(Hc(k-1)+Hc(k))*0.707
-              sum_hc = sum_hc + Hc(k)*GV%H_to_m  !### I believe this conversion factor to be wrong. -RWH
+              sum_hc = sum_hc + Hc(k)
             enddo
            !Igl(kc) = 0. ! Neumann condition for pressure modes
             Igl(kc) = 2.*Igu(kc) ! Dirichlet condition for pressure modes
@@ -562,10 +559,9 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: min_h_frac
-  real :: H_to_pres  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
-  real :: H_to_m     ! Local copy of a unit conversion factor.
+  real :: Z_to_Pa  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &    ! Thicknesses in m.
+    htot, hmin, &    ! Thicknesses in Z.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot ! overestimate of the mode-1 speed squared, m2 s-2
   real :: speed2_min ! minimum mode speed (squared) to consider in root searching
@@ -577,8 +573,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
+  logical :: use_EOS    ! If true, density is calculated from T & S using the equation of state.
   real, dimension(SZK_(G)+1) :: z_int, N2
   integer :: nsub       ! number of subintervals used for root finding
   integer, parameter :: sub_it_max = 4
@@ -588,7 +583,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: kc, nrows
   integer :: sub, sub_it
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, row, iint, m, ig, jg
-  integer :: ig_need_sub, jg_need_sub ! for debugging (BDM)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -604,13 +598,11 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
-
-  H_to_pres = GV%g_Earth * GV%Rho0
-  H_to_m = GV%H_to_m
+  Z_to_Pa = GV%g_Earth * GV%Rho0
 
   min_h_frac = tol1 / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
-  !$OMP                                     H_to_pres,H_to_m,tv,cn,g_Rho0,nmodes)
+  !$OMP                                     Z_to_Pa,tv,cn,g_Rho0,nmodes)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -671,7 +663,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
         if (use_EOS) then
           pres(1) = 0.0
           do k=2,kf(i)
-            pres(k) = pres(k-1) + H_to_pres*Hf(k-1,i)
+            pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
             T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
@@ -842,22 +834,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               endif
             enddo
 
-            ! print resutls (for debugging only)
-            !if (ig == 83 .and. jg == 2) then
-            !  if (nmodes>1)then
-            !    print *,  "Results after finding first mode:"
-            !    print *, "first guess at lam_1=", 1./speed2_tot
-            !    print *, "final guess at lam_1=", lam_1
-            !    print *, "det value after iterations, det=", det
-            !    print *, "ddet value after iterations, det=", ddet
-            !    print *, "final guess at c1=", cn(i,j,1)
-            !    print *, "a_diag=",a_diag(1:nrows)
-            !    print *, "b_diag=",b_diag(1:nrows)
-            !    print *, "c_diag=",c_diag(1:nrows)
-            !    !stop
-            !  endif
-            !endif
-
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
             if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
@@ -872,15 +848,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               ! set number of intervals within search range
               numint = nint((lamMax - lamMin)/lamInc)
 
-              !if (ig == 144 .and. jg == 5) then
-              !  print *, 'Looking for other eigenvalues at', ig, jg
-              !  print *, 'Wave_speed: lamMin=',         lamMin
-              !  print *, 'Wave_speed: cnMax=',          1/sqrt(lamMin)
-              !  print *, 'Wave_speed: lamMax=',         lamMax
-              !  print *, 'Wave_speed: cnMin=',          1/sqrt(lamMax)
-              !  print *, 'Wave_speed: lamInc=',         lamInc
-              !endif
-
               !   Find intervals containing zero-crossings (roots) of the determinant
               ! that are beyond the first root
 
@@ -893,22 +860,11 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                 xl = xr - lamInc
                 call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
                                  nrows,xr,det_r,ddet_r)
-                !if (ig == 83 .and. jg == 2) then
-                !  print *, "Move interval"
-                !  print *, "iint=",iint
-                !  print *, "@ xr=",xr
-                !  print *, "det_r=",det_r
-                !  print *, "ddet_r=",ddet_r
-                !endif
                 if (det_l*det_r < 0.0) then  ! if function changes sign
                   if (det_l*ddet_l < 0.0) then ! if function at left is headed to zero
                     nrootsfound = nrootsfound + 1
                     xbl(nrootsfound) = xl
                     xbr(nrootsfound) = xr
-                    !if (ig == 144 .and. jg == 5) then
-                    !  print *, "Root located without subdivision!"
-                    !  print *, "between xbl=",xl,"and xbr=",xr
-                    !endif
                   else
                     !   function changes sign but has a local max/min in interval,
                     ! try subdividing interval as many times as necessary (or sub_it_max).
@@ -916,9 +872,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                     !call MOM_error(WARNING, "determinant changes sign"// &
                     !            "but has a local max/min in interval;"//&
                     !            " reduce increment in lam.")
-                    ig_need_sub = i + G%idg_offset ; jg_need_sub = j + G%jdg_offset
                     ! begin subdivision loop -------------------------------------------
-                    !print *, "subdividing interval at ig=",ig_need_sub,"jg=",jg_need_sub
                     sub_rootfound = .false. ! initialize
                     do sub_it=1,sub_it_max
                       nsub = 2**sub_it ! number of subintervals; nsub=2,4,8,...
@@ -933,10 +887,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                             nrootsfound = nrootsfound + 1
                             xbl(nrootsfound) = xl_sub
                             xbr(nrootsfound) = xr
-                            !if (ig == 144 .and. jg == 5) then
-                            !  print *, "Root located after subdiving",sub_it," times!"
-                            !  print *, "between xbl=",xl_sub,"and xbr=",xr
-                            !endif
                             exit ! exit sub loop
                           endif ! headed toward zero
                         endif ! sign change
@@ -994,23 +944,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
       else
         cn(i,j,:) = 0.0 ! This is a land point.
       endif ! if not land
-      ! ----- Spot check - comment out later (BDM) ----------
-      !ig = G%idg_offset + i
-      !jg = G%jdg_offset + j
-      !if (ig == 83 .and. jg == 2) then
-      !!  print *, "nmodes=",nmodes
-      !  print *, "lam_1=",lam_1
-      !  print *, "lamMin=",lamMin
-      !  print *, "lamMax=",lamMax
-      !  print *, "lamInc=",lamInc
-      !  print *, "nrootsfound=",nrootsfound
-      !  do m=1,nmodes
-      !    print *, "c",m,"= ", cn(i,j,m)
-      !    print *, "xbl",m,"= ", xbl(m)
-      !    print *, "xbr",m,"= ", xbr(m)
-      !  enddo
-      !endif
-      !-------------------------------------------------------
     enddo ! i-loop
   enddo ! j-loop
 
