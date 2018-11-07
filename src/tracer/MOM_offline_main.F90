@@ -450,7 +450,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   if (CS%id_eta_pre_distribute>0) then
     eta_work(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_pre(i,j,k)>GV%Angstrom) then
+      if (h_pre(i,j,k)>GV%Angstrom_H) then
         eta_work(i,j) = eta_work(i,j) + h_pre(i,j,k)
       endif
     enddo ; enddo ; enddo
@@ -583,7 +583,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   if (CS%id_eta_post_distribute>0) then
     eta_work(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_pre(i,j,k)>GV%Angstrom) then
+      if (h_pre(i,j,k)>GV%Angstrom_H) then
         eta_work(i,j) = eta_work(i,j) + h_pre(i,j,k)
       endif
     enddo ; enddo ; enddo
@@ -1057,7 +1057,7 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   ! Apply masks/factors at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (CS%G%mask2dT(i,j)<1.0) then
-      CS%h_end(i,j,k) = CS%GV%Angstrom
+      CS%h_end(i,j,k) = CS%GV%Angstrom_H
     endif
   enddo ; enddo ; enddo
 
