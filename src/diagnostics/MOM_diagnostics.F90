@@ -25,6 +25,7 @@ use MOM_interface_heights, only : find_eta
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean
 use MOM_spatial_means,     only : global_volume_mean, global_area_integral
 use MOM_tracer_registry,   only : tracer_registry_type, post_tracer_transport_diagnostics
+use MOM_unit_scaling,      only : unit_scale_type
 use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs, surface
 use MOM_verticalGrid,      only : verticalGrid_type, get_thickness_units
@@ -179,9 +180,10 @@ end type transport_diag_IDs
 contains
 !> Diagnostics not more naturally calculated elsewhere are computed here.
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
-                                       dt, diag_pre_sync, G, GV, CS, eta_bt)
+                                       dt, diag_pre_sync, G, GV, US, CS, eta_bt)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -284,7 +286,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, G, GV, CS%e, eta_bt)
+    call find_eta(h, tv, G, GV, US, CS%e, eta_bt)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
@@ -294,7 +296,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, G, GV, CS%e_D, eta_bt)
+      call find_eta(h, tv, G, GV, US, CS%e_D, eta_bt)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
@@ -450,7 +452,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     call post_data(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
-  call calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
+  call calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
 
   if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. associated(CS%h_Rlay) .or. &
       associated(CS%uh_Rlay) .or. associated(CS%vh_Rlay) .or. &
@@ -614,7 +616,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
-    call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+    call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,G,CS) &
@@ -655,12 +657,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   endif
   if ((CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
     if (CS%id_p_ebt>0) then
-      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
                       mono_N2_column_fraction=CS%mono_N2_column_fraction, &
                       mono_N2_depth=CS%mono_N2_depth, modal_structure=CS%p_ebt)
       call post_data(CS%id_p_ebt, CS%p_ebt, CS%diag)
     else
-      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
                       mono_N2_column_fraction=CS%mono_N2_column_fraction, &
                       mono_N2_depth=CS%mono_N2_depth)
     endif
@@ -758,9 +760,10 @@ end subroutine find_weights
 !> This subroutine calculates vertical integrals of several tracers, along
 !! with the mass-weight of these tracers, the total column mass, and the
 !! carefully calculated column height.
-subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
+subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
@@ -815,7 +818,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
   endif
 
   if (CS%id_col_ht > 0) then
-    call find_eta(h, tv, G, GV, z_top)
+    call find_eta(h, tv, G, GV, US, z_top)
     do j=js,je ; do i=is,ie
       z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
     enddo ; enddo
@@ -826,7 +829,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / (GV%g_Earth*GV%m_to_Z)
+        IG_Earth = 1.0 / (GV%g_Earth*US%m_to_Z)
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
         do k=1,nz
@@ -860,7 +863,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
       !     pbo = (mass * g) + p_surf
       ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = mass(i,j) * (GV%g_Earth*GV%m_to_Z)
+        btm_pres(i,j) = mass(i,j) * (GV%g_Earth*US%m_to_Z)
         if (associated(p_surf)) then
           btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif
@@ -1163,11 +1166,12 @@ end subroutine post_surface_dyn_diags
 
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
-subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
+subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv, &
                                     ssh, ssh_ibc)
   type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in) :: US  !< A dimensional unit scaling type
   type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
   real,                     intent(in) :: dt_int !< total time step associated with these diagnostics, in s.
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
@@ -1216,7 +1220,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, diag, dt_int, sfc_state, tv, &
   ! post total volume of the liquid ocean
   if (IDs%id_volo > 0) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + GV%Z_to_m*G%bathyT(i,j))
+      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + US%Z_to_m*G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(work_2d, G)
     call post_data(IDs%id_volo, volo, diag)
@@ -1391,7 +1395,7 @@ end subroutine post_transport_diagnostics
 
 !> This subroutine registers various diagnostics and allocates space for fields
 !! that other diagnostis depend upon.
-subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS, tv)
+subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag, CS, tv)
   type(ocean_internal_state), intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers to
                                                     !! the fields and accelerations that make up the
                                                     !! ocean's internal physical state.
@@ -1402,6 +1406,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(time_type),            intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file !< A structure to parse for run-time
                                                     !! parameters.
   type(diag_ctrl), target,    intent(inout) :: diag !< Structure to regulate diagnostic output.
@@ -1410,25 +1415,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(thermo_var_ptrs),      intent(in)    :: tv   !< A structure pointing to various
                                                     !! thermodynamic variables.
 
-! Arguments
-!  (in)     MIS    - For "MOM Internal State" a set of pointers to the fields and
-!                    accelerations that make up the ocean's internal physical
-!                    state.
-!  (inout)  ADp    - structure with pointers to momentum equation terms
-!  (inout)  CDp    - structure with pointers to continuity equation terms
-!  (in)     Time   - current model time
-!  (in)     G      - ocean grid structure
-!  (in)     GV     - The ocean's vertical grid structure.
-!  (in) param_file - structure indicating the open file to parse for
-!                     model parameter values
-!  (in)     diag   - structure to regulate diagnostic output
-!  (in/out) CS     - pointer set to point to control structure for this module
-
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-
-  character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
+  ! Local variables
   real :: omega, f2_min, convert_H
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: use_temperature
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
@@ -1534,11 +1525,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
-      'Interface Height Relative to Mean Sea Level', 'm', conversion=GV%Z_to_m)
+      'Interface Height Relative to Mean Sea Level', 'm', conversion=US%Z_to_m)
   if (CS%id_e>0) call safe_alloc_ptr(CS%e,isd,ied,jsd,jed,nz+1)
 
   CS%id_e_D = register_diag_field('ocean_model', 'e_D', diag%axesTi, Time, &
-      'Interface Height above the Seafloor', 'm', conversion=GV%Z_to_m)
+      'Interface Height above the Seafloor', 'm', conversion=US%Z_to_m)
   if (CS%id_e_D>0) call safe_alloc_ptr(CS%e_D,isd,ied,jsd,jed,nz+1)
 
   CS%id_Rml = register_diag_field('ocean_model', 'Rml', diag%axesTL, Time, &
@@ -1690,7 +1681,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'The column integrated in situ density', 'kg m-2')
 
   CS%id_col_ht = register_diag_field('ocean_model', 'col_height', diag%axesT1, Time, &
-      'The height of the water column', 'm', conversion=GV%Z_to_m)
+      'The height of the water column', 'm', conversion=US%Z_to_m)
   CS%id_pbo = register_diag_field('ocean_model', 'pbo', diag%axesT1, Time, &
       long_name='Sea Water Pressure at Sea Floor', standard_name='sea_water_pressure_at_sea_floor', &
       units='Pa')
@@ -1819,9 +1810,10 @@ subroutine register_transport_diags(Time, G, GV, IDs, diag)
 end subroutine register_transport_diags
 
 !> Offers the static fields in the ocean grid type for output via the diag_manager.
-subroutine write_static_fields(G, GV, tv, diag)
+subroutine write_static_fields(G, GV, US, tv, diag)
   type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
 
@@ -1897,7 +1889,7 @@ subroutine write_static_fields(G, GV, tv, diag)
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
         cmor_standard_name='sea_floor_depth_below_geoid', area=diag%axesT1%id_area, &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean', &
-        conversion=GV%Z_to_m)
+        conversion=US%Z_to_m)
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &

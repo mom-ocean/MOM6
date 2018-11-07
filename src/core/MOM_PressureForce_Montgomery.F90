@@ -9,6 +9,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -55,9 +56,10 @@ contains
 !! ie to ie, je to je range before this subroutine is called:
 !! h[ie+1] and h[je+1] and and (if tv%form_of_EOS is set) T[ie+1], S[ie+1],
 !! T[je+1], and S[je+1].
-subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
+subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure.
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness, in kg/m2.
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration due to pressure gradients
@@ -193,11 +195,11 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do k=1,nz ; do i=Isq,Ieq+1
-        SSH(i,j) = SSH(i,j) + (GV%m_to_Z*GV%H_to_kg_m2)*h(i,j,k)*alpha_Lay(k)
+        SSH(i,j) = SSH(i,j) + (US%m_to_Z*GV%H_to_kg_m2)*h(i,j,k)*alpha_Lay(k)
       enddo ; enddo ; enddo
     endif
 
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
@@ -353,9 +355,10 @@ end subroutine PressureForce_Mont_nonBouss
 !! ie to ie, je to je range before this subroutine is called:
 !!  h[ie+1] and h[je+1] and (if tv%form_of_EOS is set) T[ie+1], S[ie+1],
 !!  T[je+1], and S[je+1].
-subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
+subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure.
+  type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness, in m.
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration due to pressure gradients
@@ -443,7 +446,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
         e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=GV%m_to_Z)
+    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
   endif
 
 !    Here layer interface heights, e, are calculated.
@@ -807,10 +810,11 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, GFS_scale, pbce, alpha_star)
 end subroutine Set_pbce_nonBouss
 
 !> Initialize the Montgomery-potential form of PGF control structure
-subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(time_type), target, intent(in)    :: Time !< Current model time
   type(ocean_grid_type),   intent(in)    :: G  !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_Mont_CS),  pointer  :: CS !< Montgomery PGF control structure
@@ -862,7 +866,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
-        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=GV%Z_to_m)
+        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
   endif
 
   CS%GFS_scale = 1.0

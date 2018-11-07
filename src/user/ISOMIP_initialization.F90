@@ -13,6 +13,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists
 use MOM_io, only : MOM_read_data
 use MOM_io, only : slasher
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -117,9 +118,10 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
 end subroutine ISOMIP_initialize_topography
 
 !> Initialization of thicknesses
-subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_params)
+subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -150,7 +152,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
-                 'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read, scale=GV%m_to_Z)
+                 'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read, scale=US%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
@@ -399,9 +401,10 @@ end subroutine ISOMIP_initialize_temperature_salinity
 !> Sets up the the inverse restoration time (Idamp), and
 ! the values towards which the interface heights and an arbitrary
 ! number of tracers should be restored within each sponge.
-subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
+subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
                                             !! to any available thermodynamic
                                             !! fields, potential temperature and
@@ -442,7 +445,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call get_param(PF, mdl, "MIN_THICKNESS", min_thickness, "Minimum layer thickness", &
-                 units="m", default=1.e-3, scale=GV%m_to_Z)
+                 units="m", default=1.e-3, scale=US%m_to_Z)
 
   call get_param(PF, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
@@ -471,7 +474,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
 !   Set up sponges for ISOMIP configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   if (associated(CSp)) call MOM_error(FATAL, &
         "ISOMIP_initialize_sponges called with an associated control structure.")
@@ -627,7 +630,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     filename = trim(inputdir)//trim(state_file)
     if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
           "ISOMIP_initialize_sponges: Unable to open "//trim(filename))
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=GV%m_to_Z)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
     call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
     call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 

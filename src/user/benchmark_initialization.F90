@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -71,10 +72,11 @@ end subroutine benchmark_initialize_topography
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, &
+subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state, &
                                           P_ref, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -118,8 +120,8 @@ subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, &
 
   k1 = GV%nk_rho_varies + 1
 
-  ML_depth = 50.0 * GV%m_to_Z
-  thermocline_scale = 500.0 * GV%m_to_Z
+  ML_depth = 50.0 * US%m_to_Z
+  thermocline_scale = 500.0 * US%m_to_Z
   a_exp = 0.9
 
 ! This block calculates T0(k) for the purpose of diagnosing where the
