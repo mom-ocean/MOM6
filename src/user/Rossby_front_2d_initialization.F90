@@ -81,7 +81,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0 * GV%m_to_H
+          h(i,j,k) = h0 * GV%Z_to_H
         enddo
       enddo ; enddo
 
@@ -92,7 +92,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0 * GV%m_to_H
+          h(i,j,k) = h0 * GV%Z_to_H
         enddo
       enddo ; enddo
 
@@ -149,7 +149,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
     zi = 0.
     do k = 1, nz
       zi = zi - h(i,j,k)              ! Bottom interface position
-      zc = GV%H_to_m * (zi - 0.5*h(i,j,k))    ! Position of middle of cell
+      zc = GV%H_to_Z * (zi - 0.5*h(i,j,k))    ! Position of middle of cell
       zc = min( zc, -Hml(G, G%geoLatT(i,j)) ) ! Bound by depth of mixed layer
       T(i,j,k) = T_ref + dTdz * zc ! Linear temperature profile
     enddo
@@ -177,9 +177,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
   real    :: T_range      ! Range of salinities and temperatures over the vertical
   real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f
   real    :: dRho_dT
-  real    :: Dml, zi, zc, zm ! Depths in units of m.
+  real    :: Dml, zi, zc, zm ! Depths in units of Z.
   real    :: f, Ty
-  real    :: hAtU         ! Interpolated layer thickness in units of m.
+  real    :: hAtU         ! Interpolated layer thickness in units of Z.
   integer :: i, j, k, is, ie, js, je, nz
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
@@ -207,7 +207,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.
     do k = 1, nz
-      hAtU = 0.5*(h(i,j,k)+h(i+1,j,k)) * GV%H_to_m
+      hAtU = 0.5*(h(i,j,k)+h(i+1,j,k)) * GV%H_to_Z
       zi = zi - hAtU              ! Bottom interface position
       zc = zi - 0.5*hAtU          ! Position of middle of cell
       zm = max( zc + Dml, 0. )    ! Height above bottom of mixed layer
@@ -232,7 +232,8 @@ real function yPseudo( G, lat )
 end function yPseudo
 
 
-!> Analytic prescription of mixed layer depth in 2d Rossby front test
+!> Analytic prescription of mixed layer depth in 2d Rossby front test,
+!! in the same units as G%max_depth
 real function Hml( G, lat )
   type(ocean_grid_type), intent(in) :: G   !< Grid structure
   real,                  intent(in) :: lat !< Latitude
