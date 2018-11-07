@@ -7,6 +7,7 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : calculate_density
@@ -181,10 +182,11 @@ function val_weights(val, range) result(ans)
 end function val_weights
 
 !> Set up the module control structure.
-subroutine user_change_diff_init(Time, G, GV, param_file, diag, CS)
+subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),           intent(in)    :: Time       !< The current model time.
   type(ocean_grid_type),     intent(in)    :: G          !< The ocean's grid structure.
   type(verticalGrid_type),   intent(in)    :: GV         !< The ocean's vertical grid structure
+  type(unit_scale_type),     intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),     intent(in)    :: param_file !< A structure indicating the
                                                          !! open file to parse for
                                                          !! model parameter values.
@@ -215,7 +217,7 @@ subroutine user_change_diff_init(Time, G, GV, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of \n"//&
-                 "latitude and density.", default=0.0, units="m2 s-1", scale=GV%m_to_Z**2)
+                 "latitude and density.", default=0.0, units="m2 s-1", scale=US%m_to_Z**2)
   if (CS%Kd_add /= 0.0) then
     call get_param(param_file, mdl, "USER_KD_ADD_LAT_RANGE", CS%lat_range(:), &
                  "Four successive values that define a range of latitudes \n"//&

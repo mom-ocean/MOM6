@@ -7,9 +7,10 @@ use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : log_version
 use MOM_grid, only : ocean_grid_type
+use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -40,10 +41,11 @@ end type wave_speed_CS
 contains
 
 !> Calculates the wave speed of the first baroclinic mode.
-subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
+subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                       mono_N2_column_fraction, mono_N2_depth, modal_structure)
   type(ocean_grid_type),            intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
+  type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)  :: h  !< Layer thickness in units of H (m or kg/m2)
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
@@ -109,14 +111,14 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
 
-  L2_to_Z2 = GV%m_to_Z**2
+  L2_to_Z2 = US%m_to_Z**2
 
   l_use_ebt_mode = CS%use_ebt_mode
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
   l_mono_N2_column_fraction = CS%mono_N2_column_fraction
   if (present(mono_N2_column_fraction)) l_mono_N2_column_fraction = mono_N2_column_fraction
-  l_mono_N2_depth = GV%m_to_Z*CS%mono_N2_depth
-  if (present(mono_N2_depth)) l_mono_N2_depth = GV%m_to_Z*mono_N2_depth
+  l_mono_N2_depth = US%m_to_Z*CS%mono_N2_depth
+  if (present(mono_N2_depth)) l_mono_N2_depth = US%m_to_Z*mono_N2_depth
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
   if (calc_modal_structure) then
@@ -324,7 +326,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
                      (L2_to_Z2*gp > N2min*hw) ) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction
                   ! of the water column or below a certain depth.
-                  gp = GV%Z_to_m**2 * (N2min*hw)
+                  gp = US%Z_to_m**2 * (N2min*hw)
                 else
                   N2min = L2_to_Z2 * gp/hw
                 endif
@@ -509,9 +511,10 @@ subroutine tdma6(n, a, b, c, lam, y)
 end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
-subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
+subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
+  type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg/m2)
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
@@ -598,7 +601,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   Z_to_Pa = GV%g_Earth * GV%Rho0
 
   min_h_frac = tol1 / real(nz)
-  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,min_h_frac,use_EOS,T,S, &
+  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
   !$OMP                                     Z_to_Pa,tv,cn,g_Rho0,nmodes)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
@@ -772,7 +775,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = GV%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              N2(K) = US%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
               speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
