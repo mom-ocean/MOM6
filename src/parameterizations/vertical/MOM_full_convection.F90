@@ -99,7 +99,7 @@ subroutine full_convection(G, GV, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, &
   h_neglect = GV%H_subroundoff
   kap_dt_x2 = 0.0
   if (present(Kddt_convect)) kap_dt_x2 = 2.0*Kddt_convect
-  mix_len = (1.0e20 * nz) * (GV%max_depth * GV%m_to_H)
+  mix_len = (1.0e20 * nz) * (G%max_depth * GV%Z_to_H)
   h0 = 1.0e-16*sqrt(Kddt_smooth) + h_neglect
 
   do j=js,je

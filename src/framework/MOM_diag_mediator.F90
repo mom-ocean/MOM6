@@ -64,7 +64,7 @@ public diag_save_grids, diag_restore_grids
 
 !> Make a diagnostic available for averaging or output.
 interface post_data
-  module procedure post_data_3d, post_data_2d, post_data_0d
+  module procedure post_data_3d, post_data_2d, post_data_1d_k, post_data_0d
 end interface post_data
 
 !> A group of 1D axes that comprise a 1D/2D/3D mesh
@@ -752,14 +752,15 @@ end subroutine post_data_0d
 subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
                                                  !! previous call to register_diag_field.
-  real,              intent(in) :: field(:)      !< 1-d array being offered for output or averaging
+  real, target,      intent(in) :: field(:)      !< 1-d array being offered for output or averaging
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
   ! Local variables
   logical :: used  ! The return value of send_data is not used for anything.
+  real, dimension(:), pointer :: locfield => NULL()
   logical :: is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: k, ks, ke
   type(diag_type), pointer :: diag => null()
 
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
@@ -770,11 +771,29 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
               'post_data_1d_k: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-    if (is_stat) then
-      used = send_data(diag%fms_diag_id, field)
-    elseif (diag_cs%ave_enabled) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, weight=diag_cs%time_int)
+
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
+      ks = lbound(field,1) ; ke = ubound(field,1)
+      allocate( locfield( ks:ke ) )
+
+      do k=ks,ke
+        if (field(k) == diag_cs%missing_value) then
+          locfield(k) = diag_cs%missing_value
+        else
+          locfield(k) = field(k) * diag%conversion_factor
+        endif
+      enddo
+    else
+      locfield => field
     endif
+
+    if (is_stat) then
+      used = send_data(diag%fms_diag_id, locfield)
+    elseif (diag_cs%ave_enabled) then
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
+    endif
+    if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) deallocate( locfield )
+
     diag => diag%next
   enddo
 
@@ -800,7 +819,7 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
               'post_data_2d: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-     call post_data_2d_low(diag, field, diag_cs, is_static, mask)
+    call post_data_2d_low(diag, field, diag_cs, is_static, mask)
     diag => diag%next
   enddo
 
@@ -2171,7 +2190,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   character(len=240), allocatable :: diag_coords(:)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
+  character(len=40) :: mdl = "MOM_diag_mediator" ! This module's name.
 
   id_clock_diag_mediator = cpu_clock_id('(Ocean diagnostics framework)', grain=CLOCK_MODULE)
   id_clock_diag_remap = cpu_clock_id('(Ocean diagnostics remapping)', grain=CLOCK_ROUTINE)
@@ -2185,22 +2204,22 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   enddo
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, 'NUM_DIAG_COORDS', diag_cs%num_diag_coords, &
+  call get_param(param_file, mdl, 'NUM_DIAG_COORDS', diag_cs%num_diag_coords, &
                  'The number of diagnostic vertical coordinates to use.\n'//&
                  'For each coordinate, an entry in DIAG_COORDS must be provided.', &
                  default=1)
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_coords(diag_cs%num_diag_coords))
     if (diag_cs%num_diag_coords==1) then ! The default is to provide just one instance of Z*
-      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+      call get_param(param_file, mdl, 'DIAG_COORDS', diag_coords, &
                  'A list of string tuples associating diag_table modules to\n'//&
                  'a coordinate definition used for diagnostics. Each string\n'//&
                  'is of the form "MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME".', &
                  default='z Z ZSTAR')
     else ! If using more than 1 diagnostic coordinate, all must be explicitly defined
-      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+      call get_param(param_file, mdl, 'DIAG_COORDS', diag_coords, &
                  'A list of string tuples associating diag_table modules to\n'//&
                  'a coordinate definition used for diagnostics. Each string\n'//&
                  'is of the form "MODULE_SUFFIX,PARAMETER_SUFFIX,COORDINATE_NAME".', &
@@ -2214,10 +2233,10 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
     deallocate(diag_coords)
   endif
 
-  call get_param(param_file, mod, 'DIAG_MISVAL', diag_cs%missing_value, &
+  call get_param(param_file, mdl, 'DIAG_MISVAL', diag_cs%missing_value, &
                  'Set the default missing value to use for diagnostics.', &
                  default=1.e20)
-  call get_param(param_file, mod, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
+  call get_param(param_file, mdl, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
                  'Instead of writing diagnostics to the diag manager, write\n' //&
                  'a textfile containing the checksum (bitcount) of the array.',  &
                  default=.false.)
@@ -2244,7 +2263,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit < 0)) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "available_diags."//this_pe
-    call get_param(param_file, mod, "AVAILABLE_DIAGS_FILE", doc_file, &
+    call get_param(param_file, mdl, "AVAILABLE_DIAGS_FILE", doc_file, &
                  "A file into which to write a list of all available \n"//&
                  "ocean diagnostics that can be included in a diag_table.", &
                  default=doc_file_dflt, do_not_log=(diag_CS%available_diag_doc_unit/=-1))
@@ -2282,7 +2301,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   if (is_root_pe() .and. (diag_CS%chksum_diag_doc_unit < 0) .and. diag_CS%diag_as_chksum) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "chksum_diag."//this_pe
-    call get_param(param_file, mod, "CHKSUM_DIAG_FILE", doc_file, &
+    call get_param(param_file, mdl, "CHKSUM_DIAG_FILE", doc_file, &
                  "A file into which to write all checksums of the \n"//&
                  "diagnostics listed in the diag_table.", &
                  default=doc_file_dflt, do_not_log=(diag_CS%chksum_diag_doc_unit/=-1))
