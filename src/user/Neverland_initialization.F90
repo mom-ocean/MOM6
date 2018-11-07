@@ -39,7 +39,7 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
 #include "version_variable.h"
   character(len=40)  :: mdl = "Neverland_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-  real :: nl_roughness_amp
+  real :: nl_roughness_amp, nl_top_amp
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -48,6 +48,8 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NL_ROUGHNESS_AMP", nl_roughness_amp, &
                  "Amplitude of wavy signal in bathymetry.", default=0.05)
+  call get_param(param_file, mdl, "NL_CONTINENT_AMP", nl_top_amp, &
+                 "Scale factor for topography - 0.0 for no continents.", default=1.0)
 
   PI = 4.0*atan(1.0)
 
@@ -57,18 +59,17 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
     x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
     y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
 !  This sets topography that has a reentrant channel to the south.
-
-    D(i,j) = 1.0 - (1.2 * spike(x,0.2) + 1.2 * spike(x-1.0,0.2)) * spike(MIN(0.0,y-0.3),0.2) & !< South America
-              -  1.2 * spike(x-0.5,0.2) * spike(MIN(0.0,y-0.55),0.2)       & !< Africa
-              -  1.1 * spike(y-1,0.12) - 1.1 * spike(y,0.12)               & !< The great northern wall and Antarctica
-              -  1.2 * (spike(x,0.12)  + spike(x-1,0.12)) * spike(MAX(0.0,y-0.06),0.12)    & !< Antarctic Peninsula
-              -  0.1 * (cosbell(x,0.1) + cosbell(x-1,0.1))                 & !< Drake Passage ridge
-              -  0.5 * cosbell(x-0.16,0.05) * (cosbell(y-0.18,0.13)**0.4)  & !< Scotia Arc East
-              -  0.4 * (cosbell(x-0.09,0.08)**0.4) * cosbell(y-0.26,0.05)  & !< Scotia Arc North
-              -  0.4 * (cosbell(x-0.08,0.08)**0.4) * cosbell(y-0.1,0.05)   & !< Scotia Arc South
+    D(i,j) = 1.0 - 1.1 * spike(y-1,0.12) - 1.1 * spike(y,0.12) - & !< The great northern wall and Antarctica
+              nl_top_amp*( &
+                (1.2 * spike(x,0.2) + 1.2 * spike(x-1.0,0.2)) * spike(MIN(0.0,y-0.3),0.2) & !< South America
+              +  1.2 * spike(x-0.5,0.2) * spike(MIN(0.0,y-0.55),0.2)       & !< Africa
+              +  1.2 * (spike(x,0.12)  + spike(x-1,0.12)) * spike(MAX(0.0,y-0.06),0.12)    & !< Antarctic Peninsula
+              +  0.1 * (cosbell(x,0.1) + cosbell(x-1,0.1))                 & !< Drake Passage ridge
+              +  0.5 * cosbell(x-0.16,0.05) * (cosbell(y-0.18,0.13)**0.4)  & !< Scotia Arc East
+              +  0.4 * (cosbell(x-0.09,0.08)**0.4) * cosbell(y-0.26,0.05)  & !< Scotia Arc North
+              +  0.4 * (cosbell(x-0.08,0.08)**0.4) * cosbell(y-0.1,0.05))   & !< Scotia Arc South
               -  nl_roughness_amp * cos(14*PI*x) * sin(14*PI*y)            & !< roughness
               -  nl_roughness_amp * cos(20*PI*x) * cos(20*PI*y)              !< roughness
-
     if (D(i,j) < 0.0) D(i,j) = 0.0
     D(i,j) = D(i,j) * max_depth
   enddo
