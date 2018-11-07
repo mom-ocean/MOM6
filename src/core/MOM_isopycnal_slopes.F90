@@ -4,6 +4,7 @@ module MOM_isopycnal_slopes
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : int_specific_vol_dp, calculate_density_derivs
@@ -17,10 +18,11 @@ public calc_isoneutral_slopes
 contains
 
 !> Calculate isopycnal slopes, and optionally return N2 used in calculation.
-subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
+subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
                                   slope_x, slope_y, N2_u, N2_v, halo) !, eta_to_m)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (in Z or units
                                                                      !! given by 1/eta_to_m)
@@ -39,7 +41,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
 
   ! real,                              optional, intent(in)    :: eta_to_m !< The conversion factor from the units
-  !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; GV%Z_to_m by default.
+  !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; US%Z_to_m by default.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -103,7 +105,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
   nz = G%ke ; IsdB = G%IsdB
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  Z_to_L = GV%Z_to_m ; H_to_Z = GV%H_to_Z
+  Z_to_L = US%Z_to_m ; H_to_Z = GV%H_to_Z
   ! if (present(eta_to_m)) then
   !   Z_to_L = eta_to_m ; H_to_Z = GV%H_to_m / eta_to_m
   ! endif
@@ -114,7 +116,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = (GV%g_Earth*L_to_Z*GV%m_to_Z) / GV%Rho0
+  G_Rho0 = (GV%g_Earth*L_to_Z*US%m_to_Z) / GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.

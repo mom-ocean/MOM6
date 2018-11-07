@@ -11,6 +11,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_wave_interface, only: wave_parameters_CS, Get_Langmuir_Number
@@ -177,11 +178,12 @@ contains
 !!  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
 !!  have already been applied.  All calculations are done implicitly, and there
 !!  is no stability limit on the time step.
-subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
+subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS, &
                          dSV_dT, dSV_dS, TKE_forced, Buoy_Flux, dt_diag, last_call, &
                          dT_expected, dS_expected, waves )
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h_3d   !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -548,7 +550,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
 
 !!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
-!!OMP                                  CS,G,GV,fluxes,IdtdR0,                    &
+!!OMP                                  CS,G,GV,US,fluxes,IdtdR0,                 &
 !!OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
 !!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar,      &
 !!OMP                                  max_itt,Kd_int)                           &
@@ -601,12 +603,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-      U_star = GV%m_to_Z*fluxes%ustar(i,j)
+      U_star = US%m_to_Z*fluxes%ustar(i,j)
       U_Star_Mean = fluxes%ustar_gustless(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
-                    fluxes%frac_shelf_h(i,j) * GV%m_to_Z*fluxes%ustar_shelf(i,j)
+                    fluxes%frac_shelf_h(i,j) * US%m_to_Z*fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
 
@@ -627,8 +629,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       iL_Ekman   = absf(i) / U_star
       iL_Obukhov = buoy_flux(i,j)*vonkar / (U_star**3)
       if (CS%USE_LT) then
-        Ekman_o_Obukhov_stab = abs(max(0., iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)))
-        Ekman_o_Obukhov_un = abs(min(0., iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)))
+        Ekman_o_Obukhov_stab = abs(max(0., iL_Obukhov / (iL_Ekman + 1.e-10*US%Z_to_m)))
+        Ekman_o_Obukhov_un = abs(min(0., iL_Obukhov / (iL_Ekman + 1.e-10*US%Z_to_m)))
         !### Consider recoding this as...
         ! Max_ratio = 1.0e16
         ! Ekman_Obukhov = Max_ratio
@@ -642,7 +644,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       endif
 
       if (CS%Mstar_Mode == CS%CONST_MSTAR) then
-        mech_TKE(i) = (dt*CS%mstar*GV%Rho0) * GV%Z_to_m**3 * U_star**3
+        mech_TKE(i) = (dt*CS%mstar*GV%Rho0) * US%Z_to_m**3 * U_star**3
         conv_PErel(i) = 0.0
 
         if (CS%TKE_diagnostics) then
@@ -682,14 +684,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       pres(i,1) = 0.0 ; pres_Z(i,1) = 0.0
       do k=1,nz
         dMass = GV%H_to_kg_m2 * h(i,k)
-        dPres = (GV%g_Earth*GV%m_to_Z) * dMass  ! This is equivalent to GV%H_to_Pa * h(i,k)
+        dPres = (GV%g_Earth*US%m_to_Z) * dMass  ! This is equivalent to GV%H_to_Pa * h(i,k)
         dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
         dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
-        dT_to_dColHt(i,k) = dMass * GV%m_to_Z * dSV_dT(i,j,k)
-        dS_to_dColHt(i,k) = dMass * GV%m_to_Z * dSV_dS(i,j,k)
+        dT_to_dColHt(i,k) = dMass * US%m_to_Z * dSV_dT(i,j,k)
+        dS_to_dColHt(i,k) = dMass * US%m_to_Z * dSV_dS(i,j,k)
 
         pres(i,K+1) = pres(i,K) + dPres
-        pres_Z(i,K+1) = GV%Z_to_m * pres(i,K+1)
+        pres_Z(i,K+1) = US%Z_to_m * pres(i,K+1)
       enddo
 
 !    endif ; enddo
@@ -712,7 +714,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       !/BGR: Add MLD_guess based on stored previous value.
       !      note that this is different from ML_Depth already
       !      computed by EPBL, need to figure out why.
-      if (CS%MLD_iteration_guess .and. (CS%ML_Depth2(i,j) > 1.0*GV%m_to_Z)) then
+      if (CS%MLD_iteration_guess .and. (CS%ML_Depth2(i,j) > 1.0*US%m_to_Z)) then
         !If prev value is present use for guess.
         MLD_guess = CS%ML_Depth2(i,j)
       else
@@ -781,14 +783,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           ! Adjustment for unstable buoyancy flux.
           !  Convection reduces mechanical mixing because there
           !  is less density gradient to mix. (Statically unstable near surface)
-          MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * (-BF_Unstable + 1.e-10*GV%m_to_Z**2) / &
-                                 ( (-Bf_Unstable + 1.e-10*GV%m_to_Z**2) +                 &
+          MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * (-BF_Unstable + 1.e-10*US%m_to_Z**2) / &
+                                 ( (-Bf_Unstable + 1.e-10*US%m_to_Z**2) +                 &
                                    2.0 *MSTAR_MIX * U_star**3 / MLD_guess )
-          ! MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * ((-BF_Unstable + 1.e-10*GV%m_to_Z**2)*MLD_guess) / &
-          !                       ( (-Bf_Unstable + 1.e-10*GV%m_to_Z**2)*MLD_guess + &
+          ! MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * ((-BF_Unstable + 1.e-10*US%m_to_Z**2)*MLD_guess) / &
+          !                       ( (-Bf_Unstable + 1.e-10*US%m_to_Z**2)*MLD_guess + &
           !                         2.0*MSTAR_MIX * U_star**3 )
           if (CS%USE_LT) then
-            call get_Langmuir_Number( LA, G, GV, abs(MLD_guess), u_star_mean, i, j, &
+            call get_Langmuir_Number( LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, &
                                       H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
             ! 2. Get parameters for modified LA
             MLD_o_Ekman = abs(MLD_guess * iL_Ekman)
@@ -818,7 +820,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           endif
           !Reset mech_tke and conv_perel values (based on new mstar)
           mech_TKE(i) = ( MSTAR_mix * MSTAR_conv_adj * ENHANCE_M + MSTAR_LT) * &
-                        GV%Z_to_m**3 * (dt*GV%Rho0*U_star**3)
+                        US%Z_to_m**3 * (dt*GV%Rho0*U_star**3)
           conv_PErel(i) = 0.0
           if (CS%TKE_diagnostics) then
             CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
@@ -1379,7 +1381,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           !This is how the iteration was original conducted
           do k=2,nz
             if (FIRST_OBL) then !Breaks when OBL found
-              if ((Vstar_Used(k) > 1.e-10*GV%m_to_Z) .and. k < nz) then
+              if ((Vstar_Used(k) > 1.e-10*US%m_to_Z) .and. k < nz) then
                 MLD_found = MLD_found + h(i,k-1)*GV%H_to_Z
               else
                 FIRST_OBL = .false.
@@ -1467,7 +1469,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       if (allocated(CS%mstar_lt)) CS%mstar_lt(i,j) = MSTAR_LT
       if (allocated(CS%MLD_Obukhov)) CS%MLD_Obukhov(i,j) = MLD_guess * iL_Obukhov
       if (allocated(CS%MLD_Ekman)) CS%MLD_Ekman(i,j) = MLD_guess * iL_Ekman
-      if (allocated(CS%Ekman_Obukhov)) CS%Ekman_Obukhov(i,j) = iL_Obukhov / (iL_Ekman + 1.e-10*GV%Z_to_m)
+      if (allocated(CS%Ekman_Obukhov)) CS%Ekman_Obukhov(i,j) = iL_Obukhov / (iL_Ekman + 1.e-10*US%Z_to_m)
       if (allocated(CS%La)) CS%La(i,j) = LA
       if (allocated(CS%La_mod)) CS%La_mod(i,j) = LAmod
     else ! End of the ocean-point part of the i-loop
@@ -1843,28 +1845,29 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 end subroutine find_PE_chg_orig
 
 !> Copies the ePBL active mixed layer depth into MLD
-subroutine energetic_PBL_get_MLD(CS, MLD, G, GV, m_to_MLD_units)
+subroutine energetic_PBL_get_MLD(CS, MLD, G, US, m_to_MLD_units)
   type(energetic_PBL_CS),           pointer     :: CS  !< Control structure for ePBL
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
-  type(verticalGrid_type),          intent(in)  :: GV  !< The ocean's vertical grid structure
+  type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer, in m
   real,                   optional, intent(in)  :: m_to_MLD_units !< A conversion factor to the desired units for MLD
   ! Local variables
   real :: scale  ! A dimensional rescaling factor
   integer :: i,j
 
-  scale = GV%Z_to_m ; if (present(m_to_MLD_units)) scale = scale * m_to_MLD_units
+  scale = US%Z_to_m ; if (present(m_to_MLD_units)) scale = scale * m_to_MLD_units
 
-  do j = G%jsc, G%jec ; do i = G%isc, G%iec
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
     MLD(i,j) = scale*CS%ML_Depth(i,j)
   enddo ; enddo
 
 end subroutine energetic_PBL_get_MLD
 
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
-subroutine ust_2_u10_coare3p5(USTair,U10,GV)
+subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
   real,                    intent(in)  :: USTair !< Ustar in the air, in m s-1.
   type(verticalGrid_type), intent(in)  :: GV     !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US     !< A dimensional unit scaling type
   real,                    intent(out) :: U10    !< The 10 m wind speed, in m s-1.
 
   real, parameter :: vonkar = 0.4
@@ -1887,7 +1890,7 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
     CT=CT+1
     u10a = u10
     alpha = min(0.028,0.0017 * u10 - 0.005)
-    z0rough = alpha * USTair**2/(GV%g_Earth*GV%m_to_Z) ! Compute z0rough from ustar guess
+    z0rough = alpha * USTair**2/(GV%g_Earth*US%m_to_Z) ! Compute z0rough from ustar guess
     z0=z0sm+z0rough
     CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
     u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop
@@ -1907,10 +1910,11 @@ end subroutine ust_2_u10_coare3p5
 
 !> This subroutine returns the Langmuir number, given ustar and the boundary
 !! layer thickness, inclusion conversion to the 10m wind.
-subroutine get_LA_windsea(ustar, hbl, GV, LA)
+subroutine get_LA_windsea(ustar, hbl, GV, US, LA)
   real,                    intent(in)  :: ustar !< The water-side surface friction velocity (m/s)
   real,                    intent(in)  :: hbl   !< The ocean boundary layer depth (m)
   type(verticalGrid_type), intent(in)  :: GV    !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US    !< A dimensional unit scaling type
   real,                    intent(out) :: LA    !< The Langmuir number returned from this module
 ! Original description:
 ! This function returns the enhancement factor, given the 10-meter
@@ -1938,22 +1942,22 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
        us_to_u10 = 0.0162, &
        ! loss ratio of Stokes transport
        r_loss = 0.667
-  real :: us, hm0, fm, fp, vstokes, kphil, kstar
+  real :: uStokes, hm0, fm, fp, vstokes, kphil, kstar
   real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
   real :: pi, u10
   pi = 4.0*atan(1.0)
   if (ustar > 0.0) then
     ! Computing u10 based on ustar and COARE 3.5 relationships
-    call ust_2_u10_coare3p5(ustar * sqrt(GV%Rho0/1.225), U10, GV)
+    call ust_2_u10_coare3p5(ustar * sqrt(GV%Rho0/1.225), U10, GV, US)
     ! surface Stokes drift
-    us = us_to_u10*u10
+    uStokes = us_to_u10*u10
 
     ! significant wave height from Pierson-Moskowitz spectrum (Bouws, 1998)
     hm0 = 0.0246 *u10**2
 
     ! peak frequency (PM, Bouws, 1998)
     tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * (GV%g_Earth*GV%m_to_Z) / tmp
+    fp = 0.877 * (GV%g_Earth*US%m_to_Z) / tmp
 
     ! mean frequency
     fm = fm_to_fp * fp
@@ -1966,7 +1970,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
     !
     ! the general peak wavenumber for Phillips' spectrum
     ! (Breivik et al., 2016) with correction of directional spreading
-    kphil = 0.176 * us / vstokes
+    kphil = 0.176 * uStokes / vstokes
     !
     ! surface layer averaged Stokes dirft with Stokes drift profile
     ! estimated from Phillips' spectrum (Breivik et al., 2016)
@@ -1989,7 +1993,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
     r4 = ( 0.125 + 0.0946 / kstar * z0i ) &
          *sqrt( 2.0 * PI *kstar * z0) &
          *erfc( sqrt( 2.0 * kstar * z0 ) )
-    us_sl = us * (0.715 + r1 + r2 + r3 + r4)
+    us_sl = uStokes * (0.715 + r1 + r2 + r3 + r4)
     !
     LA = sqrt(ustar / us_sl)
   else
@@ -1998,10 +2002,11 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
 endsubroutine Get_LA_windsea
 
 !> This subroutine initializes the energetic_PBL module
-subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
+subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< The current model time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic output
   type(energetic_PBL_CS),  pointer       :: CS   !< A pointer that is set to point to the control
@@ -2123,7 +2128,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "VSTAR_SCALE_FACTOR", CS%vstar_scale_fac, &
                  "An overall nondimensional scaling factor for v*. \n"//    &
                  "Making this larger decreases the PBL diffusivity.",       &
-                 units="nondim", default=1.0, scale=GV%m_to_Z)
+                 units="nondim", default=1.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef,           &
                  "A nondimensional scaling factor controlling the inhibition \n"//   &
                  "of the diffusive length scale by rotation. Making this larger \n"//&
@@ -2143,11 +2148,11 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "EPBL_MLD_TOLERANCE", CS%MLD_tol,         &
                  "The tolerance for the iteratively determined mixed \n"//  &
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
-                 units="meter", default=1.0, scale=GV%m_to_Z)
+                 units="meter", default=1.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "EPBL_MIN_MIX_LEN", CS%min_mix_len,    &
                  "The minimum mixing length scale that will be used \n"//&
                  "by ePBL.  The default (0) does not set a minimum.",    &
-                 units="meter", default=0.0, scale=GV%m_to_Z)
+                 units="meter", default=0.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc,         &
                  "If true, the ePBL code uses the original form of the \n"//        &
                  "potential energy change code.  Otherwise, the newer \n"//         &
@@ -2222,12 +2227,12 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   endif
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_to_Z*GV%H_subroundoff)
-  call log_param(param_file, mdl, "EPBL_USTAR_MIN", CS%ustar_min*GV%Z_to_m, &
+  call log_param(param_file, mdl, "EPBL_USTAR_MIN", CS%ustar_min*US%Z_to_m, &
                  "The (tiny) minimum friction velocity used within the \n"//&
                  "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1")
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
-      Time, 'Surface boundary layer depth', 'm', conversion=GV%Z_to_m, &
+      Time, 'Surface boundary layer depth', 'm', conversion=US%Z_to_m, &
       cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
       Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3')
@@ -2245,17 +2250,17 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'ePBL_TKE_conv_decay', diag%axesT1, &
       Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'ePBL_Hs_used', diag%axesT1, &
-      Time, 'Surface region thickness that is used', 'm', conversion=GV%m_to_Z)
+      Time, 'Surface region thickness that is used', 'm', conversion=US%m_to_Z)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
-      Time, 'Mixing Length that is used', 'm', conversion=GV%Z_to_m)
+      Time, 'Mixing Length that is used', 'm', conversion=US%Z_to_m)
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'm s-1', conversion=GV%Z_to_m)
+      Time, 'Velocity Scale that is used.', 'm s-1', conversion=US%Z_to_m)
   CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
       Time, 'LT enhancement that is used.', 'nondim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'MSTAR that is used.', 'nondim')
   CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'ePBL Surface Boundary layer depth.', 'm', conversion=GV%m_to_Z)
+      Time, 'ePBL Surface Boundary layer depth.', 'm', conversion=US%m_to_Z)
   ! BGR (9/21/2017) Note that ePBL_OSBL is the guess for iteration step while ePBL_h_ML is
   !                 result from iteration step.
   CS%id_mld_ekman = register_diag_field('ocean_model', 'MLD_EKMAN', diag%axesT1, &

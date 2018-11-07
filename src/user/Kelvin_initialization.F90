@@ -16,6 +16,7 @@ use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_DIRECTION_N, OBC_DIRECTION_E
 use MOM_open_boundary,  only : OBC_DIRECTION_S, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, time_type_to_real
 
@@ -155,13 +156,14 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
 end subroutine Kelvin_initialize_topography
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, h, Time)
+subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
                                               !! whether, where, and what open boundary
                                               !! conditions are used.
   type(Kelvin_OBC_CS),     pointer    :: CS   !< Kelvin wave control structure.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness, in H.
   type(time_type),         intent(in) :: Time !< model time.
 
@@ -192,9 +194,9 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, h, Time)
 
   if (CS%mode == 0) then
     omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
-    val1 = GV%m_to_Z * sin(omega * time_sec)
+    val1 = US%m_to_Z * sin(omega * time_sec)
   else
-    N0 = sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth * (GV%m_to_Z * CS%H0))
+    N0 = sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth * (US%m_to_Z * CS%H0))
     ! Two wavelengths in domain
     plx = 4.0 * PI / G%len_lon
     pmz = PI * CS%mode / CS%H0
