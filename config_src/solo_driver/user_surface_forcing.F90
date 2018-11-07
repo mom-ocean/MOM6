@@ -12,7 +12,7 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
+use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
 use MOM_variables, only : surface
@@ -49,30 +49,15 @@ contains
 !! direction as the u- and v- velocities.)  They are both in Pa.
 subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
-                                                    !! describe the surface state of the ocean.
+                                                       !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day  !< The time of the fluxes
   type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
                                                        !! by a previous call to user_surface_forcing_init
 
-!   This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
-! These are the stresses in the direction of the model grid (i.e. the same
-! direction as the u- and v- velocities.)  They are both in Pa.
-!   In addition, this subroutine can be used to set the surface friction
-! velocity, forces%ustar, in m s-1. This is needed with a bulk mixed layer.
-!
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day - Time of the fluxes.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to user_surface_forcing_init
-
+  ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
@@ -81,8 +66,6 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
   call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
@@ -138,22 +121,12 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
 
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day_start - Start time of the fluxes.
-!  (in)      day_interval - Length of time over which these fluxes
-!                           will be applied.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to user_surface_forcing_init
-
+  ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward, in C.
   real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
   real :: density_restore  ! The potential density that is being restored
                          ! toward, in kg m-3.
-  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
+  real :: rhoXcp         ! The mean density times the heat capacity, in J m-3 K-1.
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
 
@@ -265,14 +238,6 @@ subroutine USER_surface_forcing_init(Time, G, param_file, diag, CS)
   type(diag_ctrl), target,       intent(in) :: diag !< A structure that is used to regulate diagnostic output.
   type(user_surface_forcing_CS), pointer    :: CS   !< A pointer that is set to point to
                                                     !! the control structure for this module
-
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"

@@ -17,7 +17,7 @@ use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_io, only : file_exists, slasher, MOM_read_data
 use MOM_restart, only : register_restart_field, query_initialized
 use MOM_restart, only : MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real
+use MOM_time_manager, only : time_type, set_time
 !MJH use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary
 use MOM_ice_shelf_state, only : ice_shelf_state
 use MOM_coms, only : reproducing_sum, sum_across_PEs, max_across_PEs, min_across_PEs
@@ -523,18 +523,18 @@ subroutine initialize_diagnostic_fields(CS, ISS, G, Time)
   type(ocean_grid_type),  intent(inout) :: G   !< The grid structure used by the ice shelf.
   type(time_type),        intent(in)    :: Time !< The current model time
 
-  integer             :: i, j, iters, isd, ied, jsd, jed
-  real                 :: rhoi, rhow, OD
-  type(time_type)          :: dummy_time
+  integer         :: i, j, iters, isd, ied, jsd, jed
+  real            :: rhoi, rhow, OD
+  type(time_type) :: dummy_time
 
   rhoi = CS%density_ice
   rhow = CS%density_ocean_avg
-  dummy_time = set_time (0,0)
+  dummy_time = set_time(0,0)
   isd=G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   do j=jsd,jed
     do i=isd,ied
-      OD = G%bathyT(i,j) - rhoi/rhow * ISS%h_shelf(i,j)
+      OD = G%Zd_to_m*G%bathyT(i,j) - rhoi/rhow * ISS%h_shelf(i,j)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
@@ -829,7 +829,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
         do k=0,1
           do l=0,1
             if ((ISS%hmask(i,j) == 1) .and. &
-              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%bathyT(i,j) <= 0)) then
+              (rhoi/rhow * H_node(i-1+k,j-1+l) - G%Zd_to_m*G%bathyT(i,j) <= 0)) then
               nodefloat = nodefloat + 1
             endif
           enddo
@@ -888,7 +888,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
   Au(:,:) = 0.0 ; Av(:,:) = 0.0
 
   call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-            CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, G%areaT, &
+            CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, G%areaT, &
             G, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi/rhow)
 
   err_init = 0 ; err_tempu = 0; err_tempv = 0
@@ -947,7 +947,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
     Au(:,:) = 0 ; Av(:,:) = 0
 
     call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-            CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, G%areaT, &
+            CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, G%areaT, &
             G, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi/rhow)
 
     err_max = 0
@@ -1111,7 +1111,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
   call pass_vector(DIAGu, DIAGv, G%domain, TO_ALL, BGRID_NE)
 
   call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, hmask, &
-          H_node, CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, &
+          H_node, CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, &
           G%areaT, G, isc-1, iec+1, jsc-1, jec+1, CS%density_ice/CS%density_ocean_avg)
 
   call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
@@ -1182,7 +1182,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
     Au(:,:) = 0 ; Av(:,:) = 0
 
     call CG_action(Au, Av, Du, Dv, Phi, Phisub, CS%umask, CS%vmask, hmask, &
-          H_node, CS%ice_visc, float_cond, G%bathyT, CS%taub_beta_eff, &
+          H_node, CS%ice_visc, float_cond, G%Zd_to_m*G%bathyT(:,:), CS%taub_beta_eff, &
           G%areaT, G, is, ie, js, je, CS%density_ice/CS%density_ocean_avg)
 
     ! Au, Av valid region moves in by 1
@@ -2123,7 +2123,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, TAUD_X, TAUD_Y, OD)
   ! prelim - go through and calculate S
 
   ! or is this faster?
-  BASE(:,:) = -G%bathyT(:,:) + OD(:,:)
+  BASE(:,:) = -G%Zd_to_m*G%bathyT(:,:) + OD(:,:)
   S(:,:) = BASE(:,:) + ISS%h_shelf(:,:)
 
   do j=jsc-1,jec+1
@@ -2222,7 +2222,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, TAUD_X, TAUD_Y, OD)
         taud_y(I,J) = taud_y(I,J) - .25 * rho * grav * ISS%h_shelf(i,j) * sy * dxdyh
 
         if (CS%float_frac(i,j) == 1) then
-          neumann_val = .5 * grav * (rho * ISS%h_shelf(i,j) ** 2 - rhow * G%bathyT(i,j) ** 2)
+          neumann_val = .5 * grav * (rho * ISS%h_shelf(i,j) ** 2 - rhow * (G%Zd_to_m*G%bathyT(i,j)) ** 2)
         else
           neumann_val = .5 * grav * (1-rho/rhow) * rho * ISS%h_shelf(i,j) ** 2
         endif
@@ -2738,7 +2738,7 @@ subroutine matrix_diagonal(CS, G, float_cond, H_node, nu, beta, hmask, dens_rati
       enddo ; enddo
     enddo ; enddo
     if (float_cond(i,j) == 1) then
-      Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%bathyT(i,j)
+      Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%Zd_to_m*G%bathyT(i,j)
       Hcell(:,:) = H_node(i-1:i,j-1:j)
       call CG_diagonal_subgrid_basal &
           (Phisub, Hcell, dxdyh, basel, dens_ratio, Usubcontr, Vsubcontr)
@@ -2953,7 +2953,7 @@ subroutine apply_boundary_values(CS, ISS, G, time, Phisub, H_node, nu, beta, flo
       enddo ; enddo
 
       if (float_cond(i,j) == 1) then
-        Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%bathyT(i,j)
+        Usubcontr = 0.0 ; Vsubcontr = 0.0 ; basel = G%Zd_to_m*G%bathyT(i,j)
         Ucell(:,:) = CS%u_bdry_val(i-1:i,j-1:j) ; Vcell(:,:) = CS%v_bdry_val(i-1:i,j-1:j)
         Hcell(:,:) = H_node(i-1:i,j-1:j)
         call CG_action_subgrid_basal &
@@ -3089,7 +3089,7 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
 
   do j=jsd,jed
     do i=isd,ied
-      OD = G%bathyT(i,j) - rhoi/rhow * h_shelf(i,j)
+      OD = G%Zd_to_m*G%bathyT(i,j) - rhoi/rhow * h_shelf(i,j)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
@@ -3609,7 +3609,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   real,                   intent(in)    :: time_step !< The time step for this update, in s.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: hmask !< A mask indicating which tracer points are
+                          intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: h0 !< The initial ice shelf thicknesses in m.
@@ -3850,7 +3850,7 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
   real,                   intent(in)    :: time_step !< The time step for this update, in s.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: hmask !< A mask indicating which tracer points are
+                          intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: h_after_uflux !< The ice shelf thicknesses after

@@ -18,15 +18,16 @@ contains
 
 !> Calculate isopycnal slopes, and optionally return N2 used in calculation.
 subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
-                                  slope_x, slope_y, N2_u, N2_v, halo)
+                                  slope_x, slope_y, N2_u, N2_v, halo) !, eta_to_m)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (in Z or units
+                                                                     !! given by 1/eta_to_m)
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
-  real,                                        intent(in)    :: dt_kappa_smooth !< A vertical diffusive smoothing
-                                                                     !! timescale, in s.
+  real,                                        intent(in)    :: dt_kappa_smooth !< A smoothing vertical diffusivity
+                                                                     !! times a smoothing timescale, in Z2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: slope_x !< Isopycnal slope in i-direction (nondim)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y !< Isopycnal slope in j-direction (nondim)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), &
@@ -36,6 +37,9 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                                      optional, intent(inout) :: N2_v !< Brunt-Vaisala frequency squared at
                                                                      !! interfaces between u-points (s-2)
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
+
+  ! real,                              optional, intent(in)    :: eta_to_m !< The conversion factor from the units
+  !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; GV%Z_to_m by default.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -63,12 +67,12 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                         ! interface times the grid spacing, in kg m-3.
   real :: drdkL, drdkR  ! Vertical density differences across an interface,
                         ! in kg m-3.
-  real :: hg2A, hg2B, hg2L, hg2R
-  real :: haA, haB, haL, haR
-  real :: dzaL, dzaR
-  real :: wtA, wtB, wtL, wtR
-  real :: drdx, drdy, drdz  ! Zonal, meridional, and vertical density gradients,
-                            ! in units of kg m-4.
+  real :: hg2A, hg2B, hg2L, hg2R ! Squares of geometric mean thicknesses, in H2.
+  real :: haA, haB, haL, haR     ! Arithmetic mean thicknesses in H.
+  real :: dzaL, dzaR    ! Temporary thicknesses in eta units (Z?).
+  real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
+  real :: drdx, drdy    ! Zonal and meridional density gradients, in kg m-4.
+  real :: drdz          ! Vertical density gradient, in units of kg m-3 Z-1.
   real :: Slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1.
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient, in kg2 m-8.
@@ -77,10 +81,15 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                         ! in roundoff and can be neglected, in H.
   real :: h_neglect2    ! h_neglect^2, in H2.
   real :: dz_neglect    ! A thickness in m that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
+                        ! in roundoff and can be neglected, in eta units (Z?).
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   real :: G_Rho0, N2, dzN2,  H_x(SZIB_(G)), H_y(SZI_(G))
+  real :: Z_to_L        ! A conversion factor between from units for e to the
+                        ! units for lateral distances.
+  real :: L_to_Z        ! A conversion factor between from units for lateral distances
+                        ! to the units for e.
+  real :: H_to_Z        ! A conversion factor from thickness units to the units of e.
 
   logical :: present_N2_u, present_N2_v
   integer :: is, ie, js, je, nz, IsdB
@@ -94,13 +103,18 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
   nz = G%ke ; IsdB = G%IsdB
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = GV%H_subroundoff*GV%H_to_m
+  Z_to_L = GV%Z_to_m ; H_to_Z = GV%H_to_Z
+  ! if (present(eta_to_m)) then
+  !   Z_to_L = eta_to_m ; H_to_Z = GV%H_to_m / eta_to_m
+  ! endif
+  L_to_Z = 1.0 / Z_to_L
+  dz_neglect = GV%H_subroundoff * H_to_Z
 
   use_EOS = associated(tv%eqn_of_state)
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = GV%g_Earth / GV%Rho0
+  G_Rho0 = (GV%g_Earth*L_to_Z*GV%m_to_Z) / GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.
@@ -116,34 +130,32 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
   if (use_EOS) then
     if (present(halo)) then
-      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, GV, halo+1)
+      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, halo+1)
     else
-      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, GV, 1)
+      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, 1)
     endif
   endif
 
   ! Find the maximum and minimum permitted streamfunction.
-!$OMP parallel default(none) shared(is,ie,js,je,pres,GV,h,nz)
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-1,je+1 ; do i=is-1,ie+1
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
     pres(i,j,2) = pres(i,j,1) + GV%H_to_Pa*h(i,j,1)
   enddo ; enddo
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
       pres(i,j,K+1) = pres(i,j,K) + GV%H_to_Pa*h(i,j,k)
     enddo ; enddo
   enddo
-!$OMP end parallel
 
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,GV,pres,T,S, &
-!$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u,slope_x) &
-!$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
-!$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
-!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio)
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,pres,T,S,tv, &
+  !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
+  !$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u,slope_x) &
+  !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
+  !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
+  !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+  !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio)
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -187,7 +199,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
         if (GV%Boussinesq) then
-          dzaL = haL * GV%H_to_m ; dzaR = haR * GV%H_to_m
+          dzaL = haL * H_to_Z ; dzaR = haR * H_to_Z
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
@@ -207,7 +219,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
         ! This estimate of slope is accurate for small slopes, but bounded
         ! to be between -1 and 1.
-        mag_grad2 = drdx**2 + drdz**2
+        mag_grad2 = drdx**2 + (L_to_Z*drdz)**2
         if (mag_grad2 > 0.0) then
           slope_x(I,j,K) = drdx / sqrt(mag_grad2)
         else ! Just in case mag_grad2 = 0 ever.
@@ -217,20 +229,20 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))
+        slope_x(I,j,K) = (Z_to_L*(e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
       endif
 
     enddo ! I
   enddo ; enddo ! end of j-loop
 
-    ! Calculate the meridional isopycnal slope.
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,GV,pres,T,S, &
-!$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y) &
-!$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
-!$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
-!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio)
+  ! Calculate the meridional isopycnal slope.
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,pres,T,S,tv, &
+  !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
+  !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y) &
+  !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
+  !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
+  !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+  !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio)
   do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
@@ -271,7 +283,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
         if (GV%Boussinesq) then
-          dzaL = haL * GV%H_to_m ; dzaR = haR * GV%H_to_m
+          dzaL = haL * H_to_Z ; dzaR = haR * H_to_Z
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
@@ -291,7 +303,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
         ! This estimate of slope is accurate for small slopes, but bounded
         ! to be between -1 and 1.
-        mag_grad2 = drdy**2 + drdz**2
+        mag_grad2 = drdy**2 + (L_to_Z*drdz)**2
         if (mag_grad2 > 0.0) then
           slope_y(i,J,K) = drdy / sqrt(mag_grad2)
         else ! Just in case mag_grad2 = 0 ever.
@@ -301,7 +313,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))
+        slope_y(i,J,K) = (Z_to_L*(e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
       endif
 
     enddo ! i
@@ -311,14 +323,14 @@ end subroutine calc_isoneutral_slopes
 
 !> Returns tracer arrays (nominally T and S) with massless layers filled with
 !! sensible values, by diffusing vertically with a small but constant diffusivity.
-subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
+subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Salinity (psu)
-  real,                                     intent(in)  :: kappa !< A vertical diffusivity to use for smoothing (m2 s-1)
-  real,                                     intent(in)  :: dt   !< The time increment, in s.
+  real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
+                                                                !! times a smoothing timescale, in Z2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f  !< Filled temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filed salinity (psu)
   integer,                        optional, intent(in)  :: halo_here !< Halo width over which to compute
@@ -338,7 +350,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
 
-  kap_dt_x2 = (2.0*kappa*dt)*GV%m_to_H**2
+  kap_dt_x2 = (2.0*kappa_dt)*GV%Z_to_H**2
   h_neglect = GV%H_subroundoff
 
   if (kap_dt_x2 <= 0.0) then

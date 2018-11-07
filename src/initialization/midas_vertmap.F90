@@ -19,8 +19,8 @@ interface fill_boundaries
    module procedure fill_boundaries_int
 end interface
 
-real, parameter :: epsln=1.e-10 !< A hard-wired constant!
-                                !! \todo Get rid of this constant
+! real, parameter :: epsln=1.e-10 !< A hard-wired constant!
+                                  !! \todo Get rid of this constant
 
 contains
 
@@ -71,7 +71,8 @@ end function wright_eos_2d
 function alpha_wright_eos_2d(T,S,p) result(drho_dT)
   real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and Salinity (psu)
   real, intent(in) :: p !< pressure (Pa)
-  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dT !< partial derivative of density with respect to temperature (kg m-3 C-1)
+  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dT !< partial derivative of density with
+                                                          !! respect to temperature (kg m-3 C-1)
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom,I_denom2
@@ -110,7 +111,8 @@ end function alpha_wright_eos_2d
 function beta_wright_eos_2d(T,S,p) result(drho_dS)
   real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and salinity (psu)
   real, intent(in) :: p !< pressure (Pa)
-  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with respect to salinity (kg m-3 PSU-1)
+  real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with
+                                                          !! respect to salinity (kg m-3 PSU-1)
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom,I_denom2
@@ -141,58 +143,58 @@ end function beta_wright_eos_2d
 #endif
 
 !> Layer model routine for remapping tracers
-function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,i_debug,j_debug) result(tr)
-  real, dimension(:,:,:), intent(in)           :: tr_in !< The z-space array of tracer concentrations that is read in.
-  real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input z* data (m)
-  integer, intent(in)                          :: nlay !< The number of vertical layers in the target grid
-  real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), intent(in) :: e !< The depths of the target layer interfaces (m)
-  integer, intent(in)                          :: nkml !< The number of mixed layers
-  integer, intent(in)                          :: nkbl !< The number of buffer layers
-  real, intent(in)                             :: land_fill !< fill in data over land (1)
-  real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet !< The wet mask for the source data (valid points)
-  real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs !< The number of input levels with valid data
-  logical, optional, intent(in)                :: debug !< optional debug flag
-  integer, optional, intent(in)                :: i_debug !< i-index of point for debugging
-  integer, optional, intent(in)                :: j_debug !< j-index of point for debugging
+function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlevs, &
+                       debug, i_debug, j_debug, eps_z) result(tr)
+  real, dimension(:,:,:),           intent(in) :: tr_in !< The z-space array of tracer concentrations that is read in.
+  real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input z* data (Z or m)
+  integer,                          intent(in) :: nlay !< The number of vertical layers in the target grid
+  real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), &
+                                    intent(in) :: e !< The depths of the target layer interfaces (Z or m)
+  integer,                          intent(in) :: nkml !< The number of mixed layers
+  integer,                          intent(in) :: nkbl !< The number of buffer layers
+  real,                             intent(in) :: land_fill !< fill in data over land (1)
+  real, dimension(size(tr_in,1),size(tr_in,2)), &
+                                    intent(in) :: wet !< The wet mask for the source data (valid points)
+  real, dimension(size(tr_in,1),size(tr_in,2)), &
+                          optional, intent(in) :: nlevs !< The number of input levels with valid data
+  logical,                optional, intent(in) :: debug !< optional debug flag
+  integer,                optional, intent(in) :: i_debug !< i-index of point for debugging
+  integer,                optional, intent(in) :: j_debug !< j-index of point for debugging
+  real,                   optional, intent(in) :: eps_z   !< A negligibly small layer thickness in the units of Z.
   real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr !< tracers in layer space
+
   ! Local variables
   real, dimension(size(tr_in,3)) :: tr_1d !< a copy of the input tracer concentrations in a column.
-  real, dimension(nlay+1) :: e_1d
-  real, dimension(nlay) :: tr_
+  real, dimension(nlay+1) :: e_1d ! A 1-d column of intreface heights, in the same units as e.
+  real, dimension(nlay) :: tr_    ! A 1-d column of tracer concentrations
   integer, dimension(size(tr_in,1),size(tr_in,2)) :: nlevs_data !< number of valid levels in the input dataset
   integer :: n,i,j,k,l,nx,ny,nz,nt,kz
   integer :: k_top,k_bot,k_bot_prev,kk,kstart
-  real    :: sl_tr
+  real    :: sl_tr    ! The tracer concentration slope times the layer thickess, in tracer units.
+  real    :: epsln_Z  ! A negligibly thin layer thickness, in Z.
   real, dimension(size(tr_in,3)) :: wt !< The fractional weight for each layer in the range between z1 and z2
-  real, dimension(size(tr_in,3)) :: z1,z2 !< z1 and z2 are the depths of the top and bottom limits of the part
-  ! of a z-cell that contributes to a layer, relative to the cell
-  !               center and normalized by the cell thickness, nondim.
-  !               Note that -1/2 <= z1 <= z2 <= 1/2.
+  real, dimension(size(tr_in,3)) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom
+                                  ! limits of the part of a z-cell that contributes to a layer, relative
+                                  ! to the cell center and normalized by the cell thickness, nondim.
+                                  ! Note that -1/2 <= z1 <= z2 <= 1/2.
 
-  logical :: debug_msg, debug_
+  logical :: debug_msg, debug_, debug_pt
 
   nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3)
 
   nlevs_data = size(tr_in,3)
-  if (PRESENT(nlevs)) then
-     nlevs_data  = anint(nlevs)
-  endif
+  if (PRESENT(nlevs)) nlevs_data = anint(nlevs)
+  epsln_Z = 1.0e-10 ; if (PRESENT(eps_z)) epsln_Z = eps_z
 
-  debug_=.false.
-  if (PRESENT(debug)) then
-     debug_=debug
-  endif
-
-  debug_msg = .false.
-  if (debug_) then
-     debug_msg=.true.
-  endif
+  debug_=.false. ; if (PRESENT(debug)) debug_ = debug
+  debug_msg = debug_
+  debug_pt = debug_ ; if (PRESENT(i_debug) .and. PRESENT(j_debug)) debug_pt = debug_
 
   do j=1,ny
     i_loop: do i=1,nx
       if (nlevs_data(i,j) == 0 .or. wet(i,j) == 0.) then
-         tr(i,j,:) = land_fill
-         cycle i_loop
+        tr(i,j,:) = land_fill
+        cycle i_loop
       endif
 
       do k=1,nz
@@ -205,107 +207,82 @@ function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,
       k_bot = 1 ; k_bot_prev = -1
       do k=1,nlay
         if (e_1d(k+1) > z_edges(1)) then
-           tr(i,j,k) = tr_1d(1)
+          tr(i,j,k) = tr_1d(1)
         elseif (e_1d(k) < z_edges(nlevs_data(i,j)+1)) then
-           if (debug_msg) then
-              print *,'*** WARNING : Found interface below valid range of z data '
-              print *,'(i,j,z_bottom,interface)= ',&
-                   i,j,z_edges(nlevs_data(i,j)+1),e_1d(k)
-              print *,'z_edges= ',z_edges
-              print *,'e=',e_1d
-              print *,'*** I will extrapolate below using the bottom-most valid values'
-              debug_msg = .false.
-           endif
-           tr(i,j,k) = tr_1d(nlevs_data(i,j))
+          if (debug_msg) then
+            print *,'*** WARNING : Found interface below valid range of z data '
+            print *,'(i,j,z_bottom,interface)= ',&
+                 i,j,z_edges(nlevs_data(i,j)+1),e_1d(k)
+            print *,'z_edges= ',z_edges
+            print *,'e=',e_1d
+            print *,'*** I will extrapolate below using the bottom-most valid values'
+            debug_msg = .false.
+          endif
+          tr(i,j,k) = tr_1d(nlevs_data(i,j))
 
         else
-           kstart=k_bot
-           call find_overlap(z_edges, e_1d(k), e_1d(k+1), nlevs_data(i,j), &
-                kstart, k_top, k_bot, wt, z1, z2)
+          kstart=k_bot
+          call find_overlap(z_edges, e_1d(k), e_1d(k+1), nlevs_data(i,j), &
+                            kstart, k_top, k_bot, wt, z1, z2)
 
-           if (debug_) then
-              if (PRESENT(i_debug)) then
-                 if (i == i_debug.and.j == j_debug) then
-                    print *,'0001 k,k_top,k_bot,sum(wt),sum(z2-z1) = ',k,k_top,k_bot,sum(wt),sum(z2-z1)
-                 endif
-              endif
-           endif
-           kz = k_top
-           sl_tr=0.0; ! cur_tr=0.0
-           if (kz /= k_bot_prev) then
-              ! Calculate the intra-cell profile.
-              if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
-                 sl_tr = find_limited_slope(tr_1d, z_edges, kz)
-              endif
-           endif
-           if (kz > nlevs_data(i,j)) kz = nlevs_data(i,j)
-           ! This is the piecewise linear form.
-           tr(i,j,k) = wt(kz) * &
-                (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
-           ! For the piecewise parabolic form add the following...
-           !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
-           !        if (debug_) then
-           !      print *,'k,k_top,k_bot= ',k,k_top,k_bot
-           !        endif
-           if (debug_) then
-              if (PRESENT(i_debug)) then
-                 if (i == i_debug.and.j == j_debug) then
-                    print *,'0002 k,k_top,k_bot,k_bot_prev,sl_tr = ',k,k_top,k_bot,k_bot_prev,sl_tr
-                 endif
-              endif
-           endif
+          if (debug_pt) then ; if ((i == i_debug) .and. (j == j_debug)) then
+            print *,'0001 k,k_top,k_bot,sum(wt),sum(z2-z1) = ',k,k_top,k_bot,sum(wt),sum(z2-z1)
+          endif ; endif
+          kz = k_top
+          sl_tr=0.0; ! cur_tr=0.0
+          if (kz /= k_bot_prev) then
+            ! Calculate the intra-cell profile.
+            if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
+               sl_tr = find_limited_slope(tr_1d, z_edges, kz)
+            endif
+          endif
+          if (kz > nlevs_data(i,j)) kz = nlevs_data(i,j)
+          ! This is the piecewise linear form.
+          tr(i,j,k) = wt(kz) * (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
+          ! For the piecewise parabolic form add the following...
+          !     + C1_3*wt(kz) * cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
+          if (debug_pt) then ; if ((i == i_debug) .and. (j == j_debug)) then
+            print *,'0002 k,k_top,k_bot,k_bot_prev,sl_tr = ',k,k_top,k_bot,k_bot_prev,sl_tr
+          endif ; endif
 
-           do kz=k_top+1,k_bot-1
-             tr(i,j,k) = tr(i,j,k) + wt(kz)*tr_1d(kz)
-           enddo
+          do kz=k_top+1,k_bot-1
+            tr(i,j,k) = tr(i,j,k) + wt(kz)*tr_1d(kz)
+          enddo
 
-           if (debug_) then
-              if (PRESENT(i_debug)) then
-                 if (i == i_debug.and.j == j_debug) then
-                    print *,'0003 k,tr = ',k,tr(i,j,k)
-                 endif
-              endif
-           endif
+          if (debug_pt) then ; if ((i == i_debug) .and. (j == j_debug)) then
+            print *,'0003 k,tr = ',k,tr(i,j,k)
+          endif ; endif
 
-           if (k_bot > k_top) then
-              kz = k_bot
-              ! Calculate the intra-cell profile.
-              sl_tr = 0.0 ! ; cur_tr = 0.0
-              if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
-                 sl_tr = find_limited_slope(tr_1d, z_edges, kz)
-                 !      if (debug_) then
-                 !              print *,'002 sl_tr,k,kz,nlevs= ',sl_tr,k,kz,nlevs_data(i,j),nlevs(i,j)
-                 !            endif
-              endif
-              ! This is the piecewise linear form.
-              tr(i,j,k) = tr(i,j,k) + wt(kz) * &
-                   (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
-              ! For the piecewise parabolic form add the following...
-              !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
+          if (k_bot > k_top) then
+            kz = k_bot
+            ! Calculate the intra-cell profile.
+            sl_tr = 0.0 ! ; cur_tr = 0.0
+            if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
+               sl_tr = find_limited_slope(tr_1d, z_edges, kz)
+            endif
+            ! This is the piecewise linear form.
+            tr(i,j,k) = tr(i,j,k) + wt(kz) * &
+                 (tr_1d(kz) + 0.5*sl_tr*(z2(kz) + z1(kz)))
+            ! For the piecewise parabolic form add the following...
+            !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
 
-              if (debug_) then
-                 if (PRESENT(i_debug)) then
-                    if (i == i_debug.and.j == j_debug) then
-                       print *,'0004 k,kz,nlevs,sl_tr,tr = ',k,kz,nlevs_data(i,j),sl_tr,tr(i,j,k)
-                       print *,'0005 k,kz,tr(kz),tr(kz-1),tr(kz+1) = ',k,kz,tr_1d(kz),tr_1d(kz-1),tr_1d(kz+1),z_edges(kz+2)
-                    endif
-                 endif
-              endif
+            if (debug_pt) then ; if ((i == i_debug) .and. (j == j_debug)) then
+              print *,'0004 k,kz,nlevs,sl_tr,tr = ',k,kz,nlevs_data(i,j),sl_tr,tr(i,j,k)
+              print *,'0005 k,kz,tr(kz),tr(kz-1),tr(kz+1) = ',k,kz,tr_1d(kz),tr_1d(kz-1),tr_1d(kz+1),z_edges(kz+2)
+            endif ; endif
 
-           endif
-           k_bot_prev = k_bot
+          endif
+          k_bot_prev = k_bot
 
         endif
       enddo ! k-loop
 
       do k=2,nlay  ! simply fill vanished layers with adjacent value
-        if (e_1d(k)-e_1d(k+1) <= epsln) tr(i,j,k)=tr(i,j,k-1)
+        if (e_1d(k)-e_1d(k+1) <= epsln_Z) tr(i,j,k)=tr(i,j,k-1)
       enddo
 
     enddo i_loop
   enddo
-
-  return
 
 end function tracer_z_init
 
@@ -360,10 +337,9 @@ end function bisect_fast
 #ifdef PY_SOLO
 !  Only for stand-alone python
 
-!> This subroutine determines the potential temperature and
-!! salinity that is consistent with the target density
-!! using provided initial guess
-subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start)
+!> This subroutine determines the potential temperature and salinity that
+!! is consistent with the target density using provided initial guess
+subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start)
   real(kind=8), dimension(:,:,:), intent(inout) :: temp !< potential temperature (degC)
   real(kind=8), dimension(:,:,:), intent(inout) :: salt !< salinity (PSU)
   real(kind=8), dimension(size(temp,3)), intent(in) :: R !< desired potential density, in kg m-3.
@@ -372,49 +348,40 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start)
   integer, intent(in) :: k_start !< starting index (i.e. below the buffer layer)
   real, intent(in) :: land_fill !< land fill value
   real(kind=8), dimension(:,:,:), intent(in) :: h !< layer thickness . Do not iterate for massless layers
+
   ! Local variables
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
-  real(kind=8), dimension(size(temp,1)) :: press
-  integer :: nx,ny,nz,nt,i,j,k,n,itt
-  logical :: adjust_salt , old_fit
-  real    :: dT_dS
   real, parameter :: T_max = 35.0, T_min = -2.0
-  real, parameter :: S_min = 0.5, S_max=65.0
-  real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
 #else
-!> This subroutine determines the potential temperature and
-!! salinity that is consistent with the target density
-!! using provided initial guess
-subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start,eos)
-  real, dimension(:,:,:), intent(inout) :: temp !< potential temperature (degC)
-  real, dimension(:,:,:), intent(inout) :: salt !< salinity (PSU)
-  real, dimension(size(temp,3)), intent(in) :: R !< desired potential density, in kg m-3.
-  real, intent(in) :: p_ref !< reference pressure, in Pa.
-  integer, intent(in) :: niter !< maximum number of iterations
-  integer, intent(in) :: k_start !< starting index (i.e. below the buffer layer)
-  real, intent(in) :: land_fill !< land fill value
-  real, dimension(:,:,:), intent(in) :: h !< layer thickness . Do not iterate for massless layers
-  type(eos_type), pointer :: eos !< seawater equation of state control structure
-  ! Local variables
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
-  real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
-  real(kind=8), dimension(size(temp,1)) :: press
-  integer :: nx,ny,nz,nt,i,j,k,n,itt
-  real    :: dT_dS
-  logical :: adjust_salt , old_fit
+!> This subroutine determines the potential temperature and salinity that
+!! is consistent with the target density using provided initial guess
+subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start, eos)
+  real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature (degC)
+  real, dimension(:,:,:),        intent(inout) :: salt !< salinity (PSU)
+  real, dimension(size(temp,3)), intent(in)    :: R !< desired potential density, in kg m-3.
+  real,                          intent(in)    :: p_ref !< reference pressure, in Pa.
+  integer,                       intent(in)    :: niter !< maximum number of iterations
+  integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
+  real,                          intent(in)    :: land_fill !< land fill value
+  real, dimension(:,:,:),        intent(in)    :: h   !< layer thickness, used only to avoid working on massless layers
+  type(eos_type),                pointer       :: eos !< seawater equation of state control structure
+
   real, parameter :: T_max = 31.0, T_min = -2.0
+#endif
+  ! Local variables (All of which need documentation!)
+  real(kind=8), dimension(size(temp,1),size(temp,3)) :: T, S, dT, dS, rho, hin
+  real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT, drho_dS
+  real(kind=8), dimension(size(temp,1)) :: press
+  integer :: nx, ny, nz, nt, i, j, k, n, itt
+  real    :: dT_dS
+  logical :: adjust_salt, old_fit
   real, parameter :: S_min = 0.5, S_max=65.0
   real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
-#endif
 
   old_fit = .true.   ! reproduces siena behavior
-  ! will switch to the newer
-  ! method which simultaneously adjusts
-  ! temp and salt based on the ratio
-  ! of the thermal and haline coefficients.
+  ! will switch to the newer method which simultaneously adjusts
+  ! temp and salt based on the ratio of the thermal and haline coefficients.
 
-  nx=size(temp,1);ny=size(temp,2); nz=size(temp,3)
+  nx=size(temp,1) ; ny=size(temp,2) ; nz=size(temp,3)
 
   press(:) = p_ref
 
@@ -431,71 +398,58 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start,eos
       drho_dT=alpha_wright_eos_2d(T,S,p_ref)
 #else
       do k=1, nz
-        call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
-        call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), 1, nx, eos)
+        call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), 1, nx, eos)
       enddo
 #endif
-      do k=k_start,nz
-        do i=1,nx
+      do k=k_start,nz ; do i=1,nx
 
-!         if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
-          if (abs(rho(i,k)-R(k))>tol) then
-             if (old_fit) then
-                dT(i,k)=(R(k)-rho(i,k))/drho_dT(i,k)
-                if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
-                if (dT(i,k)<-1.0*max_t_adj) dT(i,k)=-1.0*max_t_adj
-                T(i,k)=max(min(T(i,k)+dT(i,k),T_max),T_min)
-             else
-                dT_dS = 10.0 - min(-drho_dT(i,k)/drho_dS(i,k),10.)
-                dS(i,k) = (R(k)-rho(i,k))/(drho_dS(i,k) - drho_dT(i,k)*dT_dS )
-                dT(i,k)= -dT_dS*dS(i,k)
-!               if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
-!               if (dT(i,k)<-1.0*max_t_adj) dT(i,k)=-1.0*max_t_adj
-              T(i,k)=max(min(T(i,k)+dT(i,k),T_max),T_min)
-                S(i,k)=max(min(S(i,k)+dS(i,k),S_max),S_min)
-             endif
+!       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
+        if (abs(rho(i,k)-R(k))>tol) then
+          if (old_fit) then
+             dT(i,k) = max(min((R(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
+             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+          else
+             dT_dS = 10.0 - min(-drho_dT(i,k)/drho_dS(i,k),10.)
+             !### RWH: Based on the dimensions alone, the expression above should be:
+             ! dT_dS = 10.0 - min(-drho_dS(i,k)/drho_dT(i,k),10.)
+             dS(i,k) = (R(k)-rho(i,k)) / (drho_dS(i,k) - drho_dT(i,k)*dT_dS )
+             dT(i,k) = -dT_dS*dS(i,k)
+           ! dT(i,k) = max(min(dT(i,k), max_t_adj), -max_t_adj)
+             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+             S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
           endif
-        enddo
-      enddo
+        endif
+      enddo ; enddo
       if (maxval(abs(dT)) < tol) then
          adjust_salt = .false.
          exit iter_loop
       endif
     enddo iter_loop
 
-    if (adjust_salt .and. old_fit) then
-       iter_loop2: do itt = 1,niter
+    if (adjust_salt .and. old_fit) then ; do itt = 1,niter
 #ifdef PY_SOLO
-         rho=wright_eos_2d(T,S,p_ref)
-         drho_dS=beta_wright_eos_2d(T,S,p_ref)
+      rho = wright_eos_2d(T,S,p_ref)
+      drho_dS = beta_wright_eos_2d(T,S,p_ref)
 #else
-         do k=1, nz
-           call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
-           call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
-         enddo
+      do k=1, nz
+        call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
+        call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
+      enddo
 #endif
-         do k=k_start,nz
-           do i=1,nx
-!              if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln ) then
-             if (abs(rho(i,k)-R(k))>tol ) then
-                dS(i,k)=(R(k)-rho(i,k))/drho_dS(i,k)
-                if (dS(i,k)>max_s_adj) dS(i,k)=max_s_adj
-                if (dS(i,k)<-1.0*max_s_adj) dS(i,k)=-1.0*max_s_adj
-                S(i,k)=max(min(S(i,k)+dS(i,k),S_max),S_min)
-             endif
-           enddo
-         enddo
-         if (maxval(abs(dS)) < tol) then
-            exit iter_loop2
-         endif
-       enddo iter_loop2
-    endif
+      do k=k_start,nz ; do i=1,nx
+!       if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln ) then
+        if (abs(rho(i,k)-R(k)) > tol) then
+          dS(i,k) = max(min((R(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
+          S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+        endif
+      enddo ; enddo
+      if (maxval(abs(dS)) < tol) exit
+    enddo ; endif
 
     temp(:,j,:)=T(:,:)
     salt(:,j,:)=S(:,:)
   enddo
-
-  return
 
 end subroutine determine_temperature
 
@@ -505,57 +459,62 @@ end subroutine determine_temperature
 !! of each layer that overlaps that depth range.
 !! Note that by convention, e decreases with increasing k and Z_top > Z_bot.
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
-  real, dimension(:), intent(in) :: e !< the interface positions, in m.
-  real, intent(in)   :: Z_top !< The top of the range being mapped to, in m.
-  real, intent(in)   :: Z_bot !< The bottom of the range being mapped to, in m.
-  integer, intent(in) :: k_max !< The number of valid layers.
-  integer, intent(in) :: k_start !< The layer at which to start searching.
-  integer, intent(out) :: k_top !< The index of the top layer that overlap with the depth range.
-  integer, intent(out) :: k_bot !< The index of the bottom layer that overlap with the depth range.
-  real, dimension(:), intent(out) :: wt !< The relative weights of each layer from k_top to k_bot.
-  real, dimension(:), intent(out) :: z1 !< Depth of the top limit of layer that contributes to a level
-  real, dimension(:), intent(out) :: z2 !< Depth of the bottom limit of layer that contributes to a level
+  real, dimension(:), intent(in)  :: e  !< The interface positions, in m or Z.
+  real,               intent(in)  :: Z_top !< The top of the range being mapped to, in m or Z.
+  real,               intent(in)  :: Z_bot !< The bottom of the range being mapped to, in m or Z.
+  integer,            intent(in)  :: k_max !< The number of valid layers.
+  integer,            intent(in)  :: k_start !< The layer at which to start searching.
+  integer,            intent(out) :: k_top !< The index of the top layer that overlap with the depth range.
+  integer,            intent(out) :: k_bot !< The index of the bottom layer that overlap with the depth range.
+  real, dimension(:), intent(out) :: wt !< The relative weights of each layer from k_top to k_bot, nondim.
+  real, dimension(:), intent(out) :: z1 !< Depth of the top limit of layer that contributes to a level, nondim.
+  real, dimension(:), intent(out) :: z2 !< Depth of the bottom limit of layer that contributes to a level, nondim.
+
   ! Local variables
   real :: Ih, e_c, tot_wt, I_totwt
   integer :: k
 
-  wt(:)=0.0; z1(:)=0.0; z2(:)=0.0
-  k_top = k_start; k_bot= k_start; wt(1) = 1.0; z1(1)=-0.5; z2(1) = 0.5
+  wt(:)=0.0 ; z1(:)=0.0 ; z2(:)=0.0
+  k_top = k_start ; k_bot = k_start ; wt(1) = 1.0 ; z1(1) = -0.5 ; z2(1) = 0.5
 
-  do k=k_start,k_max ;if (e(k+1)<Z_top) exit ; enddo
-    k_top = k
-    if (k>k_max) return
+  do k=k_start,k_max ; if (e(K+1) < Z_top) exit ; enddo
+  k_top = k
 
-    ! Determine the fractional weights of each layer.
-    ! Note that by convention, e and Z_int decrease with increasing k.
-    if (e(k+1)<=Z_bot) then
-       wt(k) = 1.0 ; k_bot = k
-       Ih = 1.0 / (e(k)-e(k+1))
-       e_c = 0.5*(e(k)+e(k+1))
-       z1(k) = (e_c - MIN(e(k),Z_top)) * Ih
-       z2(k) = (e_c - Z_bot) * Ih
-    else
-       wt(k) = MIN(e(k),Z_top) - e(k+1) ; tot_wt = wt(k) ! These are always > 0.
-       z1(k) = (0.5*(e(k)+e(k+1)) - MIN(e(k),Z_top)) / (e(k)-e(k+1))
-       z2(k) = 0.5
-       k_bot = k_max
-       do k=k_top+1,k_max
-         if (e(k+1)<=Z_bot) then
-            k_bot = k
-            wt(k) = e(k) - Z_bot ; z1(k) = -0.5
-            z2(k) = (0.5*(e(k)+e(k+1)) - Z_bot) / (e(k)-e(k+1))
-         else
-            wt(k) = e(k) - e(k+1) ; z1(k) = -0.5 ; z2(k) = 0.5
-         endif
-         tot_wt = tot_wt + wt(k) ! wt(k) is always > 0.
-         if (k>=k_bot) exit
-       enddo
+  if (k>k_max) return
 
-       I_totwt = 1.0 / tot_wt
-       do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
+  ! Determine the fractional weights of each layer.
+  ! Note that by convention, e and Z_int decrease with increasing k.
+  if (e(K+1) <= Z_bot) then
+    wt(k) = 1.0 ; k_bot = k
+    Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
+    e_c = 0.5*(e(K)+e(K+1))
+    z1(k) = (e_c - MIN(e(K), Z_top)) * Ih
+    z2(k) = (e_c - Z_bot) * Ih
+  else
+    wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
+    ! Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
+    if (e(K) /= e(K+1)) then
+      z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K), Z_top)) / (e(K)-e(K+1))
+    else ; z1(k) = -0.5 ; endif
+    z2(k) = 0.5
+    k_bot = k_max
+    do k=k_top+1,k_max
+      if (e(K+1) <= Z_bot) then
+        k_bot = k
+        wt(k) = e(K) - Z_bot ; z1(k) = -0.5
+        if (e(K) /= e(K+1)) then
+          z2(k) = (0.5*(e(K)+e(K+1)) - Z_bot) / (e(K)-e(K+1))
+        else ; z2(k) = 0.5 ; endif
+      else
+        wt(k) = e(K) - e(K+1) ; z1(k) = -0.5 ; z2(k) = 0.5
       endif
+      tot_wt = tot_wt + wt(k) ! wt(k) is always > 0.
+      if (k>=k_bot) exit
+    enddo
 
-      return
+    I_totwt = 0.0 ; if (tot_wt > 0.0) I_totwt = 1.0 / tot_wt
+    do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
+  endif
 
 end subroutine find_overlap
 
@@ -563,56 +522,55 @@ end subroutine find_overlap
 !! a piecewise limited scheme.
 function find_limited_slope(val, e, k) result(slope)
   real, dimension(:), intent(in) :: val !< An column the values that are being interpolated.
-  real, dimension(:), intent(in) :: e !< A column's interface heights, in m.
-  integer, intent(in) :: k !< The layer whose slope is being determined.
+  real, dimension(:), intent(in) :: e   !< A column's interface heights, in Z or m.
+  integer,            intent(in) :: k   !< The layer whose slope is being determined.
   real :: slope !< The normalized slope in the intracell distribution of val.
   ! Local variables
-  real :: amx,bmx,amn,bmn,cmn,dmn
+  real :: amn, cmn
   real :: d1, d2
 
   if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
-     slope = 0.0 ! ; curvature = 0.0
+    slope = 0.0 ! ; curvature = 0.0
   else
-     d1 = 0.5*(e(k-1)-e(k+1)) ; d2 = 0.5*(e(k)-e(k+2))
-     slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
-          (e(k) - e(k+1)) / (d1*d2*(d1+d2))
-     ! slope = 0.5*(val(k+1) - val(k-1))
-     ! This is S.J. Lin's form of the PLM limiter.
-     amx=max(val(k-1),val(k))
-     bmx = max(amx,val(k+1))
-     amn = min(abs(slope),2.0*(bmx-val(k)))
-     bmn = min(val(k-1),val(k))
-     cmn = 2.0*(val(k)-min(bmn,val(k+1)))
-     dmn = min(amn,cmn)
-     slope = sign(1.0,slope) * dmn
+    d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
+    if (d1*d2 > 0.0) then
+      slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
+              (e(K) - e(K+1)) / (d1*d2*(d1+d2))
+      ! slope = 0.5*(val(k+1) - val(k-1))
+      ! This is S.J. Lin's form of the PLM limiter.
+      amn = min(abs(slope), 2.0*(max(val(k-1), val(k), val(k+1)) - val(k)))
+      cmn = 2.0*(val(k) - min(val(k-1), val(k), val(k+1)))
+      slope = sign(1.0, slope) * min(amn, cmn)
 
-     ! min(abs(slope), &
-     !             2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
-     !             2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
-     ! curvature = 0.0
+      ! min(abs(slope), 2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
+      !                 2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
+      ! curvature = 0.0
+    else
+      slope = 0.0 ! ; curvature = 0.0
+    endif
   endif
-
-  return
 
 end function find_limited_slope
 
 !> Find interface positions corresponding to density profile
-function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
+function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps_z) result(zi)
   real, dimension(:,:,:), &
-       intent(in) :: rho !< potential density in z-space (kg m-3)
+                      intent(in) :: rho   !< potential density in z-space (kg m-3)
   real, dimension(size(rho,3)), &
-       intent(in) :: zin !< levels (m)
-  real, dimension(:), intent(in) :: Rb !< target interface densities (kg m-3)
+                      intent(in) :: zin   !< Input data levels, in Z (often m).
+  real, dimension(:), intent(in) :: Rb    !< target interface densities (kg m-3)
   real, dimension(size(rho,1),size(rho,2)), &
-       intent(in) :: depth !< ocean depth (m)
+                      intent(in) :: depth !< ocean depth in Z
   real, dimension(size(rho,1),size(rho,2)), &
-       optional, intent(in) ::nlevs !< number of valid points in each column
+            optional, intent(in) :: nlevs !< number of valid points in each column
   logical,  optional, intent(in) :: debug !< optional debug flag
-  integer,  optional, intent(in) :: nkml !< number of mixed layer pieces
-  integer,  optional, intent(in) :: nkbl !< number of buffer layer pieces
-  real,     optional, intent(in) :: hml !< mixed layer depth
+  integer,  optional, intent(in) :: nkml  !< number of mixed layer pieces
+  integer,  optional, intent(in) :: nkbl  !< number of buffer layer pieces
+  real,     optional, intent(in) :: hml   !< mixed layer depth, in Z
+  real,     optional, intent(in) :: eps_z !< A negligibly small layer thickness in the units of Z.
+  real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi !< The returned interface, in the same units az zin.
+
   ! Local variables
-  real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi
   real, dimension(size(rho,1),size(rho,3)) :: rho_
   real, dimension(size(rho,1)) :: depth_
   logical :: unstable
@@ -620,11 +578,13 @@ function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
   integer, dimension(size(rho,1),size(Rb,1)) :: ki_
   real, dimension(size(rho,1),size(Rb,1)) :: zi_
   integer, dimension(size(rho,1),size(rho,2)) :: nlevs_data
-  integer, dimension(size(rho,1)) :: lo,hi
+  integer, dimension(size(rho,1)) :: lo, hi
   real :: slope,rsm,drhodz,hml_
   integer :: n,i,j,k,l,nx,ny,nz,nt
   integer :: nlay,kk,nkml_,nkbl_
   logical :: debug_ = .false.
+  real    :: epsln_Z    ! A negligibly thin layer thickness, in Z.
+  real    :: epsln_rho  ! A negligibly small density change, in kg m-3.
   real, parameter :: zoff=0.999
 
   nlay=size(Rb)-1
@@ -636,94 +596,85 @@ function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
   nx = size(rho,1); ny=size(rho,2); nz = size(rho,3)
   nlevs_data(:,:) = size(rho,3)
 
-  nkml_=0;nkbl_=0;hml_=0.0
-  if (PRESENT(nkml)) nkml_=max(0,nkml)
-  if (PRESENT(nkbl)) nkbl_=max(0,nkbl)
-  if (PRESENT(hml)) hml_=hml
+  nkml_ = 0 ;  if (PRESENT(nkml)) nkml_ = max(0, nkml)
+  nkbl_ = 0 ;  if (PRESENT(nkbl)) nkbl_ = max(0, nkbl)
+  hml_ = 0.0 ; if (PRESENT(hml)) hml_ = hml
+  epsln_Z = 1.0e-10 ; if (PRESENT(eps_z)) epsln_Z = eps_z
+  epsln_rho = 1.0e-10
 
   if (PRESENT(nlevs)) then
-     nlevs_data(:,:) = nlevs(:,:)
+    nlevs_data(:,:) = nlevs(:,:)
   endif
 
   do j=1,ny
     rho_(:,:) = rho(:,j,:)
     i_loop: do i=1,nx
       if (debug_) then
-         print *,'looking for interfaces, i,j,nlevs= ',i,j,nlevs_data(i,j)
-         print *,'initial density profile= ', rho_(i,:)
+        print *,'looking for interfaces, i,j,nlevs= ',i,j,nlevs_data(i,j)
+        print *,'initial density profile= ', rho_(i,:)
       endif
       unstable=.true.
       dir=1
       do while (unstable)
         unstable=.false.
         if (dir == 1) then
-           do k=2,nlevs_data(i,j)-1
-             if (rho_(i,k) - rho_(i,k-1) < 0.0 ) then
-                if (k == 2) then
-                   rho_(i,k-1)=rho_(i,k)-epsln
-                else
-                   drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
-                   if (drhodz  < 0.0) then
-                      unstable=.true.
-                   endif
-                   rho_(i,k) = rho_(i,k-1)+drhodz*zoff*(zin(k)-zin(k-1))
-                endif
-             endif
-           enddo
-           dir=-1*dir
+          do k=2,nlevs_data(i,j)-1
+            if (rho_(i,k) - rho_(i,k-1) < 0.0 ) then
+              if (k == 2) then
+                rho_(i,k-1) = rho_(i,k)-epsln_rho
+              else
+                drhodz = (rho_(i,k+1)-rho_(i,k-1)) / (zin(k+1)-zin(k-1))
+                if (drhodz < 0.0) unstable=.true.
+                rho_(i,k) = rho_(i,k-1) + drhodz*zoff*(zin(k)-zin(k-1))
+              endif
+            endif
+          enddo
+          dir = -1*dir
         else
-           do k=nlevs_data(i,j)-1,2,-1
-             if (rho_(i,k+1) - rho_(i,k) < 0.0) then
-                if (k == nlevs_data(i,j)-1) then
-                   rho_(i,k+1)=rho_(i,k-1)+epsln
-                else
-                   drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
-                   if (drhodz  < 0.0) then
-                      unstable=.true.
-                   endif
-                   rho_(i,k) = rho_(i,k+1)-drhodz*(zin(k+1)-zin(k))
-                endif
-             endif
-           enddo
-           dir=-1*dir
+          do k=nlevs_data(i,j)-1,2,-1
+            if (rho_(i,k+1) - rho_(i,k) < 0.0) then
+              if (k == nlevs_data(i,j)-1) then
+                rho_(i,k+1) = rho_(i,k-1)+epsln_rho
+              else
+                drhodz = (rho_(i,k+1)-rho_(i,k-1))/(zin(k+1)-zin(k-1))
+                if (drhodz  < 0.0) unstable=.true.
+                rho_(i,k) = rho_(i,k+1)-drhodz*(zin(k+1)-zin(k))
+              endif
+            endif
+          enddo
+          dir = -1*dir
         endif
       enddo
       if (debug_) then
-         print *,'final density profile= ', rho_(i,:)
+        print *,'final density profile= ', rho_(i,:)
       endif
     enddo i_loop
 
     ki_(:,:) = 0
     zi_(:,:) = 0.0
-    depth_(:)=-1.0*depth(:,j)
-    lo(:)=1
-    hi(:)=nlevs_data(:,j)
-    ki_ = bisect_fast(rho_,Rb,lo,hi)
-    ki_(:,:) = max(1,ki_(:,:)-1)
+    depth_(:) = -1.0*depth(:,j)
+    lo(:) = 1
+    hi(:) = nlevs_data(:,j)
+    ki_ = bisect_fast(rho_, Rb, lo, hi)
+    ki_(:,:) = max(1, ki_(:,:)-1)
     do i=1,nx
       do l=2,nlay
-        slope = (zin(ki_(i,l)+1) - zin(ki_(i,l)))/max(rho_(i,ki_(i,l)+1) - rho_(i,ki_(i,l)),epsln)
+        slope = (zin(ki_(i,l)+1) - zin(ki_(i,l))) / max(rho_(i,ki_(i,l)+1) - rho_(i,ki_(i,l)),epsln_rho)
         zi_(i,l) = -1.0*(zin(ki_(i,l)) + slope*(Rb(l)-rho_(i,ki_(i,l))))
-        zi_(i,l) = max(zi_(i,l),depth_(i))
-        zi_(i,l) = min(zi_(i,l),-1.0*hml_)
+        zi_(i,l) = max(zi_(i,l), depth_(i))
+        zi_(i,l) = min(zi_(i,l), -1.0*hml_)
       enddo
-      zi_(i,nlay+1)=depth_(i)
+      zi_(i,nlay+1) = depth_(i)
       do l=2,nkml_+1
-        zi_(i,l)=max(((1.0-real(l))/real(nkml_))*hml_,depth_(i))
+        zi_(i,l) = max(hml_*((1.0-real(l))/real(nkml_)), depth_(i))
       enddo
       do l=nlay,nkml_+2,-1
-        if (zi_(i,l) < zi_(i,l+1)+epsln) then
-           zi_(i,l)=zi_(i,l+1)+epsln
-        endif
-        if (zi_(i,l)>-1.0*hml_) then
-           zi_(i,l)=max(-1.0*hml_,depth_(i))
-        endif
+        if (zi_(i,l) < zi_(i,l+1) + epsln_Z) zi_(i,l) = zi_(i,l+1) + epsln_Z
+        if (zi_(i,l) > -1.0*hml_)  zi_(i,l) = max(-1.0*hml_, depth_(i))
       enddo
     enddo
-    zi(:,j,:)=zi_(:,:)
+    zi(:,j,:) = zi_(:,:)
   enddo
-
-  return
 
 end function find_interfaces
 
