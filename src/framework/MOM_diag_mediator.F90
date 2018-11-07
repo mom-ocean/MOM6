@@ -15,6 +15,7 @@ use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
+use MOM_unit_scaling,       only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_diag_remap,       only : diag_remap_ctrl
@@ -240,12 +241,13 @@ integer :: id_clock_diag_mediator, id_clock_diag_remap, id_clock_diag_grid_updat
 contains
 
 !> Sets up diagnostics axes
-subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
-  type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
-  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
-  type(param_file_type), intent(in)    :: param_file !< Parameter file structure
-  type(diag_ctrl),       intent(inout) :: diag_cs !< Diagnostics control structure
-  logical, optional,     intent(in)    :: set_vertical !< If true or missing, set up
+subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
+  type(ocean_grid_type),   intent(inout) :: G  !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file structure
+  type(diag_ctrl),         intent(inout) :: diag_cs !< Diagnostics control structure
+  logical,       optional, intent(in)    :: set_vertical !< If true or missing, set up
                                                        !! vertical axes
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
@@ -347,7 +349,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   do i=1, diag_cs%num_diag_coords
     ! For each possible diagnostic coordinate
-    call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), GV, param_file)
+    call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), GV, US, param_file)
 
     ! This vertical coordinate has been configured so can be used.
     if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then

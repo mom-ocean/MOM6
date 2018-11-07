@@ -9,6 +9,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -70,9 +71,10 @@ end subroutine BFB_set_coord
 
 !> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
 !! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
-subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_file, CSp, h)
+subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, param_file, CSp, h)
   type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   logical,                 intent(in) :: use_temperature !< If true, temperature and salinity are used as
                                             !! state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
@@ -102,7 +104,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_fi
 
 !   Set up sponges for DOME configuration
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   call get_param(param_file, mdl, "SOUTHLAT", slat, &
                  "The southern latitude of the domain.", units="degrees")
