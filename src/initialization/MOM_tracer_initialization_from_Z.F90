@@ -15,17 +15,17 @@ use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
-use MOM_string_functions, only : uppercase
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : setVerticalGridAxes
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_EOS, only : int_specific_vol_dp
-use MOM_ALE, only : ALE_remap_scalar
+use MOM_horizontal_regridding, only : myStats, horiz_interp_and_extrap_tracer
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
-use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_horizontal_regridding, only : myStats, horiz_interp_and_extrap_tracer
+use MOM_string_functions, only : uppercase
+use MOM_unit_scaling, only : unit_scale_type
+use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : int_specific_vol_dp
+use MOM_ALE, only : ALE_remap_scalar
 
 implicit none ; private
 
@@ -38,11 +38,12 @@ character(len=40)  :: mdl = "MOM_tracer_initialization_from_Z" !< This module's 
 contains
 
 !> Initializes a tracer from a z-space data file.
-subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam, &
+subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_nam, &
                           src_var_unit_conversion, src_var_record, homogenize, &
                           useALEremapping, remappingScheme, src_var_gridspec )
   type(ocean_grid_type),      intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
+  type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(in)    :: h   !< Layer thickness, in H (often m or kg m-2).
   real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
@@ -121,7 +122,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
 
   call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
        G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
-       homog, m_to_Z=GV%m_to_Z)
+       homog, m_to_Z=US%m_to_Z)
 
   kd = size(z_edges_in,1)-1
   call pass_var(tr_z,G%Domain)
