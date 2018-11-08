@@ -85,11 +85,13 @@ subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
-                          ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
-                          ! positive upward, in m.                       !
-  real    :: min_thickness, S_surf, S_range, S_ref, S_light, S_dense
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z), usually
+                          ! negative because it is positive upward.
+  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+                          ! positive upward, in depth units (Z).
+  real :: min_thickness   ! The minimum layer thicknesses, in Z.
+  real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities, in ppt.
+  real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights, in Z-1.
   character(len=20) :: verticalCoordinate
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
@@ -102,7 +104,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_p
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
-                'Minimum thickness for layer',&
+                'Minimum thickness for layer', &
                  units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
@@ -126,6 +128,10 @@ subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_p
     call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
     call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
     call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+    call get_param(param_file, mdl, "INTERFACE_IC_QUANTA", eta_IC_quanta, &
+                   "The granularity of initial interface height values \n"//&
+                   "per meter, to avoid sensivity to order-of-arithmetic changes.", &
+                   default=2048.0, units="m-1", scale=US%Z_to_m, do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
 
     do K=1,nz+1
@@ -138,7 +144,8 @@ subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_p
       e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * &
                               ( (real(K)-1.5) / real(nz-1) ) ) / S_range
       ! Force round numbers ... the above expression has irrational factors ...
-      e0(K) = nint(2048.*US%Z_to_m*e0(K))/(2048.*US%Z_to_m)
+      if (eta_IC_quanta > 0.0) &
+        e0(K) = nint(eta_IC_quanta*e0(K)) / eta_IC_quanta
       e0(K) = min(real(1-K)*GV%Angstrom_Z, e0(K)) ! Bound by surface
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
     enddo
