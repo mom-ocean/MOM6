@@ -6,7 +6,7 @@ module sloshing_initialization
 use MOM_domains, only : sum_across_PEs
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : get_param, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
@@ -24,8 +24,6 @@ implicit none ; private
 public sloshing_initialize_topography
 public sloshing_initialize_thickness
 public sloshing_initialize_temperature_salinity
-
-character(len=40)  :: mdl = "sloshing_initialization" !< This module's name.
 
 contains
 
@@ -73,14 +71,27 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   real    :: weight_z           ! A (misused?) depth-space weighting, in inconsistent units.
   real    :: x1, y1, x2, y2     ! Dimensonless parameters.
   real    :: x, t               ! Dimensionless depth coordinates?
+  logical :: use_IC_bug         ! If true, set the initial conditions retaining an old bug.
   logical :: just_read          ! If true, just read parameters but set nothing.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40)  :: mdl = "sloshing_initialization" !< This module's name.
 
   integer :: i, j, k, is, ie, js, je, nx, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
-  if (just_read) return ! This subroutine has no run-time parameters.
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SLOSHING_IC_AMPLITUDE", a0, &
+                 "Initial amplitude of sloshing internal interface height \n"//&
+                 "displacements it the sloshing test case.", &
+                 units='m', default=75.0, scale=US%m_to_Z, do_not_log=just_read)
+  call get_param(param_file, mdl, "SLOSHING_IC_BUG", use_IC_bug, &
+                 "If true, use code with a bug to set the sloshing initial conditions.", &
+                 default=.true., do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   ! Define thicknesses
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -116,14 +127,17 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
     enddo
 
     ! 2. Define displacement
-    a0 = 75.0 * US%m_to_Z ! 75m Displacement amplitude in depth units.
+    ! a0 is set via get_param; by default a0 is a 75m Displacement amplitude in depth units.
     do k = 1,nz+1
 
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1.0
 
       x = G%geoLonT(i,j) / G%len_lon
-      !### Perhaps the '+ weight_z' here should be '* weight_z' - RWH
-      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * US%m_to_Z
+      if (use_IC_bug) then
+        displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * US%m_to_Z
+      else
+        displ(k) = a0 * cos(acos(-1.0)*x) * weight_z
+      endif
 
       if ( k == 1 ) then
         displ(k) = 0.0
