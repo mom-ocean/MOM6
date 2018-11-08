@@ -37,10 +37,11 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
                            ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward, in in depth units (Z).
+  real :: IC_amp           ! The amplitude of the initial height displacement, in H.
   real :: diskrad, rad, xCenter, xRadius, lonC, latC, xOffset
   logical :: just_read
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -61,6 +62,10 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
                  "The x-offset of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=G%x_axis_units, &
                  default = 0.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "DISK_IC_AMPLITUDE", IC_amp, &
+                 "Initial amplitude of interface height displacements \n"//&
+                 "in the circle_obcs test case.", &
+                 units='m', default=5.0, scale=GV%m_to_H, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -93,12 +98,11 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
     rad = rad*(2.*asin(1.)) ! Map 0-1 to 0-pi
     if (nz==1) then
       ! The model is barotropic
-      h(i,j,k) = h(i,j,k) + GV%m_to_H * 1.0*0.5*(1.+cos(rad)) ! cosine bell
+      h(i,j,k) = h(i,j,k) + IC_amp * 0.5*(1.+cos(rad)) ! cosine bell
     else
       ! The model is baroclinic
       do k = 1, nz
-        h(i,j,k) = h(i,j,k) - GV%m_to_H * 0.5*(1.+cos(rad)) & ! cosine bell
-            * 5.0 * real( 2*k-nz )
+        h(i,j,k) = h(i,j,k) - 0.5*(1.+cos(rad)) * IC_amp * real( 2*k-nz )
       enddo
     endif
   enddo ; enddo
