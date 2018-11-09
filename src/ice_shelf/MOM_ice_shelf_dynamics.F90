@@ -3590,8 +3590,10 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
     do i=isc,iec
       if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2)) then
         if (ISS%h_shelf(i,j) > 0.0) then
-!          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf - US%m_to_Z*melt_rate(i,j)*ISS%tfreeze(i,j))/(ISS%h_shelf(i,j))
-          CS%t_shelf(i,j) = CS%t_shelf(i,j) + time_step*(adot*Tsurf - (3.0*US%m_to_Z/spy)*ISS%tfreeze(i,j)) / ISS%h_shelf(i,j)
+!         CS%t_shelf(i,j) = CS%t_shelf(i,j) + &
+!             time_step*(adot*Tsurf - US%m_to_Z*melt_rate(i,j)*ISS%tfreeze(i,j))/(ISS%h_shelf(i,j))
+          CS%t_shelf(i,j) = CS%t_shelf(i,j) + &
+              time_step*(adot*Tsurf - (3.0*US%m_to_Z/spy)*ISS%tfreeze(i,j)) / ISS%h_shelf(i,j)
         else
           ! the ice is about to melt away
           ! in this case set thickness, area, and mask to zero
