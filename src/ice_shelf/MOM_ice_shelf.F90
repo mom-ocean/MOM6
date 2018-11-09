@@ -645,7 +645,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     endif
   endif
 
-  if (CS%DEBUG) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, haloshift=0)
+  if (CS%DEBUG) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, US, haloshift=0)
 
   call add_shelf_flux(G, CS, state, fluxes)
 
@@ -687,7 +687,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   call cpu_clock_end(id_clock_shelf)
 
-  if (CS%DEBUG) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, haloshift=0)
+  if (CS%DEBUG) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, US, haloshift=0)
 
 end subroutine shelf_calc_flux
 
@@ -1053,7 +1053,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     if (CS%DEBUG) then
       write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux, CS%time_step
       call MOM_mesg(mesg)
-      call MOM_forcing_chksum("After constant sea level", fluxes, G, haloshift=0)
+      call MOM_forcing_chksum("After constant sea level", fluxes, G, CS%US, haloshift=0)
     endif
 
   endif !constant_sea_level
