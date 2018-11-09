@@ -339,7 +339,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 
   if (CS%debug) then
     call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1,scale=GV%H_to_m)
-    call hchksum(forces%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
+    call hchksum(forces%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1,scale=US%Z_to_m)
     call hchksum(MLD_fast,'mixed_layer_restrat: MLD',G%HI,haloshift=1,scale=GV%H_to_m)
     call hchksum(Rml_av_fast,'mixed_layer_restrat: rml',G%HI,haloshift=1, scale=US%m_to_Z)
   endif
@@ -351,7 +351,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !   U - Component
 !$OMP do
   do j=js,je ; do I=is-1,ie
-    u_star = US%m_to_Z*0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
+    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
@@ -427,7 +427,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !  V- component
 !$OMP do
   do J=js-1,je ; do i=is,ie
-    u_star = US%m_to_Z*0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
+    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
@@ -650,7 +650,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
     do I=is-1,ie
       h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
 
-      u_star = US%m_to_Z*0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
+      u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
       absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
       ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
       ! momentum mixing rate: pi^2*visc/h_ml^2
@@ -698,7 +698,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   do J=js-1,je ; do i=is,ie
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * GV%H_to_Z
 
-    u_star = US%m_to_Z*0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
+    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
