@@ -663,7 +663,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       ! as the third piece will then optimally describe mixed layer
       ! restratification.  For nkml>=4 the whole strategy should be revisited.
       do i=is,ie
-        kU_Star = 0.41*US%m_to_Z*fluxes%ustar(i,j) ! Maybe could be replaced with u*+w*?
+        kU_Star = 0.41*fluxes%ustar(i,j) ! Maybe could be replaced with u*+w*?
         if (associated(fluxes%ustar_shelf) .and. &
             associated(fluxes%frac_shelf_h)) then
           if (fluxes%frac_shelf_h(i,j) > 0.0) &
@@ -1368,7 +1368,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
   if (CS%omega_frac >= 1.0) absf = 2.0*CS%omega
   do i=is,ie
-    U_Star = US%m_to_Z * fluxes%ustar(i,j)
+    U_Star = fluxes%ustar(i,j)
     if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
       if (fluxes%frac_shelf_h(i,j) > 0.0) &
         U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &

@@ -45,7 +45,7 @@ type, public :: forcing
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-    ustar         => NULL(), & !< surface friction velocity scale (m/s)
+    ustar         => NULL(), & !< surface friction velocity scale (Z/s)
     ustar_gustless => NULL()   !< surface friction velocity scale without any
                                !! any augmentation for gustiness (m/s)
 
@@ -181,7 +181,7 @@ type, public :: mech_forcing
   real, pointer, dimension(:,:) :: &
     taux  => NULL(), & !< zonal wind stress (Pa)
     tauy  => NULL(), & !< meridional wind stress (Pa)
-    ustar => NULL(), & !< surface friction velocity scale (m/s)
+    ustar => NULL(), & !< surface friction velocity scale (Z/s)
     net_mass_src => NULL() !< The net mass source to the ocean, in kg m-2 s-1.
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
@@ -943,10 +943,11 @@ end subroutine calculateBuoyancyFlux2d
 
 
 !> Write out chksums for thermodynamic fluxes.
-subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
+subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   character(len=*),        intent(in) :: mesg      !< message
   type(forcing),           intent(in) :: fluxes    !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in) :: G         !< grid type
+  type(unit_scale_type),   intent(in) :: US        !< A dimensional unit scaling type
   integer, optional,       intent(in) :: haloshift !< shift in halo
 
   integer :: is, ie, js, je, nz, hshift
@@ -958,7 +959,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI,haloshift=hshift)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI, haloshift=hshift, scale=US%Z_to_m)
   if (associated(fluxes%buoy)) &
     call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
   if (associated(fluxes%sw)) &
@@ -1020,10 +1021,11 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
 end subroutine MOM_forcing_chksum
 
 !> Write out chksums for the driving mechanical forces.
-subroutine MOM_mech_forcing_chksum(mesg, forces, G, haloshift)
+subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   character(len=*),        intent(in) :: mesg      !< message
   type(mech_forcing),      intent(in) :: forces    !< A structure with the driving mechanical forces
   type(ocean_grid_type),   intent(in) :: G         !< grid type
+  type(unit_scale_type),   intent(in) :: US        !< A dimensional unit scaling type
   integer, optional,       intent(in) :: haloshift !< shift in halo
 
   integer :: is, ie, js, je, nz, hshift
@@ -1040,7 +1042,7 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, haloshift)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
   if (associated(forces%ustar)) &
-    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift)
+    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift, scale=US%Z_to_m)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
     call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
                   forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true.)
@@ -1134,9 +1136,10 @@ end subroutine forcing_SinglePointPrint
 
 
 !> Register members of the forcing type for diagnostics
-subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use_berg_fluxes)
+subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles, use_berg_fluxes)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
+  type(unit_scale_type), intent(in)  :: US              !< A dimensional unit scaling type
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles         !< handles for diagnostics
   logical, optional,   intent(in)    :: use_berg_fluxes !< If true, allow iceberg flux diagnostics
@@ -1158,7 +1161,8 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
          cmor_standard_name='surface_downward_y_stress')
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
-      'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', 'm s-1')
+      'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &
+      'm s-1', conversion=US%Z_to_m)
 
   if (present(use_berg_fluxes)) then
     if (use_berg_fluxes) then
