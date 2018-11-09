@@ -12,6 +12,7 @@ use MOM_verticalgrid,  only : verticalGrid_type
 use MOM_safe_alloc,    only : safe_alloc_ptr
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_time_manager,  only : time_type, operator(+), operator(/), time_type_to_real
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 implicit none ; private
 
@@ -184,11 +185,12 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
 
 end subroutine SCM_CVMix_tests_surface_forcing_init
 
-subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, CS)
-  type(surface),                    intent(in)    :: state  !< Surface state structure
-  type(mech_forcing),               intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),                  intent(in)    :: day    !< Time in days
-  type(ocean_grid_type),            intent(inout) :: G      !< Grid structure
+subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
+  type(surface),            intent(in)    :: state  !< Surface state structure
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),          intent(in)    :: day    !< Time in days
+  type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(SCM_CVMix_tests_CS), pointer       :: CS     !< Container for SCM parameters
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -211,7 +213,7 @@ subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, CS)
 
   mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = sqrt(  mag_tau / CS%Rho0 )
+    forces%ustar(i,j) = US%m_to_Z * sqrt(  mag_tau / CS%Rho0 )
   enddo ; enddo ; endif
 
 end subroutine SCM_CVMix_tests_wind_forcing
