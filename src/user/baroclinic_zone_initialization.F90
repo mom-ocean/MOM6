@@ -94,7 +94,8 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone, just_read_params)
+  call bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
+                  delta_T, dTdx, L_zone, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
