@@ -1,4 +1,6 @@
 !> Implements the Mesoscale Eddy Kinetic Energy framework
+! with topographic beta effect included in computing beta in Rhines scale
+
 module MOM_MEKE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -61,8 +63,10 @@ type, public :: MEKE_CS ; private
   real :: aEady         !< Weighting towards Eady scale of mixing length (non-dim.)
   real :: aGrid         !< Weighting towards grid scale of mixing length (non-dim.)
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE (non-dim.)
+  real :: MEKE_topographic_beta !< weighting how much topographic beta is considered 
+                                ! when computing beta in Rhines scale
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
-  logical :: debug      !< If true, write out checksums of data for debugging
+  logical :: debug      !< If true, write out checksums of data for debugging 
 
   ! Optional storage
   real, dimension(:,:), allocatable :: del2MEKE !< Laplacian of MEKE, used for bi-harmonic diffusion.
@@ -557,12 +561,15 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: beta, SN, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady
   real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
   real :: EKE, EKEmin, EKEmax, resid, ResMin, ResMax, EKEerr
+  real, dimension(SZI_(G),SZJ_(G)) :: D, lat, lon !< ocean depth, lat, & lon at h-points
+  real :: FatH    ! Coriolis parameter at h points; to compute topographic beta
   integer :: i, j, is, ie, js, je, n1, n2
   real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket in m^2 s^-2.
   logical :: useSecant, debugIteration
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
+  D = G%bathyT; lat = G%geolatt; lon = G%geolont
+  
   debugIteration = .false.
   KhCoeff = CS%MEKE_KhCoeff
   Ubg2 = CS%MEKE_Uscale**2
@@ -573,7 +580,13 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     !SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min( min(SN_u(I,j) , SN_u(I-1,j)) , min(SN_v(i,J), SN_v(i,J-1)) )
-    beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
+
+    FatH = 0.25*((G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) + &
+           (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1))) !< Coriolis parameter at h points
+    beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/D(i,j)*(D(i+1,j) - D(i-1,j)) &
+           /2./G%dxT(i,j) )**2. + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/D(i,j) &
+           *(D(i,j+1) - D(i,j-1))/2./G%dyT(i,j) )**2. )
+        
     I_H = GV%Rho0 * I_mass(i,j)
 
     if (KhCoeff*SN*I_H>0.) then
@@ -678,11 +691,12 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: barotrFac2 !< gamma_t^2
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length (m).
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
-  real :: beta, SN
+  real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady, D, lat, lon
+  real :: beta, SN, FatH
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  D = G%bathyT; lat = G%geolatt; lon = G%geolont
 
 !$OMP do
   do j=js,je ; do i=is,ie
@@ -692,7 +706,11 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
       else
         SN = 0.
       endif
-      beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
+      FatH = 0.25*( ( G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1) ) + &
+             ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  !< Coriolis parameter at h points
+      beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/D(i,j)*(D(i+1,j) - D(i-1,j)) &
+             /2./G%dxT(i,j) )**2. + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/D(i,j) &
+             *(D(i,j+1) - D(i,j-1))/2./G%dyT(i,j) )**2. )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),  &
@@ -926,6 +944,11 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "A scale factor in front of advection of eddy energy. Zero turns advection off.\n"//&
                  "Using unity would be normal but other values could accomodate a mismatch\n"//&
                  "between the advecting barotropic flow and the vertical structure of MEKE.", &
+                 units="nondim", default=0.0)
+  call get_param(param_file, mdl, "MEKE_topographic_beta", CS%MEKE_topographic_beta, &
+                 "A scale factor to determine how much topographic beta is weighed in " //&
+                 "computing beta in the expression of Rhines scale. Use 1 if full "//&
+                 "topographic beta effect is considered; use 0 if it's completely ignored.", &
                  units="nondim", default=0.0)
 
   ! Nonlocal module parameters
@@ -1235,7 +1258,7 @@ end subroutine MEKE_end
 !!
 !! \f{eqnarray*}{
 !! L_d & = & \sqrt{\frac{c_g^2}{f^2+2\beta c_g}} \sim \frac{ c_g }{f} \\\\
-!! L_R & = & \sqrt{\frac{U_e}{\beta}} \\\\
+!! L_R & = & \sqrt{\frac{U_e}{\beta^*}} \\\\
 !! L_e & = & \frac{U_e}{|S| N} \\\\
 !! L_f & = & \frac{H}{c_d} \\\\
 !! L_\Delta & = & \sqrt{A_\Delta} .
@@ -1243,8 +1266,21 @@ end subroutine MEKE_end
 !!
 !! \f$L_c\f$ is a constant and \f$\delta[L_c]\f$ is the impulse function so that the term
 !! \f$\frac{\delta[L_c]}{L_c}\f$ evaluates to \f$\frac{1}{L_c}\f$ when \f$L_c\f$ is non-zero
-!! but is dropped if \f$L_c=0\f$.
+!! but is dropped if \f$L_c=0\fi$.
+!! 
+!! \f$\beta^*\f$ is the effective \f$\beta\f$ that combines both the planetary vorticity
+!! gradient (i.e. \f$\beta=\nabla f\f$) and the topographic \f$\beta\f$ effect,
+!! with the latter weighed by a weighting constant, \f$c_\beta\f$, that varies
+!! from 0 to 1, so that \f$c_\beta=0\f$ means the topographic \f$\beta\f$ effect is ignored,
+!! while \f$c_\beta=1\f$ means it is fully considered. The new \f$\beta^*\f$ therefore
+!! takes the form of
 !!
+!! \f[ 
+!! \beta^* = \sqrt{( \partial_xf - c_\beta\frac{f}{D}\partial_xD )^2 + 
+!!           ( \partial_yf - c_\beta\frac{f}{D}\partial_yD )^2}
+!! \f]
+!! where \f$D\f$ is water column depth at T points.
+!! 
 !! \subsection section_MEKE_viscosity Viscosity derived from MEKE
 !!
 !! As for \f$ \kappa_M \f$, the predicted eddy velocity scale can be
@@ -1295,6 +1331,7 @@ end subroutine MEKE_end
 !! | \f$ \alpha_e \f$      | <code>MEKE_ALPHA_EADY</code> |
 !! | \f$ \alpha_\Delta \f$ | <code>MEKE_ALPHA_GRID</code> |
 !! | \f$ L_c \f$           | <code>MEKE_FIXED_MIXING_LENGTH</code> |
+!! | \f$ c_\beta \f$       | <code>MEKE_TOPOGRAPHIC_BETA</code> |
 !! | -                     | <code>MEKE_KHTH_FAC</code> |
 !! | -                     | <code>MEKE_KHTR_FAC</code> |
 !!
