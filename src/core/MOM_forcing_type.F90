@@ -129,12 +129,12 @@ type, public :: forcing
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
-    ustar_berg => NULL(), &   !< iceberg contribution to top ustar (m/s)
+    ustar_berg => NULL(), &   !< iceberg contribution to top ustar (Z/s)
     area_berg  => NULL(), &   !< area of ocean surface covered by icebergs (m2/m2)
     mass_berg  => NULL()      !< mass of icebergs (kg/m2)
 
   ! land ice-shelf related inputs
-  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves (in m/s)
+  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves (in Z/s)
                                  !! as computed by the ocean at the previous time step.
   real, pointer, dimension(:,:) :: frac_shelf_h => NULL() !< Fractional ice shelf coverage of h-cells, nondimensional
                                  !! cells, nondimensional from 0 to 1. This is only
@@ -1167,7 +1167,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   if (present(use_berg_fluxes)) then
     if (use_berg_fluxes) then
       handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
-          'Friction velocity below iceberg ', 'm s-1')
+          'Friction velocity below iceberg ', 'm s-1', conversion=US%Z_to_m)
 
       handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
           'Area of grid cell covered by iceberg ', 'm2 m-2')
@@ -1176,7 +1176,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
           'Mass of icebergs ', 'kg m-2')
 
       handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
-          'Friction velocity below iceberg and ice shelf together', 'm s-1')
+          'Friction velocity below iceberg and ice shelf together', 'm s-1', conversion=US%Z_to_m)
 
       handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
           'Area of grid cell below iceberg and ice shelf together ', 'm2 m-2')

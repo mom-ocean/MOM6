@@ -668,7 +668,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
             associated(fluxes%frac_shelf_h)) then
           if (fluxes%frac_shelf_h(i,j) > 0.0) &
             kU_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * kU_star + &
-                      fluxes%frac_shelf_h(i,j) * (0.41*US%m_to_Z*fluxes%ustar_shelf(i,j))
+                      fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
         absf_x_H = 0.25 * US%m_to_Z * h(i,0) * &  !### I think this should be H_to_Z -RWH
             ((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -1372,7 +1372,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
     if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
       if (fluxes%frac_shelf_h(i,j) > 0.0) &
         U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
-                  fluxes%frac_shelf_h(i,j) * US%m_to_Z * fluxes%ustar_shelf(i,j)
+                  fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
     endif
 
     if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
