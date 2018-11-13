@@ -944,7 +944,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "Using unity would be normal but other values could accomodate a mismatch\n"//&
                  "between the advecting barotropic flow and the vertical structure of MEKE.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mdl, "MEKE_topographic_beta", CS%MEKE_topographic_beta, &
+  call get_param(param_file, mdl, "MEKE_TOPOGRAPHIC_BETA", CS%MEKE_topographic_beta, &
                  "A scale factor to determine how much topographic beta is weighed in " //&
                  "computing beta in the expression of Rhines scale. Use 1 if full "//&
                  "topographic beta effect is considered; use 0 if it's completely ignored.", &
