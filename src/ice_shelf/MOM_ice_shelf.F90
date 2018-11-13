@@ -83,7 +83,7 @@ type, public :: ice_shelf_CS ; private
   real, pointer, dimension(:,:) :: &
     utide   => NULL()  !< tidal velocity, in m/s
 
-  real :: ustar_bg     !< A minimum value for ustar under ice shelves, in m s-1.
+  real :: ustar_bg     !< A minimum value for ustar under ice shelves, in Z s-1.
   real :: cdrag        !< drag coefficient under ice shelves , non-dimensional.
   real :: g_Earth      !< The gravitational acceleration in m s-2.
   real :: Cp           !< The heat capacity of sea water, in J kg-1 K-1.
@@ -356,12 +356,11 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
           u_at_h = state%u(i,j)
           v_at_h = state%v(i,j)
 
-          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag*((u_at_h**2.0 + v_at_h**2.0) +&
-                                                    CS%utide(i,j)**1))
+          !### I think that CS%utide**1 should be CS%utide**2
+          fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%m_to_Z * &
+              sqrt(CS%cdrag*((u_at_h**2.0 + v_at_h**2.0) + CS%utide(i,j)**1)))
 
-          ustar_h = MAX(CS%ustar_bg, fluxes%ustar_shelf(i,j))
-
-          fluxes%ustar_shelf(i,j) = ustar_h
+          ustar_h = US%Z_to_m*fluxes%ustar_shelf(i,j)
 
           if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
             state%taux_shelf(i,j) = ustar_h*ustar_h*CS%Rho0*Isqrt2
@@ -931,7 +930,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     !   tauy2 = (asv1 * state%tauy_shelf(i,J-1)**2 + &
     !            asv2 * state%tauy_shelf(i,J)**2  ) / (asv1 + asv2)
 
-    !fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
+    !fluxes%ustar(i,j) = MAX(CS%ustar_bg, US%m_to_Z*sqrt(Irho0 * sqrt(taux2 + tauy2)))
 !  endif ; enddo ; enddo
 
   if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
@@ -1345,8 +1344,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  units="m", default=0.0, scale=US%m_to_Z)
 
   call get_param(param_file, mdl, "USTAR_SHELF_BG", CS%ustar_bg, &
-                 "The minimum value of ustar under ice sheves.", units="m s-1", &
-                 default=0.0)
+                 "The minimum value of ustar under ice sheves.", &
+                 units="m s-1", default=0.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "CDRAG_SHELF", cdrag, &
        "CDRAG is the drag coefficient relating the magnitude of \n"//&
        "the velocity field to the surface stress.", units="nondim", &
@@ -1357,9 +1356,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "DRAG_BG_VEL is either the assumed bottom velocity (with \n"//&
                  "LINEAR_DRAG) or an unresolved  velocity that is \n"//&
                  "combined with the resolved velocity to estimate the \n"//&
-                 "velocity magnitude.", units="m s-1", default=0.0)
+                 "velocity magnitude.", units="m s-1", default=0.0, scale=US%m_to_Z)
     if (CS%cdrag*drag_bg_vel > 0.0) CS%ustar_bg = sqrt(CS%cdrag)*drag_bg_vel
-
   endif
 
   ! Allocate and initialize state variables to default values
@@ -1571,7 +1569,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   CS%id_tfl_shelf = register_diag_field('ocean_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
      'Heat conduction into ice shelf', 'W m-2')
   CS%id_ustar_shelf = register_diag_field('ocean_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
-     'Fric vel under shelf', 'm/s')
+     'Fric vel under shelf', 'm/s', conversion=US%Z_to_m)
   if (CS%active_shelf_dynamics) then
     CS%id_h_mask = register_diag_field('ocean_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none')
