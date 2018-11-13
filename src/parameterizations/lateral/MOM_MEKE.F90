@@ -695,7 +695,6 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  D = G%bathyT; lat = G%geolatt; lon = G%geolont
 
 !$OMP do
   do j=js,je ; do i=is,ie
