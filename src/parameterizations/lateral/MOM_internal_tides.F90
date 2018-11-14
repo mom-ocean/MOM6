@@ -74,7 +74,7 @@ type, public :: int_tide_CS ; private
                         !< energy lost due to wave breaking [W m-2]
   real, allocatable, dimension(:,:) :: TKE_itidal_loss_fixed
                         !< fixed part of the energy lost due to small-scale drag
-                        !! [kg m-2] here; will be multiplied by N and En to get into [W m-2]
+                        !! [kg Z-2] here; will be multiplied by N and En to get into [W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss
                         !< energy lost due to small-scale wave drag [W m-2]
   real, allocatable, dimension(:,:) :: tot_leak_loss !< Energy loss rates due to misc bakground processes,
@@ -397,7 +397,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Finally, apply loss
   if (CS%apply_wave_drag) then
     ! Calculate loss rate and apply loss over the time step
-    call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
+    call itidal_lowmode_loss(G, US, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
                              CS%TKE_itidal_loss, dt, full_halos=.false.)
   endif
   ! Check for En<0 - for debugging, delete later
@@ -622,8 +622,9 @@ end subroutine sum_En
 
 !> Calculates the energy lost from the propagating internal tide due to
 !! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
-subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
+subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
   type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
+  type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
   type(int_tide_CS),         pointer       :: CS !< The control structure returned by a
                                                  !! previous call to int_tide_init.
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
@@ -633,7 +634,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
                                                  !! mode velocity, in m s-1.
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                              intent(in) :: TKE_loss_fixed !< Fixed part of energy loss,
-                                                 !! in kg m-2 (rho*kappa*h^2).
+                                                 !! in kg Z-2 (rho*kappa*h^2).
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
                              intent(inout) :: En !< Energy density of the internal waves, in J m-2.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
@@ -670,7 +671,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
     enddo
 
     ! Calculate TKE loss rate; units of [W m-2] here.
-    TKE_loss_tot = q_itides * TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
+    TKE_loss_tot = q_itides * US%Z_to_m**2 * TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
 
     ! Update energy remaining (this is a pseudo implicit calc)
     ! (E(t+1)-E(t))/dt = -TKE_loss(E(t+1)/E(t)), which goes to zero as E(t+1) goes to zero
@@ -2104,10 +2105,11 @@ end subroutine PPM_limit_pos
 ! end subroutine register_int_tide_restarts
 
 !> This subroutine initializes the internal tides module.
-subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
+subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type), target,   intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),     intent(in)    :: param_file !< A structure to parse for run-time
                                                    !! parameters.
   type(diag_ctrl), target,   intent(in)    :: diag !< A structure that is used to regulate
@@ -2280,7 +2282,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
                  "dissipated locally with INT_TIDE_DISSIPATION.  \n"//&
                  "THIS NAME COULD BE BETTER.", &
                  units="nondim", default=0.3333)
-    call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
+  call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0))
@@ -2312,15 +2314,17 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1)
+  call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1, scale=US%m_to_Z)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
-    h2(i,j) = min(0.01*(G%Zd_to_m*G%bathyT(i,j))**2, h2(i,j))
+    h2(i,j) = min(0.01*(G%bathyT(i,j))**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here
     ! will be multiplied by N and En to get into [W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * h2(i,j)
   enddo ; enddo
+
+  deallocate(h2)
 
   ! Read in prescribed coast/ridge/shelf angles from file
   call get_param(param_file, mdl, "REFL_ANGLE_FILE", refl_angle_file, &
