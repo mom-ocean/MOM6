@@ -136,8 +136,8 @@ type, public :: tidal_mixing_cs
   type(CVMix_tidal_params_type)   :: CVMix_tidal_params !< A CVMix-specific type with parameters for tidal mixing
   type(CVMix_global_params_type)  :: CVMix_glb_params   !< CVMix-specific for Prandtl number only
   real                            :: tidal_max_coef     !< CVMix-specific maximum allowable tidal diffusivity. [m^2/s]
-  real                            :: tidal_diss_lim_tc  !< CVMix-specific dissipation limit for
-                                                        !! tidal-energy-constituent data
+  real                            :: tidal_diss_lim_tc  !< CVMix-specific dissipation limit depth for
+                                                        !! tidal-energy-constituent data, in Z.
   type(remapping_CS)              :: remap_CS           !< The control structure for remapping
 
   ! Data containers
@@ -510,7 +510,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     call get_param(param_file, mdl, "TIDAL_DISS_LIM_TC", CS%tidal_diss_lim_tc, &
                    "Min allowable depth for dissipation for tidal-energy-constituent data. \n"//&
                    "No dissipation contribution is applied above TIDAL_DISS_LIM_TC.", &
-                   units="m", default=0.0)
+                   units="m", default=0.0, scale=US%m_to_Z)
     call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
                  "The path to the file containing tidal energy \n"//&
                  "dissipation. Used with CVMix tidal mixing schemes.", &
@@ -549,7 +549,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
                           local_mixing_frac       = CS%Gamma_itides,          &
                           depth_cutoff            = CS%min_zbot_itides*US%Z_to_m)
 
-    call read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
+    call read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
 
     !call closeParameterBlock(param_file)
 
@@ -1500,13 +1500,14 @@ end subroutine post_tidal_diagnostics
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
 !> This subroutine read tidal energy inputs from a file.
-subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
+subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   character(len=20),       intent(in) :: tidal_energy_type !< The type of tidal energy inputs to read
   character(len=200),      intent(in) :: tidal_energy_file !< The file from which to read tidalinputs
   type(tidal_mixing_cs),   pointer    :: CS   !< The control structure for this module
   ! local
-  integer :: isd, ied, jsd, jed, nz
+  integer :: i, j, isd, ied, jsd, jed, nz
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -1516,10 +1517,12 @@ subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
     if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
     allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
     call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
-    CS%tidal_qe_2d = (CS%Gamma_itides) * tidal_energy_flux_2d
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      CS%tidal_qe_2d(i,j) = CS%Gamma_itides * tidal_energy_flux_2d(i,j)
+    enddo ; enddo
     deallocate(tidal_energy_flux_2d)
   case ('ER03') ! Egbert & Ray 2003
-    call read_tidal_constituents(G, tidal_energy_file, CS)
+    call read_tidal_constituents(G, US, tidal_energy_file, CS)
   case default
     call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
   end select
@@ -1527,31 +1530,33 @@ subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
 end subroutine read_tidal_energy
 
 !> This subroutine reads tidal input energy from a file by constituent.
-subroutine read_tidal_constituents(G, tidal_energy_file, CS)
+subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in) :: US   !< A dimensional unit scaling type
   character(len=200),    intent(in) :: tidal_energy_file !< The file from which to read tidal energy inputs
   type(tidal_mixing_cs), pointer    :: CS   !< The control structure for this module
 
-  ! local
-  integer               :: k, isd, ied, jsd, jed, i,j
-  integer, dimension(4) :: nz_in
-  real, parameter       :: p33 = 1.0/3.0
+  ! local variables
+  real, parameter :: C1_3 = 1.0/3.0
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tidal_qk1, &  ! qk1 coefficient used in Schmittner & Egbert
     tidal_qo1     ! qo1 coefficient used in Schmittner & Egbert
   real, allocatable, dimension(:) :: &
-    z_t, &        ! depth from surface to midpoint of input layer [cm]
-    z_w           ! depth from surface to top of input layer [cm]
+    z_t, &        ! depth from surface to midpoint of input layer [Z]
+    z_w           ! depth from surface to top of input layer [Z]
   real, allocatable, dimension(:,:,:) :: &
     tc_m2, &      ! input lunar semidiurnal tidal energy flux [W/m^2]
     tc_s2, &      ! input solar semidiurnal tidal energy flux [W/m^2]
     tc_k1, &      ! input lunar diurnal tidal energy flux [W/m^2]
     tc_o1         ! input lunar diurnal tidal energy flux [W/m^2]
+  integer, dimension(4) :: nz_in
+  integer               :: k, is, ie, js, je, isd, ied, jsd, jed, i, j
 
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! get number of input levels:
-  call field_size(tidal_energy_file, 'z_t',nz_in)
+  call field_size(tidal_energy_file, 'z_t', nz_in)
 
   ! allocate local variables
   allocate(z_t(nz_in(1)), z_w(nz_in(1)) )
@@ -1569,28 +1574,30 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
   call MOM_read_data(tidal_energy_file, 'S2', tc_s2, G%domain)
   call MOM_read_data(tidal_energy_file, 'K1', tc_k1, G%domain)
   call MOM_read_data(tidal_energy_file, 'O1', tc_o1, G%domain)
-  call MOM_read_data(tidal_energy_file, 'z_t', z_t)
-  call MOM_read_data(tidal_energy_file, 'z_w', z_w)
+  ! Note the hard-coded assumption that z_t and z_w in the file are in centimeters.
+  call MOM_read_data(tidal_energy_file, 'z_t', z_t, scale=100.0*US%m_to_Z)
+  call MOM_read_data(tidal_energy_file, 'z_w', z_w, scale=100.0*US%m_to_Z)
 
-  !### THE USE OF WHERE STTAEMENTS IS STRONGLY DISCOURAGED IN MOM6!
-  where (abs(G%geoLatT(:,:)) < 30.0)
-    tidal_qk1(:,:) = p33
-    tidal_qo1(:,:) = p33
-  elsewhere
-    tidal_qk1(:,:) = 1.0
-    tidal_qo1(:,:) = 1.0
-  endwhere
+  do j=js,je ; do i=is,ie
+    if (abs(G%geoLatT(i,j)) < 30.0) then
+      tidal_qk1(i,j) = C1_3
+      tidal_qo1(i,j) = C1_3
+    else
+      tidal_qk1(i,j) = 1.0
+      tidal_qo1(i,j) = 1.0
+    endif
+  enddo ; enddo
 
-  CS%tidal_qe_3d_in = 0.0
+  CS%tidal_qe_3d_in(:,:,:) = 0.0
   do k=1,nz_in(1)
-    ! input cell thickness
-    CS%h_src(k) = (z_t(k)-z_w(k))*2.0 *1e-2
+    ! Store the input cell thickness in m for use with CVmix.
+    CS%h_src(k) = US%Z_to_m*(z_t(k)-z_w(k))*2.0
     ! form tidal_qe_3d_in from weighted tidal constituents
-    !### THE USE OF WHERE STATEMENTS IS STRONGLY DISCOURAGED IN MOM6!
-    where (((z_t(k)*1e-2) <= G%bathyT(:,:)*G%Zd_to_m) .and. (z_w(k)*1e-2 > CS%tidal_diss_lim_tc))
-      CS%tidal_qe_3d_in(:,:,k) = p33*tc_m2(:,:,k) + p33*tc_s2(:,:,k) + &
-                           tidal_qk1*tc_k1(:,:,k) + tidal_qo1*tc_o1(:,:,k)
-    endwhere
+    do j=js,je ; do i=is,ie
+      if ((z_t(k) <= G%bathyT(i,j)) .and. (z_w(k) > CS%tidal_diss_lim_tc)) &
+        CS%tidal_qe_3d_in(i,j,k) = C1_3*tc_m2(i,j,k) + C1_3*tc_s2(i,j,k) + &
+                tidal_qk1(i,j)*tc_k1(i,j,k) + tidal_qo1(i,j)*tc_o1(i,j,k)
+    enddo ; enddo
   enddo
 
   !open(unit=1905,file="out_1905.txt",access="APPEND")
@@ -1601,7 +1608,7 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
   !      do k=50,nz_in(1)
   !          write(1905,*) i,j,k
   !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)
-  !          write(1905,*) z_t(k), G%bathyT(i,j)*G%Zd_to_m, z_w(k),CS%tidal_diss_lim_tc
+  !          write(1905,*) z_t(k), G%bathyT(i,j), z_w(k),CS%tidal_diss_lim_tc
   !      end do
   !    endif
   !  enddo
@@ -1614,12 +1621,11 @@ subroutine read_tidal_constituents(G, tidal_energy_file, CS)
   endif
 
   !! collapse 3D q*E to 2D q*E
-  !CS%tidal_qe_2d = 0.0
-  !do k=1,nz_in(1)
-  !  where (z_t(k) <= G%bathyT(:,:)*G%Zd_to_m)
-  !    CS%tidal_qe_2d(:,:) = CS%tidal_qe_2d(:,:) + CS%tidal_qe_3d_in(:,:,k)
-  !  endwhere
-  !enddo
+  !CS%tidal_qe_2d(:,:) = 0.0
+  !do k=1,nz_in(1) ; do j=js,je ; do i=is,ie
+  !  if (z_t(k) <= G%bathyT(i,j)) &
+  !    CS%tidal_qe_2d(i,j) = CS%tidal_qe_2d(i,j) + CS%tidal_qe_3d_in(i,j,k)
+  !enddo ; enddo ; enddo
 
   ! initialize input remapping:
   call initialize_remapping(CS%remap_cs, remapping_scheme="PLM", &
