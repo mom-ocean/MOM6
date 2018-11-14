@@ -8,6 +8,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : MOM_read_data
+use MOM_unit_scaling, only : unit_scale_type
 
 use netcdf
 
@@ -21,9 +22,10 @@ contains
 
 !>   This function initializes a tracer by reading a Z-space file, returning
 !! .true. if this appears to have been successful, and false otherwise.
-function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
+function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   logical :: tracer_Z_init !< A return code indicating if the initialization has been successful
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(out)   :: tr   !< The tracer to initialize
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -82,7 +84,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
   ! Find out the number of input levels and read the depth of the edges,
   ! also modifying their sign convention to be monotonically decreasing.
   call read_Z_edges(filename, tr_name, z_edges, nz_in, has_edges, use_missing, &
-                    missing, scale=1.0/G%Zd_to_m)
+                    missing, scale=US%m_to_Z)
   if (nz_in < 1) then
     tracer_Z_init = .false.
     return
