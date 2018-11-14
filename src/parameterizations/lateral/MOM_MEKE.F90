@@ -63,10 +63,10 @@ type, public :: MEKE_CS ; private
   real :: aEady         !< Weighting towards Eady scale of mixing length (non-dim.)
   real :: aGrid         !< Weighting towards grid scale of mixing length (non-dim.)
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE (non-dim.)
-  real :: MEKE_topographic_beta !< weighting how much topographic beta is considered 
+  real :: MEKE_topographic_beta !< weighting how much topographic beta is considered
                                 ! when computing beta in Rhines scale
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
-  logical :: debug      !< If true, write out checksums of data for debugging 
+  logical :: debug      !< If true, write out checksums of data for debugging
 
   ! Optional storage
   real, dimension(:,:), allocatable :: del2MEKE !< Laplacian of MEKE, used for bi-harmonic diffusion.
@@ -567,7 +567,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   logical :: useSecant, debugIteration
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  
+
   debugIteration = .false.
   KhCoeff = CS%MEKE_KhCoeff
   Ubg2 = CS%MEKE_Uscale**2
@@ -585,7 +585,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
            (G%bathyT(i+1,j) - G%bathyT(i-1,j))/2./G%dxT(i,j) )**2. &
            + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
            *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
-        
+
     I_H = GV%Rho0 * I_mass(i,j)
 
     if (KhCoeff*SN*I_H>0.) then
@@ -1266,7 +1266,7 @@ end subroutine MEKE_end
 !! \f$L_c\f$ is a constant and \f$\delta[L_c]\f$ is the impulse function so that the term
 !! \f$\frac{\delta[L_c]}{L_c}\f$ evaluates to \f$\frac{1}{L_c}\f$ when \f$L_c\f$ is non-zero
 !! but is dropped if \f$L_c=0\fi$.
-!! 
+!!
 !! \f$\beta^*\f$ is the effective \f$\beta\f$ that combines both the planetary vorticity
 !! gradient (i.e. \f$\beta=\nabla f\f$) and the topographic \f$\beta\f$ effect,
 !! with the latter weighed by a weighting constant, \f$c_\beta\f$, that varies
@@ -1274,12 +1274,12 @@ end subroutine MEKE_end
 !! while \f$c_\beta=1\f$ means it is fully considered. The new \f$\beta^*\f$ therefore
 !! takes the form of
 !!
-!! \f[ 
-!! \beta^* = \sqrt{( \partial_xf - c_\beta\frac{f}{D}\partial_xD )^2 + 
+!! \f[
+!! \beta^* = \sqrt{( \partial_xf - c_\beta\frac{f}{D}\partial_xD )^2 +
 !!           ( \partial_yf - c_\beta\frac{f}{D}\partial_yD )^2}
 !! \f]
 !! where \f$D\f$ is water column depth at T points.
-!! 
+!!
 !! \subsection section_MEKE_viscosity Viscosity derived from MEKE
 !!
 !! As for \f$ \kappa_M \f$, the predicted eddy velocity scale can be
