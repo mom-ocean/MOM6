@@ -122,6 +122,7 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
                             ! usually negative because it is positive upward.
   real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile (Z)
   real :: e_interface ! Current interface position (m)
+  real :: x,y,r1,r2 ! x,y and radial coordinates for computation of initial pert.
   character(len=40)  :: mdl = "Neverland_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
@@ -141,7 +142,12 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   do j=js,je ; do i=is,ie
     e_interface = -G%bathyT(i,j)
     do k=nz,1,-1
-      h(i,j,k) = max( GV%Angstrom_H, GV%Z_to_H * (e0(k) - e_interface) )
+      x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
+      y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
+      r1=sqrt((x-0.7)**2+(y-0.2)**2)
+      r2=sqrt((x-0.3)**2+(y-0.25)**2)
+      h(i,j,k) = max( GV%Angstrom_H, GV%Z_to_H * (e0(k) - e_interface) &
+                      + 1.0E5*GV%Angstrom_H*(spike(r1,0.15)-spike(r2,0.15)) )
       e_interface = max( e0(k), e_interface - GV%H_to_Z * h(i,j,k) )
     enddo
   enddo ; enddo
