@@ -2452,7 +2452,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   CS%nstep_tot = 0
   if (present(count_calls)) CS%count_calls = count_calls
-  call MOM_sum_output_init(G, param_file, dirs%output_directory, &
+  call MOM_sum_output_init(G, US, param_file, dirs%output_directory, &
                            CS%ntrunc, Time_init, CS%sum_output_CSp)
 
   ! Flag whether to save initial conditions in finish_MOM_initialization() or not.
