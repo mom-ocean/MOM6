@@ -13,6 +13,7 @@ use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher
 use MOM_time_manager, only : time_type, operator(+), operator(/)
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -46,12 +47,13 @@ contains
 
 !> Sets the surface wind stresses, forces%taux and forces%tauy for the
 !! Neverland forcing configuration.
-subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
+subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                          !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day    !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G      !< Grid structure.
+  type(unit_scale_type),         intent(in)    :: US     !< A dimensional unit scaling type
   type(Neverland_surface_forcing_CS), pointer  :: CS     !< Control structure for this module.
 
   ! Local variables
@@ -102,7 +104,7 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
   !  is always positive.
 ! if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
 !   !  This expression can be changed if desired, but need not be.
-!   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+!   forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
 !      sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
 !           0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
 ! enddo ; enddo ; endif

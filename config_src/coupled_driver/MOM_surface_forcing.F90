@@ -28,6 +28,7 @@ use MOM_restart,          only : register_restart_field, restart_init, MOM_resta
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
 use MOM_spatial_means,    only : adjust_area_mean_to_zero
+use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,  only : user_revise_forcing_CS
@@ -194,7 +195,7 @@ contains
 !> This subroutine translates the Ice_ocean_boundary_type into a MOM
 !! thermodynamic forcing type, including changes of units, sign conventions,
 !! and putting the fields into arrays with MOM-standard halos.
-subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, sfc_state)
+subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc_state)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
@@ -205,6 +206,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, sfc_sta
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
   type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
@@ -412,7 +414,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, sfc_sta
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%ustar_berg)) &
-      fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%ustar_berg(i,j) = US%m_to_Z * IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%area_berg)) &
       fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
@@ -531,12 +533,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, sfc_sta
 
   ! Set the wind stresses and ustar.
   if (associated(fluxes%ustar) .and. associated(fluxes%ustar_gustless)) then
-    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, ustar=fluxes%ustar, &
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=fluxes%ustar, &
                               gustless_ustar=fluxes%ustar_gustless)
   elseif (associated(fluxes%ustar)) then
-    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, ustar=fluxes%ustar)
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=fluxes%ustar)
   elseif (associated(fluxes%ustar_gustless)) then
-    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, gustless_ustar=fluxes%ustar_gustless)
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, gustless_ustar=fluxes%ustar_gustless)
   endif
 
   if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
@@ -558,7 +560,7 @@ end subroutine convert_IOB_to_fluxes
 !> This subroutine translates the Ice_ocean_boundary_type into a MOM
 !! mechanical forcing type, including changes of units, sign conventions,
 !! and putting the fields into arrays with MOM-standard halos.
-subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS, dt_forcing, reset_avg)
+subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_forcing, reset_avg)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
@@ -567,6 +569,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS, dt_forc
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
   real,          optional, intent(in)    :: dt_forcing !< A time interval over which to apply the
@@ -678,10 +681,10 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS, dt_forc
 
   ! Set the wind stresses and ustar.
   if (wt1 <= 0.0) then
-    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux=forces%taux, tauy=forces%tauy, &
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux=forces%taux, tauy=forces%tauy, &
                               ustar=forces%ustar, tau_halo=1)
   else
-    call extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux=forces%taux, tauy=forces%tauy, &
+    call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux=forces%taux, tauy=forces%tauy, &
                               ustar=ustar_tmp, tau_halo=1)
     do j=js,je ; do i=is,ie
       forces%ustar(i,j) = wt1*forces%ustar(i,j) + wt2*ustar_tmp(i,j)
@@ -782,7 +785,7 @@ end subroutine convert_IOB_to_forces
 !> This subroutine extracts the wind stresses and related fields like ustar from an
 !! Ice_ocean_boundary_type into optional argument arrays, including changes of units, sign
 !! conventions, and putting the fields into arrays with MOM-standard sized halos.
-subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, ustar, &
+subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, ustar, &
                                 gustless_ustar, tau_halo)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB  !< An ice-ocean boundary type with fluxes to drive
@@ -791,6 +794,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
   type(time_type),         intent(in)    :: Time !< The time of the fluxes, used for interpolating the
                                                  !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS   !< A pointer to the control structure returned by a
                                                  !! previous call to surface_forcing_init.
   real, dimension(SZIB_(G),SZJ_(G)), &
@@ -798,7 +802,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(inout) :: tauy !< The meridional wind stresses on a C-grid, in Pa.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(inout) :: ustar !< The surface friction velocity, in m s-1.
+                 optional, intent(inout) :: ustar !< The surface friction velocity, in Z s-1.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: gustless_ustar !< The surface friction velocity without
                                                  !! any contributions from gustiness, in m s-1.
@@ -939,7 +943,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
                 (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0)) ) &
             gustiness = CS%gust(i,j)
         endif
-        ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
+        ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
       if (do_gustless) then ; do j=js,je ; do i=is,ie
         gustless_ustar(i,j) = sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
@@ -958,7 +962,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
             ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_ustar) ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0 * tau_mag)
         if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
@@ -968,7 +972,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
         tau_mag = G%mask2dT(i,j) * sqrt(taux_in_A(i,j)**2 + tauy_in_A(i,j)**2)
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_ustar) ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0 * tau_mag)
         if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
@@ -987,7 +991,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, CS, taux, tauy, usta
         gustiness = CS%gust_const
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_ustar) ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0 * tau_mag)
         if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
@@ -1122,9 +1126,10 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 end subroutine forcing_save_restart
 
 !> Initialize the surface forcing, including setting parameters and allocating permanent memory.
-subroutine surface_forcing_init(Time, G, param_file, diag, CS)
+subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,  intent(inout) :: diag !< A structure that is used to regulate
                                                   !! diagnostic output
@@ -1407,7 +1412,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &
                  "If true, makes available diagnostics of fluxes from icebergs\n"//&
                  "as seen by MOM6.", default=.false.)
-  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles, &
+  call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
                                    use_berg_fluxes=iceberg_flux_diags)
 
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
