@@ -603,12 +603,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-      U_star = US%m_to_Z*fluxes%ustar(i,j)
+      U_star = fluxes%ustar(i,j)
       U_Star_Mean = fluxes%ustar_gustless(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
-                    fluxes%frac_shelf_h(i,j) * US%m_to_Z*fluxes%ustar_shelf(i,j)
+                    fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
 

@@ -465,11 +465,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   type(wave_parameters_CS),  pointer     :: CS    !< Wave parameter Control structure
   type(ocean_grid_type),   intent(inout) :: G     !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< Vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-       intent(in)    :: h     !<Thickness (m or kg/m2)
+       intent(in)    :: h     !< Thickness (m or kg/m2)
   real, dimension(SZI_(G),SZJ_(G)), &
-       intent(in)    :: ustar !< Wind friction velocity (m/s)
+       intent(in)    :: ustar !< Wind friction velocity (Z/s)
   ! Local Variables
   real    :: Top, MidPoint, Bottom, one_cm
   real    :: DecayScale
@@ -618,7 +618,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
           !    this code has only been previous used for uniform
           !    grid cases.  This needs fixed if DHH85 is used for non
           !    uniform cases.
-          call DHH85_mid(GV, US, ustar(ii,jj), MidPoint, UStokes)
+          call DHH85_mid(GV, US, MidPoint, UStokes)
           ! Putting into x-direction (no option for direction
           CS%US_x(II,jj,kk) = UStokes
         enddo
@@ -636,7 +636,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
           !    this code has only been previous used for uniform
           !    grid cases.  This needs fixed if DHH85 is used for non
           !    uniform cases.
-          ! call DHH85_mid(GV,ustar(ii,JJ),Midpoint,US)
+          ! call DHH85_mid(GV, US, Midpoint, UStokes)
           ! Putting into x-direction, so setting y direction to 0
           CS%US_y(ii,JJ,kk) = 0.0 !### Note that =0 should be =US - RWH
                                   !    bgr - see note above, but this is true
@@ -666,7 +666,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   do ii = G%isc,G%iec
     do jj = G%jsc, G%jec
       Top = h(ii,jj,1)*GV%H_to_Z
-      call get_Langmuir_Number( La, G, GV, US, Top, ustar(ii,jj), ii, jj, &
+      call get_Langmuir_Number( La, G, GV, US, Top, US%Z_to_m*ustar(ii,jj), ii, jj, &
              Override_MA=.false.,WAVES=CS)
       CS%La_turb(ii,jj) = La
     enddo
@@ -857,14 +857,14 @@ end subroutine Surface_Bands_by_data_override
 !! Note this can be called with an unallocated Waves pointer, which is okay if we
 !!  want the wind-speed only dependent Langmuir number.  Therefore, we need to be
 !!  careful about what we try to access here.
-subroutine get_Langmuir_Number( LA, G, GV, US, HBL, USTAR, i, j, &
+subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
                                 H, U_H, V_H, Override_MA, Waves )
   type(ocean_grid_type),   intent(in) :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   integer, intent(in) :: i      !< Meridional index of h-point
   integer, intent(in) :: j      !< Zonal index of h-point
-  real, intent(in)    :: USTAR  !< Friction velocity (m/s)
+  real, intent(in)    :: ustar  !< Friction velocity (m/s)
   real, intent(in)    :: HBL    !< (Positive) thickness of boundary layer (Z)
   logical, optional,       intent(in) :: Override_MA !< Override to use misalignment in LA
                                 !! calculation. This can be used if diagnostic
@@ -1127,10 +1127,9 @@ end subroutine Get_SL_Average_Band
 !! use for comparing MOM6 simulation to his LES
 !! computed at z mid point (I think) and not depth averaged.
 !! Should be fine to integrate in frequency from 0.1 to sqrt(-0.2*grav*2pi/dz
-subroutine DHH85_mid(GV, US, ust, zpt, UStokes)
+subroutine DHH85_mid(GV, US, zpt, UStokes)
   type(verticalGrid_type), intent(in)  :: GV  !< Ocean vertical grid
   type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
-  real, intent(in)  :: UST   !< Surface friction velocity (m/s)
   real, intent(in)  :: ZPT   !< Depth to get Stokes drift (Z) !### THIS IS NOT USED YET.
   real, intent(out) :: UStokes !< Stokes drift (m/s)
   !

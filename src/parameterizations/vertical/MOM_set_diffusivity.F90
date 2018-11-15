@@ -117,7 +117,7 @@ type, public :: set_diffusivity_CS ; private
                               !! to ML_rad as applied to the other surface
                               !! sources of TKE in the mixed layer code.
   real    :: ustar_min        !< A minimum value of ustar to avoid numerical
-                              !! problems (m/s).  If the value is small enough,
+                              !! problems (Z/s).  If the value is small enough,
                               !! this parameter should not affect the solution.
   real    :: TKE_decay        !< ratio of natural Ekman depth to TKE decay scale (nondim)
   real    :: mstar            !< ratio of friction velocity cubed to
@@ -1551,7 +1551,9 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
   real, dimension(SZI_(G)) :: I_decay ! A decay rate in Z-1.
   real, dimension(SZI_(G)) :: Kd_mlr_ml ! Diffusivities associated with mixed layer radiation, in Z2 s-1.
 
-  real :: f_sq, h_ml_sq, ustar_sq
+  real :: f_sq              ! The square of the local Coriolis parameter or a related variable, in s-2.
+  real :: h_ml_sq           ! The square of the mixed layer thickness, in Z2.
+  real :: ustar_sq          ! ustar squared in Z2 s-2.
   real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation, in Z2 s-1.
   real :: C1_6              ! 1/6
   real :: Omega2            ! rotation rate squared (1/s2)
@@ -1587,8 +1589,8 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
 
     ustar_sq = max(fluxes%ustar(i,j), CS%ustar_min)**2
 
-    TKE_ml_flux(i) = (CS%mstar*CS%ML_rad_coeff)*(ustar_sq*fluxes%ustar(i,j))
-    I_decay_len2_TKE = CS%TKE_decay**2 * (f_sq / (US%m_to_Z**2*ustar_sq))
+    TKE_ml_flux(i) = (CS%mstar*CS%ML_rad_coeff)*(US%Z_to_m**3*ustar_sq*fluxes%ustar(i,j))
+    I_decay_len2_TKE = CS%TKE_decay**2 * (f_sq / ustar_sq)
 
     if (CS%ML_rad_TKE_decay) &
       TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-h_ml(i) * sqrt(I_decay_len2_TKE))
@@ -1984,7 +1986,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "length scale.", default=.false.)
   if (CS%ML_radiation) then
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_m + GV%H_subroundoff*GV%H_to_m)
+    CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_subroundoff*GV%H_to_Z)
 
     call get_param(param_file, mdl, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration \n"//&
