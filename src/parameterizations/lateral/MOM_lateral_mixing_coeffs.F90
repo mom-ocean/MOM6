@@ -389,8 +389,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     e             ! The interface heights relative to mean sea level, in m.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at u-points
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points, in s-2
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points, in s-2
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
@@ -584,7 +584,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
                                                                   !! otherwise use slopes stored in CS
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
+  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points (for diagnostics)
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: H_cutoff      ! Local estimate of a minimum thickness for masking (m)
   real :: h_neglect     ! A thickness that is so small it is usually lost
