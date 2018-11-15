@@ -1,5 +1,5 @@
 !> Implements the Mesoscale Eddy Kinetic Energy framework
-! with topographic beta effect included in computing beta in Rhines scale
+!! with topographic beta effect included in computing beta in Rhines scale
 
 module MOM_MEKE
 
@@ -63,8 +63,8 @@ type, public :: MEKE_CS ; private
   real :: aEady         !< Weighting towards Eady scale of mixing length (non-dim.)
   real :: aGrid         !< Weighting towards grid scale of mixing length (non-dim.)
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE (non-dim.)
-  real :: MEKE_topographic_beta !< weighting how much topographic beta is considered
-                                ! when computing beta in Rhines scale
+  real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
+                                !! when computing beta in Rhines scale (non-dim.)
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
 
@@ -704,7 +704,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
         SN = 0.
       endif
       FatH = 0.25*( ( G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1) ) + &
-             ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  !< Coriolis parameter at h points
+             ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  ! Coriolis parameter at h points
       beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
              *(G%bathyT(i+1,j) - G%bathyT(i-1,j)) /2./G%dxT(i,j) )**2. &
              + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
