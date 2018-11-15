@@ -72,7 +72,6 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_dyn_horgrid,           only : rescale_dyn_horgrid_bathymetry
 use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_grid,                  only : ocean_grid_type, MOM_grid_init, MOM_grid_end
@@ -1978,10 +1977,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call MOM_timing_init(CS)
 
   ! Allocate initialize time-invariant MOM variables.
-  call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
+  call MOM_initialize_fixed(dG, US, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
-
-  if (dG%Zd_to_m /= US%Z_to_m) call rescale_dyn_horgrid_bathymetry(dG, US%Z_to_m)
 
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
 
@@ -2982,7 +2979,7 @@ subroutine extract_surface_state(CS, sfc_state)
     numberOfErrors=0 ! count number of errors
     do j=js,je; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
-        bathy_m = G%Zd_to_m*G%bathyT(i,j)
+        bathy_m = CS%US%Z_to_m * G%bathyT(i,j)
         localError = sfc_state%sea_lev(i,j)<=-bathy_m &
                 .or. sfc_state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j)<=-CS%bad_val_ssh_max  &
