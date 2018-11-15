@@ -488,7 +488,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTL, Time, &
       'Unresolved shear turbulence used by [CVMix] KPP', 'm2/s2')
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
-      'Friction velocity, u*, as used by [CVMix] KPP', 'm/s')
+      'Friction velocity, u*, as used by [CVMix] KPP', 'm/s', conversion=US%Z_to_m)
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesTi, Time, &
       'Surface (and penetrating) buoyancy flux, as used by [CVMix] KPP', 'm2/s3')
   CS%id_QminusSW = register_diag_field('ocean_model', 'KPP_QminusSW', diag%axesT1, Time, &
@@ -587,7 +587,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   type(unit_scale_type),                      intent(in)    :: US    !< A dimensional unit scaling type
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (Z/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP (Z2/s)
                                                                     !< (out) Vertical diffusivity including KPP (Z2/s)
@@ -618,7 +618,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
-    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
+    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0, scale=US%Z_to_m)
     call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
     call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=US%Z_to_m**2)
     call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=US%Z_to_m**2)
@@ -638,7 +638,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
       if (G%mask2dT(i,j)==0.) cycle
 
       ! things independent of position within the column
-      surfFricVel = uStar(i,j)
+      surfFricVel = US%Z_to_m * uStar(i,j)
 
       iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
       hcorr = 0.
@@ -882,7 +882,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component (m/s)
   type(EOS_type),                             pointer       :: EOS   !< Equation of state
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (Z/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
 
@@ -958,7 +958,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
       ! things independent of position within the column
       Coriolis = 0.25*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
-      surfFricVel = uStar(i,j)
+      surfFricVel = US%Z_to_m * uStar(i,j)
 
       ! Bullk Richardson number computed for each cell in a column,
       ! assuming OBLdepth = grid cell depth. After Rib(k) is

@@ -605,7 +605,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     if (cycle_start) &
       call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV)
     if (cycle_start) call check_redundant("Before steps ", u, v, G)
-    if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, haloshift=0)
+    if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, US, haloshift=0)
     if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G)
   endif
   call cpu_clock_end(id_clock_other)
@@ -1185,7 +1185,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G, GV)
       call MOM_thermo_chksum("Pre-diabatic ", tv, G,haloshift=0)
       call check_redundant("Pre-diabatic ", u, v, G)
-      call MOM_forcing_chksum("Pre-diabatic", fluxes, G, haloshift=0)
+      call MOM_forcing_chksum("Pre-diabatic", fluxes, G, US, haloshift=0)
     endif
 
     call cpu_clock_begin(id_clock_diabatic)

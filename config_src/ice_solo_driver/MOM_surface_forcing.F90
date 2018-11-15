@@ -72,6 +72,7 @@ use MOM_restart,             only : restart_init_end, save_restart, restore_stat
 use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, set_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
+use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 ! use MESO_surface_forcing,  only : MESO_wind_forcing, MESO_buoyancy_forcing
 ! use MESO_surface_forcing,  only : MESO_surface_forcing_init, MESO_surface_forcing_CS
@@ -333,12 +334,13 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
 end subroutine buoyancy_forcing_allocate
 
 
-subroutine wind_forcing_zero(sfc_state, forces, day, G, CS)
+subroutine wind_forcing_zero(sfc_state, forces, day, G, US, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(in)    :: G      !< The ocean's grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer       :: CS
 
 ! subroutine sets the surface wind stresses to zero
@@ -373,11 +375,11 @@ subroutine wind_forcing_zero(sfc_state, forces, day, G, CS)
 
   if (CS%read_gust_2d) then
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = sqrt(CS%gust(i,j)/CS%Rho0)
+      forces%ustar(i,j) = US%m_to_Z * sqrt(CS%gust(i,j)/CS%Rho0)
     enddo ; enddo ; endif
   else
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = sqrt(CS%gust_const/CS%Rho0)
+      forces%ustar(i,j) = US%m_to_Z * sqrt(CS%gust_const/CS%Rho0)
     enddo ; enddo ; endif
   endif
 
@@ -389,8 +391,8 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(in)    :: G      !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to double gyre.
@@ -432,8 +434,8 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(in)    :: G      !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to single gyre.
@@ -470,12 +472,13 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
 end subroutine wind_forcing_1gyre
 
 
-subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
+subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(in)    :: G      !< The ocean's grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to gyres.
@@ -513,7 +516,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
 
   ! set the friction velocity
   do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = sqrt(sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + &
+    forces%ustar(i,j) = US%m_to_Z * sqrt(sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + &
       forces%tauy(i,j)*forces%tauy(i,j) + forces%taux(i-1,j)*forces%taux(i-1,j) + &
       forces%taux(i,j)*forces%taux(i,j)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
   enddo ; enddo
@@ -522,12 +525,13 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
 end subroutine wind_forcing_gyres
 
 
-subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
+subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
+  type(time_type),          intent(in)    :: day    !< Time used for determining the fluxes.
+  type(ocean_grid_type),    intent(inout) :: G      !< The ocean's grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses.
@@ -580,12 +584,12 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
 
       if (CS%read_gust_2d) then
         do j=js,je ; do i=is,ie
-          forces%ustar(i,j) = sqrt((sqrt(temp_x(i,j)*temp_x(i,j) + &
+          forces%ustar(i,j) = US%m_to_Z * sqrt((sqrt(temp_x(i,j)*temp_x(i,j) + &
               temp_y(i,j)*temp_y(i,j)) + CS%gust(i,j)) / CS%Rho0)
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
-          forces%ustar(i,j) = sqrt(sqrt(temp_x(i,j)*temp_x(i,j) + &
+          forces%ustar(i,j) = US%m_to_Z * sqrt(sqrt(temp_x(i,j)*temp_x(i,j) + &
               temp_y(i,j)*temp_y(i,j))/CS%Rho0 + (CS%gust_const/CS%Rho0))
         enddo ; enddo
       endif
@@ -605,13 +609,13 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
       call pass_vector(forces%taux, forces%tauy, G%Domain, To_All)
       if (CS%read_gust_2d) then
         do j=js, je ; do i=is, ie
-          forces%ustar(i,j) = sqrt((sqrt(0.5*((forces%tauy(i,j-1)**2 + &
+          forces%ustar(i,j) = US%m_to_Z * sqrt((sqrt(0.5*((forces%tauy(i,j-1)**2 + &
             forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
             forces%taux(i,j)**2))) + CS%gust(i,j)) / CS%Rho0 )
         enddo ; enddo
       else
         do j=js, je ; do i=is, ie
-          forces%ustar(i,j) = sqrt(sqrt(0.5*((forces%tauy(i,j-1)**2 + &
+          forces%ustar(i,j) = US%m_to_Z * sqrt(sqrt(0.5*((forces%tauy(i,j-1)**2 + &
             forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
             forces%taux(i,j)**2)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
         enddo ; enddo
@@ -631,7 +635,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes
-  type(time_type),       intent(in)    :: day
+  type(time_type),       intent(in)    :: day    !< Time used for determining the fluxes.
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
@@ -836,7 +840,7 @@ subroutine buoyancy_forcing_zero(sfc_state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes
-  type(time_type),       intent(in)    :: day
+  type(time_type),       intent(in)    :: day    !< Time used for determining the fluxes.
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply, in s
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
@@ -895,7 +899,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes
-  type(time_type),       intent(in)    :: day
+  type(time_type),       intent(in)    :: day    !< Time used for determining the fluxes.
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply, in s
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
@@ -1011,9 +1015,10 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 
 end subroutine forcing_save_restart
 
-subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
+subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),           intent(in) :: Time
   type(ocean_grid_type),     intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type),     intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),     intent(in) :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,   intent(in) :: diag
   type(surface_forcing_CS),  pointer    :: CS
@@ -1228,7 +1233,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
 !    call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   endif
 
-  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
+  call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles)
 
   ! Set up any restart fields associated with the forcing.
   call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
