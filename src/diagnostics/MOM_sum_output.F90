@@ -117,9 +117,10 @@ end type sum_output_CS
 contains
 
 !> MOM_sum_output_init initializes the parameters and settings for the MOM_sum_output module.
-subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
+subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                                Input_start_time, CS)
   type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
+  type(unit_scale_type),  intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time
                                                       !! parameters.
   character(len=*),       intent(in)    :: directory  !< The directory where the energy file goes.
@@ -213,7 +214,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     call get_param(param_file, mdl, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
                    "The minimum increment between the depths of the \n"//&
                    "entries in the depth-list file.", &
-                   units="m", default=1.0E-10, scale=1.0/G%Zd_to_m)
+                   units="m", default=1.0E-10, scale=US%m_to_Z)
     if (CS%read_depth_list) then
       call get_param(param_file, mdl, "DEPTH_LIST_FILE", CS%depth_list_file, &
                    "The name of the depth list file.", default="Depth_list.nc")
@@ -222,7 +223,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     endif
 
     allocate(CS%lH(G%ke))
-    call depth_list_setup(G, CS)
+    call depth_list_setup(G, US, CS)
   else
     CS%list_size = 0
   endif
@@ -1023,8 +1024,9 @@ end subroutine accumulate_net_input
 !! cross sectional areas at each depth and the volume of fluid deeper
 !! than each depth.  This might be read from a previously created file
 !! or it might be created anew.  (For now only new creation occurs.
-subroutine depth_list_setup(G, CS)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+subroutine depth_list_setup(G, US, CS)
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
   ! Local variables
@@ -1032,13 +1034,13 @@ subroutine depth_list_setup(G, CS)
 
   if (CS%read_depth_list) then
     if (file_exists(CS%depth_list_file)) then
-      call read_depth_list(G, CS, CS%depth_list_file)
+      call read_depth_list(G, US, CS, CS%depth_list_file)
     else
       if (is_root_pe()) call MOM_error(WARNING, "depth_list_setup: "// &
         trim(CS%depth_list_file)//" does not exist.  Creating a new file.")
       call create_depth_list(G, CS)
 
-      call write_depth_list(G, CS, CS%depth_list_file, CS%list_size+1)
+      call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
     endif
   else
     call create_depth_list(G, CS)
@@ -1177,8 +1179,9 @@ subroutine create_depth_list(G, CS)
 end subroutine create_depth_list
 
 !> This subroutine writes out the depth list to the specified file.
-subroutine write_depth_list(G, CS, filename, list_size)
+subroutine write_depth_list(G, US, CS, filename, list_size)
   type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure.
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
@@ -1235,7 +1238,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; tmp(k) = G%Zd_to_m*CS%DL(k)%depth ; enddo
+  do k=1,list_size ; tmp(k) = US%Z_to_m*CS%DL(k)%depth ; enddo
   status = NF90_PUT_VAR(ncid, Did, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" depth "//trim(NF90_STRERROR(status)))
@@ -1245,7 +1248,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" area "//trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; tmp(k) = G%Zd_to_m*CS%DL(k)%vol_below ; enddo
+  do k=1,list_size ; tmp(k) = US%Z_to_m*CS%DL(k)%vol_below ; enddo
   status = NF90_PUT_VAR(ncid, Vid, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
@@ -1258,8 +1261,9 @@ end subroutine write_depth_list
 
 !> This subroutine reads in the depth list to the specified file
 !! and allocates and sets up CS%DL and CS%list_size .
-subroutine read_depth_list(G, CS, filename)
+subroutine read_depth_list(G, US, CS, filename)
   type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
@@ -1267,12 +1271,10 @@ subroutine read_depth_list(G, CS, filename)
   character(len=32) :: mdl
   character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
-  real    :: m_to_Z
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)
 
   mdl = "MOM_sum_output read_depth_list:"
-  m_to_Z = 1.0/G%Zd_to_m
 
   status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
@@ -1311,7 +1313,7 @@ subroutine read_depth_list(G, CS, filename)
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; CS%DL(k)%depth = m_to_Z*tmp(k) ; enddo
+  do k=1,list_size ; CS%DL(k)%depth = US%m_to_Z*tmp(k) ; enddo
 
   var_name = "area"
   var_msg = trim(var_name)//" in "//trim(filename)//" - "
@@ -1337,7 +1339,7 @@ subroutine read_depth_list(G, CS, filename)
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; CS%DL(k)%vol_below = m_to_Z*tmp(k) ; enddo
+  do k=1,list_size ; CS%DL(k)%vol_below = US%m_to_Z*tmp(k) ; enddo
 
   status = NF90_CLOSE(ncid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, mdl// &
