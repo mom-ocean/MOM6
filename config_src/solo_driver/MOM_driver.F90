@@ -322,7 +322,7 @@ program MOM_main
 
   call extract_surface_state(MOM_CSp, sfc_state)
 
-  call surface_forcing_init(Time, grid, param_file, diag, &
+  call surface_forcing_init(Time, grid, US, param_file, diag, &
                             surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
@@ -478,12 +478,12 @@ program MOM_main
 
     ! Set the forcing for the next steps.
     if (.not. offline_tracer_mode) then
-        call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, &
+        call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, US, &
                      surface_forcing_CSp)
     endif
     if (debug) then
-      call MOM_mech_forcing_chksum("After set forcing", forces, grid, haloshift=0)
-      call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
+      call MOM_mech_forcing_chksum("After set forcing", forces, grid, US, haloshift=0)
+      call MOM_forcing_chksum("After set forcing", fluxes, grid, US, haloshift=0)
     endif
 
     if (use_ice_shelf) then
