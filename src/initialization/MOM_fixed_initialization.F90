@@ -84,7 +84,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   ! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
   ! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
   call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
-  if (G%Zd_to_m /= US%Z_to_m) call rescale_dyn_horgrid_bathymetry(G, US%Z_to_m)
+  call rescale_dyn_horgrid_bathymetry(G, US%Z_to_m)
 
   ! To initialize masks, the bathymetry in halo regions must be filled in
   call pass_var(G%bathyT, G%Domain)
@@ -96,7 +96,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call open_boundary_impose_normal_slope(OBC, G, G%bathyT)
 
   ! This call sets masks that prohibit flow over any point interpreted as land
-  call initialize_masks(G, PF)
+  call initialize_masks(G, PF, US)
 
   ! Make OBC mask consistent with land mask
   call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv)
@@ -162,7 +162,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call compute_global_grid_integrals(G)
 
 ! Write out all of the grid data used by this run.
-  if (write_geom) call write_ocean_geometry_file(G, PF, output_dir)
+  if (write_geom) call write_ocean_geometry_file(G, PF, output_dir, US=US)
 
   call callTree_leave('MOM_initialize_fixed()')
 
