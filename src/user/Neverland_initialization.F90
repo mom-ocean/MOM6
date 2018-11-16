@@ -26,18 +26,19 @@ contains
 
 !> This subroutine sets up the Neverland test case topography.
 subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+  type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+
   ! Local variables
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
   real :: x, y
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "Neverland_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   real :: nl_roughness_amp, nl_top_amp
@@ -55,10 +56,9 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
   PI = 4.0*atan(1.0)
 
 !  Calculate the depth of the bottom.
-  do i=is,ie
-  do j=js,je
-    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
-    y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
+  do j=js,je ; do i=is,ie
+    x = (G%geoLonT(i,j)-G%west_lon) / G%len_lon
+    y =( G%geoLatT(i,j)-G%south_lat) / G%len_lat
 !  This sets topography that has a reentrant channel to the south.
     D(i,j) = 1.0 - 1.1 * spike(y-1,0.12) - 1.1 * spike(y,0.12) - & !< The great northern wall and Antarctica
               nl_top_amp*( &
@@ -73,8 +73,7 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
               -  nl_roughness_amp * cos(20*PI*x) * cos(20*PI*y)              !< roughness
     if (D(i,j) < 0.0) D(i,j) = 0.0
     D(i,j) = D(i,j) * max_depth
-  enddo
-  enddo
+  enddo ; enddo
 
 end subroutine Neverland_initialize_topography
 ! -----------------------------------------------------------------------------
