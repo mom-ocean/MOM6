@@ -13,6 +13,7 @@ use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N
 use MOM_open_boundary, only : OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -54,12 +55,13 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 end subroutine USER_set_coord
 
 !> Initialize topography.
-subroutine USER_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine USER_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_topography: " // &
