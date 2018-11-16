@@ -944,8 +944,8 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "between the advecting barotropic flow and the vertical structure of MEKE.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_TOPOGRAPHIC_BETA", CS%MEKE_topographic_beta, &
-                 "A scale factor to determine how much topographic beta is weighed in " //&
-                 "computing beta in the expression of Rhines scale. Use 1 if full "//&
+                 "A scale factor to determine how much topographic beta is weighed in\n" //&
+                 "computing beta in the expression of Rhines scale. Use 1 if full\n"//&
                  "topographic beta effect is considered; use 0 if it's completely ignored.", &
                  units="nondim", default=0.0)
 
