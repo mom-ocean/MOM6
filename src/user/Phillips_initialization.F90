@@ -283,48 +283,52 @@ function sech(x)
 end function sech
 
 !> Initialize topography.
-subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
-  real :: PI, Htop, Wtop, Ltop, offset, dist, &
-          x1, x2, x3, x4, y1, y2
+  ! Local variables
+  real :: m_to_Z  ! A dimensional rescaling factor.
+  real :: PI, Htop, Wtop, Ltop, offset, dist
+  real :: x1, x2, x3, x4, y1, y2
   integer :: i,j,is,ie,js,je
   character(len=40)  :: mdl = "Phillips_initialize_topography" ! This subroutine's name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   PI = 4.0*atan(1.0)
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
 
-  call get_param(param_file, mdl, "PHILLIPS_HTOP", Htop,             &
-                 "The maximum height of the topography.", units="m", &
+  call get_param(param_file, mdl, "PHILLIPS_HTOP", Htop, &
+                 "The maximum height of the topography.", units="m", scale=m_to_Z, &
                  fail_if_missing=.true.)
 ! Htop=0.375*max_depth     ! max height of topog. above max_depth
-  Wtop=0.5*G%len_lat       ! meridional width of drake and mount
-  Ltop=0.25*G%len_lon      ! zonal width of topographic features
-  offset=0.1*G%len_lat ! meridional offset from center
-  dist=0.333*G%len_lon       ! distance between drake and mount
+  Wtop = 0.5*G%len_lat     ! meridional width of drake and mount
+  Ltop = 0.25*G%len_lon    ! zonal width of topographic features
+  offset = 0.1*G%len_lat   ! meridional offset from center
+  dist = 0.333*G%len_lon   ! distance between drake and mount
                            ! should be longer than Ltop/2
 
   y1=G%south_lat+0.5*G%len_lat+offset-0.5*Wtop; y2=y1+Wtop
   x1=G%west_lon+0.1*G%len_lon; x2=x1+Ltop; x3=x1+dist; x4=x3+3.0/2.0*Ltop
 
   do i=is,ie ; do j=js,je
-     D(i,j)=0.0
-     if (G%geoLonT(i,j)>x1 .and. G%geoLonT(i,j)<x2) then
-       D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2
-       if (G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
-          D(i,j)=D(i,j)*(1-sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2)
-       endif
-     elseif (G%geoLonT(i,j)>x3 .and. G%geoLonT(i,j)<x4 .and. &
-              G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
-       D(i,j) = 2.0/3.0*Htop*sin(PI*(G%geoLonT(i,j)-x3)/(x4-x3))**2 &
-                    *sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2
-     endif
-     D(i,j)=max_depth-D(i,j)
+    D(i,j)=0.0
+    if (G%geoLonT(i,j)>x1 .and. G%geoLonT(i,j)<x2) then
+      D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2
+      if (G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
+         D(i,j) = D(i,j)*(1-sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2)
+      endif
+    elseif (G%geoLonT(i,j)>x3 .and. G%geoLonT(i,j)<x4 .and. &
+             G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then
+      D(i,j) = 2.0/3.0*Htop*sin(PI*(G%geoLonT(i,j)-x3)/(x4-x3))**2 &
+                   *sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2
+    endif
+    D(i,j) = max_depth - D(i,j)
   enddo ; enddo
 
 end subroutine Phillips_initialize_topography
