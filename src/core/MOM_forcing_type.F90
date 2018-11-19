@@ -90,7 +90,8 @@ type, public :: forcing
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
     heat_content_cond    => NULL(), & !< heat content associated with condensating water (W/m^2)
-    heat_content_lprec   => NULL(), & !< heat content associated with liquid >0 precip   (W/m^2) (diagnostic)
+    heat_content_lprec   => NULL(), & !< heat content associated with liquid >0 precip  (W/m^2) (diagnostic)
+    heat_content_meltw   => NULL(), & !< heat content associated with snow/seaice melt/freeze (W/m^2)
     heat_content_fprec   => NULL(), & !< heat content associated with frozen precip      (W/m^2)
     heat_content_vprec   => NULL(), & !< heat content associated with virtual >0 precip  (W/m^2)
     heat_content_lrunoff => NULL(), & !< heat content associated with liquid runoff      (W/m^2)
@@ -262,7 +263,7 @@ type, public :: forcing_diags
   integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1
   integer :: id_heat_added          = -1, id_heat_content_massin   = -1
   integer :: id_hfrainds            = -1, id_hfrunoffds            = -1
-  integer :: id_melth               = -1
+  integer :: id_melth               = -1, id_heat_content_meltw    = -1
 
   ! global area integrated heat flux diagnostic handles
   integer :: id_total_net_heat_coupler    = -1, id_total_net_heat_surface      = -1
@@ -275,7 +276,7 @@ type, public :: forcing_diags
   integer :: id_total_heat_content_cond   = -1, id_total_heat_content_surfwater= -1
   integer :: id_total_heat_content_vprec  = -1, id_total_heat_content_massout  = -1
   integer :: id_total_heat_added          = -1, id_total_heat_content_massin   = -1
-  integer :: id_total_melth               = -1
+  integer :: id_total_melth               = -1, id_total_heat_content_meltw    = -1
 
   ! global area averaged heat flux diagnostic handles
   integer :: id_net_heat_coupler_ga = -1, id_net_heat_surface_ga = -1
@@ -727,6 +728,15 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
         endif
       endif
 
+      ! Following lprec and fprec, water flux due to sea ice melt (meltw) enters at SST - GMM
+      if (associated(fluxes%heat_content_meltw)) then
+        if (fluxes%meltw(i,j) > 0.0) then
+          fluxes%heat_content_meltw(i,j) = fluxes%C_p*fluxes%meltw(i,j)*T(i,1)
+        else
+          fluxes%heat_content_meltw(i,j) = 0.0
+        endif
+      endif
+
       ! virtual precip associated with salinity restoring
       ! vprec > 0 means add water to ocean, assumed to be at SST
       ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
@@ -1035,6 +1045,8 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
     call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_fprec)) &
     call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G%HI,haloshift=hshift)
+  if (associated(fluxes%heat_content_meltw)) &
+    call hchksum(fluxes%heat_content_meltw, mesg//" fluxes%heat_content_meltw",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_cond)) &
     call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_massout)) &
@@ -1131,6 +1143,7 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   call locMsg(fluxes%heat_content_frunoff,'heat_content_frunoff')
   call locMsg(fluxes%heat_content_lprec,'heat_content_lprec')
   call locMsg(fluxes%heat_content_fprec,'heat_content_fprec')
+  call locMsg(fluxes%heat_content_meltw,'heat_content_meltw')
   call locMsg(fluxes%heat_content_vprec,'heat_content_vprec')
   call locMsg(fluxes%heat_content_cond,'heat_content_cond')
   call locMsg(fluxes%heat_content_cond,'heat_content_massout')
@@ -1404,6 +1417,10 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
         diag%axesT1,Time,'Heat content (relative to 0degC) of frozen prec entering ocean',&
         'W m-2')
 
+  handles%id_heat_content_meltw = register_diag_field('ocean_model', 'heat_content_meltw',&
+        diag%axesT1,Time,'Heat content (relative to 0degC) of water flux due to sea ice melting entering ocean',&
+        'W m-2')
+
   handles%id_heat_content_vprec = register_diag_field('ocean_model', 'heat_content_vprec',   &
         diag%axesT1,Time,'Heat content (relative to 0degC) of virtual precip entering ocean',&
         'W m-2')
@@ -1538,6 +1555,11 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
   handles%id_total_heat_content_fprec = register_scalar_field('ocean_model',     &
       'total_heat_content_fprec', Time, diag,                                    &
       long_name='Area integrated heat content (relative to 0C) of frozen precip',&
+      units='W')
+
+  handles%id_total_heat_content_meltw = register_scalar_field('ocean_model',     &
+      'total_heat_content_meltw', Time, diag,                                    &
+      long_name='Area integrated heat content (relative to 0C) of water flux due to melting',&
       units='W')
 
   handles%id_total_heat_content_vprec = register_scalar_field('ocean_model',      &
@@ -1862,6 +1884,11 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
   if (associated(fluxes%heat_content_fprec) .and. associated(flux_tmp%heat_content_fprec)) then
     do j=js,je ; do i=is,ie
       fluxes%heat_content_fprec(i,j) = wt1*fluxes%heat_content_fprec(i,j) + wt2*flux_tmp%heat_content_fprec(i,j)
+    enddo ; enddo
+  endif
+  if (associated(fluxes%heat_content_meltw) .and. associated(flux_tmp%heat_content_meltw)) then
+    do j=js,je ; do i=is,ie
+      fluxes%heat_content_meltw(i,j) = wt1*fluxes%heat_content_meltw(i,j) + wt2*flux_tmp%heat_content_meltw(i,j)
     enddo ; enddo
   endif
   if (associated(fluxes%heat_content_vprec) .and. associated(flux_tmp%heat_content_vprec)) then
@@ -2287,6 +2314,13 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       call post_data(handles%id_total_heat_content_fprec, total_transport, diag)
     endif
 
+    if ((handles%id_heat_content_meltw > 0) .and. associated(fluxes%heat_content_meltw))      &
+      call post_data(handles%id_heat_content_meltw, fluxes%heat_content_meltw, diag)
+    if ((handles%id_total_heat_content_meltw > 0) .and. associated(fluxes%heat_content_meltw)) then
+      total_transport = global_area_integral(fluxes%heat_content_meltw,G)
+      call post_data(handles%id_total_heat_content_meltw, total_transport, diag)
+    endif
+
     if ((handles%id_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec))      &
       call post_data(handles%id_heat_content_vprec, fluxes%heat_content_vprec, diag)
     if ((handles%id_total_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec)) then
@@ -2346,17 +2380,18 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
         if (associated(fluxes%SW))                   res(i,j) = res(i,j) + fluxes%SW(i,j)
         if (associated(fluxes%melth))                res(i,j) = res(i,j) + fluxes%melth(i,j)
         if (associated(sfc_state%frazil))            res(i,j) = res(i,j) + sfc_state%frazil(i,j) * I_dt
-      ! if (associated(sfc_state%TempXpme)) then
-      !    res(i,j) = res(i,j) + sfc_state%TempXpme(i,j) * fluxes%C_p * I_dt
-      ! else
-        if (associated(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
-        if (associated(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
-        if (associated(fluxes%heat_content_lprec))   res(i,j) = res(i,j) + fluxes%heat_content_lprec(i,j)
-        if (associated(fluxes%heat_content_fprec))   res(i,j) = res(i,j) + fluxes%heat_content_fprec(i,j)
-        if (associated(fluxes%heat_content_vprec))   res(i,j) = res(i,j) + fluxes%heat_content_vprec(i,j)
-        if (associated(fluxes%heat_content_cond))    res(i,j) = res(i,j) + fluxes%heat_content_cond(i,j)
-        if (associated(fluxes%heat_content_massout)) res(i,j) = res(i,j) + fluxes%heat_content_massout(i,j)
-      ! endif
+        !if (associated(sfc_state%TempXpme)) then
+        !  res(i,j) = res(i,j) + sfc_state%TempXpme(i,j) * fluxes%C_p * I_dt
+        !else
+          if (associated(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
+          if (associated(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
+          if (associated(fluxes%heat_content_lprec))   res(i,j) = res(i,j) + fluxes%heat_content_lprec(i,j)
+          if (associated(fluxes%heat_content_fprec))   res(i,j) = res(i,j) + fluxes%heat_content_fprec(i,j)
+          if (associated(fluxes%heat_content_meltw))   res(i,j) = res(i,j) + fluxes%heat_content_meltw(i,j)
+          if (associated(fluxes%heat_content_vprec))   res(i,j) = res(i,j) + fluxes%heat_content_vprec(i,j)
+          if (associated(fluxes%heat_content_cond))    res(i,j) = res(i,j) + fluxes%heat_content_cond(i,j)
+          if (associated(fluxes%heat_content_massout)) res(i,j) = res(i,j) + fluxes%heat_content_massout(i,j)
+        !endif
         if (associated(fluxes%heat_added))         res(i,j) = res(i,j) + fluxes%heat_added(i,j)
       enddo ; enddo
       call post_data(handles%id_net_heat_surface, res, diag)
@@ -2380,6 +2415,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
           if (associated(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
           if (associated(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
           if (associated(fluxes%heat_content_lprec))   res(i,j) = res(i,j) + fluxes%heat_content_lprec(i,j)
+          if (associated(fluxes%heat_content_meltw))   res(i,j) = res(i,j) + fluxes%heat_content_meltw(i,j)
           if (associated(fluxes%heat_content_fprec))   res(i,j) = res(i,j) + fluxes%heat_content_fprec(i,j)
           if (associated(fluxes%heat_content_vprec))   res(i,j) = res(i,j) + fluxes%heat_content_vprec(i,j)
           if (associated(fluxes%heat_content_cond))    res(i,j) = res(i,j) + fluxes%heat_content_cond(i,j)
@@ -2640,6 +2676,7 @@ subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, ic
 
   if (present(heat) .and. present(water)) then ; if (heat .and. water) then
     call myAlloc(fluxes%heat_content_cond,isd,ied,jsd,jed, .true.)
+    call myAlloc(fluxes%heat_content_meltw,isd,ied,jsd,jed, .true.)
     call myAlloc(fluxes%heat_content_lprec,isd,ied,jsd,jed, .true.)
     call myAlloc(fluxes%heat_content_fprec,isd,ied,jsd,jed, .true.)
     call myAlloc(fluxes%heat_content_vprec,isd,ied,jsd,jed, .true.)
@@ -2736,6 +2773,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%heat_added))           deallocate(fluxes%heat_added)
   if (associated(fluxes%heat_content_lrunoff)) deallocate(fluxes%heat_content_lrunoff)
   if (associated(fluxes%heat_content_frunoff)) deallocate(fluxes%heat_content_frunoff)
+  if (associated(fluxes%heat_content_meltw))   deallocate(fluxes%heat_content_meltw)
   if (associated(fluxes%heat_content_lprec))   deallocate(fluxes%heat_content_lprec)
   if (associated(fluxes%heat_content_fprec))   deallocate(fluxes%heat_content_fprec)
   if (associated(fluxes%heat_content_cond))    deallocate(fluxes%heat_content_cond)
