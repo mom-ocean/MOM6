@@ -15,6 +15,8 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
+use random_numbers_mod, only: initializeRandomNumberStream, getRandomNumbers, randomNumberStream
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -124,6 +126,9 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   real :: e_interface ! Current interface position (m)
   real :: x,y,r1,r2 ! x,y and radial coordinates for computation of initial pert.
   real :: pert_amp ! Amplitude of perturbations measured in Angstrom_H
+  real :: h_noise ! Amplitude of noise to scale h by
+  real :: noise ! Noise
+  type(randomNumberStream) :: rns ! Random numbers for stochastic tidal parameterization
   character(len=40)  :: mdl = "Neverland_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
@@ -136,6 +141,8 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   call get_param(param_file, mdl, "NL_THICKNESS_PERT_AMP", pert_amp, &
                  "Amplitude of finite scale perturbations as fraction of depth.", &
                  units="nondim", default=0.)
+  call get_param(param_file, mdl, "NL_THICKNESS_NOISE_AMP", h_noise, &
+                 "Amplitude of noise to scale layer by.", units="nondim", default=0.)
 
   ! e0 is the notional position of interfaces
   e0(1) = 0. ! The surface
@@ -152,6 +159,12 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
       r1=sqrt((x-0.7)**2+(y-0.2)**2)
       r2=sqrt((x-0.3)**2+(y-0.25)**2)
       h(i,j,k) = h(i,j,k) + pert_amp*(e0(k) - e0(nz+1))*GV%Z_to_H*(spike(r1,0.15)-spike(r2,0.15)) ! Prescribed perturbation
+      if (h_noise /= 0.) then
+        rns = initializeRandomNumberStream( int( 4096*(x + (y+1.)) ) )
+        call getRandomNumbers(rns, noise) ! x will be in (0,1)
+        noise = h_noise * 2. * ( noise - 0.5 ) ! range -h_noise to h_noise
+        h(i,j,k) = ( 1. + noise ) * h(i,j,k)
+      endif
       h(i,j,k) = max( GV%Angstrom_H, h(i,j,k) ) ! Limit to non-negative
       e_interface = e_interface + GV%H_to_Z * h(i,j,k) ! Actual position of upper interface
     enddo
