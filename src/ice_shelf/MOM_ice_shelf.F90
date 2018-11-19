@@ -1385,7 +1385,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   ! Set up the bottom depth, G%D either analytically or from file
   call MOM_initialize_topography(dG%bathyT, G%max_depth, dG, param_file)
-  if (dG%Zd_to_m /= US%Z_to_m) call rescale_dyn_horgrid_bathymetry(dG, US%Z_to_m)
+  call rescale_dyn_horgrid_bathymetry(dG, US%Z_to_m)
 
   ! Set up the Coriolis parameter, G%f, usually analytically.
   call MOM_initialize_rotation(dG%CoriolisBu, dG, param_file)

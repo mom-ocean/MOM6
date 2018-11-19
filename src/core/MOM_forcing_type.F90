@@ -47,7 +47,7 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     ustar         => NULL(), & !< surface friction velocity scale (Z/s)
     ustar_gustless => NULL()   !< surface friction velocity scale without any
-                               !! any augmentation for gustiness (m/s)
+                               !! any augmentation for gustiness (Z/s)
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
@@ -1961,19 +1961,20 @@ end subroutine copy_common_forcing_fields
 
 !> This subroutine calculates certain derived forcing fields based on information
 !! from a mech_forcing type and stores them in a (thermodynamic) forcing type.
-subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
+subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
   type(mech_forcing),      intent(in)    :: forces   !< A structure with the driving mechanical forces
   type(forcing),           intent(inout) :: fluxes   !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in)    :: G        !< grid type
+  type(unit_scale_type),   intent(in)    :: US       !< A dimensional unit scaling type
   real,                    intent(in)    :: Rho0     !< A reference density of seawater, in kg m-3,
                                                      !! as used to calculate ustar.
 
   real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
-  real :: Irho0        ! Inverse of the mean density in (m^3/kg)
+  real :: Irho0        ! Inverse of the mean density rescaled to (Z2 m / kg)
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  Irho0 = 1.0/Rho0
+  Irho0 = US%m_to_Z**2 / Rho0
 
   if (associated(forces%taux) .and. associated(forces%tauy) .and. &
       associated(fluxes%ustar_gustless)) then
@@ -1989,7 +1990,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
-      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) / Rho0)
+      fluxes%ustar_gustless(i,j) = US%m_to_Z * sqrt(sqrt(taux2 + tauy2) / Rho0)
 !### Change to:
 !      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
     enddo ; enddo

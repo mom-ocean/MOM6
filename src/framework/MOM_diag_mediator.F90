@@ -15,7 +15,7 @@ use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
-use MOM_unit_scaling,       only : unit_scale_type
+use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_diag_remap,       only : diag_remap_ctrl
@@ -223,6 +223,7 @@ type, public :: diag_ctrl
   type(EOS_type),  pointer :: eqn_of_state => null() !< The equation of state type
   type(ocean_grid_type), pointer :: G => null()  !< The ocean grid type
   type(verticalGrid_type), pointer :: GV => null()  !< The model's vertical ocean grid
+  type(unit_scale_type), pointer :: US => null() !< A dimensional unit scaling type
 
   !> The volume cell measure (special diagnostic) manager id
   integer :: volume_cell_measure_dm_id = -1
@@ -2177,9 +2178,10 @@ end subroutine diag_mediator_infrastructure_init
 
 !> diag_mediator_init initializes the MOM diag_mediator and opens the available
 !! diagnostics file, if appropriate.
-subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
+subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   type(ocean_grid_type), target, intent(inout) :: G  !< The ocean grid type.
   type(verticalGrid_type), target, intent(in)  :: GV !< The ocean vertical grid structure
+  type(unit_scale_type),   target, intent(in)  :: US !< A dimensional unit scaling type
   integer,                    intent(in)    :: nz    !< The number of layers in the model's native grid.
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(diag_ctrl),            intent(inout) :: diag_cs !< A pointer to a type with many variables
@@ -2251,6 +2253,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
   diag_cs%GV => GV
+  diag_cs%US => US
   diag_cs%h => null()
   diag_cs%T => null()
   diag_cs%S => null()
@@ -2404,7 +2407,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, diag_cs%GV, h_diag, T_diag, S_diag, &
+                           diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
                            diag_cs%eqn_of_state)
   enddo
 

@@ -15,6 +15,7 @@ use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
+use MOM_unit_scaling, only : unit_scale_type
 
 use netcdf
 
@@ -1143,12 +1144,13 @@ end subroutine compute_global_grid_integrals
 ! -----------------------------------------------------------------------------
 !> Write out a file describing the topography, Coriolis parameter, grid locations
 !! and various other fixed fields from the grid.
-subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
-  type(dyn_horgrid_type),     intent(inout) :: G         !< The dynamic horizontal grid
-  type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
-  character(len=*),           intent(in)    :: directory !< The directory into which to place the geometry file.
-  character(len=*), optional, intent(in)    :: geom_file !< If present, the name of the geometry file
-                                                         !! (otherwise the file is "ocean_geometry")
+subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
+  type(dyn_horgrid_type),       intent(inout) :: G         !< The dynamic horizontal grid
+  type(param_file_type),        intent(in)    :: param_file !< Parameter file structure
+  character(len=*),             intent(in)    :: directory !< The directory into which to place the geometry file.
+  character(len=*),   optional, intent(in)    :: geom_file !< If present, the name of the geometry file
+                                                           !! (otherwise the file is "ocean_geometry")
+  type(unit_scale_type), optional, intent(in) :: US        !< A dimensional unit scaling type
 
   ! Local variables.
   character(len=240) :: filepath
@@ -1156,6 +1158,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
+  real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   integer :: unit
   integer :: file_threading
   integer :: nFlds_used
@@ -1171,6 +1174,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  Z_to_m_scale = 1.0 ; if (present(US)) Z_to_m_scale = US%Z_to_m
 
 !   vardesc is a structure defined in MOM_io.F90.  The elements of
 ! this structure, in order, are:
@@ -1240,7 +1245,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
   call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%Zd_to_m*G%bathyT(i,j) ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
   call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
   call write_field(unit, fields(6), G%Domain%mpp_domain, G%CoriolisBu)
 
