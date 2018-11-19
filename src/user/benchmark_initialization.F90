@@ -26,17 +26,20 @@ public benchmark_init_temperature_salinity
 contains
 
 !> This subroutine sets up the benchmark test case topography.
-subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine benchmark_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+
   ! Local variables
-  real :: min_depth            ! The minimum and maximum depths in m.
+  real :: min_depth            ! The minimum and maximum depths in Z.
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
+  real :: m_to_Z  ! A dimensional rescaling factor.
   real :: x, y
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -47,17 +50,19 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
 
   PI = 4.0*atan(1.0)
   D0 = max_depth / 0.5
 
 !  Calculate the depth of the bottom.
-  do i=is,ie ; do j=js,je
-    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
-    y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
+  do j=js,je ; do i=is,ie
+    x = (G%geoLonT(i,j)-G%west_lon) / G%len_lon
+    y = (G%geoLatT(i,j)-G%south_lat) / G%len_lat
 !  This sets topography that has a reentrant channel to the south.
     D(i,j) = -D0 * ( y*(1.0 + 0.6*cos(4.0*PI*x)) &
                    + 0.75*exp(-6.0*y) &
