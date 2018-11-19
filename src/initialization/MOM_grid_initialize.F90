@@ -54,9 +54,10 @@ contains
 !> set_grid_metrics is used to set the primary values in the model's horizontal
 !! grid.  The bathymetry, land-sea mask and any restricted channel widths are
 !! not known yet, so these are set later.
-subroutine set_grid_metrics(G, param_file)
-  type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
-  type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
+subroutine set_grid_metrics(G, param_file, US)
+  type(dyn_horgrid_type),          intent(inout) :: G  !< The dynamic horizontal grid type
+  type(param_file_type),           intent(in)    :: param_file !< Parameter file structure
+  type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1216,9 +1217,9 @@ end function Adcroft_reciprocal
 !! any land or boundary point.  For points in the interior, mask2dCu,
 !! mask2dCv, and mask2dBu are all 1.0.
 subroutine initialize_masks(G, PF, US)
-  type(dyn_horgrid_type),       intent(inout) :: G  !< The dynamic horizontal grid type
-  type(param_file_type),        intent(in)    :: PF !< Parameter file structure
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
+  type(dyn_horgrid_type),          intent(inout) :: G  !< The dynamic horizontal grid type
+  type(param_file_type),           intent(in)    :: PF !< Parameter file structure
+  type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   real :: m_to_Z_scale ! A unit conversion factor from m to Z.
   real :: Dmin       ! The depth for masking in the same units as G%bathyT (Z).
