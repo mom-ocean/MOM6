@@ -36,23 +36,27 @@ public ISOMIP_initialize_sponges
 contains
 
 !> Initialization of topography for the ISOMIP configuration
-subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+
   ! Local variables
-  real :: min_depth ! The minimum and maximum depths in m.
+  real :: min_depth ! The minimum and maximum depths in Z.
+  real :: m_to_Z  ! A dimensional rescaling factor.
   ! The following variables are used to set up the bathymetry in the ISOMIP example.
   real :: bmax            ! max depth of bedrock topography
   real :: b0,b2,b4,b6     ! first, second, third and fourth bedrock topography coeff
-  real :: xbar           ! characteristic along-flow lenght scale of the bedrock
-  real :: dc              ! depth of the trough compared with side walls
+  real :: xbar            ! characteristic along-flow lenght scale of the bedrock
+  real :: dc              ! depth of the trough compared with side walls in Z
   real :: fc              ! characteristic width of the side walls of the channel
   real :: wc              ! half-width of the trough
   real :: ly              ! domain width (across ice flow)
-  real :: bx, by, xtil    ! dummy vatiables
+  real :: bx, by          ! dummy vatiables in Z
+  real :: xtil            ! dummy vatiable
   logical :: is_2D         ! If true, use 2D setup
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -63,15 +67,18 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  ISOMIP_initialization.F90, ISOMIP_initialize_topography: setting topography", 5)
 
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
   call get_param(param_file, mdl, "ISOMIP_2D",is_2D,'If true, use a 2D setup.', default=.false.)
 
   ! The following variables should be transformed into runtime parameters?
-  bmax=720.0; b0=-150.0; b2=-728.8; b4=343.91; b6=-50.57
-  xbar=300.0E3; dc=500.0; fc=4.0E3; wc=24.0E3; ly=80.0E3
-  bx = 0.0; by = 0.0; xtil = 0.0
+  bmax = 720.0*m_to_Z ; dc = 500.0*m_to_Z
+  b0 = -150.0*m_to_Z ; b2 = -728.8*m_to_Z ; b4 = 343.91*m_to_Z ; b6 = -50.57*m_to_Z
+  xbar = 300.0e3 ; fc = 4.0e3 ; wc = 24.0e3 ; ly = 80.0e3
+  bx = 0.0 ; by = 0.0 ; xtil = 0.0
 
 
   if (is_2D) then
@@ -79,15 +86,15 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
       ! 2D setup
       xtil = G%geoLonT(i,j)*1.0e3/xbar
       !xtil = 450*1.0e3/xbar
-      bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
+      bx = b0 + b2*xtil**2 + b4*xtil**4 + b6*xtil**6
       !by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
       !        (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
 
       ! slice at y = 40 km
-      by = (dc/(1.+exp(-2.*(40.0*1.0e3- ly/2. - wc)/fc))) + &
-           (dc/(1.+exp(2.*(40.0*1.0e3- ly/2. + wc)/fc)))
+      by = (dc / (1.+exp(-2.*(40.0*1.0e3- ly/2. - wc)/fc))) + &
+           (dc / (1.+exp(2.*(40.0*1.0e3- ly/2. + wc)/fc)))
 
-      D(i,j) = -max(bx+by,-bmax)
+      D(i,j) = -max(bx+by, -bmax)
       if (D(i,j) > max_depth) D(i,j) = max_depth
       if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
     enddo ; enddo
@@ -105,11 +112,11 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
 
       xtil = G%geoLonT(i,j)*1.0e3/xbar
 
-      bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
-      by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
-              (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
+      bx = b0 + b2*xtil**2 + b4*xtil**4 + b6*xtil**6
+      by = (dc / (1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
+           (dc / (1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
 
-      D(i,j) = -max(bx+by,-bmax)
+      D(i,j) = -max(bx+by, -bmax)
       if (D(i,j) > max_depth) D(i,j) = max_depth
       if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
     enddo ; enddo

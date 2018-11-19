@@ -83,8 +83,8 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   ! Set up the bottom depth, G%bathyT either analytically or from file
   ! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
   ! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
-  call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
-  call rescale_dyn_horgrid_bathymetry(G, US%Z_to_m)
+  call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF, US)
+!  call rescale_dyn_horgrid_bathymetry(G, US%Z_to_m)
 
   ! To initialize masks, the bathymetry in halo regions must be filled in
   call pass_var(G%bathyT, G%Domain)
@@ -170,18 +170,23 @@ end subroutine MOM_initialize_fixed
 
 !> MOM_initialize_topography makes the appropriate call to set up the bathymetry.  At this
 !! point the topography is in units of m, but this can be changed later.
-subroutine MOM_initialize_topography(D, max_depth, G, PF)
+subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
   type(dyn_horgrid_type),           intent(in)  :: G  !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                                     intent(out) :: D  !< Ocean bottom depth in m
   type(param_file_type),            intent(in)  :: PF !< Parameter file structure
   real,                             intent(out) :: max_depth !< Maximum depth of model in m
+  type(unit_scale_type),  optional, intent(in)  :: US !< A dimensional unit scaling type
 
 !  This subroutine makes the appropriate call to set up the bottom depth.
 !  This is a separate subroutine so that it can be made public and shared with
 !  the ice-sheet code or other components.
+  real :: m_to_Z, Z_to_m  ! Dimensional rescaling factors
   character(len=40)  :: mdl = "MOM_initialize_topography" ! This subroutine's name.
   character(len=200) :: config
+
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+  Z_to_m = 1.0 ; if (present(US)) Z_to_m = US%Z_to_m
 
   call get_param(PF, mdl, "TOPO_CONFIG", config, &
                  "This specifies how bathymetry is specified: \n"//&
@@ -210,39 +215,39 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
-  max_depth = -1.e9; call read_param(PF, "MAXIMUM_DEPTH", max_depth)
+  max_depth = -1.e9*m_to_Z ; call read_param(PF, "MAXIMUM_DEPTH", max_depth, scale=m_to_Z)
   select case ( trim(config) )
-    case ("file");      call initialize_topography_from_file(D, G, PF)
-    case ("flat");      call initialize_topography_named(D, G, PF, config, max_depth)
-    case ("spoon");     call initialize_topography_named(D, G, PF, config, max_depth)
-    case ("bowl");      call initialize_topography_named(D, G, PF, config, max_depth)
-    case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth)
-    case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
-    case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth)
-    case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
+    case ("file");      call initialize_topography_from_file(D, G, PF, US)
+    case ("flat");      call initialize_topography_named(D, G, PF, config, max_depth, US)
+    case ("spoon");     call initialize_topography_named(D, G, PF, config, max_depth, US)
+    case ("bowl");      call initialize_topography_named(D, G, PF, config, max_depth, US)
+    case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth, US)
+    case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth, US)
+    case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth, US)
+    case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth, US)
     case ("Neverland"); call Neverland_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
-    case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth)
+    case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth, US)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
-    case ("dumbbell");   call dumbbell_initialize_topography(D, G, PF, max_depth)
-    case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
-    case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
+    case ("dumbbell");  call dumbbell_initialize_topography(D, G, PF, max_depth)
+    case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth, US)
+    case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth, US)
     case ("dense");     call dense_water_initialize_topography(D, G, PF, max_depth)
-    case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
+    case ("USER");      call user_initialize_topography(D, G, PF, max_depth, US)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
   end select
   if (max_depth>0.) then
-    call log_param(PF, mdl, "MAXIMUM_DEPTH", max_depth, &
+    call log_param(PF, mdl, "MAXIMUM_DEPTH", max_depth*Z_to_m, &
                    "The maximum depth of the ocean.", units="m")
   else
     max_depth = diagnoseMaximumDepth(D,G)
-    call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth, &
+    call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth*Z_to_m, &
                    "The (diagnosed) maximum depth of the ocean.", units="m")
   endif
   if (trim(config) /= "DOME") then
-    call limit_topography(D, G, PF, max_depth)
+    call limit_topography(D, G, PF, max_depth, US)
   endif
 
 end subroutine MOM_initialize_topography
