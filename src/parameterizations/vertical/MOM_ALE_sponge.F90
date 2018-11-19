@@ -18,10 +18,11 @@ use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
-use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
+use MOM_verticalGrid, only : verticalGrid_type
 ! GMM - Planned extension:  Support for time varying sponge targets.
 
 implicit none ; private
@@ -139,7 +140,8 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                                                              !! to parse for model parameter values (in).
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
                                                      !! structure for this module (in/out).
-  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge input layers.
+  real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge
+                                                     !! input layers, in thickness units (H).
 
 
 ! This include declares and sets the variable "version".
@@ -330,7 +332,7 @@ end function get_ALE_sponge_nz_data
 subroutine get_ALE_sponge_thicknesses(G, data_h, sponge_mask, CS)
   type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
   real, allocatable, dimension(:,:,:), &
-                         intent(inout) :: data_h !< The thicknesses of the sponge input layers.
+                         intent(inout) :: data_h !< The thicknesses of the sponge input layers, in H.
   logical, dimension(SZI_(G),SZJ_(G)), &
                          intent(out)   :: sponge_mask !< A logical mask that is true where
                                                  !! sponges are being applied.
@@ -666,10 +668,10 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
     zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
     do k=1,nz_data
       if (mask_z(CS%col_i(col),CS%col_j(col),k) == 1.0) then
-        zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(CS%col_i(col),CS%col_j(col)) )
+        zBottomOfCell = -min( z_edges_in(k+1), G%Zd_to_m*G%bathyT(CS%col_i(col),CS%col_j(col)) )
 !        tmpT1d(k) = sp_val(CS%col_i(col),CS%col_j(col),k)
       elseif (k>1) then
-        zBottomOfCell = -G%bathyT(CS%col_i(col),CS%col_j(col))
+        zBottomOfCell = -G%Zd_to_m*G%bathyT(CS%col_i(col),CS%col_j(col))
 !        tmpT1d(k) = tmpT1d(k-1)
 !      else ! This next block should only ever be reached over land
 !        tmpT1d(k) = -99.9
@@ -679,7 +681,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
       zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
     enddo
     ! In case data is deeper than model
-    hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(CS%col_i(col),CS%col_j(col)) )
+    hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%Zd_to_m*G%bathyT(CS%col_i(col),CS%col_j(col)) )
     CS%Ref_val(CS%fldno)%h(1:nz_data,col) = 0.
     CS%Ref_val(CS%fldno)%p(1:nz_data,col) = -1.e24
     CS%Ref_val(CS%fldno)%h(1:nz_data,col) = hsrc(1:nz_data)
@@ -736,7 +738,8 @@ end subroutine set_up_ALE_sponge_vel_field_fixed
 
 !> This subroutine stores the reference profile at uand v points for the variable
 !! whose address is given by u_ptr and v_ptr.
-subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v,fieldname_v, Time, G, CS, u_ptr, v_ptr)
+subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename_v, fieldname_v, &
+                                               Time, G, CS, u_ptr, v_ptr)
   character(len=*), intent(in)    :: filename_u  !< File name for u field
   character(len=*), intent(in)    :: fieldname_u !< Name of u variable in file
   character(len=*), intent(in)    :: filename_v  !< File name for v field
@@ -835,7 +838,7 @@ end subroutine set_up_ALE_sponge_vel_field_varying
 subroutine apply_ALE_sponge(h, dt, G, CS, Time)
   type(ocean_grid_type),     intent(inout) :: G  !< The ocean's grid structure (in).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(inout) :: h  !< Layer thickness, in m (in)
+                             intent(inout) :: h  !< Layer thickness, in H (in)
   real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_sponge (in).
