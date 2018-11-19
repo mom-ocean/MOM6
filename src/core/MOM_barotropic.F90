@@ -2272,10 +2272,10 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                                                       !! the effective open face areas as a
                                                       !! function of barotropic flow.
   real,               optional, intent(in)    :: gtot_est !< An estimate of the total gravitational
-                                                      !! acceleration, in m s-2.
+                                                      !! acceleration, in m2 Z-1 s-2.
   real,               optional, intent(in)    :: SSH_add  !< An additional contribution to SSH to
                                                       !! provide a margin of error when
-                                                      !! calculating the external wave speed, in m.
+                                                      !! calculating the external wave speed, in Z.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -2299,7 +2299,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                   ! order 1.  For stability, this may be made larger
                   ! than physical problem would suggest.
   real :: add_SSH ! An additional contribution to SSH to provide a margin of error
-                  ! when calculating the external wave speed, in m.
+                  ! when calculating the external wave speed, in Z.
   real :: min_max_dt2, Idt_max2, dtbt_max
   logical :: use_BT_cont
   type(memory_size_type) :: MS
@@ -2326,7 +2326,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   elseif (CS%Nonlinear_continuity .and. present(eta)) then
     call find_face_areas(Datu, Datv, G, GV, CS, MS, eta=eta, halo=0)
   else
-    call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=0, add_max=add_SSH*US%m_to_Z)
+    call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=0, add_max=add_SSH)
   endif
 
   det_de = 0.0
@@ -2345,8 +2345,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_est * GV%H_to_m ; gtot_W(i,j) = gtot_est * GV%H_to_m
-      gtot_N(i,j) = gtot_est * GV%H_to_m ; gtot_S(i,j) = gtot_est * GV%H_to_m
+      gtot_E(i,j) = gtot_est * GV%H_to_Z ; gtot_W(i,j) = gtot_est * GV%H_to_Z
+      gtot_N(i,j) = gtot_est * GV%H_to_Z ; gtot_S(i,j) = gtot_est * GV%H_to_Z
     enddo ; enddo
   endif
 
@@ -3717,9 +3717,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
   real :: Datu(SZIBS_(G),SZJ_(G))   ! Zonal open face area in H m.
   real :: Datv(SZI_(G),SZJBS_(G))   ! Meridional open face area in H m.
-  real :: gtot_estimate ! Summing GV%g_prime gives an upper-bound estimate for pbce.
+  real :: gtot_estimate ! Summed GV%g_prime in m2 Z-1 s-2, to give an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
-                        ! in calculating the safe external wave speed.
+                        ! in calculating the safe external wave speed, in Z.
   real :: dtbt_input, dtbt_tmp
   real :: wave_drag_scale ! A scaling factor for the barotropic linear wave drag
                           ! piston velocities.
@@ -3956,7 +3956,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "An estimate of how much higher SSH might get, for use \n"//&
                  "in calculating the safe external wave speed. The \n"//&
                  "default is the minimum of 10 m or 5% of MAXIMUM_DEPTH.", &
-                 units="m", default=min(10.0,0.05*G%max_depth*US%Z_to_m))
+                 units="m", default=min(10.0,0.05*G%max_depth*US%Z_to_m), scale=US%m_to_Z)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
@@ -4141,8 +4141,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
   ! Estimate the maximum stable barotropic time step.
   gtot_estimate = 0.0
-  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K)*US%m_to_Z ; enddo
-  call set_dtbt(G, GV, US, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
+  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K) ; enddo
+  call set_dtbt(G, GV, US, CS, gtot_est=gtot_estimate, SSH_add=SSH_extra)
 
   if (dtbt_input > 0.0) then
     CS%dtbt = dtbt_input

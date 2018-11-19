@@ -317,23 +317,23 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
     call initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS%ISOMIP_tracer_CSp, &
                                 ALE_sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ideal_age) &
-    call initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS%ideal_age_tracer_CSp, &
+    call initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS%ideal_age_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
   if (CS%use_regional_dyes) &
     call initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS%dye_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
   if (CS%use_oil) &
-    call initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS%oil_tracer_CSp, &
+    call initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS%oil_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
   if (CS%use_advection_test_tracer) &
     call initialize_advection_test_tracer(restart, day, G, GV, h, diag, OBC, CS%advection_test_tracer_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
   if (CS%use_OCMIP2_CFC) &
-    call initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS%OCMIP2_CFC_CSp, &
+    call initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS%OCMIP2_CFC_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) &
-    call initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, diag, OBC, &
+    call initialize_MOM_generic_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, &
         CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
 #endif
   if (CS%use_pseudo_salt_tracer) &
