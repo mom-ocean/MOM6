@@ -3295,7 +3295,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%use_int_tides) then
     call int_tide_input_init(Time, G, GV, US, param_file, diag, CS%int_tide_input_CSp, &
                              CS%int_tide_input)
-    call internal_tides_init(Time, G, GV, param_file, diag, CS%int_tide_CSp)
+    call internal_tides_init(Time, G, GV, US, param_file, diag, CS%int_tide_CSp)
   endif
 
   ! initialize module for setting diffusivities

@@ -352,7 +352,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: I_dtrho   ! 1.0 / (dt * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in Z s-1.
-  real :: U_Star_Mean ! The surface friction without gustiness in m s-1.
+  real :: U_Star_Mean ! The surface friction without gustiness in Z s-1.
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
   real :: Enhance_M ! An enhancement factor for vstar, based here on Langmuir impact.
   real :: LA        ! The Langmuir number (non-dim)
