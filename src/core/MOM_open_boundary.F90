@@ -19,12 +19,13 @@ use MOM_restart,              only : register_restart_field, MOM_restart_CS
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
-use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
+use MOM_unit_scaling,         only : unit_scale_type
+use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
 
 implicit none ; private
@@ -290,8 +291,9 @@ contains
 !> here. The remainder of the segment data are initialized in a
 !> later call to update_open_boundary_data
 
-subroutine open_boundary_config(G, param_file, OBC)
+subroutine open_boundary_config(G, US, param_file, OBC)
   type(dyn_horgrid_type),  intent(inout) :: G !< Ocean grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
@@ -473,7 +475,7 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "is entering the domain.", units="m", default=0.0)
     endif
 
-    if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
+    if (mask_outside) call mask_outside_OBCs(G, US, param_file, OBC)
 
     ! All tracers are using the same restoring length scale for now, but we may want to make this
     ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
@@ -3690,17 +3692,18 @@ end subroutine fill_temp_salt_segments
 !> Find the region outside of all open boundary segments and
 !! make sure it is set to land mask. Gonna need to know global land
 !! mask as well to get it right...
-subroutine mask_outside_OBCs(G, param_file, OBC)
-  type(dyn_horgrid_type),  intent(inout) :: G          !< Ocean grid structure
-  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
-  type(ocean_OBC_type),    pointer       :: OBC        !< Open boundary structure
+subroutine mask_outside_OBCs(G, US, param_file, OBC)
+  type(dyn_horgrid_type),       intent(inout) :: G          !< Ocean grid structure
+  type(param_file_type),        intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),         pointer       :: OBC        !< Open boundary structure
+  type(unit_scale_type),        intent(in)    :: US         !< A dimensional unit scaling type
 
-! Local variables
+  ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
   integer :: i, j
   logical :: fatal_error = .False.
   real    :: min_depth
-  integer, parameter  :: cin = 3, cout = 4, cland = -1, cedge = -2
+  integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
   character(len=256) :: mesg    ! Message for error messages.
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   real, allocatable, dimension(:,:) :: color, color2  ! For sorting inside from outside,
@@ -3709,8 +3712,7 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
   if (.not. associated(OBC)) return
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 default=0.0, do_not_log=.true.)
-  min_depth = min_depth / G%Zd_to_m
+                 units="m", default=0.0, scale=US%m_to_Z, do_not_log=.true.)
 
   allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
   allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0

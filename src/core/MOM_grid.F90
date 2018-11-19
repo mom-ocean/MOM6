@@ -132,7 +132,6 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     bathyT        !< Ocean bottom depth at tracer points, in depth units.
-  real :: Zd_to_m  = 1.0 !< The conversion factor between the units of bathyT and m.
 
   logical :: bathymetry_at_vel  !< If true, there are separate values for the
                   !! basin depths at velocity points.  Otherwise the effects of
@@ -165,7 +164,7 @@ type, public :: ocean_grid_type
   real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
   real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
   real :: Rad_Earth = 6.378e6 !< The radius of the planet in meters.
-  real :: max_depth     !< The maximum depth of the ocean in depth units (scaled by Zd_to_m).
+  real :: max_depth     !< The maximum depth of the ocean in depth units (Z).
 end type ocean_grid_type
 
 contains
@@ -359,13 +358,13 @@ subroutine rescale_grid_bathymetry(G, m_in_new_units)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (m_in_new_units == G%Zd_to_m) return
+  if (m_in_new_units == 1.0) return
   if (m_in_new_units < 0.0) &
     call MOM_error(FATAL, "rescale_grid_bathymetry: Negative depth units are not permitted.")
   if (m_in_new_units == 0.0) &
     call MOM_error(FATAL, "rescale_grid_bathymetry: Zero depth units are not permitted.")
 
-  rescale = G%Zd_to_m / m_in_new_units
+  rescale = 1.0 / m_in_new_units
   do j=jsd,jed ; do i=isd,ied
     G%bathyT(i,j) = rescale*G%bathyT(i,j)
   enddo ; enddo
@@ -376,7 +375,6 @@ subroutine rescale_grid_bathymetry(G, m_in_new_units)
     G%Dblock_v(i,J) = rescale*G%Dblock_v(i,J) ; G%Dopen_v(i,J) = rescale*G%Dopen_v(i,J)
   enddo ; enddo ; endif
   G%max_depth = rescale*G%max_depth
-  G%Zd_to_m = m_in_new_units
 
 end subroutine rescale_grid_bathymetry
 

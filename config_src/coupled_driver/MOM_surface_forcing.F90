@@ -794,7 +794,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   type(time_type),         intent(in)    :: Time !< The time of the fluxes, used for interpolating the
                                                  !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS   !< A pointer to the control structure returned by a
                                                  !! previous call to surface_forcing_init.
   real, dimension(SZIB_(G),SZJ_(G)), &
@@ -805,7 +805,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
                  optional, intent(inout) :: ustar !< The surface friction velocity, in Z s-1.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: gustless_ustar !< The surface friction velocity without
-                                                 !! any contributions from gustiness, in m s-1.
+                                                 !! any contributions from gustiness, in Z s-1.
   integer,       optional, intent(in)    :: tau_halo !< The halo size of wind stresses to set, 0 by default.
 
   ! Local variables
@@ -817,7 +817,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real, dimension(SZIB_(G),SZJB_(G)) :: tauy_in_B ! Meridional wind stresses (in Pa) at q points
 
   real :: gustiness     ! unresolved gustiness that contributes to ustar (Pa)
-  real :: Irho0         ! inverse of the mean density in (m^3/kg)
+  real :: Irho0         ! Inverse of the mean density rescaled to (Z2 m / kg)
   real :: taux2, tauy2  ! squared wind stresses (Pa^2)
   real :: tau_mag       ! magnitude of the wind stress (Pa)
 
@@ -831,7 +831,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   Isqh = G%IscB-halo ; Ieqh  = G%IecB+halo ; Jsqh = G%JscB-halo ; Jeqh = G%JecB+halo
   i0 = is - index_bounds(1) ; j0 = js - index_bounds(3)
 
-  Irho0 = 1.0/CS%Rho0
+  Irho0 = US%m_to_Z**2 / CS%Rho0
 
   do_ustar = present(ustar) ; do_gustless = present(gustless_ustar)
 
@@ -943,10 +943,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
                 (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0)) ) &
             gustiness = CS%gust(i,j)
         endif
-        ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
+        ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
       if (do_gustless) then ; do j=js,je ; do i=is,ie
-        gustless_ustar(i,j) = sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
+        gustless_ustar(i,j) = US%m_to_Z * sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
 !### Change to:
 !        gustless_ustar(i,j) = sqrt(Irho0 * IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
@@ -962,8 +962,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
             ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
-        if (do_ustar) ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z * sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
@@ -972,8 +972,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         tau_mag = G%mask2dT(i,j) * sqrt(taux_in_A(i,j)**2 + tauy_in_A(i,j)**2)
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-        if (do_ustar) ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z * sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
@@ -991,8 +991,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         gustiness = CS%gust_const
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
-        if (do_ustar) ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z * sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
