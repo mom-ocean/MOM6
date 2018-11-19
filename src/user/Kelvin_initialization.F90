@@ -110,22 +110,28 @@ end subroutine Kelvin_OBC_end
 
 ! -----------------------------------------------------------------------------
 !> This subroutine sets up the Kelvin topography and land mask
-subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),           intent(in)  :: G !< The dynamic horizontal grid type
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
-  real,                             intent(in)  :: max_depth  !< Maximum depth of model in m
+subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+
   ! Local variables
   character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
-  real :: min_depth ! The minimum and maximum depths in m.
+  real :: m_to_Z  ! A dimensional rescaling factor.
+  real :: min_depth ! The minimum and maximum depths in Z.
   real :: PI ! 3.1415...
   real :: coast_offset1, coast_offset2, coast_angle, right_angle
   integer :: i, j
 
   call MOM_mesg("  Kelvin_initialization.F90, Kelvin_initialize_topography: setting topography", 5)
 
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", coast_offset1, &
                  default=100.0, do_not_log=.true.)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", coast_offset2, &
@@ -137,17 +143,17 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
   right_angle = 2 * atan(1.0)
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    D(i,j)=max_depth
+    D(i,j) = max_depth
     ! Southern side
     if ((G%geoLonT(i,j) - G%west_lon > coast_offset1) .AND. &
         (atan2(G%geoLatT(i,j) - G%south_lat + coast_offset2, &
          G%geoLonT(i,j) - G%west_lon - coast_offset1) < coast_angle)) &
-             D(i,j)=0.5*min_depth
+      D(i,j) = 0.5*min_depth
     ! Northern side
     if ((G%geoLonT(i,j) - G%west_lon < G%len_lon - coast_offset1) .AND. &
         (atan2(G%len_lat + G%south_lat + coast_offset2 - G%geoLatT(i,j), &
          G%len_lon + G%west_lon - coast_offset1 - G%geoLonT(i,j)) < coast_angle)) &
-             D(i,j)=0.5*min_depth
+      D(i,j) = 0.5*min_depth
 
     if (D(i,j) > max_depth) D(i,j) = max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
