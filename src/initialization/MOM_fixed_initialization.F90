@@ -6,7 +6,7 @@ module MOM_fixed_initialization
 
 use MOM_debugging, only : hchksum, qchksum, uvchksum
 use MOM_domains, only : pass_var
-use MOM_dyn_horgrid, only : dyn_horgrid_type
+use MOM_dyn_horgrid, only : dyn_horgrid_type, rescale_dyn_horgrid_bathymetry
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
@@ -25,6 +25,7 @@ use MOM_shared_initialization, only : set_rotation_planetary, set_rotation_beta_
 use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
+use MOM_unit_scaling, only : unit_scale_type
 
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
@@ -51,8 +52,9 @@ contains
 ! -----------------------------------------------------------------------------
 !> MOM_initialize_fixed sets up time-invariant quantities related to MOM6's
 !!   horizontal grid, bathymetry, and the Coriolis parameter.
-subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
+subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   type(dyn_horgrid_type),  intent(inout) :: G    !< The ocean's grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(ocean_OBC_type),    pointer       :: OBC  !< Open boundary structure.
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
@@ -75,38 +77,39 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
          "The directory in which input files are found.", default=".")
   inputdir = slasher(inputdir)
 
-! Set up the parameters of the physical domain (i.e. the grid), G
+  ! Set up the parameters of the physical domain (i.e. the grid), G
   call set_grid_metrics(G, PF)
 
-! Set up the bottom depth, G%bathyT either analytically or from file
-! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
-! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
+  ! Set up the bottom depth, G%bathyT either analytically or from file
+  ! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
+  ! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
   call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
+  call rescale_dyn_horgrid_bathymetry(G, US%Z_to_m)
 
   ! To initialize masks, the bathymetry in halo regions must be filled in
   call pass_var(G%bathyT, G%Domain)
 
-! Determine the position of any open boundaries
-  call open_boundary_config(G, PF, OBC)
+  ! Determine the position of any open boundaries
+  call open_boundary_config(G, US, PF, OBC)
 
   ! Make bathymetry consistent with open boundaries
   call open_boundary_impose_normal_slope(OBC, G, G%bathyT)
 
   ! This call sets masks that prohibit flow over any point interpreted as land
-  call initialize_masks(G, PF)
+  call initialize_masks(G, PF, US)
 
   ! Make OBC mask consistent with land mask
   call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv)
 
   if (debug) then
-    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
+    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1, scale=US%Z_to_m)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
     call uvchksum('MOM_initialize_fixed: mask2dC[uv]', G%mask2dCu, &
                   G%mask2dCv, G%HI)
     call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
   endif
 
-! Modulate geometric scales according to geography.
+  ! Modulate geometric scales according to geography.
   call get_param(PF, mdl, "CHANNEL_CONFIG", config, &
                  "A parameter that determines which set of channels are \n"//&
                  "restricted to specific  widths.  Options are:\n"//&
@@ -128,7 +131,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
       "Unrecognized channel configuration "//trim(config))
   end select
 
-!   This call sets the topography at velocity points.
+  !   This call sets the topography at velocity points.
   if (G%bathymetry_at_vel) then
     call get_param(PF, mdl, "VELOCITY_DEPTH_CONFIG", config, &
                    "A string that determines how the topography is set at \n"//&
@@ -159,7 +162,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   call compute_global_grid_integrals(G)
 
 ! Write out all of the grid data used by this run.
-  if (write_geom) call write_ocean_geometry_file(G, PF, output_dir)
+  if (write_geom) call write_ocean_geometry_file(G, PF, output_dir, US=US)
 
   call callTree_leave('MOM_initialize_fixed()')
 

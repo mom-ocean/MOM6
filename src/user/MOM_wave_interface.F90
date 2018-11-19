@@ -864,7 +864,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   integer, intent(in) :: i      !< Meridional index of h-point
   integer, intent(in) :: j      !< Zonal index of h-point
-  real, intent(in)    :: ustar  !< Friction velocity (m/s)
+  real, intent(in)    :: ustar  !< Friction velocity (Z/s)
   real, intent(in)    :: HBL    !< (Positive) thickness of boundary layer (Z)
   logical, optional,       intent(in) :: Override_MA !< Override to use misalignment in LA
                                 !! calculation. This can be used if diagnostic
@@ -940,7 +940,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     call Get_SL_Average_Prof( GV, Dpt_LASL, H, VS_H, LA_STKy)
     LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
   elseif (WaveMethod==LF17) then
-    call get_StokesSL_LiFoxKemper(ustar,hbl*LA_FracHBL, GV, US, LA_STK, LA)
+    call get_StokesSL_LiFoxKemper(ustar, hbl*LA_FracHBL, GV, US, LA_STK, LA)
   endif
 
   if (.not.(WaveMethod==LF17)) then
@@ -949,11 +949,11 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     ! there is also no good reason to cap it here other then
     ! to prevent large enhancements in unconstrained parts of
     ! the curve fit parameterizations.
-    LA = max(WAVES%La_min,sqrt(USTAR/(LA_STK+1.e-10)))
+    LA = max(WAVES%La_min, sqrt(US%Z_to_m*ustar / (LA_STK+1.e-10)))
   endif
 
   if (Use_MA) then
-    WaveDirection = atan2(LA_STKy,LA_STKx)
+    WaveDirection = atan2(LA_STKy, LA_STKx)
     LA = LA / sqrt(max(1.e-8,cos( WaveDirection - ShearDirection)))
   endif
 
@@ -977,7 +977,7 @@ end subroutine get_Langmuir_Number
 !! - BGR remove u10 input
 !! - BGR note: fixed parameter values should be changed to "get_params"
 subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
-  real, intent(in)  :: ustar !< water-side surface friction velocity (m/s)
+  real, intent(in)  :: ustar !< water-side surface friction velocity (Z/s)
   real, intent(in)  :: hbl   !< boundary layer depth (Z)
   type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
@@ -1001,7 +1001,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
 
   if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
-    call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
+    call ust_2_u10_coare3p5(US%Z_to_m*ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
     ! surface Stokes drift
     UStokes = us_to_u10*u10
     !
@@ -1046,13 +1046,13 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
          sqrt( 2.0 * PI *kstar * z0) * &
          erfc( sqrt( 2.0 * kstar * z0 ) )
     UStokes_sl = UStokes * (0.715 + r1 + r2 + r3 + r4)
-    LA = sqrt(ustar/UStokes_sl)
+    LA = sqrt(US%Z_to_m*ustar / UStokes_sl)
   else
     UStokes_sl = 0.0
     LA=1.e8
   endif
-  return
-endsubroutine Get_StokesSL_LiFoxKemper
+
+end subroutine Get_StokesSL_LiFoxKemper
 
 !> Get SL Averaged Stokes drift from a Stokes drift Profile
 subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
