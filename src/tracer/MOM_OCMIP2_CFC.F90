@@ -18,6 +18,7 @@ use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -308,13 +309,14 @@ subroutine flux_init_OCMIP2_CFC(CS, verbosity)
 end subroutine flux_init_OCMIP2_CFC
 
 !> Initialize the OCMP2 CFC tracer fields and set up the tracer output.
-subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
                                  sponge_CSp, diag_to_Z_CSp)
   logical,                        intent(in) :: restart    !< .true. if the fields have already been
                                                            !! read from a restart file.
   type(time_type), target,        intent(in) :: day        !< Time of the start of the run.
   type(ocean_grid_type),          intent(in) :: G          !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in) :: GV         !< The ocean's vertical grid structure.
+  type(unit_scale_type),          intent(in) :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                   intent(in) :: h          !< Layer thicknesses, in H
                                                            !! (usually m or kg m-2).
@@ -343,12 +345,12 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
       .not.query_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp))) &
     call init_tracer_CFC(h, CS%CFC11, CS%CFC11_name, CS%CFC11_land_val, &
-                         CS%CFC11_IC_val, G, CS)
+                         CS%CFC11_IC_val, G, US, CS)
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
       .not.query_initialized(CS%CFC12, CS%CFC12_name, CS%restart_CSp))) &
     call init_tracer_CFC(h, CS%CFC12, CS%CFC12_name, CS%CFC12_land_val, &
-                         CS%CFC12_IC_val, G, CS)
+                         CS%CFC12_IC_val, G, US, CS)
 
   if (associated(OBC)) then
   ! Steal from updated DOME in the fullness of time.
@@ -357,8 +359,9 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
 end subroutine initialize_OCMIP2_CFC
 
 !>This subroutine initializes a tracer array.
-subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
+subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
+  type(unit_scale_type),                    intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: tr   !< The tracer concentration array
   character(len=*),                         intent(in)  :: name !< The tracer name
@@ -378,9 +381,9 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
     if (.not.file_exists(CS%IC_file, G%Domain)) &
       call MOM_error(FATAL, "initialize_OCMIP2_CFC: Unable to open "//CS%IC_file)
     if (CS%Z_IC_file) then
-      OK = tracer_Z_init(tr, h, CS%IC_file, name, G)
+      OK = tracer_Z_init(tr, h, CS%IC_file, name, G, US)
       if (.not.OK) then
-        OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G)
+        OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G, US)
         if (.not.OK) call MOM_error(FATAL,"initialize_OCMIP2_CFC: "//&
                 "Unable to read "//trim(name)//" from "//&
                 trim(CS%IC_file)//".")

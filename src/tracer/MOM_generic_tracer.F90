@@ -40,6 +40,7 @@ module MOM_generic_tracer
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
   use MOM_tracer_Z_init, only : tracer_Z_init
   use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
+  use MOM_unit_scaling, only : unit_scale_type
   use MOM_variables, only : surface, thermo_var_ptrs
   use MOM_open_boundary, only : ocean_OBC_type
   use MOM_verticalGrid, only : verticalGrid_type
@@ -222,13 +223,14 @@ contains
   !!
   !!   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
   !! and it sets up the tracer output.
-  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, diag, OBC, CS, &
+  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, CS, &
                                           sponge_CSp, ALE_sponge_CSp,diag_to_Z_CSp)
     logical,                               intent(in) :: restart !< .true. if the fields have already been
                                                                  !! read from a restart file.
     type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
+    type(unit_scale_type),                 intent(in)    :: US   !< A dimensional unit scaling type
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
     type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag    !< Regulates diagnostic output.
@@ -319,9 +321,9 @@ contains
           if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
                   "initialize_MOM_Generic_tracer: Unable to open "//CS%IC_file)
           if (CS%Z_IC_file) then
-            OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G)
+            OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G, US)
             if (.not.OK) then
-              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G)
+              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G, US)
               if (.not.OK) call MOM_error(FATAL,"initialize_MOM_Generic_tracer: "//&
                       "Unable to read "//trim(g_tracer_name)//" from "//&
                       trim(CS%IC_file)//".")
