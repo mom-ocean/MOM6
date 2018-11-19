@@ -34,13 +34,13 @@ public dumbbell_initialize_sponges
 contains
 
 !> Initialization of topography.
-subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
-  ! Arguments
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
+  type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+  type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+
   ! Local variables
   integer   :: i, j
   real      :: x, y, delta, dblen, dbfrac
@@ -56,17 +56,15 @@ subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
     dblen=dblen*1.e3
   endif
 
-  do i=G%isc,G%iec
-    do j=G%jsc,G%jec
-      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-      x = ( G%geoLonT(i,j) ) / dblen
-      y = ( G%geoLatT(i,j)  ) / G%len_lat
-      D(i,j) = G%max_depth
-      if ((x>=-0.25 .and. x<=0.25) .and. (y <= -0.5*dbfrac .or. y >= 0.5*dbfrac)) then
-        D(i,j) = 0.0
-      endif
-    enddo
-  enddo
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+    x = ( G%geoLonT(i,j) ) / dblen
+    y = ( G%geoLatT(i,j)  ) / G%len_lat
+    D(i,j) = G%max_depth
+    if ((x>=-0.25 .and. x<=0.25) .and. (y <= -0.5*dbfrac .or. y >= 0.5*dbfrac)) then
+      D(i,j) = 0.0
+    endif
+  enddo ; enddo
 
 end subroutine dumbbell_initialize_topography
 
