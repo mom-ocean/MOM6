@@ -33,19 +33,19 @@ character(len=40) :: mdl = "DOME2D_initialization" !< This module's name.
 contains
 
 !> Initialize topography with a shelf and slope in a 2D domain
-subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
-  ! Arguments
-  type(dyn_horgrid_type), intent(in)  :: G !< The dynamic horizontal grid type
+subroutine DOME2d_initialize_topography( D, G, param_file, max_depth )
+  type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                          intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),  intent(in)  :: param_file !< Parameter file structure
-  real,                   intent(in)  :: max_depth  !< Maximum depth of model in m
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+  type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+
   ! Local variables
   integer :: i, j
   real    :: x, bay_depth, l1, l2
   real    :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
 
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &

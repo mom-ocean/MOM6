@@ -33,13 +33,12 @@ public seamount_initialize_temperature_salinity
 contains
 
 !> Initialization of topography.
-subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
-  ! Arguments
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine seamount_initialize_topography( D, G, param_file, max_depth )
+  type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+  type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
 
   ! Local variables
   integer   :: i, j
@@ -61,14 +60,13 @@ subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   Ly = Ly / G%len_lat
   rLx = 0. ; if (Lx>0.) rLx = 1. / Lx
   rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
-  do i=G%isc,G%iec
-    do j=G%jsc,G%jec
-      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-      y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
-      D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(rLx*x)**2 -(rLy*y)**2) )
-    enddo
-  enddo
+
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+    x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
+    y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+    D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(rLx*x)**2 -(rLy*y)**2) )
+  enddo ; enddo
 
 end subroutine seamount_initialize_topography
 
