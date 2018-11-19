@@ -35,7 +35,7 @@ module MOM_generic_tracer
   use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
-  use MOM_time_manager, only : time_type, get_time, set_time
+  use MOM_time_manager, only : time_type, set_time
   use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
   use MOM_tracer_Z_init, only : tracer_Z_init
@@ -498,7 +498,7 @@ contains
     !
     g_tracer=>CS%g_tracer_list
     do
-       if (_allocated(g_tracer%trunoff)) then
+       if (_ALLOCATED(g_tracer%trunoff)) then
           call g_tracer_get_alias(g_tracer,g_tracer_name)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'stf',   stf_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
@@ -519,7 +519,7 @@ contains
     !Prepare input arrays for source update
     !
 
-    rho_dzt(:,:,:) = GV%H_to_kg_m2 * GV%Angstrom
+    rho_dzt(:,:,:) = GV%H_to_kg_m2 * GV%Angstrom_H
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
       rho_dzt(i,j,k) = GV%H_to_kg_m2 * h_old(i,j,k)
     enddo ; enddo ; enddo !}

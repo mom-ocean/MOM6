@@ -251,6 +251,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, &
   real :: delta_sst           ! temporary storage for sst diff from restoring value
 
   real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
+  real :: sign_for_net_FW_bug ! Should be +1. but an old bug can be recovered by using -1.
 
   call cpu_clock_begin(id_clock_forcing)
 
@@ -470,15 +471,17 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, &
     ! salt flux
     ! more salt restoring logic
     if (associated(fluxes%salt_flux)) &
-      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(IOB%salt_flux(i-i0,j-j0) + fluxes%salt_flux(i,j))
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
 
     if (associated(fluxes%salt_flux_in)) &
-      fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*IOB%salt_flux(i-i0,j-j0)
+      fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*(-IOB%salt_flux(i-i0,j-j0))
 
   enddo; enddo
 
   ! adjust the NET fresh-water flux to zero, if flagged
   if (CS%adjust_net_fresh_water_to_zero) then
+    sign_for_net_FW_bug = 1.
+    if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
       net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j) + fluxes%meltw(i,j)) + &
           (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
@@ -1058,6 +1061,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  CS%adjust_net_fresh_water_to_zero, &
                  "If true, adjusts the net fresh-water forcing seen \n"//&
                  "by the ocean (including restoring) to zero.", default=.false.)
+  if (CS%adjust_net_fresh_water_to_zero) &
+    call get_param(param_file, mdl, "USE_NET_FW_ADJUSTMENT_SIGN_BUG", &
+                 CS%use_net_FW_adjustment_sign_bug, &
+                   "If true, use the wrong sign for the adjustment to\n"//&
+                   "the net fresh-water.", default=.false.)
   call get_param(param_file, mdl, "ADJUST_NET_FRESH_WATER_BY_SCALING", &
                  CS%adjust_net_fresh_water_by_scaling, &
                  "If true, adjustments to net fresh water to achieve zero net are\n"//&

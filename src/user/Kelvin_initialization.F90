@@ -17,7 +17,7 @@ use MOM_open_boundary,  only : OBC_DIRECTION_N, OBC_DIRECTION_E
 use MOM_open_boundary,  only : OBC_DIRECTION_S, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_time_manager,   only : time_type, set_time, time_type_to_real
+use MOM_time_manager,   only : time_type, time_type_to_real
 
 implicit none ; private
 
@@ -223,11 +223,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          cff = sqrt(G%g_Earth * 0.5 * G%Zd_to_m * (G%bathyT(i+1,j) + G%bathyT(i,j)))
           val2 = fac * exp(- CS%F_0 * y / cff)
           segment%eta(I,j) = val2 * cos(CS%omega * time_sec)
           segment%normal_vel_bt(I,j) = val1 * cff * cosa /         &
-                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+                 (0.5 * G%Zd_to_m * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
           ! Not rotated yet
           segment%eta(I,j) = 0.0
@@ -255,11 +255,17 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
+          !### Problem: val2 & cff could be a functions of space, but are not set in this loop.
+          !### Problem: Is val2 in the numerator or denominator below?
           if (CS%mode == 0) then
             do k=1,nz
-              segment%tangential_vel(I,J,k) = val1 * cff * sina /     &
-                 (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) +           &
-                          G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+              segment%tangential_vel(I,J,k) = val1 * cff * sina / &
+                 (0.25 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j) + &
+                                    G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+!### For rotational symmetry, this should be:
+!              segment%tangential_vel(I,J,k) = val1 * cff * sina / &
+!                 ( 0.25*G%Zd_to_m*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +&
+!                                   (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ) * val2
             enddo
           endif
         enddo ; enddo
@@ -273,11 +279,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+          cff = sqrt(G%g_Earth * 0.5 * G%Zd_to_m*(G%bathyT(i,j+1) + G%bathyT(i,j)))
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
           segment%eta(I,j) = val2 * cos(CS%omega * time_sec)
-          segment%normal_vel_bt(I,j) = val1 * cff * sina /       &
-                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+          segment%normal_vel_bt(I,j) = val1 * cff * sina / &
+                 (0.5 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
           ! Not rotated yet
           segment%eta(i,J) = 0.0
@@ -303,11 +309,17 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
+          !### Problem: val2 & cff could be a functions of space, but are not set in this loop.
+          !### Problem: Is val2 in the numerator or denominator below?
           if (CS%mode == 0) then
             do k=1,nz
-              segment%tangential_vel(I,J,k) = val1 * cff * sina /     &
-                 (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) +           &
-                          G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+              segment%tangential_vel(I,J,k) = val1 * cff * sina / &
+                 (0.25 * G%Zd_to_m*(G%bathyT(i+1,j) + G%bathyT(i,j) + &
+                                    G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) * val2
+!### This should be:
+!              segment%tangential_vel(I,J,k) = val1 * cff * sina / &
+!                 ( 0.25*G%Zd_to_m*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +&
+!                                   (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ) * val2
             enddo
           endif
         enddo ; enddo
