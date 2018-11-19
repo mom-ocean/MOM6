@@ -15,7 +15,7 @@ use MOM_open_boundary,   only : ocean_OBC_type, OBC_segment_tracer_type
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_restart,         only : MOM_restart_CS
 use MOM_sponge,          only : set_up_sponge_field, sponge_CS
-use MOM_time_manager,    only : time_type, get_time
+use MOM_time_manager,    only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables,       only : surface
@@ -169,8 +169,9 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
   real :: dist2  ! The distance squared from a line, in m2.
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
-  real :: e(SZK_(G)+1), e_top, e_bot, d_tr
+                            ! in roundoff and can be neglected, in H.
+  real :: e(SZK_(G)+1), e_top, e_bot ! Heights in Z.
+  real :: d_tr   ! A change in tracer concentraions, in tracer units.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -215,24 +216,24 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
         do j=js,je ; do i=is,ie
           e(nz+1) = -G%bathyT(i,j)
           do k=nz,1,-1
-            e(K) = e(K+1) + h(i,j,k)*GV%H_to_m
+            e(K) = e(K+1) + h(i,j,k)*GV%H_to_Z
             do m=7,NTR
-              e_top = -600.0*real(m-1) + 3000.0
-              e_bot = -600.0*real(m-1) + 2700.0
+              e_top = (-600.0*real(m-1) + 3000.0) * GV%m_to_Z
+              e_bot = (-600.0*real(m-1) + 2700.0) * GV%m_to_Z
               if (e_top < e(K)) then
                 if (e_top < e(K+1)) then ; d_tr = 0.0
                 elseif (e_bot < e(K+1)) then
-                  d_tr = (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
-                else ; d_tr = (e_top-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
+                  d_tr = 1.0 * (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
+                else ; d_tr = 1.0 * (e_top-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
                 endif
               elseif (e_bot < e(K)) then
                 if (e_bot < e(K+1)) then ; d_tr = 1.0
-                else ; d_tr = (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
+                else ; d_tr = 1.0 * (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
                 endif
               else
                 d_tr = 0.0
               endif
-              if (h(i,j,k) < 2.0*GV%Angstrom) d_tr=0.0
+              if (h(i,j,k) < 2.0*GV%Angstrom_H) d_tr=0.0
               CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + d_tr
             enddo
           enddo

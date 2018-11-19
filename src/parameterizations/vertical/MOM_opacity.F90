@@ -5,7 +5,6 @@ module MOM_opacity
 
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
-use MOM_time_manager, only :  get_time
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
@@ -116,14 +115,14 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
 
     ! Make sure there is no division by 0.
-    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
+    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_m, &
                                  GV%H_to_m*GV%H_subroundoff)
     if ( CS%Opacity_scheme == DOUBLE_EXP ) then
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
-             0.1*GV%Angstrom_z,GV%H_to_m*GV%H_subroundoff)
+             0.1*GV%Angstrom_m,GV%H_to_m*GV%H_subroundoff)
       enddo ; enddo ; enddo
       if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
         !$OMP parallel do default(shared)
@@ -225,7 +224,6 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                             ! radiation, in W m-2.
   type(time_type) :: day
   character(len=128) :: mesg
-  integer :: days, seconds
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
   logical :: multiband_vis_input, multiband_nir_input
 
@@ -271,7 +269,6 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   else
     ! Only the 2-d surface chlorophyll can be read in from a file.  The
     ! same value is assumed for all layers.
-    call get_time(CS%Time,seconds,days)
     call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
     do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
