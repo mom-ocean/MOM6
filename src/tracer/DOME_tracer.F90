@@ -18,6 +18,7 @@ use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables,       only : surface
 use MOM_verticalGrid,    only : verticalGrid_type
 
@@ -134,10 +135,11 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 end function register_DOME_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:) and sets up the tracer output.
-subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp, param_file)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                 intent(in) :: US !< A dimensional unit scaling type
   logical,                               intent(in) :: restart !< .true. if the fields have already
                                                                !! been read from a restart file.
   type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
@@ -218,8 +220,8 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           do k=nz,1,-1
             e(K) = e(K+1) + h(i,j,k)*GV%H_to_Z
             do m=7,NTR
-              e_top = (-600.0*real(m-1) + 3000.0) * GV%m_to_Z
-              e_bot = (-600.0*real(m-1) + 2700.0) * GV%m_to_Z
+              e_top = (-600.0*real(m-1) + 3000.0) * US%m_to_Z
+              e_bot = (-600.0*real(m-1) + 2700.0) * US%m_to_Z
               if (e_top < e(K)) then
                 if (e_top < e(K+1)) then ; d_tr = 0.0
                 elseif (e_bot < e(K+1)) then

@@ -15,6 +15,7 @@ use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
+use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_diag_remap,       only : diag_remap_ctrl
@@ -301,6 +302,7 @@ type, public :: diag_ctrl
   type(EOS_type),  pointer :: eqn_of_state => null() !< The equation of state type
   type(ocean_grid_type), pointer :: G => null()  !< The ocean grid type
   type(verticalGrid_type), pointer :: GV => null()  !< The model's vertical ocean grid
+  type(unit_scale_type), pointer :: US => null() !< A dimensional unit scaling type
 
   !> The volume cell measure (special diagnostic) manager id
   integer :: volume_cell_measure_dm_id = -1
@@ -319,12 +321,13 @@ integer :: id_clock_diag_mediator, id_clock_diag_remap, id_clock_diag_grid_updat
 contains
 
 !> Sets up diagnostics axes
-subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
-  type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
-  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
-  type(param_file_type), intent(in)    :: param_file !< Parameter file structure
-  type(diag_ctrl),       intent(inout) :: diag_cs !< Diagnostics control structure
-  logical, optional,     intent(in)    :: set_vertical !< If true or missing, set up
+subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
+  type(ocean_grid_type),   intent(inout) :: G  !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file structure
+  type(diag_ctrl),         intent(inout) :: diag_cs !< Diagnostics control structure
+  logical,       optional, intent(in)    :: set_vertical !< If true or missing, set up
                                                        !! vertical axes
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
@@ -430,7 +433,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   do i=1, diag_cs%num_diag_coords
     ! For each possible diagnostic coordinate
-    call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), GV, param_file)
+    call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), GV, US, param_file)
 
     ! This vertical coordinate has been configured so can be used.
     if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then
@@ -2600,7 +2603,7 @@ function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
-     x_cell_method, y_cell_method, area_cell_method)
+     x_cell_method, y_cell_method, area_cell_method, conversion)
   integer :: register_static_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
@@ -2626,6 +2629,7 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
   character(len=*), optional, intent(in) :: area_cell_method !< Specifies the cell method for area
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
 
   ! Local variables
   real :: MOM_missing_value
@@ -2654,6 +2658,7 @@ function register_static_field(module_name, field_name, axes, &
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    if (present(conversion)) diag%conversion_factor = conversion
     if (present(x_cell_method)) then
       call get_diag_axis_name(axes%handles(1), axis_name)
       call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
@@ -2696,6 +2701,7 @@ function register_static_field(module_name, field_name, axes, &
       call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      if (present(conversion)) cmor_diag%conversion_factor = conversion
       if (present(x_cell_method)) then
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
@@ -2855,9 +2861,10 @@ end subroutine diag_mediator_infrastructure_init
 
 !> diag_mediator_init initializes the MOM diag_mediator and opens the available
 !! diagnostics file, if appropriate.
-subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
+subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   type(ocean_grid_type), target, intent(inout) :: G  !< The ocean grid type.
   type(verticalGrid_type), target, intent(in)  :: GV !< The ocean vertical grid structure
+  type(unit_scale_type),   target, intent(in)  :: US !< A dimensional unit scaling type
   integer,                    intent(in)    :: nz    !< The number of layers in the model's native grid.
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(diag_ctrl),            intent(inout) :: diag_cs !< A pointer to a type with many variables
@@ -2929,6 +2936,7 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
   diag_cs%GV => GV
+  diag_cs%US => US
   diag_cs%h => null()
   diag_cs%T => null()
   diag_cs%S => null()
@@ -3092,7 +3100,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, diag_cs%GV, h_diag, T_diag, S_diag, &
+                           diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
                            diag_cs%eqn_of_state)
   enddo
 

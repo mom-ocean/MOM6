@@ -23,6 +23,7 @@ use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(-)
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -61,20 +62,20 @@ public register_barotropic_restarts, set_dtbt
 type, private :: BT_OBC_type
   real, dimension(:,:), pointer :: Cg_u => NULL()  !< The external wave speed at u-points, in m s-1.
   real, dimension(:,:), pointer :: Cg_v => NULL()  !< The external wave speed at u-points, in m s-1.
-  real, dimension(:,:), pointer :: H_u => NULL()   !< The total thickness at the u-points, in m or kg m-2.
-  real, dimension(:,:), pointer :: H_v => NULL()   !< The total thickness at the v-points, in m or kg m-2.
+  real, dimension(:,:), pointer :: H_u => NULL()   !< The total thickness at the u-points, in H (m or kg m-2).
+  real, dimension(:,:), pointer :: H_v => NULL()   !< The total thickness at the v-points, in H (m or kg m-2).
   real, dimension(:,:), pointer :: uhbt => NULL()  !< The zonal barotropic thickness fluxes specified
-                                     !! for open boundary conditions (if any), in units of m3 s-1.
+                                     !! for open boundary conditions (if any), in units of H m2 s-1.
   real, dimension(:,:), pointer :: vhbt => NULL()  !< The meridional barotropic thickness fluxes specified
-                                     !! for open boundary conditions (if any), in units of m3 s-1.
+                                     !! for open boundary conditions (if any), in units of H m2 s-1.
   real, dimension(:,:), pointer :: ubt_outer => NULL() !< The zonal velocities just outside the domain,
                                      !! as set by the open boundary conditions, in units of m s-1.
   real, dimension(:,:), pointer :: vbt_outer => NULL() !< The meridional velocities just outside the domain,
                                      !! as set by the open boundary conditions, in units of m s-1.
   real, dimension(:,:), pointer :: eta_outer_u => NULL() !< The surface height outside of the domain
-                                     !! at a u-point with an open boundary condition, in units of m or kg m-2.
+                                     !! at a u-point with an open boundary condition, in units of H.
   real, dimension(:,:), pointer :: eta_outer_v => NULL() !< The surface height outside of the domain
-                                     !! at a v-point with an open boundary condition, in units of m or kg m-2.
+                                     !! at a v-point with an open boundary condition, in units of H.
   logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
   logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
   !>@{ Index ranges for the open boundary conditions
@@ -375,14 +376,15 @@ contains
 !! 0.0 and 1.0 determining the scheme.  In practice, bebt must be of
 !! order 0.2 or greater.  A forwards-backwards treatment of the
 !! Coriolis terms is always used.
-subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
-                  forces, pbce, eta_PF_in, U_Cor, V_Cor, &
-                  accel_layer_u, accel_layer_v, eta_out, uhbtav, vhbtav, G, GV, CS, &
+subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, &
+                  eta_PF_in, U_Cor, V_Cor, accel_layer_u, accel_layer_v, &
+                  eta_out, uhbtav, vhbtav, G, GV, US, CS, &
                   visc_rem_u, visc_rem_v, etaav, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
+  type(unit_scale_type),                     intent(in)  :: US      !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in    !< The initial (3-D) zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in    !< The initial (3-D) meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in  !< The initial barotropic free surface height
@@ -708,7 +710,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   dtbt = dt * Instep
   bebt = CS%bebt
   be_proj = CS%bebt
-  mass_to_Z = GV%m_to_Z / GV%Rho0
+  mass_to_Z = US%m_to_Z / GV%Rho0
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -1249,7 +1251,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP                               Rayleigh_u, Rayleigh_v,                         &
 !$OMP                               use_BT_Cont,BTCL_u,uhbt0,BTCL_v,vhbt0,eta,Idt)  &
 !$OMP                       private(u_max_cor,v_max_cor,eta_cor_max,Htot)
-!$OMP do
+  !$OMP do
   do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
   !$OMP do
   do J=js-1,je ; do i=is-1,ie+1 ; av_rem_v(i,J) = 0.0 ; enddo ; enddo
@@ -1309,23 +1311,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   ! Zero out the arrays for various time-averaged quantities.
   if (find_etaav) then
-!$OMP do
+    !$OMP do
     do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
       eta_sum(i,j) = 0.0 ; eta_wtd(i,j) = 0.0
     enddo ; enddo
   else
-!$OMP do
+    !$OMP do
     do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
       eta_wtd(i,j) = 0.0
     enddo ; enddo
    endif
-!$OMP do
+  !$OMP do
   do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
     ubt_sum(I,j) = 0.0 ; uhbt_sum(I,j) = 0.0
     PFu_bt_sum(I,j) = 0.0 ; Coru_bt_sum(I,j) = 0.0
     ubt_wtd(I,j) = 0.0 ; ubt_trans(I,j) = 0.0
   enddo ; enddo
-!$OMP do
+  !$OMP do
   do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
     vbt_sum(i,J) = 0.0 ; vhbt_sum(i,J) = 0.0
     PFv_bt_sum(i,J) = 0.0 ; Corv_bt_sum(i,J) = 0.0
@@ -1333,7 +1335,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   enddo ; enddo
 
   ! Set the mass source, after first initializing the halos to 0.
-!$OMP do
+  !$OMP do
   do j=jsvf-1,jevf+1; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
   if (CS%bound_BT_corr) then ; if (use_BT_Cont .and. CS%BT_cont_bounds) then
     do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
@@ -1362,7 +1364,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j)) &
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j),CS%eta_cor(i,j))
   enddo ; enddo ; endif ; endif
-!$OMP do
+  !$OMP do
   do j=js,je ; do i=is,ie
     eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j))
   enddo ; enddo
@@ -1459,7 +1461,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
     call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, &
                   G%HI, haloshift=0)
-    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, scale=GV%m_to_Z)
+    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, scale=US%m_to_Z)
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, &
                   G%HI, haloshift=1)
   endif
@@ -2256,9 +2258,10 @@ end subroutine btstep
 
 !> This subroutine automatically determines an optimal value for dtbt based
 !! on some state of the ocean.
-subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
+subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(ocean_grid_type),        intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),      intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),        intent(in)    :: US   !< A dimensional unit scaling type
   type(barotropic_CS),          pointer       :: CS   !< Barotropic control structure.
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: eta  !< The barotropic free surface
                                                       !! height anomaly or column mass anomaly, in H.
@@ -2269,10 +2272,10 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                                                       !! the effective open face areas as a
                                                       !! function of barotropic flow.
   real,               optional, intent(in)    :: gtot_est !< An estimate of the total gravitational
-                                                      !! acceleration, in m s-2.
+                                                      !! acceleration, in m2 Z-1 s-2.
   real,               optional, intent(in)    :: SSH_add  !< An additional contribution to SSH to
                                                       !! provide a margin of error when
-                                                      !! calculating the external wave speed, in m.
+                                                      !! calculating the external wave speed, in Z.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -2296,7 +2299,7 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                   ! order 1.  For stability, this may be made larger
                   ! than physical problem would suggest.
   real :: add_SSH ! An additional contribution to SSH to provide a margin of error
-                  ! when calculating the external wave speed, in m.
+                  ! when calculating the external wave speed, in Z.
   real :: min_max_dt2, Idt_max2, dtbt_max
   logical :: use_BT_cont
   type(memory_size_type) :: MS
@@ -2323,7 +2326,7 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   elseif (CS%Nonlinear_continuity .and. present(eta)) then
     call find_face_areas(Datu, Datv, G, GV, CS, MS, eta=eta, halo=0)
   else
-    call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=0, add_max=add_SSH*GV%m_to_Z)
+    call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=0, add_max=add_SSH)
   endif
 
   det_de = 0.0
@@ -2342,8 +2345,8 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_est * GV%H_to_m ; gtot_W(i,j) = gtot_est * GV%H_to_m
-      gtot_N(i,j) = gtot_est * GV%H_to_m ; gtot_S(i,j) = gtot_est * GV%H_to_m
+      gtot_E(i,j) = gtot_est * GV%H_to_Z ; gtot_W(i,j) = gtot_est * GV%H_to_Z
+      gtot_N(i,j) = gtot_est * GV%H_to_Z ; gtot_S(i,j) = gtot_est * GV%H_to_Z
     enddo ; enddo
   endif
 
@@ -2422,8 +2425,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real :: vel_prev    ! The previous velocity in m s-1.
   real :: vel_trans   ! The combination of the previous and current velocity
                       ! that does the mass transport, in m s-1.
-  real :: H_u         ! The total thickness at the u-point, in m or kg m-2.
-  real :: H_v         ! The total thickness at the v-point, in m or kg m-2.
+  real :: H_u         ! The total thickness at the u-point, in H (often m or kg m-2).
+  real :: H_v         ! The total thickness at the v-point, in H (often m or kg m-2).
   real :: cfl         ! The CFL number at the point in question, ND.
   real :: u_inlet
   real :: v_inlet
@@ -2630,7 +2633,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
         endif
-      else            ! This is assuming Flather as only other option
+      else  ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%Z_to_H + eta(i,j)
@@ -2640,15 +2643,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             BT_OBC%H_u(I,j) = eta(i,j)
-            BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + GV%m_to_Z*eta(i,j))) !### * GV%H_to_m?
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
             BT_OBC%H_u(I,j) = eta(i+1,j)
-            BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * (G%bathyT(i+1,j) + GV%m_to_Z*eta(i+1,j))) !### * GV%H_to_m?
           endif
         endif
-        if (GV%Boussinesq) then
-          BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*GV%m_to_Z * BT_OBC%H_u(i,j)) !### * GV%H_to_m?
-        endif
+        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
@@ -2686,7 +2685,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
         endif
-      else              ! This is assuming Flather as only other option
+      else  ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%Z_to_H + eta(i,j)
@@ -2696,15 +2695,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
         else
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             BT_OBC%H_v(i,J) = eta(i,j)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j) + eta(i,j)*GV%m_to_Z)) !### * GV%H_to_m?
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             BT_OBC%H_v(i,J) = eta(i,j+1)
-            BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * (G%bathyT(i,j+1) + eta(i,j+1)*GV%m_to_Z)) !### * GV%H_to_m?
           endif
         endif
-        if (GV%Boussinesq) then
-          BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*GV%m_to_Z * BT_OBC%H_v(i,J)) !### * GV%H_to_m?
-        endif
+        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
@@ -3685,10 +3680,11 @@ end subroutine bt_mass_source
 !> barotropic_init initializes a number of time-invariant fields used in the
 !! barotropic calculation and initializes any barotropic fields that have not
 !! already been initialized.
-subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
+subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, &
                            restart_CS, calc_dtbt, BT_cont, tides_CSp)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -3721,9 +3717,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
   real :: Datu(SZIBS_(G),SZJ_(G))   ! Zonal open face area in H m.
   real :: Datv(SZI_(G),SZJBS_(G))   ! Meridional open face area in H m.
-  real :: gtot_estimate ! Summing GV%g_prime gives an upper-bound estimate for pbce.
+  real :: gtot_estimate ! Summed GV%g_prime in m2 Z-1 s-2, to give an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
-                        ! in calculating the safe external wave speed.
+                        ! in calculating the safe external wave speed, in Z.
   real :: dtbt_input, dtbt_tmp
   real :: wave_drag_scale ! A scaling factor for the barotropic linear wave drag
                           ! piston velocities.
@@ -3960,7 +3956,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  "An estimate of how much higher SSH might get, for use \n"//&
                  "in calculating the safe external wave speed. The \n"//&
                  "default is the minimum of 10 m or 5% of MAXIMUM_DEPTH.", &
-                 units="m", default=min(10.0,0.05*G%max_depth*GV%Z_to_m))
+                 units="m", default=min(10.0,0.05*G%max_depth*US%Z_to_m), scale=US%m_to_Z)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
@@ -4145,8 +4141,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 
   ! Estimate the maximum stable barotropic time step.
   gtot_estimate = 0.0
-  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K)*GV%m_to_Z ; enddo
-  call set_dtbt(G, GV, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
+  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K) ; enddo
+  call set_dtbt(G, GV, US, CS, gtot_est=gtot_estimate, SSH_add=SSH_extra)
 
   if (dtbt_input > 0.0) then
     CS%dtbt = dtbt_input

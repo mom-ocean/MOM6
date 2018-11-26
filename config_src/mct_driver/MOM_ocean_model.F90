@@ -53,6 +53,7 @@ use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
 use MOM_time_manager,        only : operator(<), real_to_time_type, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
+use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_ice_shelf,           only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
@@ -198,6 +199,8 @@ type, public :: ocean_state_type
                               !! containing metrics and related information.
   type(verticalGrid_type), pointer :: GV => NULL() !< A pointer to a vertical grid
                               !! structure containing metrics and related information.
+  type(unit_scale_type), pointer :: US => NULL() !< A pointer to a structure containing
+                              !! dimensional unit scaling factors.
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: &
@@ -276,7 +279,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       input_restart_file=input_restart_file, diag_ptr=OS%diag, &
                       count_calls=.true.)
-  call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, C_p=OS%fluxes%C_p, &
+  call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, C_p=OS%fluxes%C_p, &
                               use_temp=use_temperature)
   OS%C_p = OS%fluxes%C_p
 
@@ -361,7 +364,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
                               gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
-  call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
+  call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
 
   if (OS%use_ice_shelf)  then
@@ -473,7 +476,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   weight = 1.0
 
   call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
-                             OS%grid, OS%forcing_CSp)
+                             OS%grid, OS%US, OS%forcing_CSp)
 
   if (OS%fluxes%fluxes_used) then
 
@@ -481,7 +484,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%diag)
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%US, OS%forcing_CSp, &
                                OS%sfc_state, OS%restore_salinity, OS%restore_temp)
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
@@ -513,7 +516,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%flux_tmp%C_p = OS%fluxes%C_p
 
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, &
+    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, OS%Time, OS%grid, OS%US, OS%forcing_CSp, &
                                OS%sfc_state, OS%restore_salinity, OS%restore_temp)
 
     if (OS%use_ice_shelf) then
@@ -539,7 +542,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #endif
   endif
 
-  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
+  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%US, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
@@ -559,8 +562,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%diag)
-  call mech_forcing_diags(OS%forces, OS%fluxes, time_step, OS%grid, &
-                          OS%diag, OS%forcing_CSp%handles)
+  call mech_forcing_diags(OS%forces, time_step, OS%grid, OS%diag, OS%forcing_CSp%handles)
   call disable_averaging(OS%diag)
 
   if (OS%fluxes%fluxes_used) then

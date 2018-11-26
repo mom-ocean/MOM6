@@ -10,7 +10,9 @@ use MOM_forcing_type,  only : forcing, mech_forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_verticalgrid,  only : verticalGrid_type
 use MOM_safe_alloc,    only : safe_alloc_ptr
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_time_manager,  only : time_type, operator(+), operator(/), time_type_to_real
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 implicit none ; private
 
@@ -45,26 +47,27 @@ character(len=40)  :: mdl = "SCM_CVMix_tests" !< This module's name.
 contains
 
 !> Initializes temperature and salinity for the SCM CVMix test example
-subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
-  type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
-  type(verticalGrid_type),                intent(in)  :: GV!< Vertical grid structure
+subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_params)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T  !< Potential temperature (degC)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S  !< Salinity (psu)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h  !< Layer thickness in H (often m or Pa)
+  type(ocean_grid_type),                  intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),                intent(in)  :: GV !< Vertical grid structure
+  type(unit_scale_type),                  intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness (m)
-  real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness (m)
+  real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness (Z)
+  real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness (Z)
   real :: UpperLayerTemp !< Upper layer temperature (SST if thickness 0) (deg C)
   real :: UpperLayerSalt !< Upper layer salinity (SSS if thickness 0) (PPT)
   real :: LowerLayerTemp !< Temp at top of lower layer (deg C)
   real :: LowerLayerSalt !< Salt at top of lower layer (PPT)
-  real :: LowerLayerdTdz !< Temp gradient in lower layer (deg C m^{-1})
-  real :: LowerLayerdSdz !< Salt gradient in lower layer (PPT m^{-1})
+  real :: LowerLayerdTdz !< Temp gradient in lower layer (deg C / Z)
+  real :: LowerLayerdSdz !< Salt gradient in lower layer (PPT / Z)
   real :: LowerLayerMinTemp !< Minimum temperature in lower layer
-  real :: zC, DZ, top, bottom
+  real :: zC, DZ, top, bottom ! Depths and thicknesses in Z.
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
@@ -75,25 +78,27 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) call log_version(param_file, mdl, version)
-  call get_param(param_file, mdl,"SCM_TEMP_MLD",UpperLayerTempMLD, &
-                 'Initial temp mixed layer depth', units='m',default=0.0, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_SALT_MLD",UpperLayerSaltMLD, &
-                 'Initial salt mixed layer depth', units='m',default=0.0, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_L1_SALT",UpperLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_L1_TEMP",UpperLayerTemp, &
+  call get_param(param_file, mdl, "SCM_TEMP_MLD", UpperLayerTempMLD, &
+                 'Initial temp mixed layer depth', &
+                 units='m', default=0.0, scale=US%m_to_Z, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_SALT_MLD", UpperLayerSaltMLD, &
+                 'Initial salt mixed layer depth', &
+                 units='m', default=0.0, scale=US%m_to_Z, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L1_SALT", UpperLayerSalt, &
+                 'Layer 2 surface salinity', units='1e-3', default=35.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L1_TEMP", UpperLayerTemp, &
                  'Layer 1 surface temperature', units='C', default=20.0, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_L2_SALT",LowerLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_L2_TEMP",LowerLayerTemp, &
+  call get_param(param_file, mdl, "SCM_L2_SALT", LowerLayerSalt, &
+                 'Layer 2 surface salinity', units='1e-3', default=35.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_TEMP", LowerLayerTemp, &
                  'Layer 2 surface temperature', units='C', default=20.0, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_L2_DTDZ",LowerLayerdTdZ,     &
+  call get_param(param_file, mdl, "SCM_L2_DTDZ", LowerLayerdTdZ,     &
                  'Initial temperature stratification in layer 2', &
-                 units='C/m', default=0.00, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_L2_DSDZ",LowerLayerdSdZ,  &
+                 units='C/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_DSDZ", LowerLayerdSdZ,  &
                  'Initial salinity stratification in layer 2', &
-                 units='PPT/m', default=0.00, do_not_log=just_read)
-  call get_param(param_file, mdl,"SCM_L2_MINTEMP",LowerLayerMinTemp, &
+                 units='PPT/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_MINTEMP",LowerLayerMinTemp, &
                  'Layer 2 minimum temperature', units='C', default=4.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -102,7 +107,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
     top = 0. ! Reference to surface
     bottom = 0.
     do k=1,nz
-      bottom = bottom - h(i,j,k)*GV%H_to_m ! Interface below layer (in m)
+      bottom = bottom - h(i,j,k)*GV%H_to_Z ! Interface below layer (in m)
       zC = 0.5*( top + bottom )        ! Z of middle of layer (in m)
       DZ = min(0., zC + UpperLayerTempMLD)
       T(i,j,k) = max(LowerLayerMinTemp,LowerLayerTemp + LowerLayerdTdZ * DZ)
@@ -180,11 +185,12 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
 
 end subroutine SCM_CVMix_tests_surface_forcing_init
 
-subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, CS)
-  type(surface),                    intent(in)    :: state  !< Surface state structure
-  type(mech_forcing),               intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),                  intent(in)    :: day    !< Time in days
-  type(ocean_grid_type),            intent(inout) :: G      !< Grid structure
+subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
+  type(surface),            intent(in)    :: state  !< Surface state structure
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),          intent(in)    :: day    !< Time in days
+  type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(SCM_CVMix_tests_CS), pointer       :: CS     !< Container for SCM parameters
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -207,7 +213,7 @@ subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, CS)
 
   mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = sqrt(  mag_tau / CS%Rho0 )
+    forces%ustar(i,j) = US%m_to_Z * sqrt(  mag_tau / CS%Rho0 )
   enddo ; enddo ; endif
 
 end subroutine SCM_CVMix_tests_wind_forcing

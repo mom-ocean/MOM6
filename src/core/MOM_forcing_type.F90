@@ -13,6 +13,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_shortwave_abs, only : sumSWoverBands, optics_type
 use MOM_spatial_means, only : global_area_integral, global_area_mean
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : surface, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -44,9 +45,9 @@ type, public :: forcing
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-    ustar         => NULL(), & !< surface friction velocity scale (m/s)
+    ustar         => NULL(), & !< surface friction velocity scale (Z/s)
     ustar_gustless => NULL()   !< surface friction velocity scale without any
-                               !! any augmentation for gustiness (m/s)
+                               !! any augmentation for gustiness (Z/s)
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
@@ -128,12 +129,12 @@ type, public :: forcing
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
-    ustar_berg => NULL(), &   !< iceberg contribution to top ustar (m/s)
+    ustar_berg => NULL(), &   !< iceberg contribution to top ustar (Z/s)
     area_berg  => NULL(), &   !< area of ocean surface covered by icebergs (m2/m2)
     mass_berg  => NULL()      !< mass of icebergs (kg/m2)
 
   ! land ice-shelf related inputs
-  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves (in m/s)
+  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves (in Z/s)
                                  !! as computed by the ocean at the previous time step.
   real, pointer, dimension(:,:) :: frac_shelf_h => NULL() !< Fractional ice shelf coverage of h-cells, nondimensional
                                  !! cells, nondimensional from 0 to 1. This is only
@@ -180,7 +181,7 @@ type, public :: mech_forcing
   real, pointer, dimension(:,:) :: &
     taux  => NULL(), & !< zonal wind stress (Pa)
     tauy  => NULL(), & !< meridional wind stress (Pa)
-    ustar => NULL(), & !< surface friction velocity scale (m/s)
+    ustar => NULL(), & !< surface friction velocity scale (Z/s)
     net_mass_src => NULL() !< The net mass source to the ocean, in kg m-2 s-1.
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
@@ -817,10 +818,11 @@ end subroutine extractFluxes2d
 !! These are actual fluxes, with units of stuff per time. Setting dt=1 in the call to
 !! extractFluxes routine allows us to get "stuf per time" rather than the time integrated
 !! fluxes needed in other routines that call extractFluxes.
-subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, &
+subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv, j, &
                                    buoyancyFlux, netHeatMinusSW, netSalt, skip_diags)
   type(ocean_grid_type),                    intent(in)    :: G              !< ocean grid
   type(verticalGrid_type),                  intent(in)    :: GV             !< ocean vertical grid structure
+  type(unit_scale_type),                    intent(in)    :: US             !< A dimensional unit scaling type
   type(forcing),                            intent(inout) :: fluxes         !< surface fluxes
   type(optics_type),                        pointer       :: optics         !< penetrating SW optics
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h              !< layer thickness (H)
@@ -858,7 +860,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
 
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  GoRho       = (GV%g_Earth*US%m_to_Z) / GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 
@@ -906,16 +908,17 @@ end subroutine calculateBuoyancyFlux1d
 
 !> Calculates surface buoyancy flux by adding up the heat, FW and salt fluxes,
 !! for 2d arrays.  This is a wrapper for calculateBuoyancyFlux1d.
-subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
+subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv, &
                                    buoyancyFlux, netHeatMinusSW, netSalt, skip_diags)
-  type(ocean_grid_type),                      intent(in)    :: G              !< ocean grid
-  type(verticalGrid_type),                    intent(in)    :: GV             !< ocean vertical grid structure
-  type(forcing),                              intent(inout) :: fluxes         !< surface fluxes
-  type(optics_type),                          pointer       :: optics         !< SW ocean optics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h              !< layer thickness (H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp           !< temperature (deg C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt           !< salinity (ppt)
-  type(thermo_var_ptrs),                      intent(inout) :: tv             !< thermodynamics type
+  type(ocean_grid_type),                      intent(in)    :: G      !< ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV     !< ocean vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
+  type(forcing),                              intent(inout) :: fluxes !< surface fluxes
+  type(optics_type),                          pointer       :: optics !< SW ocean optics
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< layer thickness (H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp   !< temperature (deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt   !< salinity (ppt)
+  type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoy flux (m^2/s^3)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux (K H)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux (ppt H)
@@ -928,24 +931,23 @@ subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
 
   netT(G%isc:G%iec) = 0. ; netS(G%isc:G%iec) = 0.
 
-!$OMP parallel do default(none) shared(G,GV,fluxes,optics,h,Temp,Salt,tv,buoyancyFlux,&
-!$OMP                                  netHeatMinusSW,netSalt,skip_diags)             &
-!$OMP                     firstprivate(netT,netS)
-  do j = G%jsc, G%jec
-    call calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), &
+  !$OMP parallel do default(shared) firstprivate(netT,netS)
+  do j=G%jsc,G%jec
+    call calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), &
                                  netT, netS, skip_diags=skip_diags)
     if (present(netHeatMinusSW)) netHeatMinusSW(G%isc:G%iec,j) = netT(G%isc:G%iec)
     if (present(netSalt)) netSalt(G%isc:G%iec,j) = netS(G%isc:G%iec)
-  enddo ! j
+  enddo
 
 end subroutine calculateBuoyancyFlux2d
 
 
 !> Write out chksums for thermodynamic fluxes.
-subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
+subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   character(len=*),        intent(in) :: mesg      !< message
   type(forcing),           intent(in) :: fluxes    !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in) :: G         !< grid type
+  type(unit_scale_type),   intent(in) :: US        !< A dimensional unit scaling type
   integer, optional,       intent(in) :: haloshift !< shift in halo
 
   integer :: is, ie, js, je, nz, hshift
@@ -957,7 +959,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI,haloshift=hshift)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI, haloshift=hshift, scale=US%Z_to_m)
   if (associated(fluxes%buoy)) &
     call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
   if (associated(fluxes%sw)) &
@@ -1019,10 +1021,11 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
 end subroutine MOM_forcing_chksum
 
 !> Write out chksums for the driving mechanical forces.
-subroutine MOM_mech_forcing_chksum(mesg, forces, G, haloshift)
+subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   character(len=*),        intent(in) :: mesg      !< message
   type(mech_forcing),      intent(in) :: forces    !< A structure with the driving mechanical forces
   type(ocean_grid_type),   intent(in) :: G         !< grid type
+  type(unit_scale_type),   intent(in) :: US        !< A dimensional unit scaling type
   integer, optional,       intent(in) :: haloshift !< shift in halo
 
   integer :: is, ie, js, je, nz, hshift
@@ -1039,7 +1042,7 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, haloshift)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
   if (associated(forces%ustar)) &
-    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift)
+    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift, scale=US%Z_to_m)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
     call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
                   forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true.)
@@ -1133,9 +1136,10 @@ end subroutine forcing_SinglePointPrint
 
 
 !> Register members of the forcing type for diagnostics
-subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use_berg_fluxes)
+subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles, use_berg_fluxes)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
+  type(unit_scale_type), intent(in)  :: US              !< A dimensional unit scaling type
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles         !< handles for diagnostics
   logical, optional,   intent(in)    :: use_berg_fluxes !< If true, allow iceberg flux diagnostics
@@ -1157,12 +1161,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
          cmor_standard_name='surface_downward_y_stress')
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
-      'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', 'm s-1')
+      'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &
+      'm s-1', conversion=US%Z_to_m)
 
   if (present(use_berg_fluxes)) then
     if (use_berg_fluxes) then
       handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
-          'Friction velocity below iceberg ', 'm s-1')
+          'Friction velocity below iceberg ', 'm s-1', conversion=US%Z_to_m)
 
       handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
           'Area of grid cell covered by iceberg ', 'm2 m-2')
@@ -1171,7 +1176,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
           'Mass of icebergs ', 'kg m-2')
 
       handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
-          'Friction velocity below iceberg and ice shelf together', 'm s-1')
+          'Friction velocity below iceberg and ice shelf together', 'm s-1', conversion=US%Z_to_m)
 
       handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
           'Area of grid cell below iceberg and ice shelf together ', 'm2 m-2')
@@ -1956,19 +1961,20 @@ end subroutine copy_common_forcing_fields
 
 !> This subroutine calculates certain derived forcing fields based on information
 !! from a mech_forcing type and stores them in a (thermodynamic) forcing type.
-subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
+subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
   type(mech_forcing),      intent(in)    :: forces   !< A structure with the driving mechanical forces
   type(forcing),           intent(inout) :: fluxes   !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in)    :: G        !< grid type
+  type(unit_scale_type),   intent(in)    :: US       !< A dimensional unit scaling type
   real,                    intent(in)    :: Rho0     !< A reference density of seawater, in kg m-3,
                                                      !! as used to calculate ustar.
 
   real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
-  real :: Irho0        ! Inverse of the mean density in (m^3/kg)
+  real :: Irho0        ! Inverse of the mean density rescaled to (Z2 m / kg)
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  Irho0 = 1.0/Rho0
+  Irho0 = US%m_to_Z**2 / Rho0
 
   if (associated(forces%taux) .and. associated(forces%tauy) .and. &
       associated(fluxes%ustar_gustless)) then
@@ -1984,7 +1990,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
-      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) / Rho0)
+      fluxes%ustar_gustless(i,j) = US%m_to_Z * sqrt(sqrt(taux2 + tauy2) / Rho0)
 !### Change to:
 !      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
     enddo ; enddo
@@ -2355,7 +2361,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       ! endif
         if (associated(fluxes%heat_added))         res(i,j) = res(i,j) + fluxes%heat_added(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_heat_surface, res, diag)
+      if (handles%id_net_heat_surface > 0) call post_data(handles%id_net_heat_surface, res, diag)
 
       if (handles%id_total_net_heat_surface > 0) then
         total_transport = global_area_integral(res,G)

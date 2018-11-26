@@ -26,6 +26,7 @@ use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), time_type_to_real
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -196,17 +197,13 @@ subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
 end subroutine idealized_hurricane_wind_init
 
 !> Computes the surface wind for the idealized hurricane test cases
-subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
-  type(surface), &
-       intent(in)    :: state  !< Surface state structure
-  type(mech_forcing), &
-       intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type), &
-       intent(in)    :: day    !< Time in days
-  type(ocean_grid_type), &
-       intent(inout) :: G      !< Grid structure
-  type(idealized_hurricane_CS), &
-       pointer       :: CS     !< Container for idealized hurricane parameters
+subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
+  type(surface),          intent(in)    :: state  !< Surface state structure
+  type(mech_forcing),     intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),        intent(in)    :: day    !< Time in days
+  type(ocean_grid_type),  intent(inout) :: G      !< Grid structure
+  type(unit_scale_type),        intent(in)    :: US     !< A dimensional unit scaling type
+  type(idealized_hurricane_CS), pointer       :: CS     !< Container for idealized hurricane parameters
 
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -268,8 +265,8 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
         YY = YC + CS%dy_from_center
         XX = XC
       else
-        LAT = G%geoLatCu(I,j)*1000. !KM_to_m
-        LON = G%geoLonCu(I,j)*1000. !KM_to_m
+        LAT = G%geoLatCu(I,j)*1000. ! Convert Lat from km to m.
+        LON = G%geoLonCu(I,j)*1000. ! Convert Lon from km to m.
         YY = LAT - YC
         XX = LON - XC
       endif
@@ -291,13 +288,12 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
         YY = YC + CS%dy_from_center
         XX = XC
       else
-        LAT = G%geoLatCv(i,J)*1000. !KM_to_m
-        LON = G%geoLonCv(i,J)*1000. !KM_to_m
+        LAT = G%geoLatCv(i,J)*1000. ! Convert Lat from km to m.
+        LON = G%geoLonCv(i,J)*1000. ! Convert Lon from km to m.
         YY = LAT - YC
         XX = LON - XC
       endif
-      call idealized_hurricane_wind_profile(&
-           CS,f,YY,XX,Uocn,Vocn,TX,TY)
+      call idealized_hurricane_wind_profile(CS, f, YY, XX, Uocn, Vocn, TX, TY)
       forces%tauy(i,J) = G%mask2dCv(i,J) * TY
     enddo
   enddo
@@ -306,7 +302,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   do j=js,je
     do i=is,ie
       !  This expression can be changed if desired, but need not be.
-      forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
+      forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
          sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
     enddo
@@ -316,7 +312,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
 end subroutine idealized_hurricane_wind_forcing
 
 !> Calculate the wind speed at a location as a function of time.
-subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
+subroutine idealized_hurricane_wind_profile(CS, absf, YY, XX, UOCN, VOCN, Tx, Ty)
   ! Author: Brandon Reichl
   ! Date: Nov-20-2014
   !       Aug-14-2018 Generalized for non-SCM configuration
@@ -436,8 +432,8 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   endif
 
   ! Compute stress vector
-  TX = CS%rho_A * Cd * sqrt(du**2+dV**2) * dU
-  TY = CS%rho_A * Cd * sqrt(du**2+dV**2) * dV
+  TX = CS%rho_A * Cd * sqrt(du**2 + dV**2) * dU
+  TY = CS%rho_A * Cd * sqrt(du**2 + dV**2) * dV
 
   return
 end subroutine idealized_hurricane_wind_profile
@@ -446,11 +442,12 @@ end subroutine idealized_hurricane_wind_profile
 !! It is included as an additional subroutine rather than padded into the previous
 !! routine with flags to ease its eventual removal.  Its functionality is replaced
 !! with the new routines and it can be deleted when answer changes are acceptable.
-subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
-  type(surface),                    intent(in)    :: state  !< Surface state structure
-  type(mech_forcing),               intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),                  intent(in)    :: day    !< Time in days
-  type(ocean_grid_type),            intent(inout) :: G      !< Grid structure
+subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
+  type(surface),                intent(in)    :: state  !< Surface state structure
+  type(mech_forcing),           intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),              intent(in)    :: day    !< Time in days
+  type(ocean_grid_type),        intent(inout) :: G      !< Grid structure
+  type(unit_scale_type),        intent(in)    :: US     !< A dimensional unit scaling type
   type(idealized_hurricane_CS), pointer       :: CS     !< Container for SCM parameters
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -607,7 +604,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
+    forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
        sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo
