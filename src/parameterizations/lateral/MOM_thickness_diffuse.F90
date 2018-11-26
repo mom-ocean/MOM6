@@ -52,7 +52,7 @@ type, public :: thickness_diffuse_CS ; private
                                  !! longer than DT, or 0 (the default) to use DT.
   integer :: nkml                !< number of layers within mixed layer
   logical :: debug               !< write verbose checksums for debugging purposes
-  logical :: QG_Leith_GM         !< If true, uses the QG Leith viscosity as the GM coefficient
+!  logical :: QG_Leith_GM         !< If true, uses the QG Leith viscosity as the GM coefficient
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity (W m-2)
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
@@ -142,6 +142,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   khth_use_ebt_struct = .false.
+
   if (associated(VarMix)) then
     use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
@@ -216,15 +217,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(I,j))
   enddo ; enddo
 
-  if (use_VarMix) then
-!$OMP do
-    if (use_QG_Leith) then
-      do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
-        KH_u(I,j,K) = VarMix%KH_u_QG(I,j,k-1)
-      enddo ; enddo ; enddo
-    endif
-  endif    
-
   if (khth_use_ebt_struct) then
 !$OMP do
     do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
@@ -235,6 +227,15 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
       KH_u(I,j,K) = KH_u(I,j,1)
     enddo ; enddo ; enddo
+  endif
+
+  if (use_VarMix) then
+!$OMP do
+    if (use_QG_Leith) then
+      do k=1,nz ; do j=js,je ; do I=is-1,ie
+        KH_u(I,j,k) = VarMix%KH_u_QG(I,j,k)
+      enddo ; enddo ; enddo
+    endif
   endif
 
 !$OMP do
@@ -283,15 +284,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     enddo ; enddo
   endif
 
-  if (use_VarMix) then
-!$OMP do
-    if (use_QG_Leith) then
-      do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
-        KH_v(i,J,K) = VarMix%KH_v_QG(i,J,k-1)
-      enddo ; enddo ; enddo
-    endif
-  endif
-
   if (khth_use_ebt_struct) then
 !$OMP do
     do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
@@ -303,6 +295,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
       KH_v(i,J,K) = KH_v(i,J,1)
     enddo ; enddo ; enddo
   endif
+
+  if (use_VarMix) then
+!$OMP do
+    if (use_QG_Leith) then
+      do k=1,nz ; do J=js-1,je ; do i=is,ie
+        KH_v(i,J,k) = VarMix%KH_v_QG(i,J,k)
+      enddo ; enddo ; enddo
+    endif
+  endif
+
 !$OMP do
   do K=1,nz+1 ; do j=js,je ; do I=is-1,ie ; int_slope_u(I,j,K) = 0.0 ; enddo ; enddo ; enddo
 !$OMP do
@@ -1754,9 +1756,11 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  "marginally unstable value in a pure layered model, but \n"//&
                  "much smaller numbers (e.g. 0.1) seem to work better for \n"//&
                  "ALE-based models.", units = "nondimensional", default=0.8)
-  call get_param(param_file, mdl, "USE_QG_LEITH_GM", CS%QG_Leith_GM, &
-               "If true, use the QG Leith viscosity as the GM coefficient.", &
-               default=.false.)
+
+!  call get_param(param_file, mdl, "USE_QG_LEITH_GM", CS%QG_Leith_GM, &
+!               "If true, use the QG Leith viscosity as the GM coefficient.", &
+!               default=.false.)
+
   if (CS%max_Khth_CFL < 0.0) CS%max_Khth_CFL = 0.0
   call get_param(param_file, mdl, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
                  "If defined add 3-d structured enhanced interface height \n"//&
@@ -1789,7 +1793,7 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  "streamfunction formulation.", &
                  default=0., units="m s-1", do_not_log=.not.CS%use_FGNV_streamfn)
   call get_param(param_file, mdl, "FGNV_STRAT_FLOOR", strat_floor, &
-                 "A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010,\n"//&
+                 "A floor for Brunt-Vaisala frequency in the Ferrari et al., 2010,\n"//&
                  "streamfunction formulation, expressed as a fraction of planetary\n"//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
                  default=1.e-15, units="nondim", do_not_log=.not.CS%use_FGNV_streamfn)
