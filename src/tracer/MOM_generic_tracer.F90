@@ -286,7 +286,7 @@ contains
                              "initializing generic tracer "//trim(g_tracer_name)//&
                              " using MOM_initialize_tracer_from_Z ")
 
-         call MOM_initialize_tracer_from_Z(h, tr_ptr, G, GV, param_file,                       &
+         call MOM_initialize_tracer_from_Z(h, tr_ptr, G, GV, US, param_file,               &
                                 src_file = g_tracer%src_file,                              &
                                 src_var_nam = g_tracer%src_var_name,                       &
                                 src_var_unit_conversion = g_tracer%src_var_unit_conversion,&
