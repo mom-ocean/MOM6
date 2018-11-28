@@ -3,16 +3,17 @@ module MOM_CVMix_conv
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,      only : hchksum
 use MOM_diag_mediator,  only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,  only : post_data
 use MOM_EOS,            only : calculate_density
-use MOM_variables,      only : thermo_var_ptrs
 use MOM_error_handler,  only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
-use MOM_debugging,      only : hchksum
-use MOM_grid,           only : ocean_grid_type
-use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_file_parser,    only : get_param, log_version, param_file_type
+use MOM_grid,           only : ocean_grid_type
+use MOM_unit_scaling,   only : unit_scale_type
+use MOM_variables,      only : thermo_var_ptrs
+use MOM_verticalGrid,   only : verticalGrid_type
 use CVMix_convection,   only : CVMix_init_conv, CVMix_coeffs_conv
 use CVMix_kpp,          only : CVMix_kpp_compute_kOBL_depth
 
@@ -51,14 +52,15 @@ character(len=40)  :: mdl = "MOM_CVMix_conv"     !< This module's name.
 contains
 
 !> Initialized the CVMix convection mixing routine.
-logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
+logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
 
   type(time_type),         intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),   intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(CVMix_conv_cs),    pointer        :: CS         !< This module's control structure.
+  type(CVMix_conv_cs),     pointer       :: CS         !< This module's control structure.
   ! Local variables
   real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
   logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
@@ -132,9 +134,9 @@ logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
   CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2')
   CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
-      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
-      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
 
   call CVMix_init_conv(convect_diff=CS%kd_conv_const, &
                        convect_visc=CS%kv_conv_const, &
@@ -145,10 +147,11 @@ end function CVMix_conv_init
 
 !> Subroutine for calculating enhanced diffusivity/viscosity
 !! due to convection via CVMix
-subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
+subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
 
   type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
+  type(unit_scale_type),                      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
   type(CVMix_conv_cs),                            pointer :: CS !< The control structure returned
@@ -168,7 +171,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k
 
-  g_o_rho0 = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  g_o_rho0 = (GV%g_Earth*US%m_to_Z) / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
@@ -228,8 +231,8 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
                                OBL_ind=kOBL)
 
       do K=1,G%ke+1
-        CS%kv_conv(i,j,K) = GV%m_to_Z**2 * kv_col(K)
-        CS%kd_conv(i,j,K) = GV%m_to_Z**2 * kd_col(K)
+        CS%kv_conv(i,j,K) = US%m_to_Z**2 * kv_col(K)
+        CS%kd_conv(i,j,K) = US%m_to_Z**2 * kd_col(K)
       enddo
       ! Do not apply mixing due to convection within the boundary layer
       do k=1,kOBL

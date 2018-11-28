@@ -20,8 +20,8 @@ use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
-use MOM_variables, only : thermo_var_ptrs
-use MOM_variables, only : vertvisc_type
+use MOM_unit_scaling, only : unit_scale_type
+use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_E
@@ -99,9 +99,10 @@ contains
 !! paper of Killworth and Edwards, JPO 1999.  It is not necessary to
 !! calculate the thickness and viscosity every time step; instead
 !! previous values may be used.
-subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
+subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -118,28 +119,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
                                                   !! of those values in visc that would be
                                                   !! calculated with symmetric memory.
-!   The following subroutine calculates the thickness of the bottom
-! boundary layer and the viscosity within that layer.  A drag law is
-! used, either linearized about an assumed bottom velocity or using
-! the actual near-bottom velocities combined with an assumed
-! unresolved velocity.  The bottom boundary layer thickness is
-! limited by a combination of stratification and rotation, as in the
-! paper of Killworth and Edwards, JPO 1999.  It is not necessary to
-! calculate the thickness and viscosity every time step; instead
-! previous values may be used.
-!
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.  In the comments below,
-!                the units of h are denoted as H.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (out)     visc - A structure containing vertical viscosities and related
-!                   fields.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 vertvisc_init.
+
+  ! Local variables
   real, dimension(SZIB_(G)) :: &
     ustar, &    !   The bottom friction velocity, in m s-1.
     T_EOS, &    !   The temperature used to calculate the partial derivatives
@@ -282,7 +263,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
-  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * GV%Z_to_m**2 * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%Z_to_m**2 * GV%Z_to_H
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
@@ -306,7 +287,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
-  cdrag_sqrt_Z = GV%m_to_Z * sqrt(CS%cdrag)
+  cdrag_sqrt_Z = US%m_to_Z * sqrt(CS%cdrag)
   K2 = max(nkmb+1, 2)
 
 !  With a linear drag law, the friction velocity is already known.
@@ -375,7 +356,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
   if (.not.use_BBL_EOS) Rml_vel(:,:) = 0.0
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,visc,G,GV,CS,Rml,is,ie,js,je,nz,nkmb,    &
+  !$OMP parallel do default(private) shared(u,v,h,tv,visc,G,GV,US,CS,Rml,is,ie,js,je,nz,nkmb, &
   !$OMP                                     nkml,Isq,Ieq,Jsq,Jeq,h_neglect,Rho0x400_G,C2pi_3, &
   !$OMP                                     U_bg_sq,cdrag_sqrt_Z,cdrag_sqrt,K2,use_BBL_EOS,   &
   !$OMP                                     OBC,maxitt,Vol_quit,D_u,D_v,mask_u,mask_v)
@@ -846,7 +827,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
             if (m==1) then ; Cell_width = G%dy_Cu(I,j)
             else ; Cell_width = G%dx_Cv(i,J) ; endif
             gam = 1.0 - L(K+1)/L(K)
-            Rayleigh = GV%m_to_Z * CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
+            Rayleigh = US%m_to_Z * CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
                 (12.0*CS%c_Smag*h_vel_pos) /  (12.0*CS%c_Smag*h_vel_pos + &
                  GV%m_to_H * CS%cdrag * gam*(1.0-gam)*(1.0-1.5*gam) * L(K)**2 * Cell_width)
           else ! This layer feels no drag.
@@ -911,12 +892,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
 
   if (CS%debug) then
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=GV%Z_to_m)
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=US%Z_to_m)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=GV%Z_to_m**2)
+        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=US%Z_to_m**2)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
         call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
-                      visc%bbl_thick_v, G%HI, haloshift=0, scale=GV%Z_to_m)
+                      visc%bbl_thick_v, G%HI, haloshift=0, scale=US%Z_to_m)
   endif
 
 end subroutine set_viscous_BBL
@@ -1012,9 +993,10 @@ end function set_u_at_v
 !! A bulk Richardson criterion or the thickness of the topmost NKML layers (with a bulk mixed layer)
 !! are currently used.  The thicknesses are given in terms of fractional layers, so that this
 !! thickness will move as the thickness of the topmost layers change.
-subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
+subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetrize)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1031,8 +1013,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to vertvisc_init.
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
-                                                  !! of those values in visc that would be
-                                                  !! calculated with symmetric memory.
+                                                 !! of those values in visc that would be
+                                                 !! calculated with symmetric memory.
   ! Local variables
   real, dimension(SZIB_(G)) :: &
     htot, &     !   The total depth of the layers being that are within the
@@ -1144,10 +1126,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
     Jsq = js-1 ; Isq = is-1
   endif ; endif
 
-  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * GV%Z_to_m**2 * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%Z_to_m**2 * GV%Z_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
-  cdrag_sqrt_Z = GV%m_to_Z * sqrt(CS%cdrag)
+  cdrag_sqrt_Z = US%m_to_Z * sqrt(CS%cdrag)
 
   OBC => CS%OBC
   use_EOS = associated(tv%eqn_of_state)
@@ -1201,7 +1183,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
     endif
   enddo ; endif
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,CS,use_EOS,dt_Rho0, &
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     h_neglect,h_tiny,g_H_Rho0,js,je,OBC,Isq,Ieq,nz,  &
   !$OMP                                     U_bg_sq,mask_v,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml)
   do j=js,je  ! u-point loop
@@ -1224,7 +1206,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
             if (CS%omega_frac > 0.0) &
               absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
           endif
-          U_star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i+1,j))*GV%m_to_Z)
+          U_star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i+1,j)))
           Idecay_len_TKE(I) = ((absf / U_star) * CS%TKE_decay) * GV%H_to_Z
         endif
       enddo
@@ -1436,7 +1418,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
 
   enddo ! j-loop at u-points
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,CS,use_EOS,dt_Rho0, &
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     h_neglect,h_tiny,g_H_Rho0,is,ie,OBC,Jsq,Jeq,nz, &
   !$OMP                                     U_bg_sq,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml,mask_u)
   do J=Jsq,Jeq  ! v-point loop
@@ -1460,7 +1442,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
              absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
 
-         U_star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i,j+1))*GV%m_to_Z)
+         U_star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_star) * CS%TKE_decay) * GV%H_to_Z
 
         endif
@@ -1779,10 +1761,11 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 end subroutine set_visc_register_restarts
 
 !> Initializes the MOM_set_visc control structure
-subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, restart_CS, OBC)
+subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS, OBC)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
@@ -1975,10 +1958,10 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, restart_CS, OB
 
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
-                 units="m2 s-1", default=Kv_background, scale=GV%m_to_Z**2)
+                 units="m2 s-1", default=Kv_background, scale=US%m_to_Z**2)
   call get_param(param_file, mdl, "KV_TBL_MIN", CS%KV_TBL_min, &
                  "The minimum viscosities in the top boundary layer.", &
-                 units="m2 s-1", default=Kv_background, scale=GV%m_to_Z**2)
+                 units="m2 s-1", default=Kv_background, scale=US%m_to_Z**2)
 
   if (CS%Channel_drag) then
     call get_param(param_file, mdl, "SMAG_LAP_CONST", smag_const1, default=-1.0)
@@ -2011,21 +1994,21 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, restart_CS, OB
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
-       diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=GV%Z_to_m)
+       diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
-       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=GV%Z_to_m**2)
+       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=US%Z_to_m**2)
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
-       diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=GV%Z_to_m)
+       diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
-       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=GV%Z_to_m**2)
+       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=US%Z_to_m**2)
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
-       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=GV%Z_to_m)
+       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=US%Z_to_m)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
-       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=GV%Z_to_m)
+       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=US%Z_to_m)
   endif
 
   if (use_CVMix_ddiff .or. differential_diffusion) then
@@ -2042,8 +2025,8 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, restart_CS, OB
        diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
   endif
 
-  if ((GV%m_to_Z_restart /= 0.0) .and. (GV%m_to_Z_restart /= GV%m_to_Z)) then
-    Z_rescale = GV%m_to_Z / GV%m_to_Z_restart
+  if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
+    Z_rescale = US%m_to_Z / US%m_to_Z_restart
     if (associated(visc%Kd_shear)) then ; if (query_initialized(visc%Kd_shear, "Kd_shear", restart_CS)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         visc%Kd_shear(i,j,k) = Z_rescale**2 * visc%Kd_shear(i,j,k)

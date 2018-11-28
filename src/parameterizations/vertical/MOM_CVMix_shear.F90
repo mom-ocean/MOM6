@@ -10,6 +10,7 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, EOS_type
@@ -50,9 +51,10 @@ character(len=40)  :: mdl = "MOM_CVMix_shear"  !< This module's name.
 contains
 
 !> Subroutine for calculating (internal) vertical diffusivities/viscosities
-subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
+subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
+  type(unit_scale_type),                      intent(in)  :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
@@ -74,7 +76,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
   real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
-  GoRho = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
+  GoRho = (GV%g_Earth*US%m_to_Z) / GV%Rho0
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -149,8 +151,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
       endif
 
       do K=1,G%ke+1
-        Kvisc(K) = GV%Z_to_m**2 * kv(i,j,K)
-        Kdiff(K) = GV%Z_to_m**2 * kd(i,j,K)
+        Kvisc(K) = US%Z_to_m**2 * kv(i,j,K)
+        Kdiff(K) = US%Z_to_m**2 * kd(i,j,K)
       enddo
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
@@ -160,8 +162,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, CS )
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
       do K=1,G%ke+1
-        kv(i,j,K) = GV%m_to_Z**2 * Kvisc(K)
-        kd(i,j,K) = GV%m_to_Z**2 * Kdiff(K)
+        kv(i,j,K) = US%m_to_Z**2 * Kvisc(K)
+        kd(i,j,K) = US%m_to_Z**2 * Kdiff(K)
       enddo
     enddo
   enddo
@@ -181,10 +183,11 @@ end subroutine calculate_CVMix_shear
 !! \note *This is where we test to make sure multiple internal shear
 !!       mixing routines (including JHL) are not enabled at the same time.
 !! (returns) CVMix_shear_init - True if module is to be used, False otherwise
-logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
+logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current time.
-  type(ocean_grid_type),   intent(in)    :: G !< Grid structure.
+  type(ocean_grid_type),   intent(in)    :: G  !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure.
   type(CVMix_shear_cs),    pointer       :: CS !< This module's control structure.
@@ -281,9 +284,9 @@ logical function CVMix_shear_init(Time, G, GV, param_file, diag, CS)
   endif
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
-      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_kv = register_diag_field('ocean_model', 'kv_shear_CVMix', diag%axesTi, Time, &
-      'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%Z_to_m**2)
+      'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s', conversion=US%Z_to_m**2)
 
 end function CVMix_shear_init
 

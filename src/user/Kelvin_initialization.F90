@@ -16,6 +16,7 @@ use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_DIRECTION_N, OBC_DIRECTION_E
 use MOM_open_boundary,  only : OBC_DIRECTION_S, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, time_type_to_real
 
@@ -109,22 +110,28 @@ end subroutine Kelvin_OBC_end
 
 ! -----------------------------------------------------------------------------
 !> This subroutine sets up the Kelvin topography and land mask
-subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),           intent(in)  :: G !< The dynamic horizontal grid type
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
-  real,                             intent(in)  :: max_depth  !< Maximum depth of model in m
+subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+
   ! Local variables
   character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
-  real :: min_depth ! The minimum and maximum depths in m.
+  real :: m_to_Z  ! A dimensional rescaling factor.
+  real :: min_depth ! The minimum and maximum depths in Z.
   real :: PI ! 3.1415...
   real :: coast_offset1, coast_offset2, coast_angle, right_angle
   integer :: i, j
 
   call MOM_mesg("  Kelvin_initialization.F90, Kelvin_initialize_topography: setting topography", 5)
 
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", coast_offset1, &
                  default=100.0, do_not_log=.true.)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", coast_offset2, &
@@ -136,17 +143,17 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
   right_angle = 2 * atan(1.0)
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    D(i,j)=max_depth
+    D(i,j) = max_depth
     ! Southern side
     if ((G%geoLonT(i,j) - G%west_lon > coast_offset1) .AND. &
         (atan2(G%geoLatT(i,j) - G%south_lat + coast_offset2, &
          G%geoLonT(i,j) - G%west_lon - coast_offset1) < coast_angle)) &
-             D(i,j)=0.5*min_depth
+      D(i,j) = 0.5*min_depth
     ! Northern side
     if ((G%geoLonT(i,j) - G%west_lon < G%len_lon - coast_offset1) .AND. &
         (atan2(G%len_lat + G%south_lat + coast_offset2 - G%geoLatT(i,j), &
          G%len_lon + G%west_lon - coast_offset1 - G%geoLonT(i,j)) < coast_angle)) &
-             D(i,j)=0.5*min_depth
+      D(i,j) = 0.5*min_depth
 
     if (D(i,j) > max_depth) D(i,j) = max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
@@ -155,13 +162,14 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
 end subroutine Kelvin_initialize_topography
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, h, Time)
+subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
                                               !! whether, where, and what open boundary
                                               !! conditions are used.
   type(Kelvin_OBC_CS),     pointer    :: CS   !< Kelvin wave control structure.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness, in H.
   type(time_type),         intent(in) :: Time !< model time.
 
@@ -192,9 +200,9 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, h, Time)
 
   if (CS%mode == 0) then
     omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
-    val1 = GV%m_to_Z * sin(omega * time_sec)
+    val1 = US%m_to_Z * sin(omega * time_sec)
   else
-    N0 = sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth * (GV%m_to_Z * CS%H0))
+    N0 = sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth * (US%m_to_Z * CS%H0))
     ! Two wavelengths in domain
     plx = 4.0 * PI / G%len_lon
     pmz = PI * CS%mode / CS%H0

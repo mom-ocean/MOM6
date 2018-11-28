@@ -55,6 +55,7 @@ use MOM_io, only : file_exists, read_data
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -88,12 +89,13 @@ contains
 !> This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
 !! These are the stresses in the direction of the model grid (i.e. the same
 !! direction as the u- and v- velocities.)  They are both in Pa.
-subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
+subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day  !< The time of the fluxes
   type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
                                                        !! by a previous call to user_surface_forcing_init
 
@@ -101,7 +103,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
 ! These are the stresses in the direction of the model grid (i.e. the same
 ! direction as the u- and v- velocities.)  They are both in Pa.
 !   In addition, this subroutine can be used to set the surface friction
-! velocity, forces%ustar, in m s-1. This is needed with a bulk mixed layer.
+! velocity, forces%ustar, in Z s-1. This is needed with a bulk mixed layer.
 !
 ! Arguments: state - A structure containing fields that describe the
 !                    surface state of the ocean.
@@ -144,7 +146,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
   !  is always positive.
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+    forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
        sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo ; endif

@@ -18,6 +18,7 @@ use MOM_time_manager,       only : time_type
 use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init,      only : tracer_Z_init
+use MOM_unit_scaling,       only : unit_scale_type
 use MOM_variables,          only : surface
 use MOM_verticalGrid,       only : verticalGrid_type
 
@@ -61,9 +62,10 @@ contains
 
 !> This subroutine is used to register tracer fields and subroutines
 !! to be used with MOM.
-function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(dye_tracer_CS),        pointer    :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
@@ -135,15 +137,15 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%dye_source_mindepth(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MINDEPTH", CS%dye_source_mindepth, &
                  "This is the minumum depth at which we inject dyes.", &
-                 units="m", scale=GV%m_to_Z, fail_if_missing=.true.)
-  if (minval(CS%dye_source_mindepth(:)) < -1.e29*GV%m_to_Z) &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.true.)
+  if (minval(CS%dye_source_mindepth(:)) < -1.e29*US%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINDEPTH")
 
   CS%dye_source_maxdepth(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MAXDEPTH", CS%dye_source_maxdepth, &
                  "This is the maximum depth at which we inject dyes.", &
-                 units="m", scale=GV%m_to_Z, fail_if_missing=.true.)
-  if (minval(CS%dye_source_maxdepth(:)) < -1.e29*GV%m_to_Z) &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.true.)
+  if (minval(CS%dye_source_maxdepth(:)) < -1.e29*US%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
