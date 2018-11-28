@@ -21,6 +21,7 @@ use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=), operator(<=), operator(>=), operator(<)
 use MOM_time_manager, only : get_calendar_type, time_type_to_real, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -116,9 +117,10 @@ end type sum_output_CS
 contains
 
 !> MOM_sum_output_init initializes the parameters and settings for the MOM_sum_output module.
-subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
+subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                                Input_start_time, CS)
   type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
+  type(unit_scale_type),  intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time
                                                       !! parameters.
   character(len=*),       intent(in)    :: directory  !< The directory where the energy file goes.
@@ -212,7 +214,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     call get_param(param_file, mdl, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
                    "The minimum increment between the depths of the \n"//&
                    "entries in the depth-list file.", &
-                   units="m", default=1.0E-10, scale=1.0/G%Zd_to_m)
+                   units="m", default=1.0E-10, scale=US%m_to_Z)
     if (CS%read_depth_list) then
       call get_param(param_file, mdl, "DEPTH_LIST_FILE", CS%depth_list_file, &
                    "The name of the depth list file.", default="Depth_list.nc")
@@ -221,7 +223,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     endif
 
     allocate(CS%lH(G%ke))
-    call depth_list_setup(G, CS)
+    call depth_list_setup(G, US, CS)
   else
     CS%list_size = 0
   endif
@@ -266,9 +268,10 @@ end subroutine MOM_sum_output_end
 
 !>  This subroutine calculates and writes the total model energy, the energy and
 !! mass of each layer, and other globally integrated  physical quantities.
-subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forcing)
+subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_forcing)
   type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u   !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -495,17 +498,17 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-      call find_eta(h, tv, G, GV, eta)
+      call find_eta(h, tv, G, GV, US, eta)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
-      vol_tot = GV%Z_to_m*reproducing_sum(tmp1, sums=vol_lay)
+      vol_tot = US%Z_to_m*reproducing_sum(tmp1, sums=vol_lay)
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = GV%m_to_Z * (mass_lay(k) / GV%Rho0) ; enddo
+      do k=1,nz ; vol_lay(k) = US%m_to_Z * (mass_lay(k) / GV%Rho0) ; enddo
     endif
   endif ! Boussinesq
 
@@ -629,7 +632,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
           hint = Z_0APE(K) + (hbelow - G%bathyT(i,j))
           hbot = Z_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * GV%Z_to_m*(GV%Rho0*GV%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * US%Z_to_m*(GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -638,14 +641,14 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
         do k=nz,1,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(Z_0APE(K) - G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * GV%Z_to_m*(GV%Rho0*GV%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * US%Z_to_m*(GV%Rho0*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
     endif
 
     PE_tot = reproducing_sum(PE_pt, sums=PE)
-    do k=1,nz+1 ; H_0APE(K) = GV%Z_to_m*Z_0APE(K) ; enddo
+    do k=1,nz+1 ; H_0APE(K) = US%Z_to_m*Z_0APE(K) ; enddo
   else
     PE_tot = 0.0
     do k=1,nz+1 ; PE(K) = 0.0 ; H_0APE(K) = 0.0 ; enddo
@@ -1021,8 +1024,9 @@ end subroutine accumulate_net_input
 !! cross sectional areas at each depth and the volume of fluid deeper
 !! than each depth.  This might be read from a previously created file
 !! or it might be created anew.  (For now only new creation occurs.
-subroutine depth_list_setup(G, CS)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+subroutine depth_list_setup(G, US, CS)
+  type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
   ! Local variables
@@ -1030,13 +1034,13 @@ subroutine depth_list_setup(G, CS)
 
   if (CS%read_depth_list) then
     if (file_exists(CS%depth_list_file)) then
-      call read_depth_list(G, CS, CS%depth_list_file)
+      call read_depth_list(G, US, CS, CS%depth_list_file)
     else
       if (is_root_pe()) call MOM_error(WARNING, "depth_list_setup: "// &
         trim(CS%depth_list_file)//" does not exist.  Creating a new file.")
       call create_depth_list(G, CS)
 
-      call write_depth_list(G, CS, CS%depth_list_file, CS%list_size+1)
+      call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
     endif
   else
     call create_depth_list(G, CS)
@@ -1175,8 +1179,9 @@ subroutine create_depth_list(G, CS)
 end subroutine create_depth_list
 
 !> This subroutine writes out the depth list to the specified file.
-subroutine write_depth_list(G, CS, filename, list_size)
+subroutine write_depth_list(G, US, CS, filename, list_size)
   type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure.
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
@@ -1233,7 +1238,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; tmp(k) = G%Zd_to_m*CS%DL(k)%depth ; enddo
+  do k=1,list_size ; tmp(k) = US%Z_to_m*CS%DL(k)%depth ; enddo
   status = NF90_PUT_VAR(ncid, Did, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" depth "//trim(NF90_STRERROR(status)))
@@ -1243,7 +1248,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" area "//trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; tmp(k) = G%Zd_to_m*CS%DL(k)%vol_below ; enddo
+  do k=1,list_size ; tmp(k) = US%Z_to_m*CS%DL(k)%vol_below ; enddo
   status = NF90_PUT_VAR(ncid, Vid, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
@@ -1256,8 +1261,9 @@ end subroutine write_depth_list
 
 !> This subroutine reads in the depth list to the specified file
 !! and allocates and sets up CS%DL and CS%list_size .
-subroutine read_depth_list(G, CS, filename)
+subroutine read_depth_list(G, US, CS, filename)
   type(ocean_grid_type), intent(in) :: G   !< The ocean's grid structure
+  type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS  !< The control structure returned by a
                                            !! previous call to MOM_sum_output_init.
   character(len=*),      intent(in) :: filename !< The path to the depth list file to read.
@@ -1265,12 +1271,10 @@ subroutine read_depth_list(G, CS, filename)
   character(len=32) :: mdl
   character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
-  real    :: m_to_Z
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)
 
   mdl = "MOM_sum_output read_depth_list:"
-  m_to_Z = 1.0/G%Zd_to_m
 
   status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
@@ -1309,7 +1313,7 @@ subroutine read_depth_list(G, CS, filename)
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; CS%DL(k)%depth = m_to_Z*tmp(k) ; enddo
+  do k=1,list_size ; CS%DL(k)%depth = US%m_to_Z*tmp(k) ; enddo
 
   var_name = "area"
   var_msg = trim(var_name)//" in "//trim(filename)//" - "
@@ -1335,7 +1339,7 @@ subroutine read_depth_list(G, CS, filename)
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
-  do k=1,list_size ; CS%DL(k)%vol_below = m_to_Z*tmp(k) ; enddo
+  do k=1,list_size ; CS%DL(k)%vol_below = US%m_to_Z*tmp(k) ; enddo
 
   status = NF90_CLOSE(ncid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, mdl// &

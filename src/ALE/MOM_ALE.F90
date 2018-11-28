@@ -42,6 +42,7 @@ use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord, extract_integer
 use MOM_tracer_registry,  only : tracer_registry_type, tracer_type, MOM_tracer_chkinv
+use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,     only : get_thickness_units, verticalGrid_type
 
@@ -125,9 +126,10 @@ contains
 !! before the main time integration loop to initialize the regridding stuff.
 !! We read the MOM_input file to register the values of different
 !! regridding/remapping parameters.
-subroutine ALE_init( param_file, GV, max_depth, CS)
+subroutine ALE_init( param_file, GV, US, max_depth, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
   type(verticalGrid_type), intent(in) :: GV         !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in) :: US         !< A dimensional unit scaling type
   real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in Z.
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
@@ -160,7 +162,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  default=.true.)
 
   ! Initialize and configure regridding
-  call ALE_initRegridding( GV, max_depth, param_file, mdl, CS%regridCS)
+  call ALE_initRegridding(GV, US, max_depth, param_file, mdl, CS%regridCS)
 
   ! Initialize and configure remapping
   call get_param(param_file, mdl, "REMAPPING_SCHEME", string, &
@@ -226,9 +228,10 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
 end subroutine ALE_init
 
 !> Initialize diagnostics for the ALE module.
-subroutine ALE_register_diags(Time, G, GV, diag, CS)
+subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   type(time_type),target,     intent(in)  :: Time  !< Time structure
   type(ocean_grid_type),      intent(in)  :: G     !< Grid structure
+  type(unit_scale_type),      intent(in)  :: US    !< A dimensional unit scaling type
   type(verticalGrid_type),    intent(in)  :: GV    !< Ocean vertical grid structure
   type(diag_ctrl), target,    intent(in)  :: diag  !< Diagnostics control structure
   type(ALE_CS), pointer                   :: CS    !< Module control structure
@@ -248,7 +251,7 @@ subroutine ALE_register_diags(Time, G, GV, diag, CS)
   CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
       'Salinity before remapping', 'PSU')
   CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
-      'Interface Heights before remapping', 'm', conversion=GV%Z_to_m)
+      'Interface Heights before remapping', 'm', conversion=US%Z_to_m)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
       'Change in interface height due to ALE regridding', 'm')
@@ -293,9 +296,10 @@ end subroutine ALE_end
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
+subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
                                                                    !! last time step in H (often m or Pa)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field (m/s)
@@ -328,7 +332,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
   if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
   if (CS%id_e_preale > 0) then
-    call find_eta(h, tv, G, GV, eta_preale)
+    call find_eta(h, tv, G, GV, US, eta_preale)
     call post_data(CS%id_e_preale, eta_preale, CS%diag)
   endif
 
@@ -1095,8 +1099,9 @@ end subroutine pressure_gradient_ppm
 
 
 !> Initializes regridding for the main ALE algorithm
-subroutine ALE_initRegridding(GV, max_depth, param_file, mdl, regridCS)
+subroutine ALE_initRegridding(GV, US, max_depth, param_file, mdl, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in Z.
   type(param_file_type),   intent(in)  :: param_file !< parameter file
   character(len=*),        intent(in)  :: mdl        !< Name of calling module
@@ -1110,7 +1115,7 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mdl, regridCS)
                  trim(regriddingCoordinateModeDoc), &
                  default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
 
-  call initialize_regridding(regridCS, GV, max_depth, param_file, mdl, coord_mode, '', '')
+  call initialize_regridding(regridCS, GV, US, max_depth, param_file, mdl, coord_mode, '', '')
 
 end subroutine ALE_initRegridding
 
