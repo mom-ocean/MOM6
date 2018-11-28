@@ -14,6 +14,7 @@ use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type
 use MOM_tracer_registry, only : tracer_name_lookup
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -31,16 +32,19 @@ contains
 
 ! -----------------------------------------------------------------------------
 !> This subroutine sets up the DOME topography
-subroutine DOME_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
-  real :: min_depth ! The minimum and maximum depths in m.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
+  real :: m_to_Z  ! A dimensional rescaling factor.
+  real :: min_depth ! The minimum and maximum depths in Z.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "DOME_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -48,22 +52,24 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_topography: setting topography", 5)
 
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
 
   do j=js,je ; do i=is,ie
     if (G%geoLatT(i,j) < 600.0) then
       if (G%geoLatT(i,j) < 300.0) then
-        D(i,j)=max_depth
+        D(i,j) = max_depth
       else
-        D(i,j)=max_depth-10.0*(G%geoLatT(i,j)-300.0)
+        D(i,j) = max_depth - 10.0*m_to_Z * (G%geoLatT(i,j)-300.0)
       endif
     else
-      if ((G%geoLonT(i,j) > 1000.0).AND.(G%geoLonT(i,j) < 1100.0)) then
-        D(i,j)=600.0
+      if ((G%geoLonT(i,j) > 1000.0) .AND. (G%geoLonT(i,j) < 1100.0)) then
+        D(i,j) = 600.0*m_to_Z
       else
-        D(i,j)=0.5*min_depth
+        D(i,j) = 0.5*min_depth
       endif
     endif
 
@@ -134,9 +140,10 @@ end subroutine DOME_initialize_thickness
 !! number of tracers should be restored within each sponge. The       !
 !! interface height is always subject to damping, and must always be  !
 !! the first registered field.                                        !
-subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
+subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers to any available
                                !! thermodynamic fields, including potential temperature and
                                !! salinity or mixed layer density. Absent fields have NULL ptrs.
@@ -167,7 +174,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 
 !   Set up sponges for DOME configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
@@ -229,7 +236,7 @@ end subroutine DOME_initialize_sponges
 
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
-subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
+subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
@@ -239,6 +246,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                               !! fields have NULL ptrs.
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in) :: US  !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
                               !! to parse for model parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
@@ -271,7 +279,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! The following variables should be transformed into runtime parameters.
-  D_edge = 300.0*GV%m_to_Z  ! The thickness of dense fluid in the inflow.
+  D_edge = 300.0*US%m_to_Z  ! The thickness of dense fluid in the inflow.
   Ri_trans = 1.0/3.0 ! The shear Richardson number in the transition region
                      ! region of the specified shear profile.
 

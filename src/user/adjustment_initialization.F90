@@ -7,6 +7,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -26,9 +27,10 @@ public adjustment_initialize_temperature_salinity
 contains
 
 !> Initializes the layer thicknesses in the adjustment test case
-subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_params)
+subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -61,7 +63,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness,'Minimum layer thickness', &
-         units='m', default=1.0e-3, do_not_log=just_read, scale=GV%m_to_Z)
+         units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
 
   ! Parameters specific to this experiment configuration
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
