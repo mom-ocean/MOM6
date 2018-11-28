@@ -22,6 +22,7 @@ use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
 ! GMM - Planned extension:  Support for time varying sponge targets.
 
@@ -652,7 +653,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, f_p
   ! modulo attribute of the zonal axis (mjh).
 
  ! call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
- !                                     missing_value, .true., .false., .false., m_to_Z=GV%m_to_Z)
+ !                                     missing_value, .true., .false., .false., m_to_Z=US%m_to_Z)
 
 ! Do not think halo updates are needed (mjh)
 !  call pass_var(sp_val,G%Domain)
@@ -740,13 +741,14 @@ end subroutine set_up_ALE_sponge_vel_field_fixed
 !> This subroutine stores the reference profile at uand v points for the variable
 !! whose address is given by u_ptr and v_ptr.
 subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename_v, fieldname_v, &
-                                               Time, G, CS, u_ptr, v_ptr)
+                                               Time, G, US, CS, u_ptr, v_ptr)
   character(len=*), intent(in)    :: filename_u  !< File name for u field
   character(len=*), intent(in)    :: fieldname_u !< Name of u variable in file
   character(len=*), intent(in)    :: filename_v  !< File name for v field
   character(len=*), intent(in)    :: fieldname_v !< Name of v variable in file
   type(time_type),  intent(in)    :: Time        !< Model time
   type(ocean_grid_type), intent(inout) :: G      !< Ocean grid (in)
+  type(unit_scale_type), intent(in)    :: US     !< A dimensional unit scaling type
   type(ALE_sponge_CS), pointer    :: CS          !< Sponge structure (in/out).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped (in).
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(in) :: v_ptr !< v pointer to the field to be damped (in).
@@ -797,7 +799,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   ! modulo attribute of the zonal axis (mjh).
 
   call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id,Time, 1.0,G,u_val,mask_u,z_in,z_edges_in,&
-                                     missing_value,.true.,.false.,.false., m_to_Z=1.0/G%Zd_to_m)
+                                     missing_value,.true.,.false.,.false., m_to_Z=US%m_to_Z)
 
 !!! TODO: add a velocity interface! (mjh)
 
@@ -807,7 +809,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   ! modulo attribute of the zonal axis (mjh).
 
   call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,v_val,mask_v,z_in,z_edges_in, &
-                                     missing_value,.true.,.false.,.false., m_to_Z=1.0/G%Zd_to_m)
+                                     missing_value,.true.,.false.,.false., m_to_Z=US%m_to_Z)
 
   ! stores the reference profile
   allocate(CS%Ref_val_u%p(fld_sz(3),CS%num_col_u))
@@ -834,9 +836,10 @@ end subroutine set_up_ALE_sponge_vel_field_varying
 
 !> This subroutine applies damping to the layers thicknesses, temp, salt and a variety of tracers
 !! for every column where there is damping.
-subroutine apply_ALE_sponge(h, dt, G, GV, CS, Time)
+subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   type(ocean_grid_type),     intent(inout) :: G  !< The ocean's grid structure (in).
   type(verticalGrid_type),   intent(in)    :: GV !< ocean vertical grid structure
+  type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(inout) :: h  !< Layer thickness, in H (in)
   real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
@@ -883,7 +886,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, CS, Time)
       mask_z(:,:,:)=0.0
 
       call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
-                                          missing_value,.true., .false.,.false., m_to_Z=GV%m_to_Z)
+                                          missing_value,.true., .false.,.false., m_to_Z=US%m_to_Z)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)
@@ -953,7 +956,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, CS, Time)
       allocate(mask_z(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
 ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
-                                     missing_value, .true., .false., .false., m_to_Z=GV%m_to_Z)
+                                     missing_value, .true., .false., .false., m_to_Z=US%m_to_Z)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)
@@ -972,7 +975,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, CS, Time)
       allocate(mask_z(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
 ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
-                                     missing_value, .true., .false., .false., m_to_Z=GV%m_to_Z)
+                                     missing_value, .true., .false., .false., m_to_Z=US%m_to_Z)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)

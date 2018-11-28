@@ -9,6 +9,7 @@ use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -41,10 +42,11 @@ contains
 !! the buoyancy flux in a layer and inversely proportional to the density
 !! differences between layers.  The scheme that is used here is described in
 !! detail in Hallberg, Mon. Wea. Rev. 2000.
-subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
+subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
                                  kb_out, Kd_Lay, Kd_int)
   type(ocean_grid_type),      intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  &
                               intent(in)  :: u  !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  &
@@ -246,22 +248,22 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
     pres(:) = 0.0
   endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,dt,Kd_int,CS,h,tv, &
-!$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
-!$OMP                                  ea,eb,correct_density,Kd_eff,diff_work,     &
-!$OMP                                  g_2dt, kb_out)                              &
-!$OMP                     firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min)             &
-!$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
-!$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &
-!$OMP                                  zeros,maxF_kb,maxF,ea_kbp1,eakb,Sref,       &
-!$OMP                                  maxF_correct,do_any,                        &
-!$OMP                                  err_min_eakb0,err_max_eakb0,eakb_maxF,      &
-!$OMP                                  min_eakb,err_eakb0,F,minF,hm,fk,F_kb_maxent,&
-!$OMP                                  F_kb,is1,ie1,kb_min_act,dFdfm_kb,b1,dFdfm,  &
-!$OMP                                  Fprev,fm,fr,c1,reiterate,eb_kmb,did_i,      &
-!$OMP                                  h_avail,h_guess,dS_kb,Rcv,F_cor,dS_kb_eff,  &
-!$OMP                                  Rho_cor,ea_cor,h1,Idt,Kd_here,pressure,     &
-!$OMP                                  T_eos,S_eos,dRho_dT,dRho_dS,dRho,dS_anom_lim)
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,US,dt,CS,h,tv,   &
+  !$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
+  !$OMP                                  ea,eb,correct_density,Kd_int,Kd_eff,        &
+  !$OMP                                  diff_work,g_2dt, kb_out)                    &
+  !$OMP                     firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min)             &
+  !$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
+  !$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &
+  !$OMP                                  zeros,maxF_kb,maxF,ea_kbp1,eakb,Sref,       &
+  !$OMP                                  maxF_correct,do_any,                        &
+  !$OMP                                  err_min_eakb0,err_max_eakb0,eakb_maxF,      &
+  !$OMP                                  min_eakb,err_eakb0,F,minF,hm,fk,F_kb_maxent,&
+  !$OMP                                  F_kb,is1,ie1,kb_min_act,dFdfm_kb,b1,dFdfm,  &
+  !$OMP                                  Fprev,fm,fr,c1,reiterate,eb_kmb,did_i,      &
+  !$OMP                                  h_avail,h_guess,dS_kb,Rcv,F_cor,dS_kb_eff,  &
+  !$OMP                                  Rho_cor,ea_cor,h1,Idt,Kd_here,pressure,     &
+  !$OMP                                  T_eos,S_eos,dRho_dT,dRho_dS,dRho,dS_anom_lim)
   do j=js,je
     do i=is,ie ; kb(i) = 1 ; enddo
 
@@ -381,7 +383,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
         htot(i) = h(i,j,1) - Angstrom
       enddo
       if (associated(fluxes%buoy)) then ; do i=is,ie
-        maxF(i,1) = (dt*fluxes%buoy(i,j)) / (GV%g_prime(2)*GV%m_to_Z)
+        maxF(i,1) = (dt*fluxes%buoy(i,j)) / (GV%g_prime(2)*US%m_to_Z)
       enddo ; endif
     endif
 
@@ -2133,10 +2135,11 @@ end subroutine find_maxF_kb
 
 !> This subroutine initializes the parameters and memory associated with the
 !! entrain_diffusive module.
-subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
+subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
@@ -2189,9 +2192,9 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H)
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
-      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=GV%Z_to_m**2)
+      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z_to_m**2)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
-      'Work actually done by diapycnal diffusion across each interface', 'W m-2', conversion=GV%Z_to_m)
+      'Work actually done by diapycnal diffusion across each interface', 'W m-2', conversion=US%Z_to_m)
 
 end subroutine entrain_diffusive_init
 

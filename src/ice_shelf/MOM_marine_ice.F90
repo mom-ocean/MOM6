@@ -136,8 +136,8 @@ subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
     fluxes%ustar_shelf(:,:) = 0.
   endif
   do j=jsd,jed ; do i=isd,ied ; if (G%areaT(i,j) > 0.0) then
-    fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j)
-    fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  +  fluxes%ustar_berg(i,j)
+    fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) + fluxes%area_berg(i,j)
+    fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  + fluxes%ustar_berg(i,j)
   endif ; enddo ; enddo
 
   !Zero'ing out other fluxes under the tabular icebergs
