@@ -21,6 +21,7 @@ use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS
+use MOM_wave_interface, only : CoriolisStokes
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -434,6 +435,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
         endif
       endif
     enddo
+  endif
+
+! add Coriolis Stokes here temperaly by XH
+  if (DoCoriolisStokes) then
+    call CoriolisStokes(G,GV,DT,h,u,v,WAVES)
   endif
 
 ! Offer diagnostic fields for averaging.
