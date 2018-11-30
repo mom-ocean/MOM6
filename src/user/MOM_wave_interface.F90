@@ -239,17 +239,17 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   call get_param(param_file, mdl, "STOKES_MIXING", CS%StokesMixing, &
        "Flag to use Stokes Mixing of momentum", units="", &
        Default=.false.)
-  if (CS%StokesMixing) then
+!  if (CS%StokesMixing) then
     ! Force Code Intervention
-    call MOM_error(FATAL,"Should you be enabling Stokes Mixing? Code not ready.")
-  endif
+!    call MOM_error(FATAL,"Should you be enabling Stokes Mixing? Code not ready.")
+!  endif
   call get_param(param_file, mdl, "CORIOLIS_STOKES", CS%CoriolisStokes, &
        "Flag to use Coriolis Stokes acceleration", units="", &
        Default=.false.)
-  if (CS%CoriolisStokes) then
-    ! Force Code Intervention
-    call MOM_error(FATAL,"Should you be enabling Coriolis-Stokes? Code not ready.")
-  endif
+!  if (CS%CoriolisStokes) then
+!    ! Force Code Intervention
+!    call MOM_error(FATAL,"Should you be enabling Coriolis-Stokes? Code not ready.")
+!  endif
 
   ! Get Wave Method and write to integer WaveMethod
   call get_param(param_file,mdl,"WAVE_METHOD",TMPSTRING1,             &

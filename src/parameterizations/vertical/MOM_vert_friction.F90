@@ -1717,11 +1717,11 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   !   care is given to the previously mentioned issues.  Comment out the following
   !   MOM_error to use, but do so at your own risk and with these points in mind.
   !}
-  if (CS%StokesMixing) then
-    call MOM_error(FATAL, "Stokes mixing requires user interfention in the code.\n"//&
-                          "  Model now exiting.  See MOM_vert_friction.F90 for  \n"//&
-                          "  details (search 'BGR 04/04/2018' to locate comment).")
-  endif
+!  if (CS%StokesMixing) then
+!    call MOM_error(FATAL, "Stokes mixing requires user interfention in the code.\n"//&
+!                          "  Model now exiting.  See MOM_vert_friction.F90 for  \n"//&
+!                          "  details (search 'BGR 04/04/2018' to locate comment).")
+!  endif
   call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
                  "A negligibly small velocity magnitude below which velocity \n"//&
                  "components are set to 0.  A reasonable value might be \n"//&
