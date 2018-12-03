@@ -12,6 +12,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+!> Control structure for adaptive coordinates (coord_adapt).
 type, public :: adapt_CS ; private
 
   !> Number of layers/levels
@@ -77,15 +78,15 @@ subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoom
   type(adapt_CS),    pointer    :: CS  !< The control structure for this module
   real,    optional, intent(in) :: adaptTimeRatio !< Ratio of optimisation and diffusion timescales
   real,    optional, intent(in) :: adaptAlpha     !< Nondimensional coefficient determining
-                                       !! how much optimisation to apply
+                                                  !! how much optimisation to apply
   real,    optional, intent(in) :: adaptZoom      !< Near-surface zooming depth, in m
   real,    optional, intent(in) :: adaptZoomCoeff !< Near-surface zooming coefficient
   real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient
   real,    optional, intent(in) :: adaptDrho0  !< Reference density difference for
-                                       !! stratification-dependent diffusion
+                                               !! stratification-dependent diffusion
   logical, optional, intent(in) :: adaptDoMin  !< If true, form a HYCOM1-like mixed layer by
-                                       !! preventing interfaces from becoming shallower than
-                                       !! the depths set by coordinateResolution
+                                               !! preventing interfaces from becoming shallower than
+                                               !! the depths set by coordinateResolution
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_adapt_params: CS not associated")
 
@@ -104,7 +105,8 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
-  integer,                                     intent(in)    :: i, j !< The indices of the column to work on
+  integer,                                     intent(in)    :: i    !< The i-index of the column to work on
+  integer,                                     intent(in)    :: j    !< The j-index of the column to work on
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt !< Interface heights, in H (m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: tInt !< Interface temperatures, in C
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: sInt !< Interface salinities, in psu
@@ -124,7 +126,7 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   zNext(nz+1) = zInt(i,j,nz+1)
 
   ! local depth for scaling diffusivity
-  depth = G%bathyT(i,j) * GV%m_to_H
+  depth = G%bathyT(i,j) * G%Zd_to_m*GV%m_to_H
 
   ! initialize del2sigma to zero
   del2sigma(:) = 0.

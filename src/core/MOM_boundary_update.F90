@@ -32,24 +32,25 @@ implicit none ; private
 public call_OBC_register, OBC_register_end
 public update_OBC_data
 
+!> The control structure for the MOM_boundary_update module
 type, public :: update_OBC_CS ; private
-  logical :: use_files = .false.
-  logical :: use_Kelvin = .false.
-  logical :: use_tidal_bay = .false.
-  logical :: use_shelfwave = .false.
-  logical :: use_dyed_channel = .false.
+  logical :: use_files = .false.        !< If true, use external files for the open boundary.
+  logical :: use_Kelvin = .false.       !< If true, use the Kelvin wave open boundary.
+  logical :: use_tidal_bay = .false.    !< If true, use the tidal_bay open boundary.
+  logical :: use_shelfwave = .false.    !< If true, use the shelfwave open boundary.
+  logical :: use_dyed_channel = .false. !< If true, use the dyed channel open boundary.
+  !>@{ Pointers to the control structures for named OBC specifications
   type(file_OBC_CS), pointer :: file_OBC_CSp => NULL()
   type(Kelvin_OBC_CS), pointer :: Kelvin_OBC_CSp => NULL()
   type(tidal_bay_OBC_CS), pointer :: tidal_bay_OBC_CSp => NULL()
   type(shelfwave_OBC_CS), pointer :: shelfwave_OBC_CSp => NULL()
   type(dyed_channel_OBC_CS), pointer :: dyed_channel_OBC_CSp => NULL()
+  !!@}
 end type update_OBC_CS
 
-integer :: id_clock_pass
+integer :: id_clock_pass !< A CPU time clock ID
 
-character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+! character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
 
 contains
 
@@ -60,8 +61,11 @@ subroutine call_OBC_register(param_file, CS, OBC)
   type(param_file_type),     intent(in) :: param_file !< Parameter file to parse
   type(update_OBC_CS),       pointer    :: CS         !< Control structure for OBCs
   type(ocean_OBC_type),      pointer    :: OBC        !< Open boundary structure
-  character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
 
+  ! Local variables
+  character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   if (associated(CS)) then
     call MOM_error(WARNING, "call_OBC_register called with an associated "// &
                             "control structure.")
@@ -113,6 +117,7 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
   type(ocean_OBC_type),                     pointer       :: OBC  !< Open boundary structure
   type(update_OBC_CS),                      pointer       :: CS   !< Control structure for OBCs
   type(time_type),                          intent(in)    :: Time !< Model time
+
   ! Local variables
   logical :: read_OBC_eta = .false.
   logical :: read_OBC_uv = .false.

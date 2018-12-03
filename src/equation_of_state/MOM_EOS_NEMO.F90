@@ -1,3 +1,4 @@
+!> The equation of state using the expressions of Roquet et al. that are used in NEMO
 module MOM_EOS_NEMO
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -9,7 +10,7 @@ module MOM_EOS_NEMO
 !*  Roquet, F., Madec, G., McDougall, T. J., and Barker, P. M., 2015.  *
 !*  Accurate polynomial expressions for the density and specific volume*
 !*  of seawater using the TEOS-10 standard. Ocean Modelling, 90:29-43. *
-!*  These algorithms are NOT from NEMO package!!                       *
+!*  These algorithms are NOT from the standard NEMO package!!          *
 !***********************************************************************
 
 !use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
@@ -21,149 +22,154 @@ public calculate_compress_nemo, calculate_density_nemo
 public calculate_density_derivs_nemo
 public calculate_density_scalar_nemo, calculate_density_array_nemo
 
+!> Compute the in situ density of sea water (units of kg/m^3), or its anomaly with respect to
+!! a reference density, from absolute salinity (g/kg), conservative temperature (in deg C),
+!! and pressure in Pa, using the expressions derived for use with NEMO
 interface calculate_density_nemo
   module procedure calculate_density_scalar_nemo, calculate_density_array_nemo
 end interface calculate_density_nemo
 
+!> For a given thermodynamic state, return the derivatives of density with conservative temperature
+!! and absolute salinity, the expressions derived for use with NEMO
 interface calculate_density_derivs_nemo
   module procedure calculate_density_derivs_scalar_nemo, calculate_density_derivs_array_nemo
 end interface calculate_density_derivs_nemo
 
-   real, parameter :: Pa2db  = 1.e-4
-   real, parameter :: rdeltaS = 32.
-   real, parameter :: r1_S0  = 0.875/35.16504
-   real, parameter :: r1_T0  = 1./40.
-   real, parameter :: r1_P0  = 1.e-4
-   real, parameter :: R00 = 4.6494977072e+01
-   real, parameter :: R01 = -5.2099962525
-   real, parameter :: R02 = 2.2601900708e-01
-   real, parameter :: R03 = 6.4326772569e-02
-   real, parameter :: R04 = 1.5616995503e-02
-   real, parameter :: R05 = -1.7243708991e-03
-   real, parameter :: EOS000 = 8.0189615746e+02
-   real, parameter :: EOS100 = 8.6672408165e+02
-   real, parameter :: EOS200 = -1.7864682637e+03
-   real, parameter :: EOS300 = 2.0375295546e+03
-   real, parameter :: EOS400 = -1.2849161071e+03
-   real, parameter :: EOS500 = 4.3227585684e+02
-   real, parameter :: EOS600 = -6.0579916612e+01
-   real, parameter :: EOS010 = 2.6010145068e+01
-   real, parameter :: EOS110 = -6.5281885265e+01
-   real, parameter :: EOS210 = 8.1770425108e+01
-   real, parameter :: EOS310 = -5.6888046321e+01
-   real, parameter :: EOS410 = 1.7681814114e+01
-   real, parameter :: EOS510 = -1.9193502195
-   real, parameter :: EOS020 = -3.7074170417e+01
-   real, parameter :: EOS120 = 6.1548258127e+01
-   real, parameter :: EOS220 = -6.0362551501e+01
-   real, parameter :: EOS320 = 2.9130021253e+01
-   real, parameter :: EOS420 = -5.4723692739
-   real, parameter :: EOS030 = 2.1661789529e+01
-   real, parameter :: EOS130 = -3.3449108469e+01
-   real, parameter :: EOS230 = 1.9717078466e+01
-   real, parameter :: EOS330 = -3.1742946532
-   real, parameter :: EOS040 = -8.3627885467
-   real, parameter :: EOS140 = 1.1311538584e+01
-   real, parameter :: EOS240 = -5.3563304045
-   real, parameter :: EOS050 = 5.4048723791e-01
-   real, parameter :: EOS150 = 4.8169980163e-01
-   real, parameter :: EOS060 = -1.9083568888e-01
-   real, parameter :: EOS001 = 1.9681925209e+01
-   real, parameter :: EOS101 = -4.2549998214e+01
-   real, parameter :: EOS201 = 5.0774768218e+01
-   real, parameter :: EOS301 = -3.0938076334e+01
-   real, parameter :: EOS401 = 6.6051753097
-   real, parameter :: EOS011 = -1.3336301113e+01
-   real, parameter :: EOS111 = -4.4870114575
-   real, parameter :: EOS211 = 5.0042598061
-   real, parameter :: EOS311 = -6.5399043664e-01
-   real, parameter :: EOS021 = 6.7080479603
-   real, parameter :: EOS121 = 3.5063081279
-   real, parameter :: EOS221 = -1.8795372996
-   real, parameter :: EOS031 = -2.4649669534
-   real, parameter :: EOS131 = -5.5077101279e-01
-   real, parameter :: EOS041 = 5.5927935970e-01
-   real, parameter :: EOS002 = 2.0660924175
-   real, parameter :: EOS102 = -4.9527603989
-   real, parameter :: EOS202 = 2.5019633244
-   real, parameter :: EOS012 = 2.0564311499
-   real, parameter :: EOS112 = -2.1311365518e-01
-   real, parameter :: EOS022 = -1.2419983026
-   real, parameter :: EOS003 = -2.3342758797e-02
-   real, parameter :: EOS103 = -1.8507636718e-02
-   real, parameter :: EOS013 = 3.7969820455e-01
-   real, parameter :: ALP000 = -6.5025362670e-01
-   real, parameter :: ALP100 = 1.6320471316
-   real, parameter :: ALP200 = -2.0442606277
-   real, parameter :: ALP300 = 1.4222011580
-   real, parameter :: ALP400 = -4.4204535284e-01
-   real, parameter :: ALP500 = 4.7983755487e-02
-   real, parameter :: ALP010 = 1.8537085209
-   real, parameter :: ALP110 = -3.0774129064
-   real, parameter :: ALP210 = 3.0181275751
-   real, parameter :: ALP310 = -1.4565010626
-   real, parameter :: ALP410 = 2.7361846370e-01
-   real, parameter :: ALP020 = -1.6246342147
-   real, parameter :: ALP120 = 2.5086831352
-   real, parameter :: ALP220 = -1.4787808849
-   real, parameter :: ALP320 = 2.3807209899e-01
-   real, parameter :: ALP030 = 8.3627885467e-01
-   real, parameter :: ALP130 = -1.1311538584
-   real, parameter :: ALP230 = 5.3563304045e-01
-   real, parameter :: ALP040 = -6.7560904739e-02
-   real, parameter :: ALP140 = -6.0212475204e-02
-   real, parameter :: ALP050 = 2.8625353333e-02
-   real, parameter :: ALP001 = 3.3340752782e-01
-   real, parameter :: ALP101 = 1.1217528644e-01
-   real, parameter :: ALP201 = -1.2510649515e-01
-   real, parameter :: ALP301 = 1.6349760916e-02
-   real, parameter :: ALP011 = -3.3540239802e-01
-   real, parameter :: ALP111 = -1.7531540640e-01
-   real, parameter :: ALP211 = 9.3976864981e-02
-   real, parameter :: ALP021 = 1.8487252150e-01
-   real, parameter :: ALP121 = 4.1307825959e-02
-   real, parameter :: ALP031 = -5.5927935970e-02
-   real, parameter :: ALP002 = -5.1410778748e-02
-   real, parameter :: ALP102 = 5.3278413794e-03
-   real, parameter :: ALP012 = 6.2099915132e-02
-   real, parameter :: ALP003 = -9.4924551138e-03
-   real, parameter :: BET000 = 1.0783203594e+01
-   real, parameter :: BET100 = -4.4452095908e+01
-   real, parameter :: BET200 = 7.6048755820e+01
-   real, parameter :: BET300 = -6.3944280668e+01
-   real, parameter :: BET400 = 2.6890441098e+01
-   real, parameter :: BET500 = -4.5221697773
-   real, parameter :: BET010 = -8.1219372432e-01
-   real, parameter :: BET110 = 2.0346663041
-   real, parameter :: BET210 = -2.1232895170
-   real, parameter :: BET310 = 8.7994140485e-01
-   real, parameter :: BET410 = -1.1939638360e-01
-   real, parameter :: BET020 = 7.6574242289e-01
-   real, parameter :: BET120 = -1.5019813020
-   real, parameter :: BET220 = 1.0872489522
-   real, parameter :: BET320 = -2.7233429080e-01
-   real, parameter :: BET030 = -4.1615152308e-01
-   real, parameter :: BET130 = 4.9061350869e-01
-   real, parameter :: BET230 = -1.1847737788e-01
-   real, parameter :: BET040 = 1.4073062708e-01
-   real, parameter :: BET140 = -1.3327978879e-01
-   real, parameter :: BET050 = 5.9929880134e-03
-   real, parameter :: BET001 = -5.2937873009e-01
-   real, parameter :: BET101 = 1.2634116779
-   real, parameter :: BET201 = -1.1547328025
-   real, parameter :: BET301 = 3.2870876279e-01
-   real, parameter :: BET011 = -5.5824407214e-02
-   real, parameter :: BET111 = 1.2451933313e-01
-   real, parameter :: BET211 = -2.4409539932e-02
-   real, parameter :: BET021 = 4.3623149752e-02
-   real, parameter :: BET121 = -4.6767901790e-02
-   real, parameter :: BET031 = -6.8523260060e-03
-   real, parameter :: BET002 = -6.1618945251e-02
-   real, parameter :: BET102 = 6.2255521644e-02
-   real, parameter :: BET012 = -2.6514181169e-03
-   real, parameter :: BET003 = -2.3025968587e-04
-
-
+real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar
+!>@{ Parameters in the NEMO equation of state
+real, parameter :: rdeltaS = 32.
+real, parameter :: r1_S0  = 0.875/35.16504
+real, parameter :: r1_T0  = 1./40.
+real, parameter :: r1_P0  = 1.e-4
+real, parameter :: R00 = 4.6494977072e+01
+real, parameter :: R01 = -5.2099962525
+real, parameter :: R02 = 2.2601900708e-01
+real, parameter :: R03 = 6.4326772569e-02
+real, parameter :: R04 = 1.5616995503e-02
+real, parameter :: R05 = -1.7243708991e-03
+real, parameter :: EOS000 = 8.0189615746e+02
+real, parameter :: EOS100 = 8.6672408165e+02
+real, parameter :: EOS200 = -1.7864682637e+03
+real, parameter :: EOS300 = 2.0375295546e+03
+real, parameter :: EOS400 = -1.2849161071e+03
+real, parameter :: EOS500 = 4.3227585684e+02
+real, parameter :: EOS600 = -6.0579916612e+01
+real, parameter :: EOS010 = 2.6010145068e+01
+real, parameter :: EOS110 = -6.5281885265e+01
+real, parameter :: EOS210 = 8.1770425108e+01
+real, parameter :: EOS310 = -5.6888046321e+01
+real, parameter :: EOS410 = 1.7681814114e+01
+real, parameter :: EOS510 = -1.9193502195
+real, parameter :: EOS020 = -3.7074170417e+01
+real, parameter :: EOS120 = 6.1548258127e+01
+real, parameter :: EOS220 = -6.0362551501e+01
+real, parameter :: EOS320 = 2.9130021253e+01
+real, parameter :: EOS420 = -5.4723692739
+real, parameter :: EOS030 = 2.1661789529e+01
+real, parameter :: EOS130 = -3.3449108469e+01
+real, parameter :: EOS230 = 1.9717078466e+01
+real, parameter :: EOS330 = -3.1742946532
+real, parameter :: EOS040 = -8.3627885467
+real, parameter :: EOS140 = 1.1311538584e+01
+real, parameter :: EOS240 = -5.3563304045
+real, parameter :: EOS050 = 5.4048723791e-01
+real, parameter :: EOS150 = 4.8169980163e-01
+real, parameter :: EOS060 = -1.9083568888e-01
+real, parameter :: EOS001 = 1.9681925209e+01
+real, parameter :: EOS101 = -4.2549998214e+01
+real, parameter :: EOS201 = 5.0774768218e+01
+real, parameter :: EOS301 = -3.0938076334e+01
+real, parameter :: EOS401 = 6.6051753097
+real, parameter :: EOS011 = -1.3336301113e+01
+real, parameter :: EOS111 = -4.4870114575
+real, parameter :: EOS211 = 5.0042598061
+real, parameter :: EOS311 = -6.5399043664e-01
+real, parameter :: EOS021 = 6.7080479603
+real, parameter :: EOS121 = 3.5063081279
+real, parameter :: EOS221 = -1.8795372996
+real, parameter :: EOS031 = -2.4649669534
+real, parameter :: EOS131 = -5.5077101279e-01
+real, parameter :: EOS041 = 5.5927935970e-01
+real, parameter :: EOS002 = 2.0660924175
+real, parameter :: EOS102 = -4.9527603989
+real, parameter :: EOS202 = 2.5019633244
+real, parameter :: EOS012 = 2.0564311499
+real, parameter :: EOS112 = -2.1311365518e-01
+real, parameter :: EOS022 = -1.2419983026
+real, parameter :: EOS003 = -2.3342758797e-02
+real, parameter :: EOS103 = -1.8507636718e-02
+real, parameter :: EOS013 = 3.7969820455e-01
+real, parameter :: ALP000 = -6.5025362670e-01
+real, parameter :: ALP100 = 1.6320471316
+real, parameter :: ALP200 = -2.0442606277
+real, parameter :: ALP300 = 1.4222011580
+real, parameter :: ALP400 = -4.4204535284e-01
+real, parameter :: ALP500 = 4.7983755487e-02
+real, parameter :: ALP010 = 1.8537085209
+real, parameter :: ALP110 = -3.0774129064
+real, parameter :: ALP210 = 3.0181275751
+real, parameter :: ALP310 = -1.4565010626
+real, parameter :: ALP410 = 2.7361846370e-01
+real, parameter :: ALP020 = -1.6246342147
+real, parameter :: ALP120 = 2.5086831352
+real, parameter :: ALP220 = -1.4787808849
+real, parameter :: ALP320 = 2.3807209899e-01
+real, parameter :: ALP030 = 8.3627885467e-01
+real, parameter :: ALP130 = -1.1311538584
+real, parameter :: ALP230 = 5.3563304045e-01
+real, parameter :: ALP040 = -6.7560904739e-02
+real, parameter :: ALP140 = -6.0212475204e-02
+real, parameter :: ALP050 = 2.8625353333e-02
+real, parameter :: ALP001 = 3.3340752782e-01
+real, parameter :: ALP101 = 1.1217528644e-01
+real, parameter :: ALP201 = -1.2510649515e-01
+real, parameter :: ALP301 = 1.6349760916e-02
+real, parameter :: ALP011 = -3.3540239802e-01
+real, parameter :: ALP111 = -1.7531540640e-01
+real, parameter :: ALP211 = 9.3976864981e-02
+real, parameter :: ALP021 = 1.8487252150e-01
+real, parameter :: ALP121 = 4.1307825959e-02
+real, parameter :: ALP031 = -5.5927935970e-02
+real, parameter :: ALP002 = -5.1410778748e-02
+real, parameter :: ALP102 = 5.3278413794e-03
+real, parameter :: ALP012 = 6.2099915132e-02
+real, parameter :: ALP003 = -9.4924551138e-03
+real, parameter :: BET000 = 1.0783203594e+01
+real, parameter :: BET100 = -4.4452095908e+01
+real, parameter :: BET200 = 7.6048755820e+01
+real, parameter :: BET300 = -6.3944280668e+01
+real, parameter :: BET400 = 2.6890441098e+01
+real, parameter :: BET500 = -4.5221697773
+real, parameter :: BET010 = -8.1219372432e-01
+real, parameter :: BET110 = 2.0346663041
+real, parameter :: BET210 = -2.1232895170
+real, parameter :: BET310 = 8.7994140485e-01
+real, parameter :: BET410 = -1.1939638360e-01
+real, parameter :: BET020 = 7.6574242289e-01
+real, parameter :: BET120 = -1.5019813020
+real, parameter :: BET220 = 1.0872489522
+real, parameter :: BET320 = -2.7233429080e-01
+real, parameter :: BET030 = -4.1615152308e-01
+real, parameter :: BET130 = 4.9061350869e-01
+real, parameter :: BET230 = -1.1847737788e-01
+real, parameter :: BET040 = 1.4073062708e-01
+real, parameter :: BET140 = -1.3327978879e-01
+real, parameter :: BET050 = 5.9929880134e-03
+real, parameter :: BET001 = -5.2937873009e-01
+real, parameter :: BET101 = 1.2634116779
+real, parameter :: BET201 = -1.1547328025
+real, parameter :: BET301 = 3.2870876279e-01
+real, parameter :: BET011 = -5.5824407214e-02
+real, parameter :: BET111 = 1.2451933313e-01
+real, parameter :: BET211 = -2.4409539932e-02
+real, parameter :: BET021 = 4.3623149752e-02
+real, parameter :: BET121 = -4.6767901790e-02
+real, parameter :: BET031 = -6.8523260060e-03
+real, parameter :: BET002 = -6.1618945251e-02
+real, parameter :: BET102 = 6.2255521644e-02
+real, parameter :: BET012 = -2.6514181169e-03
+real, parameter :: BET003 = -2.3025968587e-04
+!!@}
 
 contains
 
@@ -205,6 +211,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
   integer,            intent(in)  :: npts     !< the number of values to calculate.
   real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
+  ! Local variables
   real :: zp, zt, zh, zs, zr0, zn, zn0, zn1, zn2, zn3, zs0
   integer :: j
 
@@ -255,6 +262,8 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
  enddo
 end subroutine calculate_density_array_nemo
 
+!> For a given thermodynamic state, calculate the derivatives of density with conservative
+!! temperature and absolute salinity, using the expressions derived for use with NEMO.
 subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
@@ -265,15 +274,8 @@ subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS,
                                                  !! in kg m-3 psu-1.
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absolute salinity in g/kg.                          *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     drho_dT - the partial derivative of density with        *
-! *                      potential temperature, in kg m-3 K-1.         *
-! *  (out)     drho_dS - the partial derivative of density with        *
-! *                      salinity, in kg m-3 psu-1.                    *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
+
+  ! Local variables
   real :: zp,zt , zh , zs , zr0, zn , zn0, zn1, zn2, zn3
   integer :: j
 
@@ -337,9 +339,13 @@ end subroutine calculate_density_derivs_array_nemo
 
 !> Wrapper to calculate_density_derivs_array for scalar inputs
 subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
-  real,    intent(in)  :: T, S, pressure
-  real,    intent(out) :: drho_dt
-  real,    intent(out) :: drho_ds
+  real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,    intent(in)  :: S        !< Salinity in PSU.
+  real,    intent(in)  :: pressure !< Pressure in Pa.
+  real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                   !! temperature, in kg m-3 K-1.
+  real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                   !! in kg m-3 psu-1.
   ! Local variables
   real :: al0, p0, lambda
   integer :: j
@@ -355,6 +361,10 @@ subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds
   drho_ds = drds0(1)
 end subroutine calculate_density_derivs_scalar_nemo
 
+!> Compute the in situ density of sea water (rho in units of kg/m^3) and the compressibility
+!! (drho/dp = C_sound^-2, stored as drho_dp in units of s2 m-2) from absolute salinity
+!! (sal in g/kg), conservative temperature (T in deg C), and pressure in Pa, using the expressions
+!! derived for use with NEMO.
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
@@ -365,16 +375,8 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
                                                  !! in s2 m-2.
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absolute salinity in g/kg.                          *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (out)     drho_dp - the partial derivative of density with        *
-! *                      pressure (also the inverse of the square of   *
-! *                      sound speed) in s2 m-2.                       *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-! *====================================================================*
+
+  ! Local variables
   real ::  zs,zt,zp
   integer :: j
 

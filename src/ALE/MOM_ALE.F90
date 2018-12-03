@@ -1,8 +1,10 @@
 !> This module contains the main regridding routines.
+!!
 !! Regridding comprises two steps:
-!! (1) Interpolation and creation of a new grid based on target interface
-!!     densities (or any other criterion).
-!! (2) Remapping of quantities between old grid and new grid.
+!! 1. Interpolation and creation of a new grid based on target interface
+!!    densities (or any other criterion).
+!! 2. Remapping of quantities between old grid and new grid.
+!!
 !! Original module written by Laurent White, 2008.06.09
 module MOM_ALE
 
@@ -327,7 +329,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
   if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
   if (CS%id_e_preale > 0) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, eta_preale)
+    call find_eta(h, tv, G, GV, eta_preale, eta_to_m=1.0)
     call post_data(CS%id_e_preale, eta_preale, CS%diag)
   endif
 
@@ -758,14 +760,12 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   nz      = GV%ke
   ppt2mks = 0.001
 
-  if (associated(Reg)) then
-    ntr = Reg%ntr
-  else
-    ntr = 0
-  endif
+  ntr = 0 ; if (associated(Reg)) ntr = Reg%ntr
 
   if (present(dt)) then
     Idt = 1.0/dt
+    work_conc(:,:,:) = 0.0
+    work_cont(:,:,:) = 0.0
   endif
 
   ! Remap tracer
@@ -799,22 +799,23 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
       endif ; enddo ; enddo
 
       ! tendency diagnostics.
-      if (Tr%id_remap_conc > 0) then
-        call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag)
+      if (present(dt)) then
+        if (Tr%id_remap_conc > 0) then
+          call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag)
+        endif
+        if (Tr%id_remap_cont > 0) then
+          call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag)
+        endif
+        if (Tr%id_remap_cont_2d > 0) then
+          do j = G%jsc,G%jec ; do i = G%isc,G%iec
+            work_2d(i,j) = 0.0
+            do k = 1,GV%ke
+              work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
+            enddo
+          enddo ; enddo
+          call post_data(Tr%id_remap_cont_2d, work_2d, CS_ALE%diag)
+        endif
       endif
-      if (Tr%id_remap_cont > 0) then
-        call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag)
-      endif
-      if (Tr%id_remap_cont_2d > 0) then
-        do j = G%jsc,G%jec ; do i = G%isc,G%iec
-          work_2d(i,j) = 0.0
-          do k = 1,GV%ke
-            work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
-          enddo
-        enddo ; enddo
-        call post_data(Tr%id_remap_cont_2d, work_2d, CS_ALE%diag)
-      endif
-
     enddo ! m=1,ntr
 
   endif   ! endif for ntr > 0
@@ -864,7 +865,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   endif
 
   if (CS_ALE%id_vert_remap_h > 0) call post_data(CS_ALE%id_vert_remap_h, h_old, CS_ALE%diag)
-  if (CS_ALE%id_vert_remap_h_tendency > 0) then
+  if ((CS_ALE%id_vert_remap_h_tendency > 0) .and. present(dt)) then
     do k = 1, nz ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
       work_cont(i,j,k) = (h_new(i,j,k) - h_old(i,j,k))*Idt
     enddo ; enddo ; enddo
@@ -1163,9 +1164,9 @@ end subroutine ALE_update_regrid_weights
 !> Update the vertical grid type with ALE information.
 !! This subroutine sets information in the verticalGrid_type to be
 !! consistent with the use of ALE mode.
-subroutine ALE_updateVerticalGridType( CS, GV )
-  type(ALE_CS),            pointer :: CS  ! module control structure
-  type(verticalGrid_type), pointer :: GV  ! vertical grid information
+subroutine ALE_updateVerticalGridType(CS, GV)
+  type(ALE_CS),            pointer :: CS  !< ALE control structure
+  type(verticalGrid_type), pointer :: GV  !< vertical grid information
 
   integer :: nk
 
@@ -1224,7 +1225,7 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
   integer :: i, j, k
 
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
-    h(i,j,:) = GV%m_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
+    h(i,j,:) = GV%m_to_H * getStaticThickness( CS%regridCS, 0., G%Zd_to_m*G%bathyT(i,j) )
   enddo ; enddo
 
 end subroutine ALE_initThicknessToCoord

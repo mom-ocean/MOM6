@@ -1,20 +1,8 @@
+!> Cubic interpolation functions
 module P3M_functions
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!==============================================================================
-!
-! Date of creation: 2008.06.09
-! L. White
-!
-! This module contains p3m interpolation routines.
-!
-! p3m interpolation is performed by estimating the edge values and slopes
-! and constructing a cubic polynomial. We then make sure that the edge values
-! are bounded and continuous and we then modify the slopes to get a monotonic
-! cubic curve.
-!
-!==============================================================================
 use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 
 implicit none ; private
@@ -22,27 +10,23 @@ implicit none ; private
 public P3M_interpolation
 public P3M_boundary_extrapolation
 
-real, parameter :: hNeglect_dflt = 1.E-30
-real, parameter :: hNeglect_edge_dflt = 1.E-10
+real, parameter :: hNeglect_dflt = 1.E-30 !< Default value of a negligible cell thickness
+real, parameter :: hNeglect_edge_dflt = 1.E-10 !< Default value of a negligible edge thickness
 
 contains
 
-!------------------------------------------------------------------------------
-!> Set up a piecewise cubic cubic interpolation from cell averages and estimated
+!> Set up a piecewise cubic interpolation from cell averages and estimated
 !! edge slopes and values
+!!
+!! Cubic interpolation between edges.
+!!
+!! The edge values and slopes MUST have been estimated prior to calling
+!! this routine.
+!!
+!! It is assumed that the size of the array 'u' is equal to the number of cells
+!! defining 'grid' and 'ppoly'. No consistency check is performed here.
 subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
                               h_neglect )
-!------------------------------------------------------------------------------
-! Cubic interpolation between edges.
-!
-! The edge values and slopes MUST have been estimated prior to calling
-! this routine.
-!
-! It is assumed that the size of the array 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed here.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -61,30 +45,24 @@ subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   ! This routine could be called directly instead of having to call
   ! 'P3M_interpolation' first but we do that to provide an homogeneous
   ! interface.
-
   call P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
 
 end subroutine P3M_interpolation
 
-
-!------------------------------------------------------------------------------
 !> Adust a piecewise cubic reconstruction with a limiter that adjusts the edge
 !! values and slopes
+!!
+!! The p3m limiter operates as follows:
+!!
+!! 1. Edge values are bounded
+!! 2. Discontinuous edge values are systematically averaged
+!! 3. Loop on cells and do the following
+!!    a. Build cubic curve
+!!    b. Check if cubic curve is monotonic
+!!    c. If not, monotonize cubic curve and rebuild it
+!!
+!! Step 3 of the monotonization process leaves all edge values unchanged.
 subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
-!------------------------------------------------------------------------------
-! The p3m limiter operates as follows:
-!
-! (1) Edge values are bounded
-! (2) Discontinuous edge values are systematically averaged
-! (3) Loop on cells and do the following
-!       (a) Build cubic curve
-!       (b) Check if cubic curve is monotonic
-!       (c) If not, monotonize cubic curve and rebuild it
-!
-! Step (3) of the monotonization process leaves all edge values unchanged.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -96,7 +74,6 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions
                                            !! in the same units as h.
-
   ! Local variables
   integer :: k            ! loop index
   integer :: monotonic    ! boolean indicating whether the cubic is monotonic
@@ -211,25 +188,21 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coef, h_neglect )
 end subroutine P3M_limiter
 
 
-!------------------------------------------------------------------------------
-!> calculate the edge values and slopes at boundary cells as part of building a
-!! piecewise peicewise cubic sub-grid scale profiles
+!> Calculate the edge values and slopes at boundary cells as part of building a
+!! piecewise cubic sub-grid scale profiles
+!!
+!! The following explanations apply to the left boundary cell. The same
+!! reasoning holds for the right boundary cell.
+!!
+!! A cubic needs to be built in the cell and requires four degrees of freedom,
+!! which are the edge values and slopes. The right edge values and slopes are
+!! taken to be that of the neighboring cell (i.e., the left edge value and slope
+!! of the neighboring cell). The left edge value and slope are determined by
+!! computing the parabola based on the cell average and the right edge value
+!! and slope. The resulting cubic is not necessarily monotonic and the slopes
+!! are subsequently modified to yield a monotonic cubic.
 subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
                                        h_neglect, h_neglect_edge )
-!------------------------------------------------------------------------------
-! The following explanations apply to the left boundary cell. The same
-! reasoning holds for the right boundary cell.
-!
-! A cubic needs to be built in the cell and requires four degrees of freedom,
-! which are the edge values and slopes. The right edge values and slopes are
-! taken to be that of the neighboring cell (i.e., the left edge value and slope
-! of the neighboring cell). The left edge value and slope are determined by
-! computing the parabola based on the cell average and the right edge value
-! and slope. The resulting cubic is not necessarily monotonic and the slopes
-! are subsequently modified to yield a monotonic cubic.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   real, dimension(:),   intent(in)    :: u !< cell averages (size N)
@@ -245,7 +218,6 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
   real,       optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                           !! for the purpose of finding edge values
                                           !! in the same units as h.
-
   ! Local variables
   integer :: i0, i1
   integer :: monotonic
@@ -381,17 +353,13 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coef, &
 end subroutine P3M_boundary_extrapolation
 
 
-!------------------------------------------------------------------------------
 !> Build cubic interpolant in cell k
+!!
+!! Given edge values and edge slopes, compute coefficients of cubic in cell k.
+!!
+!! NOTE: edge values and slopes MUST have been properly calculated prior to
+!! calling this routine.
 subroutine build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
-!------------------------------------------------------------------------------
-! Given edge values and edge slopes, compute coefficients of cubic in cell k.
-!
-! NOTE: edge values and slopes MUST have been properly calculated prior to
-! calling this routine.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   real, dimension(:),   intent(in)    :: h !< cell widths (size N)
   integer,              intent(in)    :: k !< The index of the cell to work on
   real, dimension(:,:), intent(in)    :: ppoly_E    !< Edge value of polynomial,
@@ -400,7 +368,6 @@ subroutine build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
                                            !! in the units of u over the units of h.
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly
                                            !! with the same units as u.
-
   ! Local variables
   real          :: u0_l, u0_r       ! edge values
   real          :: u1_l, u1_r       ! edge slopes
@@ -428,22 +395,17 @@ subroutine build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coef )
 end subroutine build_cubic_interpolant
 
 
-!------------------------------------------------------------------------------
 !> Check whether the cubic reconstruction in cell k is monotonic
+!!
+!! This function checks whether the cubic curve in cell k is monotonic.
+!! If so, returns 1. Otherwise, returns 0.
+!!
+!! The cubic is monotonic if the first derivative is single-signed in [0,1].
+!! Hence, we check whether the roots (if any) lie inside this interval. If there
+!! is no root or if both roots lie outside this interval, the cubic is monotonic.
 integer function is_cubic_monotonic( ppoly_coef, k )
-!------------------------------------------------------------------------------
-! This function checks whether the cubic curve in cell k is monotonic.
-! If so, returns 1. Otherwise, returns 0.
-!
-! The cubic is monotonic if the first derivative is single-signed in [0,1].
-! Hence, we check whether the roots (if any) lie inside this interval. If there
-! is no root or if both roots lie outside this interval, the cubic is monotnic.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   real, dimension(:,:), intent(in) :: ppoly_coef !< Coefficients of cubic polynomial
   integer,              intent(in) :: k  !< The index of the cell to work on
-
   ! Local variables
   integer       :: monotonic        ! boolean indicating if monotonic or not
   real          :: a0, a1, a2, a3   ! cubic coefficients
@@ -497,39 +459,34 @@ integer function is_cubic_monotonic( ppoly_coef, k )
 
 end function is_cubic_monotonic
 
-
-!------------------------------------------------------------------------------
 !> Monotonize a cubic curve by modifying the edge slopes.
+!!
+!! This routine takes care of monotonizing a cubic on [0,1] by modifying the
+!! edge slopes. The edge values are NOT modified. The cubic is entirely
+!! determined by the four degrees of freedom u0_l, u0_r, u1_l and u1_r.
+!!
+!! u1_l and u1_r are the edge slopes expressed in the GLOBAL coordinate system.
+!!
+!! The monotonization occurs as follows.
+!
+!! 1. The edge slopes are set to 0 if they are inconsistent with the limited
+!!    PLM slope
+!! 2. We check whether we can find an inflexion point in [0,1]. At most one
+!!    inflexion point may exist.
+!!    a. If there is no inflexion point, the cubic is monotonic.
+!!    b. If there is one inflexion point and it lies outside [0,1], the
+!!       cubic is monotonic.
+!!    c. If there is one inflexion point and it lies in [0,1] and the slope
+!!       at the location of the inflexion point is consistent, the cubic
+!!       is monotonic.
+!!    d. If the inflexion point lies in [0,1] but the slope is inconsistent,
+!!       we go to (3) to shift the location of the inflexion point to the left
+!!       or to the right. To the left when the 2nd-order left slope is smaller
+!!       than the 2nd order right slope.
+!! 3. Edge slopes are modified to shift the inflexion point, either onto the left
+!!    edge or onto the right edge.
+
 subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r )
-!------------------------------------------------------------------------------
-! This routine takes care of monotonizing a cubic on [0,1] by modifying the
-! edge slopes. The edge values are NOT modified. The cubic is entirely
-! determined by the four degrees of freedom u0_l, u0_r, u1_l and u1_r.
-!
-! u1_l and u1_r are the edge slopes expressed in the GLOBAL coordinate system.
-!
-! The monotonization occurs as follows.
-
-! 1. The edge slopes are set to 0 if they are inconsistent with the limited
-!    PLM slope
-! 2. We check whether we can find an inflexion point in [0,1]. At most one
-!    inflexion point may exist.
-!    (a) If there is no inflexion point, the cubic is monotonic.
-!    (b) If there is one inflexion point and it lies outside [0,1], the
-!        cubic is monotonic.
-!    (c) If there is one inflexion point and it lies in [0,1] and the slope
-!        at the location of the inflexion point is consistent, the cubic
-!        is monotonic.
-!    (d) If the inflexion point lies in [0,1] but the slope is inconsistent,
-!        we go to (3) to shift the location of the inflexion point to the left
-!        or to the right. To the left when the 2nd-order left slope is smaller
-!        than the 2nd order right slope.
-! 3. Edge slopes are modified to shift the inflexion point, either onto the left
-!    edge or onto the right edge.
-!
-!------------------------------------------------------------------------------
-
-  ! Arguments
   real, intent(in)      :: h       !< cell width
   real, intent(in)      :: u0_l    !< left edge value
   real, intent(in)      :: u0_r    !< right edge value
@@ -538,7 +495,6 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   real, intent(in)      :: slope   !< limited PLM slope
   real, intent(inout)   :: u1_l    !< left edge slopes
   real, intent(inout)   :: u1_r    !< right edge slopes
-
   ! Local variables
   integer       :: found_ip
   integer       :: inflexion_l  ! bool telling if inflex. pt must be on left
@@ -676,5 +632,17 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   endif
 
 end subroutine monotonize_cubic
+
+!> \namespace p3m_functions
+!!
+!! Date of creation: 2008.06.09
+!! L. White
+!!
+!! This module contains p3m interpolation routines.
+!!
+!! p3m interpolation is performed by estimating the edge values and slopes
+!! and constructing a cubic polynomial. We then make sure that the edge values
+!! are bounded and continuous and we then modify the slopes to get a monotonic
+!! cubic curve.
 
 end module P3M_functions

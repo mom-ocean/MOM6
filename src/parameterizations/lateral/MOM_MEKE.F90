@@ -64,20 +64,24 @@ type, public :: MEKE_CS ; private
   logical :: debug      !< If true, write out checksums of data for debugging
 
   ! Optional storage
-  real, dimension(:,:), allocatable :: del2MEKE ! Laplacian of MEKE, used for bi-harmonic diffusion.
+  real, dimension(:,:), allocatable :: del2MEKE !< Laplacian of MEKE, used for bi-harmonic diffusion.
 
-  ! Diagnostic handles
-  type(diag_ctrl), pointer :: diag !< A pointer to shared diagnostics data
+  type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
+  !>@{ Diagnostic handles
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_Ub = -1, id_Ut = -1
   integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1
   integer :: id_Le = -1, id_gamma_b = -1, id_gamma_t = -1
   integer :: id_Lrhines = -1, id_Leady = -1
+  !!@}
 
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
-  type(group_pass_type) :: pass_MEKE, pass_Kh, pass_Ku, pass_del2MEKE !< Type for group-halo pass calls
+  type(group_pass_type) :: pass_MEKE !< Type for group halo pass calls
+  type(group_pass_type) :: pass_Kh   !< Type for group halo pass calls
+  type(group_pass_type) :: pass_Ku   !< Type for group halo pass calls
+  type(group_pass_type) :: pass_del2MEKE !< Type for group halo pass calls
 end type MEKE_CS
 
 contains
@@ -89,13 +93,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness in H (m or kg m-2).
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step (s).
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: hu   !< Zonal flux flux (H m2 s-1).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: hv   !< Meridional mass flux (H m2 s-1).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Zonal flux flux (H m2 s-1).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Meridional mass flux (H m2 s-1).
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     mass, &         ! The total mass of the water column, in kg m-2.
@@ -210,13 +215,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
       do j=js,je ; do I=is-1,ie
         drag_vel_u(I,j) = 0.0
         if ((G%mask2dCu(I,j) > 0.0) .and. (visc%bbl_thick_u(I,j) > 0.0)) &
-          drag_vel_u(I,j) = visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
+          drag_vel_u(I,j) = GV%Z_to_m*visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
       enddo ; enddo
 !$OMP do
       do J=js-1,je ; do i=is,ie
         drag_vel_v(i,J) = 0.0
         if ((G%mask2dCv(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
-          drag_vel_v(i,J) = visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
+          drag_vel_v(i,J) = GV%Z_to_m*visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
       enddo ; enddo
 
 !$OMP do
@@ -607,7 +612,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
       do while (resid>0.)
         n1 = n1 + 1
         EKE = EKEmax
-        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
+        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j), &
                                   MEKE%Rd_dx_h(i,j), SN, EKE,            &
                                   bottomFac2, barotrFac2, LmixScale,     &
                                   Lrhines, Leady)
@@ -712,7 +717,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
       beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),            &
+    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%Zd_to_m*G%bathyT(i,j),  &
                               MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j),            &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
                               Lrhines(i,j), Leady(i,j))

@@ -1,14 +1,8 @@
+!> Surface forcing for the dumbbell test case
 module dumbbell_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*                                                                     *
-!*  This file contains subroutines for specifying surface dynamic      *
-!*  forcing for the dumbbell case.                                     *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl
 use MOM_domains, only : pass_var, pass_vector, AGRID
@@ -17,6 +11,7 @@ use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
+use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
@@ -26,68 +21,45 @@ implicit none ; private
 
 public dumbbell_dynamic_forcing, dumbbell_buoyancy_forcing, dumbbell_surface_forcing_init
 
+!> Control structure for the dumbbell test case forcing
 type, public :: dumbbell_surface_forcing_CS ; private
-  !   This control structure should be used to store any run-time variables
-  ! associated with the user-specified forcing.  It can be readily modified
-  ! for a specific case, and because it is private there will be no changes
-  ! needed in other code (although they will have to be recompiled).
-  !   The variables in the cannonical example are used for some common
-  ! cases, but do not need to be used.
-
-  logical :: use_temperature ! If true, temperature and salinity are used as
-                             ! state variables.
-  logical :: restorebuoy     ! If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !   The density used in the Boussinesq
-                             ! approximation, in kg m-3.
-  real :: G_Earth            !   The gravitational acceleration in m s-2.
-  real :: Flux_const         !   The restoring rate at the surface, in m s-1.
-  real :: gust_const         !   A constant unresolved background gustiness
-                             ! that contributes to ustar, in Pa.
-  real :: slp_amplitude      ! The amplitude of pressure loading (in Pa) applied
-                             ! to the reservoirs
-  real :: slp_period         ! Period of sinusoidal pressure wave
-  real :: S_surf, S_range
-  real, pointer, dimension(:,:) :: forcing_mask, S_restore
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  logical :: use_temperature !< If true, temperature and salinity are used as
+                             !! state variables.
+  logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
+  real :: Rho0               !<   The density used in the Boussinesq
+                             !! approximation, in kg m-3.
+  real :: G_Earth            !<   The gravitational acceleration in m s-2.
+  real :: Flux_const         !<   The restoring rate at the surface, in m s-1.
+  real :: gust_const         !<   A constant unresolved background gustiness
+                             !! that contributes to ustar, in Pa.
+  real :: slp_amplitude      !< The amplitude of pressure loading (in Pa) applied
+                             !! to the reservoirs
+  real :: slp_period         !< Period of sinusoidal pressure wave
+  real, dimension(:,:), allocatable :: &
+    forcing_mask             !< A mask regulating where forcing occurs
+  real, dimension(:,:), allocatable :: &
+    S_restore                !< The surface salinity field toward which to
+                             !! restore, in PSU.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
+                             !! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
 
 contains
 
+!> Surface buoyancy (heat and fresh water) fluxes for the dumbbell test case
 subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
-  type(forcing),                 intent(inout) :: fluxes
-  type(time_type),               intent(in)    :: day
-  real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply, in s
-  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(dumbbell_surface_forcing_CS),  pointer       :: CS
-
-!    This subroutine specifies the current surface fluxes of buoyancy or
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-
-!    When temperature is used, there are long list of fluxes that need to be
-!  set - essentially the same as for a full coupled model, but most of these
-!  can be simply set to zero.  The net fresh water flux should probably be
-!  set in fluxes%evap and fluxes%lprec, with any salinity restoring
-!  appearing in fluxes%vprec, and the other water flux components
-!  (fprec, lrunoff and frunoff) left as arrays full of zeros.
-!  Evap is usually negative and precip is usually positive.  All heat fluxes
-!  are in W m-2 and positive for heat going into the ocean.  All fresh water
-!  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
-
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day_start - Start time of the fluxes.
-!  (in)      day_interval - Length of time over which these fluxes
-!                           will be applied.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to user_surface_forcing_init
-
+  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+                                                         !! describe the surface state of the ocean.
+  type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
+                                                         !! possible forcing fields. Unused fields
+                                                         !! have NULL ptrs.
+  type(time_type),               intent(in)    :: day    !< Time of the fluxes.
+  real,                          intent(in)    :: dt     !< The amount of time over which
+                                                         !! the fluxes apply, in s
+  type(ocean_grid_type),         intent(in)    :: G      !< The ocean's grid structure
+  type(dumbbell_surface_forcing_CS),  pointer  :: CS     !< A control structure returned by a previous
+                                                         !! call to dumbbell_surface_forcing_init
+  ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward, in C.
   real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
   real :: density_restore  ! The potential density that is being restored
@@ -101,27 +73,22 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  !   When modifying the code, comment out this error message.  It is here
-  ! so that the original (unmodified) version is not accidentally used.
-  ! call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
-  !   "User forcing routine called without modification." )
 
-  ! Allocate and zero out the forcing arrays, as necessary.  This portion is
-  ! usually not changed.
+  ! Allocate and zero out the forcing arrays, as necessary.
   if (CS%use_temperature) then
-    call alloc_if_needed(fluxes%evap, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%fprec, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lrunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%frunoff, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%vprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%evap, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%fprec, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lrunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%frunoff, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%vprec, isd, ied, jsd, jed)
 
-    call alloc_if_needed(fluxes%sw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%lw, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%latent, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%sens, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%lw, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%latent, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%sens, isd, ied, jsd, jed)
   else ! This is the buoyancy only mode.
-    call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
+    call safe_alloc_ptr(fluxes%buoy, isd, ied, jsd, jed)
   endif
 
 
@@ -154,55 +121,34 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   endif
 
   if (CS%use_temperature .and. CS%restorebuoy) then
-      do j=js,je ; do i=is,ie
-       !   Set density_restore to an expression for the surface potential
-       ! density in kg m-3 that is being restored toward.
-        if (CS%forcing_mask(i,j)>0.) then
-          fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-            ((CS%S_restore(i,j) - state%SSS(i,j)) / &
-             (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
+    do j=js,je ; do i=is,ie
+      !   Set density_restore to an expression for the surface potential
+      ! density in kg m-3 that is being restored toward.
+      if (CS%forcing_mask(i,j)>0.) then
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
+          ((CS%S_restore(i,j) - state%SSS(i,j)) / &
+           (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
 
-        endif
-      enddo ; enddo
+      endif
+    enddo ; enddo
   endif
-      ! end RESTOREBUOY
 
 end subroutine dumbbell_buoyancy_forcing
 
+!> Dynamic forcing for the dumbbell test case
 subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
-  type(forcing),                 intent(inout) :: fluxes
-  type(time_type),               intent(in)    :: day
+  type(surface),                 intent(inout) :: state  !< A structure containing fields that
+                                                       !! describe the surface state of the ocean.
+  type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
+                                                       !! possible forcing fields. Unused fields
+                                                       !! have NULL ptrs.
+  type(time_type),               intent(in)    :: day  !< Time of the fluxes.
   real,                          intent(in)    :: dt   !< The amount of time over which
                                                        !! the fluxes apply, in s
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
-  type(dumbbell_surface_forcing_CS),  pointer       :: CS
-
-!    This subroutine specifies the current surface fluxes of buoyancy or
-!  temperature and fresh water.  It may also be modified to add
-!  surface fluxes of user provided tracers.
-
-!    When temperature is used, there are long list of fluxes that need to be
-!  set - essentially the same as for a full coupled model, but most of these
-!  can be simply set to zero.  The net fresh water flux should probably be
-!  set in fluxes%evap and fluxes%lprec, with any salinity restoring
-!  appearing in fluxes%vprec, and the other water flux components
-!  (fprec, lrunoff and frunoff) left as arrays full of zeros.
-!  Evap is usually negative and precip is usually positive.  All heat fluxes
-!  are in W m-2 and positive for heat going into the ocean.  All fresh water
-!  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
-
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day_start - Start time of the fluxes.
-!  (in)      day_interval - Length of time over which these fluxes
-!                           will be applied.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to user_surface_forcing_init
-
+  type(dumbbell_surface_forcing_CS),  pointer  :: CS   !< A control structure returned by a previous
+                                                       !! call to dumbbell_surface_forcing_init
+  ! Local variables
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
   integer :: idays, isecs
@@ -216,18 +162,11 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
 
   call get_time(day,isecs,idays)
   rdays = real(idays) + real(isecs)/8.64e4
-  !   When modifying the code, comment out this error message.  It is here
-  ! so that the original (unmodified) version is not accidentally used.
-  ! call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
-  !   "User forcing routine called without modification." )
+  ! This could be:  rdays = time_type_to_real(day)/8.64e4
 
-  ! Allocate and zero out the forcing arrays, as necessary.  This portion is
-  ! usually not changed.
-  call alloc_if_needed(fluxes%p_surf, isd, ied, jsd, jed)
-  call alloc_if_needed(fluxes%p_surf_full, isd, ied, jsd, jed)
-
-
-  ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
+  ! Allocate and zero out the forcing arrays, as necessary.
+  call safe_alloc_ptr(fluxes%p_surf, isd, ied, jsd, jed)
+  call safe_alloc_ptr(fluxes%p_surf_full, isd, ied, jsd, jed)
 
   do j=js,je ; do i=is,ie
     fluxes%p_surf(i,j) = CS%forcing_mask(i,j)* CS%slp_amplitude * &
@@ -236,41 +175,21 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
                          G%mask2dT(i,j) * sin(deg_rad*(rdays/CS%slp_period))
   enddo ; enddo
 
-
-
 end subroutine dumbbell_dynamic_forcing
 
-subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
-  ! If ptr is not associated, this routine allocates it with the given size
-  ! and zeros out its contents.  This is equivalent to safe_alloc_ptr in
-  ! MOM_diag_mediator, but is here so as to be completely transparent.
-  real, pointer :: ptr(:,:)
-  integer :: isd, ied, jsd, jed
-  if (.not.associated(ptr)) then
-    allocate(ptr(isd:ied,jsd:jed))
-    ptr(:,:) = 0.0
-  endif
-end subroutine alloc_if_needed
-
+!> Reads and sets up the forcing for the dumbbell test case
 subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),                   intent(in) :: Time
-  type(ocean_grid_type),             intent(in) :: G    !< The ocean's grid structure
-  type(param_file_type),             intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,           intent(in) :: diag
-  type(dumbbell_surface_forcing_CS), pointer    :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-
-  ! This include declares and sets the variable "version".
-
-  integer :: i,j
-  real :: x,y
-
+  type(time_type),              intent(in) :: Time !< The current model time.
+  type(ocean_grid_type),        intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(diag_ctrl),      target, intent(in) :: diag !< A structure that is used to
+                                                   !! regulate diagnostic output.
+  type(dumbbell_surface_forcing_CS), &
+                                pointer    :: CS   !< A pointer to the control structure for this module
+  ! Local variables
+  real :: S_surf, S_range
+  real :: x, y
+  integer :: i, j
 #include "version_variable.h"
   character(len=40)  :: mdl = "dumbbell_surface_forcing" ! This module's name.
 
@@ -306,9 +225,9 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default = 1.0)
-  call get_param(param_file, mdl,"INITIAL_SSS", CS%S_surf, &
+  call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", units="1e-3", default=34.0, do_not_log=.true.)
-  call get_param(param_file, mdl,"INITIAL_S_RANGE", CS%S_range, &
+  call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                  "Initial salinity range (bottom - surface)", units="1e-3", &
                  default=2., do_not_log=.true.)
 
@@ -326,26 +245,27 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
     CS%Flux_const = CS%Flux_const / 86400.0
 
 
-  allocate(CS%forcing_mask(G%isd:G%ied, G%jsd:G%jed)); CS%forcing_mask(:,:)=0.0
-  allocate(CS%S_restore(G%isd:G%ied, G%jsd:G%jed))
+    allocate(CS%forcing_mask(G%isd:G%ied, G%jsd:G%jed)); CS%forcing_mask(:,:)=0.0
+    allocate(CS%S_restore(G%isd:G%ied, G%jsd:G%jed))
 
-  do j=G%jsc,G%jec
-    do i=G%isc,G%iec
-      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-      y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
-      CS%forcing_mask(i,j)=0
-      CS%S_restore(i,j) = CS%S_surf
-      if ((x>0.25)) then
-        CS%forcing_mask(i,j) = 1
-        CS%S_restore(i,j) = CS%S_surf + CS%S_range
-      elseif ((x<-0.25)) then
-        CS%forcing_mask(i,j) = 1
-        CS%S_restore(i,j) = CS%S_surf - CS%S_range
-      endif
+    do j=G%jsc,G%jec
+      do i=G%isc,G%iec
+        ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+        x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
+        y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+        CS%forcing_mask(i,j)=0
+        CS%S_restore(i,j) = S_surf
+        if ((x>0.25)) then
+          CS%forcing_mask(i,j) = 1
+          CS%S_restore(i,j) = S_surf + S_range
+        elseif ((x<-0.25)) then
+          CS%forcing_mask(i,j) = 1
+          CS%S_restore(i,j) = S_surf - S_range
+        endif
+      enddo
     enddo
-  enddo
   endif
+
 end subroutine dumbbell_surface_forcing_init
 
 end module dumbbell_surface_forcing

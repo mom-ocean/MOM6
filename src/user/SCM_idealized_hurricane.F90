@@ -10,8 +10,7 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
-                             time_type_to_real
+use MOM_time_manager, only : time_type, operator(+), operator(/), time_type_to_real
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -40,7 +39,7 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mdl = "SCM_idealized_hurricane" ! This module's name.
+character(len=40)  :: mdl = "SCM_idealized_hurricane" !< This module's name.
 
 contains
 
@@ -95,9 +94,9 @@ end subroutine SCM_idealized_hurricane_TS_init
 
 !> Initializes wind profile for the SCM idealized hurricane example
 subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
-  type(time_type),              intent(in) :: Time       !< Time
-  type(ocean_grid_type),        intent(in) :: G          !< Grid structure
-  type(param_file_type),        intent(in) :: param_file !< Input parameter structure
+  type(time_type),                  intent(in) :: Time       !< Model time
+  type(ocean_grid_type),            intent(in) :: G          !< Grid structure
+  type(param_file_type),            intent(in) :: param_file !< Input parameter structure
   type(SCM_idealized_hurricane_CS), pointer    :: CS         !< Parameter container
 
 ! This include declares and sets the variable "version".

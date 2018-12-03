@@ -1,3 +1,4 @@
+!> Initialize ice shelf variables
 module MOM_ice_shelf_initialize
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -12,14 +13,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-
 !MJHpublic initialize_ice_shelf_boundary, initialize_ice_thickness
 public initialize_ice_thickness
 
 contains
 
-subroutine initialize_ice_thickness (h_shelf, area_shelf_h, hmask, G, PF)
-
+!> Initialize ice shelf thickness
+subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness, in m.
@@ -48,9 +48,8 @@ subroutine initialize_ice_thickness (h_shelf, area_shelf_h, hmask, G, PF)
 
 end subroutine initialize_ice_thickness
 
-
-subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, PF)
-
+!> Initialize ice shelf thickness from file
+subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness, in m.
@@ -135,9 +134,8 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
 
 end subroutine initialize_ice_thickness_from_file
 
-
-subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF)
-
+!> Initialize ice shelf thickness for a channel configuration
+subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness, in m.

@@ -1,33 +1,35 @@
+!> Increments the diapycnal diffusivity in a specified band of latitudes and densities.
 module user_change_diffusivity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
-use MOM_EOS, only : calculate_density
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, p3d
+use MOM_verticalGrid,  only : verticalGrid_type
+use MOM_EOS,           only : calculate_density
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public user_change_diff, user_change_diff_init
-public user_change_diff_end
+public user_change_diff, user_change_diff_init, user_change_diff_end
 
+!> Control structure for user_change_diffusivity
 type, public :: user_change_diff_CS ; private
-  real :: Kd_add        !   The scale of a diffusivity that is added everywhere
-                        ! without any filtering or scaling, in m2 s-1.
-  real :: lat_range(4)  !   4 values that define the latitude range over which
-                        ! a diffusivity scaled by Kd_add is added, in deg.
-  real :: rho_range(4)  !   4 values that define the coordinate potential
-                        ! density range over which a diffusivity scaled by
-                        ! Kd_add is added, in kg m-3.
-  logical :: use_abs_lat  ! If true, use the absolute value of latitude when
-                          ! setting lat_range.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  real :: Kd_add        !< The scale of a diffusivity that is added everywhere
+                        !! without any filtering or scaling, in m2 s-1.
+  real :: lat_range(4)  !< 4 values that define the latitude range over which
+                        !! a diffusivity scaled by Kd_add is added, in deg.
+  real :: rho_range(4)  !< 4 values that define the coordinate potential
+                        !! density range over which a diffusivity scaled by
+                        !! Kd_add is added, in kg m-3.
+  logical :: use_abs_lat  !< If true, use the absolute value of latitude when
+                          !! setting lat_range.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                          !! regulate the timing of diagnostic output.
 end type user_change_diff_CS
 
 contains
@@ -36,17 +38,18 @@ contains
 !! main code to alter the diffusivities as needed.  The specific example
 !! implemented here augments the diffusivity for a specified range of latitude
 !! and coordinate potential density.
-subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
+subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
                                                                  !! to any available thermodynamic
                                                                  !! fields. Absent fields have NULL ptrs.
   type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd !< The diapycnal diffusivity of
-                                                                  !! each layer in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
+                                                                  !! each layer in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
-                                                                  !! at each interface in m2 s-1.
+                                                                  !! at each interface in Z2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f !< Temperature with massless
                                                                   !! layers filled in vertically.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f !< Salinity with massless
@@ -54,7 +57,7 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
   real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add !< The diapycnal
                                                                   !! diffusivity that is being added at
                                                                   !! each interface in m2 s-1.
-
+  ! Local variables
   real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers in kg m-3.
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
   real :: rho_fn      ! The density dependence of the input function, 0-1, ND.
@@ -107,7 +110,7 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
       enddo
     endif
 
-    if (present(Kd)) then
+    if (present(Kd_lay)) then
       do k=1,nz ; do i=is,ie
         if (CS%use_abs_lat) then
           lat_fn = val_weights(abs(G%geoLatT(i,j)), CS%lat_range)
@@ -116,7 +119,7 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
         endif
         rho_fn = val_weights(Rcv(i,k), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) &
-          Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add * rho_fn * lat_fn
+          Kd_lay(i,j,k) = Kd_lay(i,j,k) + GV%m_to_Z**2 * CS%Kd_add * rho_fn * lat_fn
       enddo ; enddo
     endif
     if (present(Kd_int)) then
@@ -129,7 +132,7 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
         !   rho_int = 0.5*(Rcv(i,k-1) + Rcv(i,k))
         rho_fn = val_weights( 0.5*(Rcv(i,k-1) + Rcv(i,k)), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) then
-          Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add * rho_fn * lat_fn
+          Kd_int(i,j,K) = Kd_int(i,j,K) + GV%m_to_Z**2 * CS%Kd_add * rho_fn * lat_fn
           if (store_Kd_add) Kd_int_add(i,j,K) = CS%Kd_add * rho_fn * lat_fn
         endif
       enddo ; enddo
@@ -142,7 +145,6 @@ end subroutine user_change_diff
 function range_OK(range) result(OK)
   real, dimension(4), intent(in) :: range  !< Four values to check.
   logical                        :: OK     !< Return value.
-
 
   OK = ((range(1) <= range(2)) .and. (range(2) <= range(3)) .and. &
         (range(3) <= range(4)))
@@ -158,7 +160,7 @@ function val_weights(val, range) result(ans)
   real,               intent(in) :: val    !< Value for which we need an answer.
   real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero.
   real                           :: ans    !< Return value.
-
+  ! Local variables
   real :: x   ! A nondimensional number between 0 and 1.
 
   ans = 0.0
@@ -234,7 +236,7 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
                  default=.false.)
   endif
 
- if (.not.range_OK(CS%lat_range)) then
+  if (.not.range_OK(CS%lat_range)) then
     write(mesg, '(4(1pe15.6))') CS%lat_range(1:4)
     call MOM_error(FATAL, "user_set_diffusivity: bad latitude range: \n  "//&
                     trim(mesg))
@@ -249,31 +251,11 @@ end subroutine user_change_diff_init
 
 !> Clean up the module control structure.
 subroutine user_change_diff_end(CS)
-  type(user_change_diff_CS), pointer :: CS         !< A pointer that is set to
-                                                   !! point to the control
-                                                   !! structure for this module.
+  type(user_change_diff_CS), pointer :: CS !< A pointer that is set to point to the control
+                                           !! structure for this module.
 
   if (associated(CS)) deallocate(CS)
 
 end subroutine user_change_diff_end
-
-!> \namespace user_change_diffusivity
-!!
-!!  By Robert Hallberg, May 2012
-!!
-!!    This file contains a subroutine that increments the diapycnal
-!!  diffusivity in a specified band of latitudes and densities.
-!!
-!!     A small fragment of the grid is shown below:
-!!
-!!    j+1  x ^ x ^ x   At x:  q
-!!    j+1  > o > o >   At ^:  v
-!!    j    x ^ x ^ x   At >:  u
-!!    j    > o > o >   At o:  h, T, S, Kd, etc.
-!!    j-1  x ^ x ^ x
-!!        i-1  i  i+1  At x & ^:
-!!           i  i+1    At > & o:
-!!
-!!  The boundaries always run through q grid points (x).
 
 end module user_change_diffusivity

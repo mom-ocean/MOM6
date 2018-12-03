@@ -1,11 +1,12 @@
+!> This module contains the coupler-type declarations and methods for use in
+!! ocean-only configurations of MOM6.
+!!
+!! It is intended that the version of coupler_types_mod that is avialable from
+!! FMS will conform to this version with the FMS city release after warsaw.
+
 module coupler_types_mod
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!   This module contains the coupler-type declarations and methods for use in
-! ocean-only configurations of MOM6.  It is intended that the version of
-! coupler_types_mod that is avialable from FMS will conform to this version with
-! the FMS city release after warsaw.
 
 use fms_io_mod,        only: restart_file_type, register_restart_field
 use fms_io_mod,        only: query_initialized, restore_state
@@ -28,9 +29,11 @@ public coupler_type_extract_data, coupler_type_set_data
 public coupler_type_copy_1d_2d
 public coupler_type_copy_1d_3d
 
+
 !
 !       3-d fields
 !
+!> A type with a 3-d array of values and metadata
 type, public :: coupler_3d_values_type
   character(len=48)       :: name = ' '  !< The diagnostic name for this array
   real, pointer, contiguous, dimension(:,:,:) :: values => NULL() !< The pointer to the
@@ -47,6 +50,7 @@ type, public :: coupler_3d_values_type
                                          !! if it can not be read from a restart file
 end type coupler_3d_values_type
 
+!> A field with one or more related 3-d variables and collective metadata
 type, public :: coupler_3d_field_type
   character(len=48)                 :: name = ' ' !< name
   integer                           :: num_fields = 0 !< num_fields
@@ -66,19 +70,24 @@ type, public :: coupler_3d_field_type
   real                              :: mol_wt = 0.0 !< mol_wt
 end type coupler_3d_field_type
 
+!> A collection of 3-D boundary conditions for exchange between components
 type, public :: coupler_3d_bc_type
   integer                                            :: num_bcs = 0  !< The number of boundary condition fields
   type(coupler_3d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary
                                                                      !! condition fields
   logical    :: set = .false.       !< If true, this type has been initialized
-  integer    :: isd, isc, iec, ied  !< The i-direction data and computational domain index ranges for this type
-  integer    :: jsd, jsc, jec, jed  !< The j-direction data and computational domain index ranges for this type
-  integer    :: ks, ke              !< The k-direction index ranges for this type
+  !>@{ The i- and j-direction data and computational domain index ranges for this type
+  integer    :: isd, isc, iec, ied  ! The i-direction data and computational domain index ranges for this type
+  integer    :: jsd, jsc, jec, jed  ! The j-direction data and computational domain index ranges for this type
+  !!@}
+  integer    :: ks                  !< The k-direction start index for this type
+  integer    :: ke                  !< The k-direction end index for this type
 end type coupler_3d_bc_type
 
 !
 !       2-d fields
 !
+!> A type with a 2-d array of values and metadata
 type, public    :: coupler_2d_values_type
   character(len=48)       :: name = ' '  !< The diagnostic name for this array
   real, pointer, contiguous, dimension(:,:) :: values => NULL() !< The pointer to the
@@ -95,6 +104,7 @@ type, public    :: coupler_2d_values_type
                                          !! if it can not be read from a restart file
 end type coupler_2d_values_type
 
+!> A field with one or more related 2-d variables and collective metadata
 type, public    :: coupler_2d_field_type
   character(len=48)                 :: name = ' ' !< name
   integer                           :: num_fields = 0 !< num_fields
@@ -114,18 +124,22 @@ type, public    :: coupler_2d_field_type
   real                              :: mol_wt = 0.0 !< mol_wt
 end type coupler_2d_field_type
 
+!> A collection of 2-D boundary conditions for exchange between components
 type, public    :: coupler_2d_bc_type
   integer                                            :: num_bcs = 0  !< The number of boundary condition fields
   type(coupler_2d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary
                                                                      !! condition fields
   logical    :: set = .false.       !< If true, this type has been initialized
-  integer    :: isd, isc, iec, ied  !< The i-direction data and computational domain index ranges for this type
-  integer    :: jsd, jsc, jec, jed  !< The j-direction data and computational domain index ranges for this type
+  !>@{ The i- and j-direction data and computational domain index ranges for this type
+  integer    :: isd, isc, iec, ied  ! The i-direction data and computational domain index ranges for this type
+  integer    :: jsd, jsc, jec, jed  ! The j-direction data and computational domain index ranges for this type
+  !!@}
 end type coupler_2d_bc_type
 
 !
 !       1-d fields
 !
+!> A type with a 1-d array of values and metadata
 type, public    :: coupler_1d_values_type
   character(len=48)           :: name = ' '  !< The diagnostic name for this array
   real, pointer, dimension(:) :: values => NULL() !< The pointer to the array of values
@@ -139,6 +153,7 @@ type, public    :: coupler_1d_values_type
                                              !! if it can not be read from a restart file
 end type coupler_1d_values_type
 
+!> A field with one or more related 1-d variables and collective metadata
 type, public    :: coupler_1d_field_type
   character(len=48)              :: name = ' ' !< name
   integer                        :: num_fields = 0 !< num_fields
@@ -156,6 +171,7 @@ type, public    :: coupler_1d_field_type
   real                           :: mol_wt = 0.0 !< mol_wt
 end type coupler_1d_field_type
 
+!> A collection of 1-D boundary conditions for exchange between components
 type, public    :: coupler_1d_bc_type
   integer                                            :: num_bcs = 0  !< The number of boundary condition fields
   type(coupler_1d_field_type), dimension(:), pointer :: bc => NULL() !< A pointer to the array of boundary

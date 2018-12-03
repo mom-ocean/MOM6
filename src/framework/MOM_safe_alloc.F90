@@ -1,14 +1,8 @@
+!> Convenience functions for safely allocating memory without
+!! accidentally reallocating pointer and causing memory leaks.
 module MOM_safe_alloc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    The subroutines here provide a convenient way to safely allocate *
-!*  memory without accidentally reallocating a pointer and causing a   *
-!*  memory leak.                                                       *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 implicit none ; private
 
@@ -54,7 +48,8 @@ end subroutine safe_alloc_ptr_1d
 !> Allocate a pointer to a 2-d array based on its dimension sizes
 subroutine safe_alloc_ptr_2d_2arg(ptr, ni, nj)
   real, dimension(:,:), pointer :: ptr !< A pointer to allocate
-  integer, intent(in) :: ni, nj !< The sizes of the 1st and 2nd dimensions of the array
+  integer, intent(in) :: ni !< The size of the 1st dimension of the array
+  integer, intent(in) :: nj !< The size of the 2nd dimension of the array
   if (.not.associated(ptr)) then
     allocate(ptr(ni,nj))
     ptr(:,:) = 0.0
@@ -64,8 +59,9 @@ end subroutine safe_alloc_ptr_2d_2arg
 !> Allocate a pointer to a 3-d array based on its dimension sizes
 subroutine safe_alloc_ptr_3d_2arg(ptr, ni, nj, nk)
   real, dimension(:,:,:), pointer :: ptr !< A pointer to allocate
-  integer, intent(in) :: ni, nj !< The sizes of the 1st and 2nd dimensions of the array
-  integer, intent(in) :: nk !< The size to allocate for the 3rd dimension
+  integer, intent(in) :: ni !< The size of the 1st dimension of the array
+  integer, intent(in) :: nj !< The size of the 2nd dimension of the array
+  integer, intent(in) :: nk !< The size of the 3rd dimension of the array
   if (.not.associated(ptr)) then
     allocate(ptr(ni,nj,nk))
     ptr(:,:,:) = 0.0
@@ -75,8 +71,10 @@ end subroutine safe_alloc_ptr_3d_2arg
 !> Allocate a pointer to a 2-d array based on its index starting and ending values
 subroutine safe_alloc_ptr_2d(ptr, is, ie, js, je)
   real, dimension(:,:), pointer :: ptr !< A pointer to allocate
-  integer, intent(in) :: is, ie !< The start and end indices to allocate for the 1st dimension
-  integer, intent(in) :: js, je !< The start and end indices to allocate for the 2nd dimension
+  integer, intent(in) :: is !< The start index to allocate for the 1st dimension
+  integer, intent(in) :: ie !< The end index to allocate for the 1st dimension
+  integer, intent(in) :: js !< The start index to allocate for the 2nd dimension
+  integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   if (.not.associated(ptr)) then
     allocate(ptr(is:ie,js:je))
     ptr(:,:) = 0.0
@@ -86,8 +84,10 @@ end subroutine safe_alloc_ptr_2d
 !> Allocate a pointer to a 3-d array based on its index starting and ending values
 subroutine safe_alloc_ptr_3d(ptr, is, ie, js, je, nk)
   real, dimension(:,:,:), pointer :: ptr !< A pointer to allocate
-  integer, intent(in) :: is, ie !< The start and end indices to allocate for the 1st dimension
-  integer, intent(in) :: js, je !< The start and end indices to allocate for the 2nd dimension
+  integer, intent(in) :: is !< The start index to allocate for the 1st dimension
+  integer, intent(in) :: ie !< The end index to allocate for the 1st dimension
+  integer, intent(in) :: js !< The start index to allocate for the 2nd dimension
+  integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   integer, intent(in) :: nk !< The size to allocate for the 3rd dimension
   if (.not.associated(ptr)) then
     allocate(ptr(is:ie,js:je,nk))
@@ -98,8 +98,10 @@ end subroutine safe_alloc_ptr_3d
 !> Allocate a 2-d allocatable array based on its index starting and ending values
 subroutine safe_alloc_allocatable_2d(ptr, is, ie, js, je)
   real, dimension(:,:), allocatable :: ptr !< An allocatable array to allocate
-  integer, intent(in) :: is, ie !< The start and end indices to allocate for the 1st dimension
-  integer, intent(in) :: js, je !< The start and end indices to allocate for the 2nd dimension
+  integer, intent(in) :: is !< The start index to allocate for the 1st dimension
+  integer, intent(in) :: ie !< The end index to allocate for the 1st dimension
+  integer, intent(in) :: js !< The start index to allocate for the 2nd dimension
+  integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   if (.not.allocated(ptr)) then
     allocate(ptr(is:ie,js:je))
     ptr(:,:) = 0.0
@@ -109,8 +111,10 @@ end subroutine safe_alloc_allocatable_2d
 !> Allocate a 3-d allocatable array based on its index starting and ending values
 subroutine safe_alloc_allocatable_3d(ptr, is, ie, js, je, nk)
   real, dimension(:,:,:), allocatable :: ptr !< An allocatable array to allocate
-  integer, intent(in) :: is, ie !< The start and end indices to allocate for the 1st dimension
-  integer, intent(in) :: js, je !< The start and end indices to allocate for the 2nd dimension
+  integer, intent(in) :: is !< The start index to allocate for the 1st dimension
+  integer, intent(in) :: ie !< The end index to allocate for the 1st dimension
+  integer, intent(in) :: js !< The start index to allocate for the 2nd dimension
+  integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   integer, intent(in) :: nk !< The size to allocate for the 3rd dimension
   if (.not.allocated(ptr)) then
     allocate(ptr(is:ie,js:je,nk))

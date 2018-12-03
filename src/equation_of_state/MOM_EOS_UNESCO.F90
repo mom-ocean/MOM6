@@ -1,3 +1,4 @@
+!> The equation of state using the Jackett and McDougall fits to the UNESCO EOS
 module MOM_EOS_UNESCO
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -15,15 +16,21 @@ public calculate_compress_UNESCO, calculate_density_UNESCO, calculate_spec_vol_U
 public calculate_density_derivs_UNESCO
 public calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 
+!> Compute the in situ density of sea water (in units of kg/m^3), or its anomaly with respect to
+!! a reference density, from salinity (in psu), potential temperature (in deg C), and pressure in Pa,
+!! using the UNESCO (1981) equation of state.
 interface calculate_density_UNESCO
   module procedure calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 end interface calculate_density_UNESCO
 
+!> Compute the in situ specific volume of sea water (in units of m^3/kg), or an anomaly with respect
+!! to a reference specific volume, from salinity (in psu), potential temperature (in deg C), and
+!! pressure in Pa, using the UNESCO (1981) equation of state.
 interface calculate_spec_vol_UNESCO
   module procedure calculate_spec_vol_scalar_UNESCO, calculate_spec_vol_array_UNESCO
 end interface calculate_spec_vol_UNESCO
 
-
+!>@{ Parameters in the UNESCO equation of state
 ! The following constants are used to calculate rho0.  The notation
 ! is Rab for the contribution to rho0 from T^aS^b.
 real, parameter ::  R00 = 999.842594, R10 = 6.793952e-2, R20 = -9.095290e-3, &
@@ -42,7 +49,7 @@ real, parameter ::  S00 = 1.965933e4, S10 = 1.444304e2, S20 = -1.706103, &
   Sp30 = 1.956415e-6, Sp01 = 6.704388e-3, Sp11 = -1.847318e-4, Sp21 = 2.059331e-7, &
   Sp032 = 1.480266e-4, SP000 = 2.102898e-4, SP010 = -1.202016e-5, SP020 = 1.394680e-7, &
   SP001 = -2.040237e-6, SP011 = 6.128773e-8, SP021 = 6.207323e-10
-
+!!@}
 
 contains
 
@@ -56,6 +63,7 @@ subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
   real,           intent(out) :: rho      !< In situ density in kg m-3.
   real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
+  ! Local variables
   real, dimension(1) :: T0, S0, pressure0
   real, dimension(1) :: rho0
 
@@ -80,17 +88,7 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_
   integer,            intent(in)  :: npts     !< the number of values to calculate.
   real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from salinity (S in psu), potential temperature  *
-! *  (T in deg C), and pressure in Pa.                                 *
-
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
+  ! Local variables
   real :: t_local, t2, t3, t4, t5 ! Temperature to the 1st - 5th power.
   real :: s_local, s32, s2        ! Salinity to the 1st, 3/2, & 2nd power.
   real :: p1, p2      ! Pressure (in bars) to the 1st and 2nd power.
@@ -144,6 +142,7 @@ subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
   real,           intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
 
+  ! Local variables
   real, dimension(1) :: T0, S0, pressure0, spv0
 
   T0(1) = T ; S0(1) = S ; pressure0(1) = pressure
@@ -166,6 +165,7 @@ subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts,
   integer,            intent(in)  :: npts     !< the number of values to calculate.
   real,     optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
 
+  ! Local variables
   real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
   real :: s_local, s32, s2;        ! Salinity to the 1st, 3/2, & 2nd power.
   real :: p1, p2;      ! Pressure (in bars) to the 1st and 2nd power.
@@ -221,18 +221,7 @@ subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, sta
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
-! *   This subroutine calculates the partial derivatives of density    *
-! * with potential temperature and salinity.                           *
-! *                                                                    *
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     drho_dT - the partial derivative of density with        *
-! *                      potential temperature, in kg m-3 K-1.         *
-! *  (out)     drho_dS - the partial derivative of density with        *
-! *                      salinity, in kg m-3 psu-1.                    *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
+  ! Local variables
   real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
   real :: s12, s_local, s32, s2;   ! Salinity to the 1/2 - 2nd powers.
   real :: p1, p2;         ! Pressure (in bars) to the 1st & 2nd power.
@@ -303,20 +292,7 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
-! *  This subroutine computes the in situ density of sea water (rho)   *
-! *  and the compressibility (drho/dp == C_sound^-2) at the given      *
-! *  salinity, potential temperature, and pressure.                    *
-! *                                                                    *
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (out)     drho_dp - the partial derivative of density with        *
-! *                      pressure (also the inverse of the square of   *
-! *                      sound speed) in s2 m-2.                       *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
+  ! Local variables
   real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
   real :: s_local, s32, s2;        ! Salinity to the 1st, 3/2, & 2nd power.
   real :: p1, p2;      ! Pressure (in bars) to the 1st and 2nd power.
