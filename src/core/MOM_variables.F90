@@ -195,11 +195,11 @@ type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
                              !! that is captured in Kd_shear.
   real, pointer, dimension(:,:) :: &
-    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points, in Z.
-    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points, in Z.
-    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in Z2 s-1.
-    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in Z2 s-1.
-    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in Z s-1.
+    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points, in Z ~> m.
+    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points, in Z ~> m.
+    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in Z2 s-1 ~> m2 s-1.
+    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in Z2 s-1 ~> m2 s-1.
+    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in Z s-1 ~> m s-1.
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
                              !! energy, currently in units of m3 s-3, but will later be changed to W m-2.
@@ -207,13 +207,13 @@ type, public :: vertvisc_type
     taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves, in Pa.
     tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves, in Pa.
   real, pointer, dimension(:,:) :: tbl_thick_shelf_u => NULL()
-                !< Thickness of the viscous top boundary layer under ice shelves at u-points, in Z.
+                !< Thickness of the viscous top boundary layer under ice shelves at u-points, in Z ~> m.
   real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
-                !< Thickness of the viscous top boundary layer under ice shelves at v-points, in Z.
+                !< Thickness of the viscous top boundary layer under ice shelves at v-points, in Z ~> m.
   real, pointer, dimension(:,:) :: kv_tbl_shelf_u => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at u-points, in Z2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at u-points, in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:) :: kv_tbl_shelf_v => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at v-points, in Z2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at v-points, in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:) :: nkml_visc_u => NULL()
                 !< The number of layers in the viscous surface mixed layer at u-points (nondimensional).
                 !! This is not an integer because there may be fractional layers, and it is stored in
@@ -224,29 +224,29 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: &
     MLD => NULL()      !< Instantaneous active mixing layer depth (H units).
   real, pointer, dimension(:,:,:) :: &
-    Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points, in Z s-1.
-    Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points, in Z s-1.
+    Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points, in Z s-1 ~> m s-1.
+    Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points, in Z s-1 ~> m s-1.
   real, pointer, dimension(:,:,:) :: Kd_extra_T => NULL()
                 !< The extra diffusivity of temperature due to double diffusion relative to the
-                !! diffusivity of density, in Z2 s-1.
+                !! diffusivity of density, in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:,:) :: Kd_extra_S => NULL()
                 !< The extra diffusivity of salinity due to double diffusion relative to the
-                !! diffusivity of density, in Z2 s-1.
+                !! diffusivity of density, in Z2 s-1 ~> m2 s-1.
   ! One of Kd_extra_T and Kd_extra_S is always 0. Kd_extra_S is positive for salt fingering;
   ! Kd_extra_T is positive for double diffusive convection.  They are only allocated if
   ! DOUBLE_DIFFUSION is true.
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
-                !! in tracer columns, in Z2 s-1.
+                !! in tracer columns, in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_shear => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers
-                !! in tracer columns, in Z2 s-1.
+                !! in tracer columns, in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_shear_Bu => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers in
-                !! corner columns, in Z2 s-1.
+                !! corner columns, in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:,:) :: Kv_slow  => NULL()
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
-                !! background, convection etc), in Z2 s-1.
+                !! background, convection etc), in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
                 !< The turbulent kinetic energy per unit mass at the interfaces, in m2 s-2.
                 !! This may be at the tracer or corner points

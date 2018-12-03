@@ -119,10 +119,10 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure in Pa.
   ! Local variables
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units (Z),
+  real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units (Z ~> m),
                             ! usually negative because it is positive upward.
-  real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile (Z)
-  real :: e_interface ! Current interface position (m)
+  real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile, in Z ~> m.
+  real :: e_interface ! Current interface position, in Z ~> m.
   real :: x,y,r1,r2 ! x,y and radial coordinates for computation of initial pert.
   real :: pert_amp ! Amplitude of perturbations measured in Angstrom_H
   real :: h_noise ! Amplitude of noise to scale h by
@@ -157,7 +157,8 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
       y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
       r1=sqrt((x-0.7)**2+(y-0.2)**2)
       r2=sqrt((x-0.3)**2+(y-0.25)**2)
-      h(i,j,k) = h(i,j,k) + pert_amp*(e0(k) - e0(nz+1))*GV%Z_to_H*(spike(r1,0.15)-spike(r2,0.15)) ! Prescribed perturbation
+      h(i,j,k) = h(i,j,k) + pert_amp * (e0(k) - e0(nz+1)) * GV%Z_to_H * &
+                            (spike(r1,0.15)-spike(r2,0.15)) ! Prescribed perturbation
       if (h_noise /= 0.) then
         rns = initializeRandomNumberStream( int( 4096*(x + (y+1.)) ) )
         call getRandomNumbers(rns, noise) ! x will be in (0,1)

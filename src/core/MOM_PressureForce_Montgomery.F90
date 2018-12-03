@@ -98,9 +98,9 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                   ! enable the use of a reduced gravity form of the equations,
                   ! in m2 s-2.
     dp_star, &    ! Layer thickness after compensation for compressibility, in Pa.
-    SSH, &        ! The sea surface height anomaly, in depth units (Z).
+    SSH, &        ! The sea surface height anomaly, in depth units (Z ~> m).
     e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from
-                  ! astronomical sources and self-attraction and loading, in Z.
+                  ! astronomical sources and self-attraction and loading, in Z ~> m.
     geopot_bot    !   Bottom geopotential relative to time-mean sea level,
                   ! including any tidal contributions, in units of m2 s-2.
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
@@ -390,10 +390,10 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real :: Rho_cv_BL(SZI_(G)) !   The coordinate potential density in
                 ! the deepest variable density near-surface layer, in kg m-3.
   real :: h_star(SZI_(G),SZJ_(G)) ! Layer thickness after compensation
-                             ! for compressibility, in m.
+                             ! for compressibility, in Z ~> m.
   real :: e_tidal(SZI_(G),SZJ_(G)) ! Bottom geopotential anomaly due to tidal
                              ! forces from astronomical sources and self-
-                             ! attraction and loading, in depth units (Z).
+                             ! attraction and loading, in depth units (Z ~> m).
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, in Pa (usually 2e7 Pa = 2000 dbar).
   real :: I_Rho0             ! 1/Rho0, in m3 kg-1.
@@ -402,7 +402,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                              ! compensated density gradients, in m s-2.
   real :: dr                 ! Temporary variables.
   real :: h_neglect          ! A thickness that is so small it is usually lost
-                             ! in roundoff and can be neglected, in m.
+                             ! in roundoff and can be neglected, in Z ~> m.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
@@ -603,7 +603,7 @@ end subroutine PressureForce_Mont_Bouss
 subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in Z.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in Z ~> m.
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density, in kg m-3.
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
@@ -614,7 +614,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
                                                             !! to free surface height anomalies, in m2 H-1 s-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               optional, intent(in)  :: rho_star !< The layer densities (maybe compressibility
-                                                            !! compensated), times g/rho_0, in m2 Z-1 s-2.
+                                                            !! compensated), times g/rho_0, in m2 Z-1 s-2 ~> m s-2.
 
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses, in H-1.
@@ -624,12 +624,12 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   real :: dR_dT(SZI_(G))     ! Partial derivatives of density with temperature
   real :: dR_dS(SZI_(G))     ! and salinity in kg m-3 K-1 and kg m-3 PSU-1.
   real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer.
-  real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1.
-  real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-1 Z-1.
+  real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1.
+  real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-1 Z-1 ~> kg m-2 m-2.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
   real :: z_neglect          ! A thickness that is so small it is usually lost
-                             ! in roundoff and can be neglected, in Z.
+                             ! in roundoff and can be neglected, in Z ~> m.
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke

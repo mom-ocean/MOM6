@@ -42,22 +42,22 @@ contains
 subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in Z (often m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in H (often m or kg m-2).
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
                                                                  !! to any available thermodynamic
                                                                  !! fields. Absent fields have NULL ptrs.
   type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
-                                                                  !! each layer in Z2 s-1.
+                                                                  !! each layer in Z2 s-1 ~> m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
-                                                                  !! at each interface in Z2 s-1.
+                                                                  !! at each interface in Z2 s-1 ~> m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f !< Temperature with massless
                                                                   !! layers filled in vertically.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f !< Salinity with massless
                                                                   !! layers filled in vertically.
   real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add !< The diapycnal
                                                                   !! diffusivity that is being added at
-                                                                  !! each interface in Z2 s-1.
+                                                                  !! each interface in Z2 s-1 ~> m2 s-1.
   ! Local variables
   real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers in kg m-3.
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.

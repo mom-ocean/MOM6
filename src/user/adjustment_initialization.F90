@@ -38,10 +38,10 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z), usually
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z ~> m), usually
                           ! negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units (Z).
+                          ! positive upward, in depth units (Z ~> m).
   real    :: x, y, yy, delta_S_strat, dSdz, delta_S, S_ref
   real    :: min_thickness, adjustment_width, adjustment_delta, adjustment_deltaS
   real    :: front_wave_amp, front_wave_length, front_wave_asym

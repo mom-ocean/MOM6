@@ -33,10 +33,10 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(GV)+1)   ! The resting interface heights, in depth units (Z), usually
+  real :: e0(SZK_(GV)+1)   ! The resting interface heights, in depth units (Z ~> m), usually
                            ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
-                           ! positive upward, in in depth units (Z).
+                           ! positive upward, in depth units (Z ~> m).
   real :: IC_amp           ! The amplitude of the initial height displacement, in H.
   real :: diskrad, rad, xCenter, xRadius, lonC, latC, xOffset
   logical :: just_read

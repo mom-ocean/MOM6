@@ -45,9 +45,9 @@ type, public :: forcing
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-    ustar         => NULL(), & !< surface friction velocity scale (Z/s)
+    ustar         => NULL(), & !< surface friction velocity scale, in Z s-1 ~> m s-1.
     ustar_gustless => NULL()   !< surface friction velocity scale without any
-                               !! any augmentation for gustiness (Z/s)
+                               !! any augmentation for gustiness, in Z s-1 ~> m s-1.
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
@@ -129,12 +129,12 @@ type, public :: forcing
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
-    ustar_berg => NULL(), &   !< iceberg contribution to top ustar (Z/s)
+    ustar_berg => NULL(), &   !< iceberg contribution to top ustar, in Z s-1 ~> m s-1.
     area_berg  => NULL(), &   !< area of ocean surface covered by icebergs (m2/m2)
     mass_berg  => NULL()      !< mass of icebergs (kg/m2)
 
   ! land ice-shelf related inputs
-  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves (in Z/s)
+  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves, in Z s-1 ~> m s-1.
                                  !! as computed by the ocean at the previous time step.
   real, pointer, dimension(:,:) :: frac_shelf_h => NULL() !< Fractional ice shelf coverage of h-cells, nondimensional
                                  !! cells, nondimensional from 0 to 1. This is only
@@ -181,7 +181,7 @@ type, public :: mech_forcing
   real, pointer, dimension(:,:) :: &
     taux  => NULL(), & !< zonal wind stress (Pa)
     tauy  => NULL(), & !< meridional wind stress (Pa)
-    ustar => NULL(), & !< surface friction velocity scale (Z/s)
+    ustar => NULL(), & !< surface friction velocity scale, in Z s-1 ~> m s-1.
     net_mass_src => NULL() !< The net mass source to the ocean, in kg m-2 s-1.
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
@@ -1970,7 +1970,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
                                                      !! as used to calculate ustar.
 
   real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
-  real :: Irho0        ! Inverse of the mean density rescaled to (Z2 m / kg)
+  real :: Irho0        ! Inverse of the mean density rescaled to (Z2 m / kg ~> m3 kg-1)
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 

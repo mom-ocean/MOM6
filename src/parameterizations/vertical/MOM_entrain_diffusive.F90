@@ -75,10 +75,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   ! At least one of the two following arguments must be present.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                   optional, intent(in)    :: Kd_Lay !< The diapycnal diffusivity of layers,
-                                                !! in Z2 s-1.
+                                                !! in Z2 s-1 ~> m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                   optional, intent(in)    :: Kd_int !< The diapycnal diffusivity of interfaces,
-                                                !! in Z2 s-1.
+                                                !! in Z2 s-1 ~> m2 s-1.
 
 !   This subroutine calculates ea and eb, the rates at which a layer entrains
 ! from the layers above and below.  The entrainment rates are proportional to

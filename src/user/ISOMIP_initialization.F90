@@ -45,17 +45,17 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
   type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: min_depth ! The minimum and maximum depths in Z.
+  real :: min_depth ! The minimum and maximum depths in Z ~> m.
   real :: m_to_Z  ! A dimensional rescaling factor.
   ! The following variables are used to set up the bathymetry in the ISOMIP example.
   real :: bmax            ! max depth of bedrock topography
   real :: b0,b2,b4,b6     ! first, second, third and fourth bedrock topography coeff
   real :: xbar            ! characteristic along-flow lenght scale of the bedrock
-  real :: dc              ! depth of the trough compared with side walls in Z
+  real :: dc              ! depth of the trough compared with side walls in Z ~> m.
   real :: fc              ! characteristic width of the side walls of the channel
   real :: wc              ! half-width of the trough
   real :: ly              ! domain width (across ice flow)
-  real :: bx, by          ! dummy vatiables in Z
+  real :: bx, by          ! dummy vatiables in Z ~> m.
   real :: xtil            ! dummy vatiable
   logical :: is_2D         ! If true, use 2D setup
 ! This include declares and sets the variable "version".
@@ -139,10 +139,10 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z),
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z ~> m),
                           !  usually negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units (Z).
+                          ! positive upward, in depth units (Z ~> m).
   integer :: i, j, k, is, ie, js, je, nz, tmp1
   real    :: x
   real    :: rho_range
@@ -257,7 +257,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
   real      :: x, ds, dt, rho_sur, rho_bot
-  real      :: xi0, xi1 ! Heights in depth units (Z).
+  real      :: xi0, xi1 ! Heights in depth units (Z ~> m).
   real      :: S_sur, T_sur, S_bot, T_bot
   real      :: dT_dz, dS_dz  ! Gradients of T and S in degC/Z and PPT/Z.
   real      :: z          ! vertical position in z space
@@ -436,10 +436,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   real :: rho_sur, rho_bot, rho_range
   real :: dT_dz, dS_dz              ! Gradients of T and S in degC/Z and PPT/Z.
 
-  real :: e0(SZK_(G)+1)             ! The resting interface heights, in Z, usually
+  real :: e0(SZK_(G)+1)             ! The resting interface heights, in Z ~> m, usually
                                     ! negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface, positive upward, in Z.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in Z.
+  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface, positive upward, in Z ~> m.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in Z ~> m.
   real :: min_depth, dummy1, z
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
   character(len=40) :: verticalCoordinate, filename, state_file
