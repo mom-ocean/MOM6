@@ -435,10 +435,17 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
       ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
       dT_dP = first_derivative_polynomial( ppoly_T, CS%nterm, b ) / delta_P
       dS_dP = first_derivative_polynomial( ppoly_S, CS%nterm, b ) / delta_P
-      ! Total derivative of d_delta_rho wrt P
-      d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
-                             ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
-                             dS_dP*beta_avg + dT_dP*alpha_avg
+
+      !! Total derivative of d_delta_rho wrt P
+      ! Note that this equation holds if alpha, beta are allowed to vary with T/S within the layer
+      ! However, we choose to linearize the EOS to ensure that density increases monotonically
+      ! d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
+      !                        ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
+      !                        dS_dP*beta_avg + dT_dP*alpha_avg
+
+      ! This equation holds if T/S are taken to be layer averages so most of the d/dT d/dS terms are 0
+       d_delta_rho_dP = 0.5*( delta_S*dbeta_dP + delta_T*dalpha_dP) + dS_dP*beta_avg + dT_dP*alpha_avg
+
       ! This probably won't happen, but if it does take a bisection
       if (d_delta_rho_dP == 0.) then
         b = 0.5*(a+c)
