@@ -32,7 +32,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
                                                       !! only read parameters without changing h.
   ! Local variables
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units (Z).
+                          ! positive upward, in Z ~> m.
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly
   real :: ssh_anomaly_width ! Lateral width of anomaly
   logical :: just_read    ! If true, just read parameters but set nothing.

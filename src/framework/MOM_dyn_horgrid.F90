@@ -137,11 +137,11 @@ type, public :: dyn_horgrid_type
                   !! basin depths at velocity points.  Otherwise the effects of
                   !! of topography are entirely determined from thickness points.
   real, allocatable, dimension(:,:) :: &
-    Dblock_u, &   !< Topographic depths at u-points at which the flow is blocked, in Z.
-    Dopen_u       !< Topographic depths at u-points at which the flow is open at width dy_Cu, in Z.
+    Dblock_u, &   !< Topographic depths at u-points at which the flow is blocked, in Z ~> m.
+    Dopen_u       !< Topographic depths at u-points at which the flow is open at width dy_Cu, in Z ~> m.
   real, allocatable, dimension(:,:) :: &
-    Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked, in Z.
-    Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv, in Z.
+    Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked, in Z ~> m.
+    Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv, in Z ~> m.
   real, allocatable, dimension(:,:) :: &
     CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
   real, allocatable, dimension(:,:) :: &
@@ -159,7 +159,7 @@ type, public :: dyn_horgrid_type
   real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
   real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
   real :: Rad_Earth = 6.378e6 !< The radius of the planet in meters.
-  real :: max_depth     !< The maximum depth of the ocean in Z.
+  real :: max_depth     !< The maximum depth of the ocean in Z ~> m.
 end type dyn_horgrid_type
 
 contains

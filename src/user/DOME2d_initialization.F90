@@ -97,10 +97,10 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
                                                       !! only read parameters without changing h.
 
   ! Local variables
-  real :: e0(SZK_(GV))     ! The resting interface heights, in depth units (Z), usually
+  real :: e0(SZK_(GV))     ! The resting interface heights, in depth units (Z ~> m), usually
                            ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
-                           ! positive upward, in depth units (Z).
+                           ! positive upward, in depth units (Z ~> m).
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
   real    :: delta_h
@@ -365,11 +365,11 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate, in s-1.
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
   real :: S_range, T_range             ! Range of salinities and temperatures over the vertical
-  real :: e0(SZK_(G)+1)             ! The resting interface heights, in depth units (Z),
+  real :: e0(SZK_(G)+1)             ! The resting interface heights, in Z ~> m,
                                     ! usually negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface
-                                    ! positive upward, in Z.
-  real :: d_eta(SZK_(G))            ! The layer thickness in a column, in Z.
+                                    ! positive upward, in Z ~> m.
+  real :: d_eta(SZK_(G))            ! The layer thickness in a column, in Z ~> m.
   real :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
   real :: dome2d_west_sponge_time_scale, dome2d_east_sponge_time_scale
   real :: dome2d_west_sponge_width, dome2d_east_sponge_width

@@ -41,10 +41,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
-  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces, in depth units (Z).
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in depth units (Z).
+  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces, in Z ~> m.
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in Z ~> m.
   real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface
-                            ! positive upward, in in depth units (Z).
+                            ! positive upward, in Z ~> m.
   real :: damp_rate, jet_width, jet_height, y_2
   real :: half_strat, half_depth
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -207,17 +207,17 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
 
   ! Local variables
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units (Z).
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in Z ~> m.
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in Z.
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in Z ~> m.
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
   real :: damp_rate    ! The inverse zonal-mean damping rate, in s-1.
   real :: jet_width    ! The width of the zonal mean jet, in km.
-  real :: jet_height   ! The interface height scale associated with the zonal-mean jet, in Z.
+  real :: jet_height   ! The interface height scale associated with the zonal-mean jet, in Z ~> m.
   real :: y_2          ! The y-position relative to the channel center, in km.
   real :: half_strat   ! The fractional depth where the straficiation is centered, ND.
-  real :: half_depth   ! The depth where the stratification is centered, in Z.
+  real :: half_depth   ! The depth where the stratification is centered, in Z ~> m.
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz

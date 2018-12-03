@@ -52,9 +52,9 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: u_face_mask_bdry => NULL() !< A duplicate copy of u_face_mask?
   real, pointer, dimension(:,:) :: v_face_mask_bdry => NULL() !< A duplicate copy of v_face_mask?
   real, pointer, dimension(:,:) :: u_flux_bdry_val => NULL() !< The ice volume flux into the cell through open boundary
-                                       !! u-faces (where u_face_mask=4), in Z m2 s-1???
+                                       !! u-faces (where u_face_mask=4), in Z m2 s-1 ~> m3 s-1???
   real, pointer, dimension(:,:) :: v_flux_bdry_val => NULL() !< The ice volume flux into the cell through open boundary
-                                       !! v-faces (where v_face_mask=4), in Z m2 s-1???
+                                       !! v-faces (where v_face_mask=4), in Z m2 s-1 ~> m3 s-1???
    ! needed where u_face_mask is equal to 4, similary for v_face_mask
   real, pointer, dimension(:,:) :: umask => NULL()      !< u-mask on the actual degrees of freedom (B grid)
                                        !! 1=normal node, 3=inhomogeneous boundary node,
@@ -68,7 +68,7 @@ type, public :: ice_shelf_dyn_CS ; private
                                                      !! in degC  on corner-points (B grid)
   real, pointer, dimension(:,:) :: tmask => NULL()   !< A mask on tracer points that is 1 where there is ice.
   real, pointer, dimension(:,:) :: ice_visc => NULL()   !< Glen's law ice viscosity, perhaps in m.
-  real, pointer, dimension(:,:) :: thickness_bdry_val => NULL() !< The ice thickness at an inflowing boundary, in Z.
+  real, pointer, dimension(:,:) :: thickness_bdry_val => NULL() !< The ice thickness at an inflowing boundary in Z ~> m.
   real, pointer, dimension(:,:) :: u_bdry_val => NULL() !< The zonal ice velocity at inflowing boundaries in m/s???
   real, pointer, dimension(:,:) :: v_bdry_val => NULL() !< The meridional ice velocity at inflowing boundaries in m/s???
   real, pointer, dimension(:,:) :: h_bdry_val => NULL() !< The ice thickness at inflowing boundaries, in m.
@@ -79,7 +79,7 @@ type, public :: ice_shelf_dyn_CS ; private
 
   real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av.
   real, pointer, dimension(:,:) :: float_frac_rt => NULL() !< A running total for calculating float_frac.
-  real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth, in Z.
+  real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth, in Z ~> m.
   real, pointer, dimension(:,:) :: float_frac => NULL()   !< Fraction of the time a cell is "exposed", i.e. the column
                                !! thickness is below a threshold.
                        !### [if float_frac = 1 ==> grounded; obviously counterintuitive; might fix]
@@ -124,7 +124,7 @@ type, public :: ice_shelf_dyn_CS ; private
   real :: thresh_float_col_depth !< The water column depth over which the shelf if considered to be floating
   logical :: moving_shelf_front  !< Specify whether to advance shelf front (and calve).
   logical :: calve_to_mask       !< If true, calve off the ice shelf when it passes the edge of a mask.
-  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving, in Z
+  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving, in Z ~> m.
 
   real :: cg_tolerance !< The tolerance in the CG solver, relative to initial residual, that
                        !! deterimnes when to stop the conguage gradient iterations.
@@ -704,7 +704,7 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time)
   !   o--- (3) ---o
   !
 
-  real, dimension(SZDI_(G),SZDJ_(G))   :: h_after_uflux, h_after_vflux ! Ice thicknesses in Z.
+  real, dimension(SZDI_(G),SZDJ_(G))   :: h_after_uflux, h_after_vflux ! Ice thicknesses in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G),4) :: flux_enter
   integer                           :: isd, ied, jsd, jed, i, j, isc, iec, jsc, jec
   real                              :: rho, spy
@@ -781,7 +781,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
   real, dimension(SZDIB_(G),SZDJB_(G)) :: TAUDX, TAUDY, u_prev_iterate, v_prev_iterate, &
                         u_bdry_cont, v_bdry_cont, Au, Av, err_u, err_v, &
                         u_last, v_last
-  real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thickness at corners, in Z.
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thickness at corners, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! An array indicating where the ice
                                                 ! shelf is floating: 0 if floating, 1 if not.
   character(len=160) :: mesg  ! The text of an error message
@@ -1043,7 +1043,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
                           intent(in)    :: taudy  !< The y-direction driving stress, in ???
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points, in Z.
+                                             !! points, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: float_cond !< An array indicating where the ice
                                                 !! shelf is floating: 0 if floating, 1 if not.
@@ -1421,13 +1421,13 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
                           intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: h0 !< The initial ice shelf thicknesses in Z.
+                          intent(in)    :: h0 !< The initial ice shelf thicknesses in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: h_after_uflux !< The ice shelf thicknesses after
-                                              !! the zonal mass fluxes, in Z.
+                                              !! the zonal mass fluxes, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G),4), &
                           intent(inout) :: flux_enter !< The ice volume flux into the cell
-                                              !! through the 4 cell boundaries, in Z m2
+                                              !! through the 4 cell boundaries, in Z m2 ~> m3.
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
 
@@ -1450,7 +1450,7 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
   integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
-  real, dimension(-2:2) :: stencil ! Thicknesses in Z.
+  real, dimension(-2:2) :: stencil ! Thicknesses in Z ~> m.
   real :: u_face, &  ! positive if out
       flux_diff_cell, phi, dxh, dyh, dxdyh
   character (len=1)        :: debug_str
@@ -1652,13 +1652,13 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: h_after_uflux !< The ice shelf thicknesses after
-                                              !! the zonal mass fluxes, in Z.
+                                              !! the zonal mass fluxes, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: h_after_vflux !< The ice shelf thicknesses after
-                                              !! the meridional mass fluxes, in Z.
+                                              !! the meridional mass fluxes, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G),4), &
                           intent(inout) :: flux_enter !< The ice volume flux into the cell
-                                              !! through the 4 cell boundaries, in Z m2
+                                              !! through the 4 cell boundaries, in Z m2 ~> m3.
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
 
@@ -1681,7 +1681,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
   integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
-  real, dimension(-2:2) :: stencil  ! Thicknesses in Z
+  real, dimension(-2:2) :: stencil  ! Thicknesses in Z ~> m.
   real :: v_face, &  ! positive if out
       flux_diff_cell, phi, dxh, dyh, dxdyh
   character(len=1)        :: debug_str
@@ -1859,7 +1859,7 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G),4), &
                           intent(inout) :: flux_enter !< The ice volume flux into the cell
-                                              !! through the 4 cell boundaries, in Z m2
+                                              !! through the 4 cell boundaries, in Z m2 ~> m3.
 
   ! in this subroutine we go through the computational cells only and, if they are empty or partial cells,
   ! we find the reference thickness and update the shelf mass and partial area fraction and the hmask if necessary
@@ -2034,13 +2034,13 @@ end subroutine shelf_advance_front
 subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickness_calve)
   type(ocean_grid_type), intent(in)    :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness, in Z.
+                         intent(inout) :: h_shelf !< The ice shelf thickness, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
-  real,                  intent(in)    :: thickness_calve !< The thickness at which to trigger calving, in Z.
+  real,                  intent(in)    :: thickness_calve !< The thickness at which to trigger calving, in Z ~> m.
 
   integer                        :: i,j
 
@@ -2061,7 +2061,7 @@ end subroutine ice_shelf_min_thickness_calve
 subroutine calve_to_mask(G, h_shelf, area_shelf_h, hmask, calve_mask)
   type(ocean_grid_type), intent(in) :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness, in Z.
+                         intent(inout) :: h_shelf !< The ice shelf thickness, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -2090,7 +2090,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, TAUD_X, TAUD_Y, OD)
   type(ocean_grid_type), intent(inout) :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type), intent(in)    :: US !< Pointer to a structure containing unit conversion factors
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: OD  !< ocean floor depth at tracer points, in Z
+                         intent(in)    :: OD  !< ocean floor depth at tracer points, in Z ~> m.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(inout) :: TAUD_X  !< X-direction driving stress at q-points
   real, dimension(SZDIB_(G),SZDJB_(G)), &
@@ -2107,8 +2107,8 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, TAUD_X, TAUD_Y, OD)
 !     "average" ocean depth -- and is needed to find surface elevation
 !    (it is assumed that base_ice = bed + OD)
 
-  real, dimension(SIZE(OD,1),SIZE(OD,2))  :: S, &     ! surface elevation, in Z
-                            BASE     ! basal elevation of shelf/stream, in Z
+  real, dimension(SIZE(OD,1),SIZE(OD,2))  :: S, &     ! surface elevation, in Z ~> m.
+                            BASE     ! basal elevation of shelf/stream, in Z ~> m.
 
 
   real      :: rho, rhow, sx, sy, neumann_val, dxh, dyh, dxdyh, grav
@@ -2283,8 +2283,8 @@ subroutine init_boundary_values(CS, G, time, hmask, input_flux, input_thick, new
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
-  real,                  intent(in)    :: input_flux !< The integrated inward ice thickness flux in Z m2 s-1.
-  real,                  intent(in)    :: input_thick !< The ice thickness at boundaries, in Z.
+  real,                  intent(in)    :: input_flux !< The integrated inward ice thickness flux in Z m2 s-1 ~> m3 s-1.
+  real,                  intent(in)    :: input_thick !< The ice thickness at boundaries, in Z ~> m.
   logical,     optional, intent(in)    :: new_sim !< If present and false, this run is being restarted
 
 ! this will be a per-setup function. the boundary values of thickness and velocity
@@ -2372,7 +2372,7 @@ subroutine CG_action(uret, vret, u, v, Phi, Phisub, umask, vmask, hmask, H_node,
                                              !! meridional flow at the corner point
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(in)    :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points, in Z.
+                                             !! points, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -2384,7 +2384,7 @@ subroutine CG_action(uret, vret, u, v, Phi, Phisub, umask, vmask, hmask, H_node,
                          intent(in)    :: float_cond !< An array indicating where the ice
                                                 !! shelf is floating: 0 if floating, 1 if not.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points, in Z.
+                         intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points, in Z ~> m.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(in)    :: beta  !< A field related to the nonlinear part of the
                                                 !! "linearized" basal stress.  The exact form and
@@ -2561,11 +2561,11 @@ subroutine CG_action_subgrid_basal(Phisub, H, U, V, DXDYH, bathyT, dens_ratio, U
   real, dimension(:,:,:,:,:,:), &
                         intent(in)    :: Phisub !< Quadrature structure weights at subgridscale
                                             !! locations for finite element calculations
-  real, dimension(2,2), intent(in)    :: H  !< The ice shelf thickness at nodal (corner) points, in Z.
+  real, dimension(2,2), intent(in)    :: H  !< The ice shelf thickness at nodal (corner) points, in Z ~> m.
   real, dimension(2,2), intent(in)    :: U  !< The zonal ice shelf velocity at vertices, in m/year
   real, dimension(2,2), intent(in)    :: V  !< The meridional ice shelf velocity at vertices, in m/year
   real,                 intent(in)    :: DXDYH  !< The tracer cell area, in m2
-  real,                 intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points, in Z.
+  real,                 intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points, in Z ~> m.
   real,                 intent(in)    :: dens_ratio !< The density of ice divided by the density
                                                     !! of seawater, nondimensional
   real, dimension(2,2), intent(inout) :: Ucontr !< A field related to the subgridscale contributions to
@@ -2625,7 +2625,7 @@ subroutine matrix_diagonal(CS, G, float_cond, H_node, nu, beta, hmask, dens_rati
                                                 !! shelf is floating: 0 if floating, 1 if not.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: H_node !< The ice shelf thickness at nodal
-                                                 !! (corner) points, in Z.
+                                                 !! (corner) points, in Z ~> m.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: nu   !< A field related to the ice viscosity from Glen's
                                                 !! flow law. The exact form and units depend on the
@@ -2767,9 +2767,9 @@ subroutine CG_diagonal_subgrid_basal (Phisub, H_node, DXDYH, bathyT, dens_ratio,
                         intent(in) :: Phisub !< Quadrature structure weights at subgridscale
                                              !! locations for finite element calculations
   real, dimension(2,2), intent(in) :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points, in Z
+                                             !! points, in Z ~> m.
   real,              intent(in)    :: DXDYH  !< The tracer cell area, in m2
-  real,              intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points, in Z
+  real,              intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points, in Z ~> m.
   real,              intent(in)    :: dens_ratio !< The density of ice divided by the density
                                                  !! of seawater, nondimensional
   real, dimension(2,2), intent(inout) :: Ucontr !< A field related to the subgridscale contributions to
@@ -2813,7 +2813,7 @@ subroutine apply_boundary_values(CS, ISS, G, time, Phisub, H_node, nu, beta, flo
                                             !! locations for finite element calculations
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: H_node !< The ice shelf thickness at nodal
-                                                 !! (corner) points, in Z.
+                                                 !! (corner) points, in Z ~> m.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: nu   !< A field related to the ice viscosity from Glen's
                                                 !! flow law. The exact form and units depend on the
@@ -3089,7 +3089,7 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
   type(ice_shelf_dyn_CS), intent(inout) :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: h_shelf !< the thickness of the ice shelf in Z
+                          intent(in)    :: h_shelf !< the thickness of the ice shelf in Z ~> m.
 
   integer :: i, j, iters, isd, ied, jsd, jed
   real    :: rhoi_rhow, OD
@@ -3408,13 +3408,13 @@ end subroutine update_velocity_masks
 subroutine interpolate_H_to_B(G, h_shelf, hmask, H_node)
   type(ocean_grid_type), intent(inout) :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: h_shelf !< The ice shelf thickness at tracer points, in Z.
+                         intent(in)    :: h_shelf !< The ice shelf thickness at tracer points, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(inout) :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points, in Z.
+                                             !! points, in Z ~> m.
 
   integer :: i, j, isc, iec, jsc, jec, num_h, k, l
   real    :: summ
@@ -3625,7 +3625,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
                           intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: h0 !< The initial ice shelf thicknesses in Z.
+                          intent(in)    :: h0 !< The initial ice shelf thicknesses in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: h_after_uflux !< The ice shelf thicknesses after
                                               !! the zonal mass fluxes, in m.
@@ -3857,10 +3857,10 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: h_after_uflux !< The ice shelf thicknesses after
-                                              !! the zonal mass fluxes, in Z.
+                                              !! the zonal mass fluxes, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: h_after_vflux !< The ice shelf thicknesses after
-                                              !! the meridional mass fluxes, in Z.
+                                              !! the meridional mass fluxes, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G),4), &
                           intent(inout) :: flux_enter !< The integrated temperature flux into
                                               !! the cell through the 4 cell boundaries, in degC Z m2

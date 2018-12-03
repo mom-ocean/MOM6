@@ -141,17 +141,17 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization (H units)
     htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer (H units)
     Rml_av_slow           ! g_Rho0 times the average mixed layer density (m s-2)
-  real :: g_Rho0          ! G_Earth/Rho0 (m5 Z-1 s-2 kg-1)
+  real :: g_Rho0          ! G_Earth/Rho0 (m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1)
   real :: rho_ml(SZI_(G)) ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
-  real :: h_vel           ! htot interpolated onto velocity points in Z (not H).
+  real :: h_vel           ! htot interpolated onto velocity points, in Z ~> m (not H).
   real :: absf            ! absolute value of f, interpolated to velocity points (s-1)
-  real :: u_star          ! surface friction velocity, interpolated to velocity points (Z s-1)
+  real :: u_star          ! surface friction velocity, interpolated to velocity points, in Z s-1 ~> m s-1.
   real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer (s-1)
   real :: timescale       ! mixing growth timescale (sec)
   real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected (H units)
-  real :: dz_neglect      ! A tiny thickness (in Z) that is usually lost in roundoff so can be neglected
+  real :: dz_neglect      ! A tiny thickness (in Z ~> m) that is usually lost in roundoff so can be neglected
   real :: I4dt            ! 1/(4 dt) (sec-1)
   real :: Ihtot,Ihtot_slow! total mixed layer thickness
   real :: a(SZK_(G))      ! A non-dimensional value relating the overall flux
@@ -563,17 +563,17 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
     Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
-  real :: g_Rho0          ! G_Earth/Rho0 (m5 Z-1 s-2 kg-1)
+  real :: g_Rho0          ! G_Earth/Rho0 (m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1)
   real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
-  real :: h_vel           ! htot interpolated onto velocity points (Z; not H)
+  real :: h_vel           ! htot interpolated onto velocity points (in Z ~> m; not H)
   real :: absf            ! absolute value of f, interpolated to velocity points (s-1)
-  real :: u_star          ! surface friction velocity, interpolated to velocity points (Z s-1)
+  real :: u_star          ! surface friction velocity, interpolated to velocity points, in Z s-1 ~> m s-1.
   real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer (s-1)
   real :: timescale       ! mixing growth timescale (sec)
   real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected (H units)
-  real :: dz_neglect      ! tiny thickness (in Z) that usually lost in roundoff and can be neglected (meter)
+  real :: dz_neglect      ! tiny thickness (in Z ~> m) that usually lost in roundoff and can be neglected (meter)
   real :: I4dt            ! 1/(4 dt)
   real :: I2htot          ! Twice the total mixed layer thickness at velocity points (H units)
   real :: z_topx2         ! depth of the top of a layer at velocity points (H units)

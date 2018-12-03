@@ -109,7 +109,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2.
+    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2 ~> m s-2.
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it,
@@ -125,7 +125,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real :: min_h_frac
   real :: H_to_pres
   real, dimension(SZI_(G)) :: &
-    hmin, &  ! Thicknesses in Z.
+    hmin, &  ! Thicknesses in Z ~> m.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum

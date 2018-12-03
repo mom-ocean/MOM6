@@ -23,8 +23,8 @@ public USER_init_ice_thickness
 !> The control structure for the user_ice_shelf module
 type, public :: user_ice_shelf_CS ; private
   real :: Rho_ocean  !< The ocean's typical density, in kg m-2 Z-1.
-  real :: max_draft  !< The maximum ocean draft of the ice shelf, in Z.
-  real :: min_draft  !< The minimum ocean draft of the ice shelf, in Z.
+  real :: max_draft  !< The maximum ocean draft of the ice shelf, in Z ~> m.
+  real :: min_draft  !< The minimum ocean draft of the ice shelf, in Z ~> m.
   real :: flat_shelf_width !< The range over which the shelf is min_draft thick.
   real :: shelf_slope_scale !< The range over which the shelf slopes.
   real :: pos_shelf_edge_0 !< The x-position of the shelf edge at time 0, in km.
@@ -134,7 +134,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(inout) :: h_shelf !< The ice shelf thickness, in Z.
+                           intent(inout) :: h_shelf !< The ice shelf thickness, in Z ~> m.
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: hmask !< A mask indicating which tracer points are
                                                 !! partly or fully covered by an ice-shelf

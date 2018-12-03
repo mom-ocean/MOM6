@@ -172,7 +172,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   type(regridding_CS),        intent(inout) :: CS  !< Regridding control structure
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
-  real,                       intent(in)    :: max_depth  !< The maximum depth of the ocean, in Z.
+  real,                       intent(in)    :: max_depth  !< The maximum depth of the ocean, in Z ~> m.
   type(param_file_type),      intent(in)    :: param_file !< Parameter file
   character(len=*),           intent(in)    :: mdl        !< Name of calling module.
   character(len=*),           intent(in)    :: coord_mode !< Coordinate mode
