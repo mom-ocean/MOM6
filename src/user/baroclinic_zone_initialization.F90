@@ -86,7 +86,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution
   real      :: S_ref, dSdz, dSdx, delta_S ! Parameters describing salinity distribution
   real      :: L_zone ! Width of baroclinic zone
-  real      :: zc, zi ! Depths in depth units (Z).
+  real      :: zc, zi ! Depths in depth units (Z ~> m).
   real      :: x, xd, xs, y, yd, fn
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
   logical :: just_read    ! If true, just read parameters but set nothing.

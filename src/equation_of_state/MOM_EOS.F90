@@ -625,14 +625,14 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S   !< Salinity (PSU)
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer in depth units (Z).
+                        intent(in)  :: z_t !< Height at the top of the layer in depth units (Z ~> m).
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer in Z.
+                        intent(in)  :: z_b !< Height at the bottom of the layer, in Z ~> m.
   real,                 intent(in)  :: rho_ref !< A mean density, in kg m-3, that is subtracted out to
                                            !! reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density, in kg m-3, that is used to calculate the
                                            !! pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2.
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa !< The change in the pressure anomaly across the layer, in Pa.
@@ -650,7 +650,7 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
                                            !! divided by the y grid spacing, in Pa.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
               optional, intent(in)  :: bathyT !< The depth of the bathymetry in units of Z.
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change, in Z.
+  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change, in Z ~> m.
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
 
@@ -876,16 +876,16 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S  !< Salinity of the layer in PSU.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer in depth units (Z).
+                        intent(in)  :: z_t !< Height at the top of the layer in depth units (Z ~> m).
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b !< Height at the bottom of the layer in Z.
+                        intent(in)  :: z_b !< Height at the bottom of the layer in Z ~> m.
   real,                 intent(in)  :: rho_ref !< A mean density, in kg m-3, that is
                                           !! subtracted out to reduce the magnitude
                                           !! of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density, in kg m-3, that is used
                                           !! to calculate the pressure (as p~=-z*rho_0*G_e)
                                           !! used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2.
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa !< The change in the pressure anomaly
@@ -904,7 +904,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
                                           !! layer divided by the y grid spacing, in Pa.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
               optional, intent(in)  :: bathyT !< The depth of the bathymetry in units of Z.
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change, in Z.
+  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change, in Z ~> m.
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                           !! interpolate T/S for top and bottom integrals.
   real :: T5(5), S5(5), p5(5), r5(5)
@@ -912,10 +912,10 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real :: w_left, w_right
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
-  real :: dz         ! The layer thickness, in Z.
-  real :: hWght      ! A pressure-thickness below topography, in Z.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Z.
-  real :: iDenom     ! The inverse of the denominator in the weights, in Z-2.
+  real :: dz         ! The layer thickness, in Z ~> m.
+  real :: hWght      ! A pressure-thickness below topography, in Z ~> m.
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Z ~> m.
+  real :: iDenom     ! The inverse of the denominator in the weights, in Z-2 ~> m-2.
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
   real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
@@ -1068,14 +1068,14 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                         intent(in)  :: S_b !< Salinity at the cell bottom (ppt)
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_t !< The geometric height at the top of the layer,
-                                           !! in depth units (Z), usually m.
+                                           !! in depth units (Z ~> m).
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b !< The geometric height at the bottom of the layer in Z.
+                        intent(in)  :: z_b !< The geometric height at the bottom of the layer in Z ~> m.
   real,                 intent(in)  :: rho_ref !< A mean density, in kg m-3, that is subtracted out to
                                            !! reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density, in kg m-3, that is used to calculate the
                                            !! pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2.
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
   real,                 intent(in)  :: dz_subroundoff !< A miniscule thickness
                                            !! change with the same units as z_t
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
@@ -1125,16 +1125,16 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant, ND.
   real :: GxRho                     ! Gravitational acceleration times density, in kg m-1 Z-1 s-2.
   real :: I_Rho                     ! The inverse of the reference density, in m3 kg-1.
-  real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points in Z.
-  real :: dz_x(5,HIO%iscB:HIO%iecB) ! Layer thicknesses along an x-line of subrid locations, in Z.
-  real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations, in Z.
+  real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points in Z ~> m.
+  real :: dz_x(5,HIO%iscB:HIO%iecB) ! Layer thicknesses along an x-line of subrid locations, in Z ~> m.
+  real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations, in Z ~> m.
   real :: weight_t, weight_b        ! Nondimensional wieghts of the top and bottom.
   real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1).
   real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners, in degC.
   real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners, in ppt.
-  real :: hWght                     ! A topographically limited thicknes weight, in Z.
-  real :: hL, hR                    ! Thicknesses to the left and right, in Z.
-  real :: iDenom                    ! The denominator of the thickness weight expressions, in Z-2.
+  real :: hWght                     ! A topographically limited thicknes weight, in Z ~> m.
+  real :: hL, hR                    ! Thicknesses to the left and right, in Z ~> m.
+  real :: iDenom                    ! The denominator of the thickness weight expressions, in Z-2 ~> m-2.
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   integer :: iin, jin, ioff, joff
   integer :: pos
@@ -1360,16 +1360,16 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom (degC)
   real,           intent(in)  :: S_t !< Salinity at the cell top (ppt)
   real,           intent(in)  :: S_b !< Salinity at the cell bottom (ppt)
-  real,           intent(in)  :: z_t !< Absolute height of top of cell (Z)   (Boussinesq ????)
-  real,           intent(in)  :: z_b !< Absolute height of bottom of cell (Z)
+  real,           intent(in)  :: z_t !< Absolute height of top of cell, in Z ~> m.   (Boussinesq ????)
+  real,           intent(in)  :: z_b !< Absolute height of bottom of cell, in Z ~> m.
   real,           intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t (Pa)
   real,           intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out (Pa)
   real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to
   real,           intent(in)  :: G_e !< Gravitational acceleration (m2 Z-1 s-2)
   type(EOS_type), pointer     :: EOS !< Equation of state structure
   real,           intent(out) :: P_b !< Pressure at the bottom of the cell (Pa)
-  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt (Z)
-  real, optional, intent(in)  :: z_tol !< The tolerance in finding z_out, in Z.
+  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt, in Z ~> m.
+  real, optional, intent(in)  :: z_tol !< The tolerance in finding z_out, in Z ~> m.
   ! Local variables
   real :: top_weight, bottom_weight, rho_anom, w_left, w_right, GxRho, dz, dp, F_guess, F_l, F_r
   real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz

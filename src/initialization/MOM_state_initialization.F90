@@ -700,7 +700,7 @@ subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h)
   type(ocean_grid_type),                      intent(in)    :: G   !< The ocean's grid structure
   type(verticalGrid_type),                    intent(in)    :: GV  !< The ocean's vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: eta !< Interface heights, in Z
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: eta !< Interface heights, in Z ~> m.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h   !< Layer thicknesses, in H
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
@@ -837,10 +837,10 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_list" ! This subroutine's name.
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z),
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z ~> m),
                           ! usually negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units (Z).
+                          ! positive upward, in depth units (Z ~> m).
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, eta_file, inputdir ! Strings for file/path
   character(len=72)  :: eta_var
@@ -1153,8 +1153,8 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   real,                  intent(in)    :: G_earth !< Gravitational acceleration (m2 Z-1 s-2)
-  real,                  intent(in)    :: depth !< Depth of ocean column (Z)
-  real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (Z)
+  real,                  intent(in)    :: depth !< Depth of ocean column, in Z ~> m.
+  real,                  intent(in)    :: min_thickness !< Smallest thickness allowed, in Z ~> m.
   real, dimension(nk),   intent(inout) :: T   !< Layer mean temperature
   real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer
   real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer
@@ -1166,7 +1166,7 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
   real,        optional, intent(in)    :: z_tol !< The tolerance with which to find the depth
-                                                !! matching the specified pressure, in Z.
+                                                !! matching the specified pressure, in Z ~> m.
 
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
@@ -1936,11 +1936,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   integer :: kd, inconsistent
   integer :: nkd      ! number of levels to use for regridding input arrays
-  real    :: eps_Z    ! A negligibly thin layer thickness, in Z.
+  real    :: eps_Z    ! A negligibly thin layer thickness, in Z ~> m.
   real    :: PI_180             ! for conversion from degrees to radians
 
   real, dimension(:,:), pointer :: shelf_area => NULL()
-  real    :: min_depth ! The minimum depth in Z.
+  real    :: min_depth ! The minimum depth in Z ~> m.
   real    :: dilate
   real    :: missing_value_temp, missing_value_salt
   logical :: correct_thickness
@@ -1959,19 +1959,19 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real, dimension(:), allocatable :: z_edges_in, z_in, Rb
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights in Z.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights in Z ~> m.
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press  ! Pressures in Pa.
 
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: hTarget ! Target thicknesses in Z.
+  real, dimension(:), allocatable :: hTarget ! Target thicknesses in Z ~> m.
   real, dimension(:,:), allocatable :: area_shelf_h
   real, dimension(:,:), allocatable, target :: frac_shelf_h
   real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
   real, dimension(:,:,:), allocatable :: tmp_mask_in
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses in H.
   real, dimension(:,:,:), allocatable :: dz_interface ! Change in position of interface due to regridding
-  real :: zTopOfCell, zBottomOfCell ! Heights in Z units
+  real :: zTopOfCell, zBottomOfCell ! Heights in Z units, Z ~> m.
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 

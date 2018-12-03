@@ -60,9 +60,9 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
-                                                                 !! (not layer!) in Z2 s-1.
+                                                                 !! (not layer!) in Z2 s-1 ~> m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The vertical viscosity at each interface
-                                                                 !! (not layer!) in Z2 s-1.
+                                                                 !! (not layer!) in Z2 s-1 ~> m2 s-1.
   type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous call to
                                                                  !! CVMix_shear_init.
   ! Local variables

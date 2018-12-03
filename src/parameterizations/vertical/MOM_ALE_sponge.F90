@@ -597,7 +597,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, f_p
   ! Local variables
   real, allocatable, dimension(:,:,:) :: sp_val !< Field to be used in the sponge
   real, allocatable, dimension(:,:,:) :: mask_z !< Field mask for the sponge data
-  real, allocatable, dimension(:), target :: z_in, z_edges_in ! Heights in Z.
+  real, allocatable, dimension(:), target :: z_in, z_edges_in ! Heights in Z ~> m.
   real :: missing_value
   integer :: j, k, col
   integer :: isd,ied,jsd,jed
@@ -607,9 +607,9 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, f_p
   character(len=256) :: mesg ! String for error messages
 
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: hsrc ! Source thicknesses in Z
+  real, dimension(:), allocatable :: hsrc ! Source thicknesses in Z ~> m.
   real, dimension(:), allocatable :: tmpT1d
-  real :: zTopOfCell, zBottomOfCell ! Heights in Z
+  real :: zTopOfCell, zBottomOfCell ! Heights in Z ~> m.
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   if (.not.associated(CS)) return

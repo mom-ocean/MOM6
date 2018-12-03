@@ -103,7 +103,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
 ! These are the stresses in the direction of the model grid (i.e. the same
 ! direction as the u- and v- velocities.)  They are both in Pa.
 !   In addition, this subroutine can be used to set the surface friction
-! velocity, forces%ustar, in Z s-1. This is needed with a bulk mixed layer.
+! velocity, forces%ustar, in Z s-1 ~> m s-1. This is needed with a bulk mixed layer.
 !
 ! Arguments: state - A structure containing fields that describe the
 !                    surface state of the ocean.

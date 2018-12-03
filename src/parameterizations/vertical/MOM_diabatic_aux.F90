@@ -32,7 +32,7 @@ public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 type, public :: diabatic_aux_CS ; private
   logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff at the
                                    !! river mouths to a depth of "rivermix_depth"
-  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T, in Z.
+  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T, in Z ~> m.
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
                              !! to cool the topmost layer down to the freezing
                              !! point.  The default is false.
@@ -239,7 +239,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   real :: b_denom_T    ! The first term in the denominators for the expressions
   real :: b_denom_S    ! for b1_T and b1_S, both in H.
   real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
-  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities in Z2 s-1.
+  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities in Z2 s-1 ~> m2 s-1.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -663,15 +663,15 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   ! Local variables
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences, in kg m-3.
   real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2     ! Reference pressures in Pa.
-  real, dimension(SZI_(G)) :: dK, dKm1, d1          ! Depths in Z.
+  real, dimension(SZI_(G)) :: dK, dKm1, d1          ! Depths in Z ~> m.
   real, dimension(SZI_(G)) :: rhoSurf, rhoAtK, rho1 ! Densities used for N2, in kg m-3.
-  real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth, in Z.
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth, in Z ~> m.
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML, in s-2.
-  real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2, in Z2.
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2, in Z2 ~> m2.
   real :: Rho_x_gE         ! The product of density, gravitational acceleartion and a unit
                            ! conversion factor, in kg m-1 Z-1 s-2.
   real :: gE_Rho0          ! The gravitational acceleration divided by a mean density, in m4 s-2 kg-1.
-  real :: dz_subML         ! Depth below ML over which to diagnose stratification, in Z.
+  real :: dz_subML         ! Depth below ML over which to diagnose stratification, in Z ~> m.
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
 
@@ -793,7 +793,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
                                                !! salinity, in m3 kg-1 / (g kg-1).
   real, dimension(SZI_(G),SZJ_(G)), &
-                   optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface in Z2 s-3
+                   optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface, in Z2 s-3 ~> m2 s-3.
 
   ! Local variables
   integer, parameter :: maxGroundings = 5
@@ -829,7 +829,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   real    :: Temp_in, Salin_in
 !  real    :: I_G_Earth
   real    :: g_Hconv2
-  real    :: GoRho    ! g_Earth times a unit conversion factor divided by density, in Z m3 s-2 kg-1
+  real    :: GoRho    ! g_Earth times a unit conversion factor divided by density,
+                      ! in Z m3 s-2 kg-1 ~> m4 s-2 kg-1
   logical :: calculate_energetics
   logical :: calculate_buoyancy
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
