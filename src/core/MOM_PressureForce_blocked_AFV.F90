@@ -126,9 +126,9 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
                 ! the pressure anomaly at the top of the layer, in Pa m2 s-2.
   real, dimension(SZI_(G),SZJ_(G))  :: &
     dp, &       ! The (positive) change in pressure across a layer, in Pa.
-    SSH, &      ! The sea surface height anomaly, in depth units (Z).
+    SSH, &      ! The sea surface height anomaly, in depth units (Z ~> m).
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
-                ! astronomical sources and self-attraction and loading, in Z.
+                ! astronomical sources and self-attraction and loading, in Z ~> m.
     dM, &       ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model, in m2 s-2.
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
@@ -155,8 +155,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
 
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected, in Pa.
-  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2.
-  real :: I_gEarth           ! The inverse of g_Earth_z, in s2 Z m-2
+  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2 ~> m s-2.
+  real :: I_gEarth           ! The inverse of g_Earth_z, in s2 Z m-2 ~> s2 m-1.
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref, in m3 kg-1.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
@@ -439,10 +439,10 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
                                                          !! calculate PFu and PFv, in H, with any tidal
                                                          !! contributions or compressibility compensation.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: e ! Interface height in depth units (Z).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: e ! Interface height in depth units (Z ~> m).
   real, dimension(SZI_(G),SZJ_(G))  :: &
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
-                ! astronomical sources and self-attraction and loading, in depth units (Z).
+                ! astronomical sources and self-attraction and loading, in depth units (Z ~> m).
     dM          ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model, in m2 s-2.
   real, dimension(SZI_(G)) :: &
@@ -480,10 +480,10 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected, in H.
   real :: I_Rho0             ! 1/Rho0.
-  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2.
+  real :: g_Earth_z          ! A scaled version of g_Earth, in m2 Z-1 s-2 ~> m s-2.
   real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1.
   real :: Rho_ref            ! The reference density in kg m-3.
-  real :: dz_neglect         ! A minimal thickness in Z, like e.
+  real :: dz_neglect         ! A minimal thickness in Z ~> m, like e.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an

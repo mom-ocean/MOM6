@@ -80,13 +80,13 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units (Z), usually
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in Z ~> m, usually
                           ! negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units (Z).
-  real :: min_thickness   ! The minimum layer thicknesses, in Z.
+                          ! positive upward, in Z ~> m.
+  real :: min_thickness   ! The minimum layer thicknesses, in Z ~> m.
   real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities, in ppt.
-  real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights, in Z-1.
+  real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights, in Z-1 ~> m-1.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=20) :: verticalCoordinate

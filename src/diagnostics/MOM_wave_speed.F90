@@ -30,7 +30,7 @@ type, public :: wave_speed_CS ; private
                                        !! wave speed. This parameter controls the default behavior of
                                        !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
-                                       !! calculating the equivalent barotropic wave speed. (Z)
+                                       !! calculating the equivalent barotropic wave speed, in Z ~> m.
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
@@ -68,7 +68,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2.
+    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2 ~> m s-2.
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it,
@@ -82,11 +82,11 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real :: min_h_frac
   real :: Z_to_Pa  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &  ! Thicknesses in Z.
+    htot, hmin, &  ! Thicknesses in Z ~> m.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
-  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths, in Z2 m-2.
+  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths, in Z2 m-2 ~> 1.
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
@@ -561,7 +561,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real :: min_h_frac
   real :: Z_to_Pa  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &    ! Thicknesses in Z.
+    htot, hmin, &    ! Thicknesses in Z ~> m.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot ! overestimate of the mode-1 speed squared, m2 s-2
   real :: speed2_min ! minimum mode speed (squared) to consider in root searching

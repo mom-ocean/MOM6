@@ -172,7 +172,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   real :: dist2  ! The distance squared from a line, in m2.
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected, in H.
-  real :: e(SZK_(G)+1), e_top, e_bot ! Heights in Z.
+  real :: e(SZK_(G)+1), e_top, e_bot ! Heights in Z ~> m.
   real :: d_tr   ! A change in tracer concentraions, in tracer units.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB

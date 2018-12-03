@@ -88,7 +88,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   type(thickness_diffuse_CS),                pointer       :: CS     !< Control structure for thickness diffusion
   ! Local variables
   real :: e(SZI_(G), SZJ_(G), SZK_(G)+1) ! heights of interfaces, relative to mean
-                                         ! sea level, in Z, positive up.
+                                         ! sea level, in Z ~> m, positive up.
   real :: uhD(SZIB_(G), SZJ_(G), SZK_(G)) ! uhD & vhD are the diffusive u*h &
   real :: vhD(SZI_(G), SZJB_(G), SZK_(G)) ! v*h fluxes (m2 H s-1)
 
@@ -466,28 +466,30 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: drdkL, drdkR  ! Vertical density differences across an interface, in kg m-3.
   real :: drdi_u(SZIB_(G), SZK_(G)+1) ! Copy of drdi at u-points in kg m-3.
   real :: drdj_v(SZI_(G), SZK_(G)+1)  ! Copy of drdj at v-points in kg m-3.
-  real :: drdkDe_u(SZIB_(G), SZK_(G)+1) ! Lateral difference of product of drdk and e at u-points, in Z kg m-3.
-  real :: drdkDe_v(SZI_(G), SZK_(G)+1)  ! Lateral difference of product of drdk and e at v-points, in Z kg m-3.
+  real :: drdkDe_u(SZIB_(G),SZK_(G)+1) ! Lateral difference of product of drdk and e at u-points,
+                                       ! in Z kg m-3 ~> kg m-2.
+  real :: drdkDe_v(SZI_(G),SZK_(G)+1)  ! Lateral difference of product of drdk and e at v-points,
+                                       ! in Z kg m-3 ~> kg m-2.
   real :: hg2A, hg2B, hg2L, hg2R ! Squares of geometric mean thicknesses, in H2.
   real :: haA, haB, haL, haR     ! Arithmetic mean thicknesses in H.
-  real :: dzaL, dzaR    ! Temporary thicknesses in Z.
+  real :: dzaL, dzaR    ! Temporary thicknesses in Z ~> m.
   real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
   real :: drdx, drdy    ! Zonal and meridional density gradients, in kg m-4.
-  real :: drdz          ! Vertical density gradient, in units of kg m-3 Z-1.
+  real :: drdz          ! Vertical density gradient, in units of kg m-3 Z-1 ~> kg m-4.
   real :: h_harm        ! Harmonic mean layer thickness, in H.
-  real :: c2_h_u(SZIB_(G), SZK_(G)+1) ! Wave speed squared divided by h at u-points, m2 Z-1 s-2.
-  real :: c2_h_v(SZI_(G), SZK_(G)+1)  ! Wave speed squared divided by h at v-points, m2 Z-1 s-2.
-  real :: hN2_u(SZIB_(G), SZK_(G)+1)  ! Thickness in m times N2 at interfaces above u-points, m2 Z-1 s-2.
-  real :: hN2_v(SZI_(G), SZK_(G)+1)   ! Thickness in m times N2 at interfaces above v-points, m2 Z-1 s-2.
+  real :: c2_h_u(SZIB_(G), SZK_(G)+1) ! Wave speed squared divided by h at u-points, in m2 Z-1 s-2 ~> m s-2.
+  real :: c2_h_v(SZI_(G), SZK_(G)+1)  ! Wave speed squared divided by h at v-points, in m2 Z-1 s-2 ~> m s-2.
+  real :: hN2_u(SZIB_(G), SZK_(G)+1)  ! Thickness in m times N2 at interfaces above u-points, in m2 Z-1 s-2.
+  real :: hN2_v(SZI_(G), SZK_(G)+1)   ! Thickness in m times N2 at interfaces above v-points, in m2 Z-1 s-2.
   real :: Sfn_est       ! Two preliminary estimates (before limiting) of the
-                        ! overturning streamfunction, both in Z m2 s-1.
-  real :: Sfn_unlim_u(SZIB_(G), SZK_(G)+1) ! Streamfunction for u-points (Z m2 s-1)
-  real :: Sfn_unlim_v(SZI_(G), SZK_(G)+1)  ! Streamfunction for v-points (Z m2 s-1)
+                        ! overturning streamfunction, both in Z m2 s-1 ~> m3 s-1.
+  real :: Sfn_unlim_u(SZIB_(G), SZK_(G)+1) ! Streamfunction for u-points, in Z m2 s-1 ~> m3 s-1.
+  real :: Sfn_unlim_v(SZI_(G), SZK_(G)+1)  ! Streamfunction for v-points, in Z m2 s-1 ~> m3 s-1.
   real :: slope2_Ratio_u(SZIB_(G), SZK_(G)+1) ! The ratio of the slope squared to slope_max squared.
   real :: slope2_Ratio_v(SZI_(G), SZK_(G)+1)  ! The ratio of the slope squared to slope_max squared.
   real :: Sfn_in_h      ! The overturning streamfunction, in H m2 s-1 (note units different from other Sfn vars).
   real :: Sfn_safe      ! The streamfunction that goes linearly back to 0 at the surface.  This is a
-                        ! good thing to use when the slope is so large as to be meaningless (Z m2 s-1).
+                        ! good thing to use when the slope is so large as to be meaningless (Z m2 s-1 ~> m3 s-1).
   real :: Slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1, nondimensional.
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient, in kg2 m-8.
@@ -495,16 +497,16 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected, in H.
   real :: h_neglect2    ! h_neglect^2, in H2.
-  real :: dz_neglect    ! A thickness in Z that is so small it is usually lost
-                        ! in roundoff and can be neglected, in Z.
+  real :: dz_neglect    ! A thickness, in Z ~> m, that is so small it is usually lost
+                        ! in roundoff and can be neglected, in Z ~> m.
   real :: G_scale       ! The gravitational acceleration times some unit conversion
-                        ! factors, in m3 Z-1 H-1 s-2.
+                        ! factors, in m3 Z-1 H-1 s-2 ~> m s-2 or m4 kg-1 s-2.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: find_work  ! If true, find the change in energy due to the fluxes.
   integer :: nk_linear  ! The number of layers over which the streamfunction
                         ! goes to 0.
-  real :: G_rho0        ! g/Rho0 in m5 Z-1 s-2
+  real :: G_rho0        ! g/Rho0, in m5 Z-1 s-2 ~> m4 s-2.
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
                         ! times unit conversion factors (s-2 m2 Z-2)
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: diag_sfn_x, diag_sfn_unlim_x ! Diagnostics

@@ -171,7 +171,7 @@ function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlev
   integer :: n,i,j,k,l,nx,ny,nz,nt,kz
   integer :: k_top,k_bot,k_bot_prev,kk,kstart
   real    :: sl_tr    ! The tracer concentration slope times the layer thickess, in tracer units.
-  real    :: epsln_Z  ! A negligibly thin layer thickness, in Z.
+  real    :: epsln_Z  ! A negligibly thin layer thickness, in Z ~> m.
   real, dimension(size(tr_in,3)) :: wt !< The fractional weight for each layer in the range between z1 and z2
   real, dimension(size(tr_in,3)) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom
                                   ! limits of the part of a z-cell that contributes to a layer, relative
@@ -560,13 +560,13 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
                       intent(in) :: zin   !< Input data levels, in Z (often m).
   real, dimension(:), intent(in) :: Rb    !< target interface densities (kg m-3)
   real, dimension(size(rho,1),size(rho,2)), &
-                      intent(in) :: depth !< ocean depth in Z
+                      intent(in) :: depth !< ocean depth in Z ~> m.
   real, dimension(size(rho,1),size(rho,2)), &
             optional, intent(in) :: nlevs !< number of valid points in each column
   logical,  optional, intent(in) :: debug !< optional debug flag
   integer,  optional, intent(in) :: nkml  !< number of mixed layer pieces
   integer,  optional, intent(in) :: nkbl  !< number of buffer layer pieces
-  real,     optional, intent(in) :: hml   !< mixed layer depth, in Z
+  real,     optional, intent(in) :: hml   !< mixed layer depth, in Z ~> m.
   real,     optional, intent(in) :: eps_z !< A negligibly small layer thickness in the units of Z.
   real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi !< The returned interface, in the same units az zin.
 
@@ -583,7 +583,7 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
   integer :: n,i,j,k,l,nx,ny,nz,nt
   integer :: nlay,kk,nkml_,nkbl_
   logical :: debug_ = .false.
-  real    :: epsln_Z    ! A negligibly thin layer thickness, in Z.
+  real    :: epsln_Z    ! A negligibly thin layer thickness, in Z ~> m.
   real    :: epsln_rho  ! A negligibly small density change, in kg m-3.
   real, parameter :: zoff=0.999
 

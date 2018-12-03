@@ -69,15 +69,15 @@ type, public :: set_diffusivity_CS ; private
                              !! by bottom drag drives BBL diffusion (nondim)
   real    :: cdrag           !< quadratic drag coefficient (nondim)
   real    :: IMax_decay      !< inverse of a maximum decay scale for
-                             !! bottom-drag driven turbulence, (1/Z)
-  real    :: Kv              !< The interior vertical viscosity (Z2/s)
-  real    :: Kd              !< interior diapycnal diffusivity (Z2/s)
-  real    :: Kd_min          !< minimum diapycnal diffusivity (Z2/s)
-  real    :: Kd_max          !< maximum increment for diapycnal diffusivity (Z2/s)
+                             !! bottom-drag driven turbulence, in Z-1 ~> m-1.
+  real    :: Kv              !< The interior vertical viscosity, in Z2 s-1 ~> m2 s-1.
+  real    :: Kd              !< interior diapycnal diffusivity, in Z2 s-1 ~> m2 s-1.
+  real    :: Kd_min          !< minimum diapycnal diffusivity, in Z2 s-1 ~> m2 s-1.
+  real    :: Kd_max          !< maximum increment for diapycnal diffusivity, in Z2 s-1 ~> m2 s-1.
                              !! Set to a negative value to have no limit.
   real    :: Kd_add          !< uniform diffusivity added everywhere without
-                             !! filtering or scaling (Z2/s)
-  real    :: Kdml            !< mixed layer diapycnal diffusivity (Z2/s)
+                             !! filtering or scaling, in Z2 s-1 ~> m2 s-1.
+  real    :: Kdml            !< mixed layer diapycnal diffusivity, in Z2 s-1 ~> m2 s-1.
                              !! when bulkmixedlayer==.false.
   real    :: Hmix            !< mixed layer thickness (meter) when
                              !! bulkmixedlayer==.false.
@@ -85,11 +85,11 @@ type, public :: set_diffusivity_CS ; private
 
   logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
                                !! than the following:
-  real :: dissip_min    !< Minimum dissipation (Z2 m-2 W m-3)
-  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N (Z2 m-2 W m-3)
-  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N (Z2 m-2 W m-3 s)
-  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 (Z2 m-2 W m-3 s2)
-  real :: dissip_Kd_min !< Minimum Kd (Z2/s) with dissipation Rho0*Kd_min*N^2
+  real :: dissip_min    !< Minimum dissipation (Z2 m-2 W m-3 ~> W m-3)
+  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N (Z2 m-2 W m-3 ~> W m-3)
+  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N (Z2 m-2 W m-3 s ~> J m-3)
+  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 (Z2 m-2 W m-3 s2 ~> J s m-3)
+  real :: dissip_Kd_min !< Minimum Kd, in Z2 s-1 ~> m2 s-1, with dissipation Rho0*Kd_min*N^2
 
   real :: TKE_itide_max !< maximum internal tide conversion (W m-2)
                         !! available to mix above the BBL
@@ -108,7 +108,7 @@ type, public :: set_diffusivity_CS ; private
                           !! where N2 is the squared buoyancy frequency (s-2) and OMEGA2
                           !! is the rotation rate of the earth squared.
   real :: ML_rad_kd_max   !< Maximum diapycnal diffusivity due to turbulence
-                          !! radiated from the base of the mixed layer (Z2/s)
+                          !! radiated from the base of the mixed layer, in Z2 s-1 ~> m2 s-1.
   real :: ML_rad_efold_coeff  !< non-dim coefficient to scale penetration depth
   real :: ML_rad_coeff        !< coefficient, which scales MSTAR*USTAR^3 to
                               !! obtain energy available for mixing below
@@ -117,7 +117,7 @@ type, public :: set_diffusivity_CS ; private
                               !! to ML_rad as applied to the other surface
                               !! sources of TKE in the mixed layer code.
   real    :: ustar_min        !< A minimum value of ustar to avoid numerical
-                              !! problems (Z/s).  If the value is small enough,
+                              !! problems, in Z s-1 ~> m s-1.  If the value is small enough,
                               !! this parameter should not affect the solution.
   real    :: TKE_decay        !< ratio of natural Ekman depth to TKE decay scale (nondim)
   real    :: mstar            !< ratio of friction velocity cubed to
@@ -171,12 +171,12 @@ type diffusivity_diags
     Kd_BBL   => NULL(), & !< BBL diffusivity at interfaces (m2/s)
     Kd_work  => NULL(), & !< layer integrated work by diapycnal mixing (W/m2)
     maxTKE   => NULL(), & !< energy required to entrain to h_max (m3/s3)
-    KT_extra => NULL(), & !< double diffusion diffusivity for temp (Z2/s)
-    KS_extra => NULL()    !< double diffusion diffusivity for saln (Z2/s)
+    KT_extra => NULL(), & !< double diffusion diffusivity for temp, in Z2 s-1 ~> m2 s-1.
+    KS_extra => NULL()    !< double diffusion diffusivity for saln, in Z2 s-1 ~> m2 s-1.
   real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
-                          !< conversion rate (~1.0 / (G_Earth + dRho_lay))
-                          !! between TKE dissipated within a layer and Kd
-                          !! in that layer, in Z2 s-1 / m3 s-3 = Z2 s2 m-3
+                          !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between TKE
+                          !! dissipated within a layer and Kd in that layer,
+                          !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3 ~> s2 m-1
 
 end type diffusivity_diags
 
@@ -679,7 +679,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
                                                           !! TKE dissipated within  a layer and the
                                                           !! diapycnal diffusivity witin that layer,
                                                           !! usually (~Rho_0 / (G_Earth * dRho_lay)),
-                                                          !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3
+                                                          !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3 ~> s2 m-1
   real, dimension(SZI_(G),SZK_(G)), intent(out)   :: maxTKE !< The energy required to for a layer to entrain
                                                           !! to its maximum realizable thickness, in m3 s-3
   integer, dimension(SZI_(G)),      intent(out)   :: kb   !< Index of lightest layer denser than the buffer
@@ -696,19 +696,19 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
     maxEnt        ! maxEnt is the maximum value of entrainment from below (with
                   ! compensating entrainment from above to keep the layer
                   ! density from changing) that will not deplete all of the
-                  ! layers above or below a layer within a timestep (Z)
+                  ! layers above or below a layer within a timestep, in Z ~> m.
   real, dimension(SZI_(G)) :: &
     htot,    &    ! total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL (Z)
+                  ! integrated thickness in the BBL, in Z ~> m.
     mFkb,    &    ! total thickness in the mixed and buffer layers
-                  ! times ds_dsp1 (Z)
+                  ! times ds_dsp1, in Z ~> m.
     p_ref,   &    ! array of tv%P_Ref pressures
     Rcv_kmb, &    ! coordinate density in the lowest buffer layer
     p_0           ! An array of 0 pressures
 
   real :: dh_max      ! maximum amount of entrainment a layer could
                       ! undergo before entraining all fluid in the layers
-                      ! above or below (Z)
+                      ! above or below, in Z ~> m.
   real :: dRho_lay    ! density change across a layer (kg/m3)
   real :: Omega2      ! rotation rate squared (1/s2)
   real :: G_Rho0      ! gravitation accel divided by Bouss ref density (m4 s-2 kg-1)
@@ -900,14 +900,14 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     Temp_int,  &  ! temperature at each interface (degC)
     Salin_int, &  ! salinity at each interface (PPT)
     drho_bot,  &
-    h_amp,     &  ! The topographic roughness amplitude, in Z.
-    hb,        &  ! The thickness of the bottom layer in Z
-    z_from_bot    ! The hieght above the bottom in Z
+    h_amp,     &  ! The topographic roughness amplitude, in Z ~> m.
+    hb,        &  ! The thickness of the bottom layer, in Z ~> m.
+    z_from_bot    ! The hieght above the bottom, in Z ~> m.
 
   real :: Rml_base  ! density of the deepest variable density layer
-  real :: dz_int    ! thickness associated with an interface (Z)
+  real :: dz_int    ! thickness associated with an interface, in Z ~> m.
   real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density
-                    ! times some unit conversion factors, in (Z m3 s-2 kg-1)
+                    ! times some unit conversion factors, in Z m3 s-2 kg-1 ~> m4 s-2 kg-1.
   real :: H_neglect ! negligibly small thickness, in the same units as h.
 
   logical :: do_i(SZI_(G)), do_any
@@ -1057,10 +1057,10 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
   real, dimension(SZI_(G),SZK_(G)+1),       &
                             intent(out) :: Kd_T_dd !< Interface double diffusion diapycnal
-                                               !! diffusivity for temp (Z2/sec).
+                                               !! diffusivity for temp, in Z2 s-1 ~> m2 s-1.
   real, dimension(SZI_(G),SZK_(G)+1),       &
                             intent(out) :: Kd_S_dd !< Interface double diffusion diapycnal
-                                               !! diffusivity for saln (Z2/sec).
+                                               !! diffusivity for saln, in Z2 s-1 ~> m2 s-1.
 
   real, dimension(SZI_(G)) :: &
     dRho_dT,  &    ! partial derivatives of density wrt temp (kg m-3 degC-1)
@@ -1074,12 +1074,12 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
 
   real :: Rrho    ! vertical density ratio
   real :: diff_dd ! factor for double-diffusion (nondim)
-  real :: Kd_dd   ! The dominant double diffusive diffusivity in Z2/sec
+  real :: Kd_dd   ! The dominant double diffusive diffusivity, in Z2 s-1 ~> m2 s-1
   real :: prandtl ! flux ratio for diffusive convection regime
 
   real, parameter :: Rrho0  = 1.9 ! limit for double-diffusive density ratio
-  real :: dsfmax        ! max diffusivity in case of salt fingering (Z2/sec)
-  real :: Kv_molecular  ! molecular viscosity  (Z2/sec)
+  real :: dsfmax        ! max diffusivity in case of salt fingering, in Z2 s-1 ~> m2 s-1
+  real :: Kv_molecular  ! molecular viscosity, in Z2 s-1 ~> m2 s-1
 
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = G%ke
@@ -1149,17 +1149,19 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                                                           !! TKE dissipated within  a layer and the
                                                           !! diapycnal diffusivity witin that layer,
                                                           !! usually (~Rho_0 / (G_Earth * dRho_lay)),
-                                                          !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3
+                                                          !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3 ~> s2 m-1.
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: maxTKE !< The energy required to for a layer to entrain
                                                           !! to its maximum realizable thickness, in m3 s-3
   integer, dimension(SZI_(G)),      intent(in)    :: kb   !< Index of lightest layer denser than the buffer
                                                           !! layer, or -1 without a bulk mixed layer
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers, in Z2 s-1
+                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers,
+                                                            !! in Z2 s-1 ~> m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                                    intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in Z2 s-1
-  real, dimension(:,:,:),           pointer       :: Kd_BBL !< Interface BBL diffusivity, in m2 s-1
+                                    intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces,
+                                                            !! in Z2 s-1 ~> m2 s-1.
+  real, dimension(:,:,:),           pointer       :: Kd_BBL !< Interface BBL diffusivity, in Z2 s-1 ~> m2 s-1.
 
 ! This routine adds diffusion sustained by flow energy extracted by bottom drag.
 
@@ -1167,25 +1169,25 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
     Rint          ! coordinate density of an interface (kg/m3)
   real, dimension(SZI_(G)) :: &
     htot, &       ! total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL (Z)
+                  ! integrated thickness in the BBL, in Z ~> m.
     rho_htot, &   ! running integral with depth of density (Z kg/m3)
     gh_sum_top, & ! BBL value of g'h that can be supported by
                   ! the local ustar, times R0_g (kg/m2)
     Rho_top, &    ! density at top of the BBL (kg/m3)
     TKE, &        ! turbulent kinetic energy available to drive
                   ! bottom-boundary layer mixing in a layer (m3/s3)
-    I2decay       ! inverse of twice the TKE decay scale (1/Z)
+    I2decay       ! inverse of twice the TKE decay scale, in Z-1 ~> m-1.
 
   real    :: TKE_to_layer   ! TKE used to drive mixing in a layer (m3/s3)
   real    :: TKE_Ray        ! TKE from layer Rayleigh drag used to drive mixing in layer (m3/s3)
   real    :: TKE_here       ! TKE that goes into mixing in this layer (m3/s3)
   real    :: dRl, dRbot     ! temporaries holding density differences (kg/m3)
   real    :: cdrag_sqrt     ! square root of the drag coefficient (nondimensional)
-  real    :: ustar_h        ! value of ustar at a thickness point (Z/s)
+  real    :: ustar_h        ! value of ustar at a thickness point, in Z s-1 ~> m s-1.
   real    :: absf           ! average absolute Coriolis parameter around a thickness point (1/s)
   real    :: R0_g           ! Rho0 / G_Earth (kg s2 Z-1 m-4)
   real    :: I_rho0         ! 1 / RHO0
-  real    :: delta_Kd       ! increment to Kd from the bottom boundary layer mixing (Z2/s)
+  real    :: delta_Kd       ! increment to Kd from the bottom boundary layer mixing, in Z2 s-1 ~> m2 s-1.
   logical :: Rayleigh_drag  ! Set to true if Rayleigh drag velocities
                             ! defined in visc, on the assumption that this
                             ! extracted energy also drives diapycnal mixing.
@@ -1397,17 +1399,17 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   real :: TKE_consumed     ! TKE used for mixing in this layer (m3 s-3)
   real :: TKE_Kd_wall      ! TKE associated with unlimited law of the wall mixing (m3 s-3)
   real :: cdrag_sqrt       ! square root of the drag coefficient (nondimensional)
-  real :: ustar            ! value of ustar at a thickness point (Z/s)
+  real :: ustar            ! value of ustar at a thickness point, in Z s-1 ~> m s-1.
   real :: ustar2           ! square of ustar, for convenience (Z2/s2)
   real :: absf             ! average absolute value of Coriolis parameter around a thickness point (1/sec)
-  real :: dh, dhm1         ! thickness of layers k and k-1, respecitvely (Z)
-  real :: z_bot            ! distance to interface k from bottom (Z)
-  real :: D_minus_z        ! distance to interface k from surface (Z)
-  real :: total_thickness  ! total thickness of water column (Z)
-  real :: Idecay           ! inverse of decay scale used for "Joule heating" loss of TKE with height (1/Z)
-  real :: Kd_wall          ! Law of the wall diffusivity (Z2/s)
+  real :: dh, dhm1         ! thickness of layers k and k-1, respecitvely, in Z ~> m.
+  real :: z_bot            ! distance to interface k from bottom, in Z ~> m.
+  real :: D_minus_z        ! distance to interface k from surface, in Z ~> m.
+  real :: total_thickness  ! total thickness of water column, in Z ~> m.
+  real :: Idecay           ! inverse of decay scale used for "Joule heating" loss of TKE with height, in Z-1 ~> m-1.
+  real :: Kd_wall          ! Law of the wall diffusivity, in Z2 s-1 ~> m2 s-1.
   real :: Kd_lower         ! diffusivity for lower interface (Z2/sec)
-  real :: ustar_D          ! u* x D  (Z2/s)
+  real :: ustar_D          ! u* x D , in Z2 s-1 ~> m2 s-1.
   real :: I_Rho0           ! 1 / rho0
   real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall (1/s2)
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
@@ -1465,9 +1467,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     ! Work upwards from the bottom, accumulating work used until it exceeds the available TKE input
     ! at the bottom.
     do k=G%ke,2,-1
-      dh = GV%H_to_Z * h(i,j,k) ! Thickness of this level in Z.
+      dh = GV%H_to_Z * h(i,j,k) ! Thickness of this level in Z ~> m.
       km1 = max(k-1, 1)
-      dhm1 = GV%H_to_Z * h(i,j,km1) ! Thickness of level above in Z.
+      dhm1 = GV%H_to_Z * h(i,j,km1) ! Thickness of level above in Z ~> m.
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
@@ -1481,7 +1483,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
       TKE_remaining = exp(-Idecay*dh) * TKE_remaining
 
-      z_bot = z_bot + h(i,j,k)*GV%H_to_Z ! Distance between upper interface of layer and the bottom, in Z.
+      z_bot = z_bot + h(i,j,k)*GV%H_to_Z ! Distance between upper interface of layer and the bottom, in Z ~> m.
       D_minus_z = max(total_thickness - z_bot, 0.) ! Thickness above layer, Z.
 
       ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.
@@ -1534,34 +1536,35 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
   type(forcing),                    intent(in)    :: fluxes !< Surface fluxes structure
   type(set_diffusivity_CS),         pointer       :: CS     !< Diffusivity control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers, in Z2 s-1.
+                                    intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers, in Z2 s-1 ~> m2 s-1.
   integer,                          intent(in)    :: j      !< The j-index to work on
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: TKE_to_Kd !< The conversion rate between the TKE
                                                             !! TKE dissipated within  a layer and the
                                                             !! diapycnal diffusivity witin that layer,
                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay)),
-                                                            !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3
+                                                            !! in Z2 s-1 / m3 s-3 = Z2 s2 m-3 ~> s2 m-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                          optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces, in Z2 s-1.
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces,
+                                                            !! in Z2 s-1 ~> m2 s-1.
 
 ! This routine adds effects of mixed layer radiation to the layer diffusivities.
 
-  real, dimension(SZI_(G)) :: h_ml  ! Mixed layer thickness, in Z.
+  real, dimension(SZI_(G)) :: h_ml  ! Mixed layer thickness, in Z ~> m.
   real, dimension(SZI_(G)) :: TKE_ml_flux
-  real, dimension(SZI_(G)) :: I_decay ! A decay rate in Z-1.
-  real, dimension(SZI_(G)) :: Kd_mlr_ml ! Diffusivities associated with mixed layer radiation, in Z2 s-1.
+  real, dimension(SZI_(G)) :: I_decay ! A decay rate in Z-1 ~> m-1.
+  real, dimension(SZI_(G)) :: Kd_mlr_ml ! Diffusivities associated with mixed layer radiation, in Z2 s-1 ~> m2 s-1.
 
   real :: f_sq              ! The square of the local Coriolis parameter or a related variable, in s-2.
-  real :: h_ml_sq           ! The square of the mixed layer thickness, in Z2.
-  real :: ustar_sq          ! ustar squared in Z2 s-2.
-  real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation, in Z2 s-1.
+  real :: h_ml_sq           ! The square of the mixed layer thickness, in Z2 ~> m2.
+  real :: ustar_sq          ! ustar squared in Z2 s-2 ~> m2 s-2.
+  real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation, in Z2 s-1 ~> m2 s-1.
   real :: C1_6              ! 1/6
-  real :: Omega2            ! rotation rate squared (1/s2)
+  real :: Omega2            ! rotation rate squared, in s-2.
   real :: z1                ! layer thickness times I_decay (nondim)
-  real :: dzL               ! thickness converted to Z
+  real :: dzL               ! thickness converted to Z ~> m.
   real :: I_decay_len2_TKE  ! squared inverse decay lengthscale for
-                            ! TKE, as used in the mixed layer code (1/Z2)
-  real :: h_neglect         ! negligibly small thickness (Z)
+                            ! TKE, as used in the mixed layer code, in Z-2 ~> m-2.
+  real :: h_neglect         ! negligibly small thickness, in Z ~> m.
 
   logical :: do_any, do_i(SZI_(G))
   integer :: i, k, is, ie, nz, kml
@@ -1675,21 +1678,21 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
 
   real, dimension(SZI_(G)) :: &
     htot          ! total thickness above or below a layer, or the
-                  ! integrated thickness in the BBL (Z)
+                  ! integrated thickness in the BBL, in Z ~> m.
 
   real, dimension(SZIB_(G)) :: &
     uhtot, &      ! running integral of u in the BBL (Z m/s)
-    ustar, &      ! bottom boundary layer turbulence speed (Z/s)
+    ustar, &      ! bottom boundary layer turbulence speed, in Z s-1 ~> m s-1.
     u2_bbl        ! square of the mean zonal velocity in the BBL (m2/s2)
 
   real :: vhtot(SZI_(G)) ! running integral of v in the BBL (Z m/sec)
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vstar, & ! ustar at at v-points (Z/s)
+    vstar, & ! ustar at at v-points, in Z s-1 ~> m s-1.
     v2_bbl   ! square of average meridional velocity in BBL (m2/s2)
 
   real :: cdrag_sqrt  ! square root of the drag coefficient (nondim)
-  real :: hvel        ! thickness at velocity points (Z)
+  real :: hvel        ! thickness at velocity points, in Z ~> m.
 
   logical :: domore, do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz

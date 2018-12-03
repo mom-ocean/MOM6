@@ -2707,10 +2707,10 @@ subroutine extract_surface_state(CS, sfc_state)
     u => NULL(), & !< u : zonal velocity component (m/s)
     v => NULL(), & !< v : meridional velocity component (m/s)
     h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units (Z)
+  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units (Z ~> m)
   real :: depth_ml           !< Depth over which to average to determine mixed
-                             !! layer properties (Z)
-  real :: dh                 !< Thickness of a layer within the mixed layer (Z)
+                             !! layer properties (Z ~> m)
+  real :: dh                 !< Thickness of a layer within the mixed layer (Z ~> m)
   real :: mass               !< Mass per unit area of a layer (kg/m2)
   real :: bathy_m            !< The depth of bathymetry in m (not Z), used for error checking.
   real :: T_freeze           !< freezing temperature (oC)

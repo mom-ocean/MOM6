@@ -78,8 +78,8 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
 
   ! Local variables for ALE remapping
   real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses in H units.
-  real, dimension(:), allocatable :: h1 ! A 1-d column of source thicknesses in Z.
-  real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights in Z.
+  real, dimension(:), allocatable :: h1 ! A 1-d column of source thicknesses in Z ~> m.
+  real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights in Z ~> m.
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   real :: missing_value

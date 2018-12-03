@@ -130,7 +130,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
   type(verticalGrid_type), intent(in) :: GV         !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US         !< A dimensional unit scaling type
-  real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in Z.
+  real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in Z ~> m.
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
@@ -1102,7 +1102,7 @@ end subroutine pressure_gradient_ppm
 subroutine ALE_initRegridding(GV, US, max_depth, param_file, mdl, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
-  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in Z.
+  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in Z ~> m.
   type(param_file_type),   intent(in)  :: param_file !< parameter file
   character(len=*),        intent(in)  :: mdl        !< Name of calling module
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
