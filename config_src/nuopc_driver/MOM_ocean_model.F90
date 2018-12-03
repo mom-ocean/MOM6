@@ -121,6 +121,7 @@ type, public ::  ocean_public_type
                         !! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
     frazil =>NULL(), &  !< Accumulated heating (in Joules/m^2) from frazil
                         !! formation in the ocean.
+    melt_potential => NULL(), & !< Instantaneous heat used to melt sea ice (in J/m^2)
     area => NULL()      !< cell area of the ocean surface, in m2.
   type(coupler_2d_bc_type) :: fields    !< A structure that may contain named
                                         !! arrays of tracer-related surface fields.
@@ -242,6 +243,12 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! Local variables
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
+  real :: HFrz        !< If HFrz > 0 (m), melt potential will be computed.
+                      !! The actual depth over which melt potential is computed will
+                      !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
+                      !! If HFrz <= 0 (default), melt potential will not be computed.
+  logical :: use_melt_pot!< If true, allocate melt_potential array
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
@@ -343,10 +350,22 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
+    call get_param(param_file, mdl, "HFREEZE", HFrz, &
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&           
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&             
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&             
+                 "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)                        
+
+  if (HFrz .gt. 0.0) then
+    use_melt_pot=.true.
+  else
+    use_melt_pot=.false.
+  endif
+
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
-                              do_integrals=.true., gas_fields_ocn=gas_fields_ocn)
+                              do_integrals=.true., gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
@@ -797,6 +816,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
              Ocean_sfc%v_surf (isc:iec,jsc:jec), &
              Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
              Ocean_sfc%area   (isc:iec,jsc:jec), &
+             Ocean_sfc%melt_potential(isc:iec,jsc:jec), &
              Ocean_sfc%frazil (isc:iec,jsc:jec))
 
   Ocean_sfc%t_surf  = 0.0  ! time averaged sst (Kelvin) passed to atmosphere/ice model
@@ -805,6 +825,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
   Ocean_sfc%v_surf  = 0.0  ! time averaged v-current (m/sec)  passed to atmosphere/ice models
   Ocean_sfc%sea_lev = 0.0  ! time averaged thickness of top model grid cell (m) plus patm/rho0/grav
   Ocean_sfc%frazil  = 0.0  ! time accumulated frazil (J/m^2) passed to ice model
+  Ocean_sfc%melt_potential  = 0.0  ! time accumulated melt potential (J/m^2) passed to ice model
   Ocean_sfc%area    = 0.0
   Ocean_sfc%axes    = diag%axesT1%handles !diag axes to be used by coupler tracer flux diagnostics
 
@@ -886,6 +907,12 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
   if (associated(sfc_state%frazil)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%frazil(i,j) = sfc_state%frazil(i+i0,j+j0)
+    enddo ; enddo
+  endif
+
+  if (allocated(sfc_state%melt_potential)) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%melt_potential(i,j) = sfc_state%melt_potential(i+i0,j+j0)
     enddo ; enddo
   endif
 
@@ -1057,25 +1084,25 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
   case('btfHeat')
      array2D(isc:,jsc:) = 0
   case('tlat')
-    array2D(isc:,jsc:) = OS%grid%geoLatT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatT(g_isc:g_iec,g_jsc:g_jec)
   case('tlon')
-    array2D(isc:,jsc:) = OS%grid%geoLonT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonT(g_isc:g_iec,g_jsc:g_jec)
   case('ulat')
-    array2D(isc:,jsc:) = OS%grid%geoLatCu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatCu(g_isc:g_iec,g_jsc:g_jec)
   case('ulon')
-    array2D(isc:,jsc:) = OS%grid%geoLonCu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonCu(g_isc:g_iec,g_jsc:g_jec)
   case('vlat')
-    array2D(isc:,jsc:) = OS%grid%geoLatCv(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatCv(g_isc:g_iec,g_jsc:g_jec)
   case('vlon')
-    array2D(isc:,jsc:) = OS%grid%geoLonCv(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonCv(g_isc:g_iec,g_jsc:g_jec)
   case('geoLatBu')
-    array2D(isc:,jsc:) = OS%grid%geoLatBu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatBu(g_isc:g_iec,g_jsc:g_jec)
   case('geoLonBu')
-    array2D(isc:,jsc:) = OS%grid%geoLonBu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonBu(g_isc:g_iec,g_jsc:g_jec)
   case('cos_rot')
-    array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
+     array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
   case('sin_rot')
-    array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
+     array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
   case default
      call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
   end select
@@ -1121,6 +1148,7 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
   write(outunit,100) 'ocean%v_surf   ',mpp_chksum(ocn%v_surf )
   write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
   write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
+  write(outunit,100) 'ocean%melt_potential  ',mpp_chksum(ocn%melt_potential)
 
   call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
