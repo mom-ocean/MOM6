@@ -2103,7 +2103,7 @@ subroutine get_net_mass_forcing(fluxes, G, net_mass_src)
     net_mass_src(i,j) = net_mass_src(i,j) + fluxes%evap(i,j)
   enddo ; enddo ; endif
   if (associated(fluxes%meltw)) then ; do j=js,je ; do i=is,ie
-      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%meltw(i,j)
+    net_mass_src(i,j) = net_mass_src(i,j) + fluxes%meltw(i,j)
   enddo ; enddo ; endif
 
 end subroutine get_net_mass_forcing
