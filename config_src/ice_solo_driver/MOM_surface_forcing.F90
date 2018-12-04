@@ -167,15 +167,17 @@ integer :: id_clock_forcing
 
 contains
 
-subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, CS)
+subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(forcing),         intent(inout) :: fluxes
-  type(time_type),       intent(in)    :: day_start
-  type(time_type),       intent(in)    :: day_interval
+  type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
+  type(time_type),       intent(in)    :: day_start !< The start time of the fluxes
+  type(time_type),       intent(in)    :: day_interval !< Length of time over which these fluxes applied
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  type(surface_forcing_CS), pointer    :: CS
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
+  type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
+                                               !! a previous surface_forcing_init call
 
 ! This subroutine calls other subroutines in this file to get surface forcing fields.
 ! It also allocates and initializes the fields in the flux type.
@@ -282,7 +284,7 @@ subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, C
   ! Fields that exist in both the forcing and mech_forcing types must be copied.
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
     call copy_common_forcing_fields(forces, fluxes, G)
-    call set_derived_forcing_fields(forces, fluxes, G, CS%Rho0)
+    call set_derived_forcing_fields(forces, fluxes, G, US, CS%Rho0)
   endif
 
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &

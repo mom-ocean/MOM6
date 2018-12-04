@@ -18,8 +18,8 @@ use MOM_time_manager, only : time_type, time_type_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
-use MOM_variables, only : surface
-use MOM_variables, only : thermo_var_ptrs
+use MOM_unit_scaling, only : unit_scale_type
+use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_types_mod, only : coupler_type_set_data, ind_csurf
@@ -201,13 +201,14 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 end function register_oil_tracer
 
 !> Initialize the oil tracers and set up tracer output
-subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                       intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
@@ -266,10 +267,10 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
         if (CS%Z_IC_file) then
           OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, name, &
-                             G, -1e34, 0.0) ! CS%land_val(m))
+                             G, US, -1e34, 0.0) ! CS%land_val(m))
           if (.not.OK) then
             OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, &
-                     trim(name), G, -1e34, 0.0) ! CS%land_val(m))
+                     trim(name), G, US, -1e34, 0.0) ! CS%land_val(m))
             if (.not.OK) call MOM_error(FATAL,"initialize_oil_tracer: "//&
                     "Unable to read "//trim(name)//" from "//&
                     trim(CS%IC_file)//".")
