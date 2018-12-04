@@ -404,9 +404,9 @@ module mom_cap_mod
 
   use, intrinsic :: iso_fortran_env, only: output_unit
 
-  use ESMF
-  use NUOPC
-  use NUOPC_Model, &
+  use ESMF                      
+  use NUOPC                     
+  use NUOPC_Model, &            
     model_routine_SS           => SetServices, &
     model_label_Advance        => label_Advance, &
     model_label_DataInitialize => label_DataInitialize, &
@@ -456,7 +456,7 @@ module mom_cap_mod
   logical              :: grid_attach_area = .false.
   character(len=128)   :: scalar_field_name
   integer              :: scalar_field_count
-  integer              :: scalar_field_idx_grid_nx
+  integer              :: scalar_field_idx_grid_nx 
   integer              :: scalar_field_idx_grid_ny
   character(len=*),parameter :: u_file_u = &
        __FILE__
@@ -578,23 +578,23 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
-
+         return  
+    
     write_diagnostics = .false.
     call NUOPC_CompAttributeGet(gcomp, name="DumpFields", value=value, &
          isPresent=isPresent, isSet=isSet, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
     if (isPresent .and. isSet) write_diagnostics=(trim(value)=="true")
-
+    
     write(logmsg,*) write_diagnostics
     call ESMF_LogWrite('mom_cap:DumpFields = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
 
     profile_memory = .false.
     call NUOPC_CompAttributeGet(gcomp, name="ProfileMemory", value=value, &
@@ -602,14 +602,14 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
     if (isPresent .and. isSet) profile_memory=(trim(value)=="true")
     write(logmsg,*) profile_memory
     call ESMF_LogWrite('mom_cap:ProfileMemory = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
 
     grid_attach_area = .false.
     call NUOPC_CompAttributeGet(gcomp, name="GridAttachArea", value=value, &
@@ -617,14 +617,14 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
     if (isPresent .and. isSet) grid_attach_area=(trim(value)=="true")
     write(logmsg,*) grid_attach_area
     call ESMF_LogWrite('mom_cap:GridAttachArea = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
 
     scalar_field_name = ""
     call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldName", value=value, &
@@ -632,14 +632,14 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
-    if (isPresent .and. isSet) then
+         return  
+    if (isPresent .and. isSet) then 
        scalar_field_name = trim(value)
        call ESMF_LogWrite('mom_cap:ScalarFieldName = '//trim(scalar_field_name), ESMF_LOGMSG_INFO, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return  
     endif
 
     scalar_field_count = 0
@@ -648,7 +648,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
     if (isPresent .and. isSet) then
        read(value, '(i)', iostat=iostat) scalar_field_count
        if (iostat /= 0) then
@@ -662,7 +662,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return  
     endif
 
     scalar_field_idx_grid_nx = 0
@@ -671,7 +671,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
     if (isPresent .and. isSet) then
        read(value, '(i)', iostat=iostat) scalar_field_idx_grid_nx
        if (iostat /= 0) then
@@ -685,7 +685,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return  
     endif
 
     scalar_field_idx_grid_ny = 0
@@ -694,7 +694,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return  
     if (isPresent .and. isSet) then
        read(value, '(i)', iostat=iostat) scalar_field_idx_grid_ny
        if (iostat /= 0) then
@@ -708,16 +708,16 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return  
     endif
 
-    call NUOPC_CompAttributeAdd(gcomp, &
+    call NUOPC_CompAttributeAdd(gcomp, & 
          attrList=(/'RestartFileToRead', 'RestartFileToWrite'/), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
-
+         return  
+      
   end subroutine
 
   !===============================================================================
@@ -766,7 +766,10 @@ contains
     integer                                :: userRc
     character(len=512)                     :: restartfile          ! Path/Name of restart file
     character(len=*), parameter            :: subname='(mom_cap:InitializeAdvertise)'
-    !--------------------------------
+    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_frzmlt
+    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_dhdx
+    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_dhdy    
+!--------------------------------
 
     rc = ESMF_SUCCESS
 
@@ -774,7 +777,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return         
 
     allocate(Ice_ocean_boundary)
     !allocate(ocean_state) ! ocean_model_init allocate this pointer
@@ -827,11 +830,11 @@ contains
 
     ! rsd need to figure out how to get this without share code
     !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
-    !inst_name = "OCN"//trim(inst_suffix)
+    !inst_name = "OCN"//trim(inst_suffix) 
 
     ! reset shr logging to my log file
     if (is_root_pe()) then
-       call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, &
+       call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, & 
             isPresent=isPresentDiro, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -842,7 +845,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return 
        if (isPresentDiro .and. isPresentLogfile) then
           open(newunit=logunit,file=trim(diro)//"/"//trim(logfile))
        else
@@ -853,7 +856,7 @@ contains
     endif
 
     starttype = ""
-    call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, &
+    call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, & 
          isPresent=isPresent, isSet=isSet, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -867,7 +870,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return         
     endif
 
     runtype = ""
@@ -881,7 +884,7 @@ contains
        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
             msg=subname//": unknown starttype - "//trim(starttype), &
             line=__LINE__, file=__FILE__, rcToReturn=rc)
-       return
+       return 
     endif
 
     if (len_trim(runtype) > 0) then
@@ -889,9 +892,9 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return         
     endif
-
+    
     restartfile = ""
     if (runtype == "initial") then
        ! startup (new run) - 'n' is needed below if we don't specify input_filename in input.nml
@@ -914,36 +917,36 @@ contains
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return
+               return         
        endif
-
+       
        call NUOPC_CompAttributeGet(gcomp, name='RestartFileToRead', &
             value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return
+            return  
        if (isPresent .and. isSet) then
           restartfile = trim(cvalue)
           call ESMF_LogWrite('mom_cap: RestartFileToRead = '//trim(restartfile), ESMF_LOGMSG_INFO, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return
+               return         
        else
-          call ESMF_LogWrite('mom_cap: restart requested but no RestartFileToRead attribute provided - will use input.nml', &
+          call ESMF_LogWrite('mom_cap: restart requested but no RestartFileToRead attribute provided - will use input.nml', & 
                ESMF_LOGMSG_WARNING, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return
+               return                   
        endif
 
     end if
-
+ 
     ocean_public%is_ocean_pe = .true.
     if (len_trim(restartfile) > 0) then
-       call ocean_model_init(ocean_public, ocean_state, Time, Time, &
+       call ocean_model_init(ocean_public, ocean_state, Time, Time, & 
             input_restart_file=trim(restartfile))
     else
        call ocean_model_init(ocean_public, ocean_state, Time, Time)
@@ -1008,7 +1011,7 @@ contains
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr"    , "will provide") ! -> mean_net_sw_ir_dif_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr"    , "will provide") ! -> mean_net_sw_vis_dir_flx
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx 
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf"    , "will provide") ! -> mean_net_sw_vis_dif_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux"     , "will provide") ! -> mean_zonal_moment_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy"     , "will provide") ! -> mean_merid_moment_flx
@@ -1020,7 +1023,7 @@ contains
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"       , "will provide") ! -> inst_pres_height_surface
-
+    
     ! EMC fields not used
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide") ! for CESM lwup + lwdn
@@ -1037,7 +1040,7 @@ contains
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"      , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth"    , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw"    , "will provide")
-    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide") 
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphidry" , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphodry" , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphiwet" , "will provide")
@@ -1103,19 +1106,18 @@ contains
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_s"          , "will provide") ! -> s_surf
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_u"          , "will provide") ! -> ocn_current_zonal
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v"          , "will provide") ! -> ocn_current_merid
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"       , "will provide") ! not in EMC
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"       , "will provide") ! not in EMC
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"        , "will provide") ! not in EMC
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"       , "will provide") ! -> sea_surface_slope_zonal
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"       , "will provide") ! -> sea_surface_slope_merid
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC 
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"        , "will provide") ! -> freezing_melting_potential
 
     ! EMC fields not used
-    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide") ! not in CESM
-    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide") ! not in CESM
+    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev", "will provide") ! not in CESM
 
     ! Optional CESM fields currently not used
-    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen"     , "will provide") ! not in EMC
+    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen", "will provide") ! not in EMC
     ! if (flds_co2c) then
-    !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide")
+    !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide") 
     ! end if
 
 
@@ -1177,8 +1179,18 @@ contains
    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir"           , "will provide")
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide",&
                       data=ocean_public%sea_lev)
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide",&
-                      data=ocean_public%frazil)
+   !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide",&
+   !                   data=ocean_public%frazil)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "accum_heat_frazil"          , "will provide",&
+                      data=Ocean_public%frazil) !JW
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "inst_melt_potential"        , "will provide",&
+                      data=Ocean_public%melt_potential) !JW
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential", "will provide", &
+                      data=dataPtr_frzmlt) !JW
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_zonal" , "will provide",&
+                      data=ocean_public%frazil)  !JW
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_merid" , "will provide",&
+                      data=ocean_public%frazil)  !JW
 
 #endif
 
@@ -1303,7 +1315,7 @@ contains
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
-
+    
     !---------------------------------
     ! number of tiles per PET, assumed to be 1, and number of pes (tiles) total
     !---------------------------------
@@ -1324,7 +1336,7 @@ contains
          line=__LINE__, &
          file=__FILE__)) &
          return
-
+    
     !---------------------------------
     ! get start and end indices of each tile and their PET
     !---------------------------------
@@ -1339,10 +1351,10 @@ contains
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return
+               return       
        enddo
     end if
-
+    
 
     !---------------------------------
     ! create delayout and distgrid
@@ -1425,7 +1437,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return       
     call ESMF_DistGridGet(distgrid=distgrid, localDE=0, seqIndexList=indexList, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -1437,9 +1449,9 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return
+         return       
     deallocate(IndexList)
-
+    
     !---------------------------------
     ! create grid
     !---------------------------------
@@ -1730,7 +1742,7 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
+       
        call State_SetScalar(dble(nyg),scalar_field_idx_grid_ny, exportState, localPet, &
             scalar_field_name, scalar_field_count, rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1783,7 +1795,7 @@ contains
     !     line=__LINE__, &
     !     file=__FILE__)) &
     !     return  ! bail out
-
+    
   end subroutine InitializeRealize
 
   !===============================================================================
@@ -1914,6 +1926,7 @@ contains
     integer                                :: dth, dtm, dts, dt_cpld  = 86400
     integer                                :: isc,iec,jsc,jec,lbnd1,ubnd1,lbnd2,ubnd2
     integer                                :: i,j,i1,j1
+    real                                   :: slp_L, slp_R, slp_C, slope, u_min, u_max !JW
     integer                                :: nc
     type(ESMF_Time)                        :: MyTime
     integer                                :: seconds, day, year, month, hour, minute
@@ -1927,12 +1940,22 @@ contains
     real(ESMF_KIND_R8), pointer            :: dataPtr_ocz(:,:)
     real(ESMF_KIND_R8), pointer            :: dataPtr_ocm(:,:)
     real(ESMF_KIND_R8), pointer            :: dataPtr_frazil(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_melt_potential(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_frzmlt(:,:)
+    real(ESMF_KIND_R8), pointer            :: dataPtr_dhdx(:,:) !JW
+    real(ESMF_KIND_R8), pointer            :: dataPtr_dhdy(:,:) !JW
     real(ESMF_KIND_R8), pointer            :: dataPtr_evap(:,:)
     real(ESMF_KIND_R8), pointer            :: dataPtr_sensi(:,:)
+    real(ESMF_KIND_R8), allocatable        :: ssh(:,:)
+    real(ESMF_KIND_R8), allocatable        :: sshx(:,:)
+    real(ESMF_KIND_R8), allocatable        :: sshy(:,:)
 #endif
     type(ocean_grid_type), pointer         :: ocean_grid
     character(240)                         :: msgString
     character(len=*),parameter             :: subname='(mom_cap:ModelAdvance)'
+    ! helper flag for debugging bounds
+    logical :: BoundsDebug = .false.
+    integer :: ijloc(2)
     !--------------------------------
 
     rc = ESMF_SUCCESS
@@ -2021,6 +2044,7 @@ contains
     call get_ocean_grid(ocean_state, ocean_grid)
 
 #ifdef CESMCOUPLED
+
     call shr_file_setLogUnit (logunit)
 
     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, logunit, runtype, clock, rc=rc)
@@ -2028,7 +2052,9 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
 #else
+
     call State_getFldPtr(exportState,'ocean_mask',dataPtr_mask,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -2081,7 +2107,7 @@ contains
         mzmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mzmf(i,j) &
                   - ocean_grid%sin_rot(i1,j1)*dataPtr_mmmf(i,j)
         mmmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mmmf(i,j) &
-                  + ocean_grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j)
+                  + ocean_grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j) 
       enddo
     enddo
     dataPtr_mzmf = mzmf
@@ -2114,6 +2140,7 @@ contains
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
 
 #ifdef CESMCOUPLED
+
     call mom_export(ocean_public, ocean_grid, exportState, logunit, clock, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -2151,14 +2178,175 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(exportState,'freezing_melting_potential',dataPtr_frazil,rc=rc)
+    !call State_getFldPtr(exportState,'freezing_melting_potential',dataPtr_frazil,rc=rc)
+    !if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    !  line=__LINE__, &
+    !  file=__FILE__)) &
+    !  return  ! bail out
+    ! fixfrzmlt !JW
+    call State_getFldPtr(exportState,'accum_heat_frazil',dataPtr_frazil,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+    call State_getFldPtr(exportState,'inst_melt_potential',dataPtr_melt_potential,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'freezing_melting_potential',dataPtr_frzmlt,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'sea_surface_slope_zonal',dataPtr_dhdx,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'sea_surface_slope_merid',dataPtr_dhdy,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out !JW
+
+    allocate( ssh(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !JW
+    allocate(sshx(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !JW
+    allocate(sshy(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !JW
+    ssh  = 0.0_ESMF_KIND_R8 !JW
+    sshx = 0.0_ESMF_KIND_R8 !JW
+    sshy = 0.0_ESMF_KIND_R8 !JW
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! note: the following code is modified from NCAR nuopc driver mom_cap_methods
+    ! where is the rotation in that system?
+    !
+    ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
+    ! in order to update halos. i.e. does not use global indexing.
+    !
+    ! here, isc,iec,jsc,jec are global indices on cap domain (no halos)
+
+    do j=jsc,jec
+      do i=isc,iec
+        j1 = j - ocean_grid%jdg_offset
+        i1 = i - ocean_grid%idg_offset
+        ssh(i1,j1) = Ocean_public%sea_lev(i,j)
+      end do
+    end do
+
+    ! Update halo of ssh so we can calculate gradients
+    call pass_var(ssh, ocean_grid%domain)
+
+    ! calculation of slope on native mom domains (local indexing, halos)
+    ! stay inside of halos (ie 2:79,2:97)
+    ! d/dx ssh
+    do j = ocean_grid%jsd+1,ocean_grid%jed-1
+      do i = ocean_grid%isd+1,ocean_grid%ied-1
+        ! This is a simple second-order difference
+        !dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(ig,jg)
+        ! This is a PLM slope which might be less prone to the A-grid null mode
+        slp_L = (ssh(I,j) - ssh(I-1,j)) * ocean_grid%mask2dCu(i-1,j)
+        if (ocean_grid%mask2dCu(i-1,j)==0.) slp_L = 0.
+        slp_R = (ssh(I+1,j) - ssh(I,j)) * ocean_grid%mask2dCu(i,j)
+        if (ocean_grid%mask2dCu(i+1,j)==0.) slp_R = 0.
+        slp_C = 0.5 * (slp_L + slp_R)
+        if ( (slp_L * slp_R) > 0.0 ) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+        end if
+        sshx(i,j) = slope * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
+        if (ocean_grid%mask2dT(i,j)==0.) sshx(i,j) = 0.0
+      end do
+    end do
+
+    ! d/dy ssh
+    do j = ocean_grid%jsd+1,ocean_grid%jed-1
+      do i = ocean_grid%isd+1,ocean_grid%ied-1
+        ! This is a simple second-order difference
+        !dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(ig,jg)
+        ! This is a PLM slope which might be less prone to the A-grid null mode
+        slp_L = ssh(i,J) - ssh(i,J-1) * ocean_grid%mask2dCv(i,j-1)
+        if (ocean_grid%mask2dCv(i,j-1)==0.) slp_L = 0.
+        slp_R = ssh(i,J+1) - ssh(i,J) * ocean_grid%mask2dCv(i,j)
+        if (ocean_grid%mask2dCv(i,j+1)==0.) slp_R = 0.
+        slp_C = 0.5 * (slp_L + slp_R)
+        !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
+        if ((slp_L * slp_R) > 0.0) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+        end if
+        sshy(i,j) = slope * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
+        if (ocean_grid%mask2dT(i,j)==0.) sshy(i,j) = 0.0
+      end do
+    end do
+    ! rotate slopes from tripolar grid back to lat/lon grid (CCW)
+    ! "grid" uses the usual MOM domain that has halos
+    ! and does not use global indexing.
+    ! x,y => latlon
+    do j  = lbnd2, ubnd2
+      do i = lbnd1, ubnd1
+        j1 = j + ocean_grid%jsc - lbnd2
+        i1 = i + ocean_grid%isc - lbnd1
+        dataPtr_dhdx(i,j) = ocean_grid%cos_rot(i1,j1)*sshx(i1,j1) &
+                          + ocean_grid%sin_rot(i1,j1)*sshy(i1,j1)
+        dataPtr_dhdy(i,j) = ocean_grid%cos_rot(i1,j1)*sshy(i1,j1) &
+                          - ocean_grid%sin_rot(i1,j1)*sshx(i1,j1)
+      enddo
+    enddo
+    deallocate(ssh); deallocate(sshx); deallocate(sshy)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     dataPtr_frazil = dataPtr_frazil/dt_cpld !convert from J/m^2 to W/m^2 for CICE coupling
+    dataPtr_melt_potential = -dataPtr_melt_potential/dt_cpld !convert from J/m^2 to W/m^2 for CICE coupling
+                                                             !melt_potential, defined positive for T>Tfreeze
+                                                             !so change sign
+    !testing
+    ijloc = maxloc(dataPtr_frazil)
+    if((sum(ijloc) .gt. 2) .and. &
+        (dataPtr_frazil(ijloc(1),ijloc(2)) .gt. 0.0))then
+        i1 = ijloc(1) - lbnd1 + isc
+        j1 = ijloc(2) - lbnd2 + jsc  ! work around local vs global indexing
+     write (msgString,*)' MOM6 dataPtr_frazil at maxloc ',i1,j1,&
+                         real(dataPtr_frazil(ijloc(1),ijloc(2)),4)
+     call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO, rc=rc)
 
+     write (msgString,*)' MOM6 dataPtr_melt_potential at maxloc ',i1,j1,&
+                         real(dataPtr_melt_potential(ijloc(1),ijloc(2)),4)
+     call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO, rc=rc)
+    endif
+    !testing
+
+    dataPtr_melt_potential = min(dataPtr_melt_potential,0.0)
+
+    do j  = lbnd2, ubnd2
+      do i = lbnd1, ubnd1
+       if(dataPtr_frazil(i,j) .eq. 0.0)then
+        dataPtr_frzmlt(i,j) = dataPtr_melt_potential(i,j)
+       else
+        dataPtr_frzmlt(i,j) = dataPtr_frazil(i,j)
+       endif
+      enddo
+    enddo
+    dataPtr_frzmlt = max(-1000.0,min(1000.0,dataPtr_frzmlt))
+
+    ! rotate ocn current from tripolar grid back to lat/lon grid (CCW)
+    ! "grid" uses the usual MOM domain that has halos
+    ! and does not use global indexing.
+    ! x,y => latlon
     ocz = dataPtr_ocz
     ocm = dataPtr_ocm
     do j  = lbnd2, ubnd2
@@ -2177,26 +2365,26 @@ contains
     deallocate(ocz, ocm)
 
 #endif
-
+    
     ! If restart alarm is ringing - write restart file
     call ESMF_ClockGetAlarm(clock, alarmname='alarm_restart', alarm=alarm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
-
+    
     if (ESMF_AlarmIsRinging(alarm, rc=rc)) then
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
+       
        call ESMF_AlarmRingerOff(alarm, rc=rc )
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
+       
        ! call into system specific method to get desired restart filename
        restartname = ""
        call ESMF_MethodExecute(gcomp, label="GetRestartFileToWrite", &
@@ -2230,7 +2418,7 @@ contains
                   return  ! bail out
           endif
        endif
-
+       
        if (len_trim(restartname) == 0) then
           ! none provided, so use a default restart filename
           call ESMF_ClockGetNextTime(clock, MyTime, rc=rc)
@@ -2244,7 +2432,7 @@ contains
                line=__LINE__, &
                file=__FILE__)) &
                return  ! bail out
-          write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
+          write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') & 
                "ocn", year, month, day, hour, minute, seconds
           call ESMF_LogWrite("mom_cap: Using default restart filename:  "//trim(restartname), ESMF_LOGMSG_INFO, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -2252,15 +2440,15 @@ contains
                file=__FILE__)) &
                return  ! bail out
        endif
-
+       
        ! write restart file(s)
        call ocean_model_restart(ocean_state, restartname=restartname)
-
+       
        if (is_root_pe()) then
           write(logunit,*) subname//' writing restart file ',trim(restartname)
        end if
     endif
-
+    
     if (write_diagnostics) then
        call NUOPC_Write(exportState, fileNamePrefix='field_ocn_export_', &
             timeslice=export_slice, relaxedFlag=.true., rc=rc)
@@ -2270,9 +2458,9 @@ contains
             return  ! bail out
        export_slice = export_slice + 1
     endif
-
+    
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
-
+    
   end subroutine ModelAdvance
 
   !===============================================================================
@@ -2354,9 +2542,9 @@ contains
       return  ! bail out
 
     if (first_time) then
-       !--------------------------------
+       !--------------------------------                                                                                 
        ! set restart alarm
-       !--------------------------------
+       !--------------------------------                                                                                 
 
        ! defaults
        restart_n = 0
@@ -2390,7 +2578,7 @@ contains
        else
           restart_option = "none"
        endif
-
+       
        call AlarmInit(mclock, &
             alarm   = restart_alarm,         &
             option  = trim(restart_option),  &
@@ -2402,21 +2590,21 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
+       
        call ESMF_AlarmSet(restart_alarm, clock=mclock, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
        first_time = .false.
-
-       call ESMF_LogWrite(subname//" Set restart option = "//restart_option, &
+      
+       call ESMF_LogWrite(subname//" Set restart option = "//restart_option, & 
             ESMF_LOGMSG_INFO, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
+       
     end if
 
     !--------------------------------
@@ -2537,7 +2725,7 @@ contains
     integer,           intent(in)     :: scalar_id
     type(ESMF_State),  intent(inout)  :: State
     integer,           intent(in)     :: mytask
-    character(len=*),  intent(in)     :: scalar_name
+    character(len=*),  intent(in)     :: scalar_name   
     integer,           intent(in)     :: scalar_count
     integer,           intent(inout)  :: rc
 
@@ -2635,14 +2823,14 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
+          
           ! initialize to zero
           call ESMF_FieldGet(field, farrayPtr=fldptr, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-          fldptr = 0.0
+          fldptr = 0.0 
 
         endif
 
