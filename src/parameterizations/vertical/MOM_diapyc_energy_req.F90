@@ -1,16 +1,11 @@
+!> Calculates the energy requirements of mixing.
 module MOM_diapyc_energy_req
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!* By Robert Hallberg, May 2015                                        *
-!*                                                                     *
-!*   This module calculates the energy requirements of mixing.         *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+!! \author By Robert Hallberg, May 2015
 
-use MOM_diag_mediator, only : diag_ctrl, Time_type, post_data_1d_k, register_diag_field
+use MOM_diag_mediator, only : diag_ctrl, Time_type, post_data, register_diag_field
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -22,25 +17,29 @@ implicit none ; private
 
 public diapyc_energy_req_init, diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_end
 
+!> This control structure holds parameters for the MOM_diapyc_energy_req module
 type, public :: diapyc_energy_req_CS ; private
-  logical :: initialized = .false. ! A variable that is here because empty
-                               ! structures are not permitted by some compilers.
-  real :: test_Kh_scaling      ! A scaling factor for the diapycnal diffusivity.
-  real :: ColHt_scaling        ! A scaling factor for the column height change
-                               ! correction term.
-  logical :: use_test_Kh_profile   ! If true, use the internal test diffusivity
-                               ! profile in place of any that might be passed
-                               ! in as an argument.
-  type(diag_ctrl), pointer :: diag ! Structure used to regulate timing of diagnostic output
+  logical :: initialized = .false. !< A variable that is here because empty
+                               !! structures are not permitted by some compilers.
+  real :: test_Kh_scaling      !< A scaling factor for the diapycnal diffusivity.
+  real :: ColHt_scaling        !< A scaling factor for the column height change correction term.
+  logical :: use_test_Kh_profile !< If true, use the internal test diffusivity profile in place of
+                               !! any that might be passed in as an argument.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                               !! regulate the timing of diagnostic output.
+
+  !>@{ Diagnostic IDs
   integer :: id_ERt=-1, id_ERb=-1, id_ERc=-1, id_ERh=-1, id_Kddt=-1, id_Kd=-1
   integer :: id_CHCt=-1, id_CHCb=-1, id_CHCc=-1, id_CHCh=-1
   integer :: id_T0=-1, id_Tf=-1, id_S0=-1, id_Sf=-1, id_N2_0=-1, id_N2_f=-1
   integer :: id_h=-1, id_zInt=-1
+  !!@}
 end type diapyc_energy_req_CS
 
 contains
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine helps test the accuracy of the diapycnal mixing energy requirement code
+!! by writing diagnostics, possibly using an intensely mixing test profile of diffusivity
 subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
   type(ocean_grid_type),          intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -54,17 +53,9 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
                                                         !! in s.
   type(diapyc_energy_req_CS),     pointer       :: CS   !< This module's control structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke+1), &
-                        optional, intent(in)    :: Kd_int !< Interface diffusivities.
+                        optional, intent(in)    :: Kd_int !< Interface diffusivities in Z2 s-1.
 
-! Arguments: h_3d -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - This module's control structure
-!  (in,opt)  Kd_int -  Interface diffusivities.
-
+  ! Local variables
   real, dimension(GV%ke) :: &
     T0, S0, &   ! T0 & S0 are columns of initial temperatures and salinities, in degC and g/kg.
     h_col       ! h_col is a column of thicknesses h at tracer points, in H (m or kg m-2).
@@ -84,7 +75,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
 !$OMP do
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
     if (present(Kd_int) .and. .not.CS%use_test_Kh_profile) then
-      do k=1,nz+1 ; Kd(K) = CS%test_Kh_scaling*Kd_int(i,j,K) ; enddo
+      do k=1,nz+1 ; Kd(K) = CS%test_Kh_scaling*GV%Z_to_m**2*Kd_int(i,j,K) ; enddo
     else
       htot = 0.0 ; h_top(1) = 0.0
       do k=1,nz
@@ -98,13 +89,13 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
         h_bot(K) = h_bot(K+1) + h_col(k)
       enddo
 
-      ustar = 0.01 ! Change this to being an input parameter?
+      ustar = 0.01*GV%m_to_Z ! Change this to being an input parameter?
       absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                    (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
       Kd(1) = 0.0 ; Kd(nz+1) = 0.0
       do K=2,nz
-        tmp1 = h_top(K) * h_bot(K) * GV%H_to_m
-        Kd(K) = CS%test_Kh_scaling * &
+        tmp1 = h_top(K) * h_bot(K) * GV%H_to_Z
+        Kd(K) = CS%test_Kh_scaling * GV%Z_to_m**2 * &
                 ustar * 0.41 * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
       enddo
     endif
@@ -126,7 +117,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
-                                                  !! in m or kg m-2.
+                                                  !! in H (m or kg m-2).
   real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures, in degC.
   real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities, in g kg-1.
   real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities,
@@ -141,21 +132,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   logical,        optional, intent(in)    :: may_print !< If present and true, write out diagnostics
                                                   !! of energy use.
   type(diapyc_energy_req_CS), &
-                  optional, pointer        :: CS  !< This module's control structure.
-
-! Arguments: h_in -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      T_in - The layer temperatures, in degC.
-!  (in)      S_in - The layer salinities, in g kg-1.
-!  (in)      Kd - The interfaces diapycnal diffusivities, in m2 s-1.
-!  (in/out)  tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (out)     energy_Kd - The column-integrated rate of energy consumption
-!                 by diapycnal diffusion, in W m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in,opt)  may_print - If present and true, write out diagnostics of energy use.
-!  (in,opt)  CS - This module's control structure
+                  optional, pointer       :: CS   !< This module's control structure.
 
 !   This subroutine uses a substantially refactored tridiagonal equation for
 ! diapycnal mixing of temperature and salinity to estimate the potential energy
@@ -274,7 +251,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   nz = G%ke
   h_neglect = GV%H_subroundoff
 
-  I_G_Earth = 1.0 / GV%g_Earth
+  I_G_Earth = 1.0 / (GV%g_Earth*GV%m_to_Z)
   debug = .true.
 
   surface_BL = .true. ; bottom_BL = .true. ; halves = .true.
@@ -292,7 +269,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     T0(k) = T_in(k) ; S0(k) = S_in(k)
     h_tr(k) = h_in(k)
     htot = htot + h_tr(k)
-    pres(K+1) = pres(K) + GV%g_Earth * GV%H_to_kg_m2 * h_tr(k)
+    pres(K+1) = pres(K) + GV%H_to_Pa * h_tr(k)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
     Z_int(K+1) = Z_int(K) - GV%H_to_m * h_tr(k)
   enddo
@@ -313,7 +290,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 
   do k=1,nz
     dMass = GV%H_to_kg_m2 * h_tr(k)
-    dPres = GV%g_Earth * dMass
+    dPres = (GV%g_Earth*GV%m_to_Z) * dMass
     dT_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dT(k)
     dS_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dS(k)
     dT_to_dColHt(k) = dMass * dSV_dT(k) * CS%ColHt_scaling
@@ -933,43 +910,43 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   K=nz
 
   if (do_print) then
-    if (CS%id_ERt>0) call post_data_1d_k(CS%id_ERt, PE_chg_k(:,1), CS%diag)
-    if (CS%id_ERb>0) call post_data_1d_k(CS%id_ERb, PE_chg_k(:,2), CS%diag)
-    if (CS%id_ERc>0) call post_data_1d_k(CS%id_ERc, PE_chg_k(:,3), CS%diag)
-    if (CS%id_ERh>0) call post_data_1d_k(CS%id_ERh, PE_chg_k(:,4), CS%diag)
-    if (CS%id_Kddt>0) call post_data_1d_k(CS%id_Kddt, GV%H_to_m*Kddt_h, CS%diag)
-    if (CS%id_Kd>0)   call post_data_1d_k(CS%id_Kd, Kd, CS%diag)
-    if (CS%id_h>0)    call post_data_1d_k(CS%id_h, GV%H_to_m*h_tr, CS%diag)
-    if (CS%id_zInt>0) call post_data_1d_k(CS%id_zInt, Z_int, CS%diag)
-    if (CS%id_CHCt>0) call post_data_1d_k(CS%id_CHCt, ColHt_cor_k(:,1), CS%diag)
-    if (CS%id_CHCb>0) call post_data_1d_k(CS%id_CHCb, ColHt_cor_k(:,2), CS%diag)
-    if (CS%id_CHCc>0) call post_data_1d_k(CS%id_CHCc, ColHt_cor_k(:,3), CS%diag)
-    if (CS%id_CHCh>0) call post_data_1d_k(CS%id_CHCh, ColHt_cor_k(:,4), CS%diag)
-    if (CS%id_T0>0) call post_data_1d_k(CS%id_T0, T0, CS%diag)
-    if (CS%id_Tf>0) call post_data_1d_k(CS%id_Tf, Tf, CS%diag)
-    if (CS%id_S0>0) call post_data_1d_k(CS%id_S0, S0, CS%diag)
-    if (CS%id_Sf>0) call post_data_1d_k(CS%id_Sf, Sf, CS%diag)
+    if (CS%id_ERt>0) call post_data(CS%id_ERt, PE_chg_k(:,1), CS%diag)
+    if (CS%id_ERb>0) call post_data(CS%id_ERb, PE_chg_k(:,2), CS%diag)
+    if (CS%id_ERc>0) call post_data(CS%id_ERc, PE_chg_k(:,3), CS%diag)
+    if (CS%id_ERh>0) call post_data(CS%id_ERh, PE_chg_k(:,4), CS%diag)
+    if (CS%id_Kddt>0) call post_data(CS%id_Kddt, GV%H_to_m*Kddt_h, CS%diag)
+    if (CS%id_Kd>0)   call post_data(CS%id_Kd, Kd, CS%diag)
+    if (CS%id_h>0)    call post_data(CS%id_h, GV%H_to_m*h_tr, CS%diag)
+    if (CS%id_zInt>0) call post_data(CS%id_zInt, Z_int, CS%diag)
+    if (CS%id_CHCt>0) call post_data(CS%id_CHCt, ColHt_cor_k(:,1), CS%diag)
+    if (CS%id_CHCb>0) call post_data(CS%id_CHCb, ColHt_cor_k(:,2), CS%diag)
+    if (CS%id_CHCc>0) call post_data(CS%id_CHCc, ColHt_cor_k(:,3), CS%diag)
+    if (CS%id_CHCh>0) call post_data(CS%id_CHCh, ColHt_cor_k(:,4), CS%diag)
+    if (CS%id_T0>0) call post_data(CS%id_T0, T0, CS%diag)
+    if (CS%id_Tf>0) call post_data(CS%id_Tf, Tf, CS%diag)
+    if (CS%id_S0>0) call post_data(CS%id_S0, S0, CS%diag)
+    if (CS%id_Sf>0) call post_data(CS%id_Sf, Sf, CS%diag)
     if (CS%id_N2_0>0) then
       N2(1) = 0.0 ; N2(nz+1) = 0.0
       do K=2,nz
         call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = (GV%g_Earth * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*GV%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
-      call post_data_1d_k(CS%id_N2_0, N2, CS%diag)
+      call post_data(CS%id_N2_0, N2, CS%diag)
     endif
     if (CS%id_N2_f>0) then
       N2(1) = 0.0 ; N2(nz+1) = 0.0
       do K=2,nz
         call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = (GV%g_Earth * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((GV%g_Earth*GV%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo
-      call post_data_1d_k(CS%id_N2_f, N2, CS%diag)
+      call post_data(CS%id_N2_f, N2, CS%diag)
     endif
   endif
 
@@ -1278,15 +1255,14 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 
 end subroutine find_PE_chg_orig
 
+!> Initialize parameters and allocate memory associated with the diapycnal energy requirement module.
 subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
   type(time_type),            intent(in)    :: Time        !< model time
   type(ocean_grid_type),      intent(in)    :: G           !< model grid structure
   type(param_file_type),      intent(in)    :: param_file  !< file to parse for parameter values
   type(diag_ctrl),    target, intent(inout) :: diag        !< structure to regulate diagnostic output
   type(diapyc_energy_req_CS), pointer       :: CS          !< module control structure
-! Arguments: param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  Reg - A pointer that is set to point to the tracer registry.
+
   integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1351,8 +1327,10 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
 
 end subroutine diapyc_energy_req_init
 
+!> Clean up and deallocate memory associated with the diapycnal energy requirement module.
 subroutine diapyc_energy_req_end(CS)
-  type(diapyc_energy_req_CS), pointer :: CS
+  type(diapyc_energy_req_CS), pointer :: CS !< Diapycnal energy requirement control structure that
+                                            !! will be deallocated in this subroutine.
   if (associated(CS)) deallocate(CS)
 end subroutine diapyc_energy_req_end
 

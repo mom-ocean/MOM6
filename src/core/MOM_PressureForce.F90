@@ -16,7 +16,7 @@ use MOM_PressureForce_blk_AFV, only : PressureForce_blk_AFV_CS
 use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_nonBouss
 use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_end
 use MOM_PressureForce_Mont, only : PressureForce_Mont_CS
-use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
+use MOM_tidal_forcing, only : tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ALE, only: ALE_CS
@@ -26,7 +26,7 @@ implicit none ; private
 
 public PressureForce, PressureForce_init, PressureForce_end
 
-! Pressure force control structure
+!> Pressure force control structure
 type, public :: PressureForce_CS ; private
   logical :: Analytic_FV_PGF !< If true, use the analytic finite volume form
                              !! (Adcroft et al., Ocean Mod. 2008) of the PGF.

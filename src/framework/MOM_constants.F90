@@ -7,6 +7,7 @@ use constants_mod, only : HLV, HLF
 
 implicit none ; private
 
+!> The constant offset for converting temperatures in Kelvin to Celsius
 real, public, parameter :: CELSIUS_KELVIN_OFFSET = 273.15
 public :: HLV, HLF
 

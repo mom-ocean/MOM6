@@ -1,16 +1,7 @@
+!> Handy functions for manipulating strings
 module MOM_string_functions
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Alistair Adcroft and Robert Hallberg, last updated Sept. 2013.  *
-!*                                                                     *
-!*    The functions here perform a set of useful manipulations of      *
-!*  character strings.   Although they are a part of MOM6, the do not  *
-!*  require any other MOM software to be useful.                       *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 implicit none ; private
 
@@ -416,5 +407,13 @@ function slasher(dir)
     slasher = trim(dir)//"/"
   endif
 end function slasher
+
+!> \namespace mom_string_functions
+!!
+!!  By Alistair Adcroft and Robert Hallberg, last updated Sept. 2013.
+!!
+!!    The functions here perform a set of useful manipulations of
+!!  character strings.   Although they are a part of MOM6, the do not
+!!  require any other MOM software to be useful.
 
 end module MOM_string_functions

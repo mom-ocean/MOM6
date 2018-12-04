@@ -1,40 +1,7 @@
+!> This tracer package is used to test advection schemes
 module advection_test_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2002                                           *
-!*                                                                     *
-!*    This file contains an example of the code that is needed to set  *
-!*  up and use a set (in this case eleven) of dynamically passive      *
-!*  tracers.  These tracers dye the inflowing water or water initially *
-!*  within a range of latitudes or water initially in a range of       *
-!*  depths.                                                            *
-!*                                                                     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
@@ -47,7 +14,7 @@ use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_var
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
+use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables, only : surface
@@ -64,39 +31,39 @@ public register_advection_test_tracer, initialize_advection_test_tracer
 public advection_test_tracer_surface_state, advection_test_tracer_end
 public advection_test_tracer_column_physics, advection_test_stock
 
-! ntr is the number of tracers in this module.
-integer, parameter :: NTR = 11
+integer, parameter :: NTR = 11  !< The number of tracers in this module.
 
+!> The control structure for the advect_test_tracer module
 type, public :: advection_test_tracer_CS ; private
-  integer :: ntr = NTR                  ! Number of tracers in this module
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
-                                   ! to initialize internally.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
-                                           ! subroutine, in g m-3?
-  real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
-  logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
-  logical :: tracers_may_reinit
+  integer :: ntr = NTR                 !< Number of tracers in this module
+  logical :: coupled_tracers = .false. !< These tracers are not offered to the coupler.
+  character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
+  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out.
+  logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
+  logical :: tracers_may_reinit !< If true, the tracers may be set up via the initialization code if
+                           !! they are not found in the restart files.  Otherwise it is a fatal error
+                           !! if the tracers are not found in the restart files of a restarted run.
+  real :: x_origin !< Parameters describing the test functions
+  real :: x_width  !< Parameters describing the test functions
+  real :: y_origin !< Parameters describing the test functions
+  real :: y_width  !< Parameters describing the test functions
 
-  real :: x_origin, x_width ! Parameters describing the test functions
-  real :: y_origin, y_width ! Parameters describing the test functions
+  integer, dimension(NTR) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and
+                   !! the surface tracer concentrations are to be provided to the coupler.
 
-  integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
-             ! if it is used and the surface tracer concentrations are to be
-             ! provided to the coupler.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-
-  type(vardesc) :: tr_desc(NTR)
+  type(vardesc) :: tr_desc(NTR) !< Descriptions and metadata for the tracers
 end type advection_test_tracer_CS
 
 contains
 
+!> Register tracer fields and subroutines to be used with MOM.
 function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),        intent(in) :: HI   !< A horizontal index type structure
   type(verticalGrid_type),     intent(in) :: GV   !< The ocean's vertical grid structure
@@ -107,17 +74,8 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
                                                 !! structure for the tracer advection and
                                                 !! diffusion module
   type(MOM_restart_CS),        pointer    :: restart_CS !< A pointer to the restart control structure
-! This subroutine is used to register tracer fields and subroutines
-! to be used with MOM.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in/out)  tr_Reg - A pointer that is set to point to the control structure
-!                  for the tracer advection and diffusion module.
-!  (in)      restart_CS - A pointer to the restart control structure.
+
+  ! Local variables
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -204,6 +162,7 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   register_advection_test_tracer = .true.
 end function register_advection_test_tracer
 
+!>   Initializes the NTR tracer fields in tr(:,:,:,:) and it sets up the tracer output.
 subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS, &
                                             sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
@@ -223,24 +182,8 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
   type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
   type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
                                                                   !! for diagnostics in depth space.
-!   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
-! and it sets up the tracer output.
 
-! Arguments: restart - .true. if the fields have already been read from
-!                     a restart file.
-!  (in)      day - Time of the start of the run.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 register_advection_test_tracer.
-!  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
-!                         they are in use.  Otherwise this may be unassociated.
-!  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
-!                            in depth space.
+  ! Local variables
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &
     OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
@@ -315,6 +258,8 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
 end subroutine initialize_advection_test_tracer
 
 
+!>   Applies diapycnal diffusion and any other column tracer physics or chemistry to the tracers
+!! from this package.  This is a simple example of a set of advected passive tracers.
 subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
@@ -344,24 +289,9 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
 
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
-!  (in)      ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in m or kg m-2.
-!  (in)      eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in m or kg m-2.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_advection_test_tracer.
-!
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
@@ -420,34 +350,20 @@ subroutine advection_test_tracer_surface_state(state, h, G, CS)
 
 end subroutine advection_test_tracer_surface_state
 
+!> Calculate the mass-weighted integral of all tracer stocks, returning the number of stocks it has calculated.
+!!  If the stock_index is present, only the stock corresponding to that coded index is returned.
 function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(ocean_grid_type),              intent(in)    :: G      !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                               !! tracer, in kg times concentration units.
-  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(verticalGrid_type),            intent(in)    :: GV     !< The ocean's vertical grid structure
   type(advection_test_tracer_CS),     pointer       :: CS     !< The control structure returned by a previous
                                                               !! call to register_advection_test_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
   character(len=*), dimension(:),     intent(out)   :: units  !< the units of the stocks calculated.
-  integer, optional,                  intent(in)    :: stock_index !< the coded index of a specific stock
-                                                                   !! being sought.
-  integer                                           :: advection_test_stock
-! This function calculates the mass-weighted integral of all tracer stocks,
-! returning the number of stocks it has calculated.  If the stock_index
-! is present, only the stock corresponding to that coded index is returned.
-
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (out)     stocks - the mass-weighted integrated amount of each tracer,
-!                     in kg times concentration units.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_ideal_age_tracer.
-!  (out)     names - the names of the stocks calculated.
-!  (out)     units - the units of the stocks calculated.
-!  (in,opt)  stock_index - the coded index of a specific stock being sought.
-! Return value: the number of stocks calculated here.
+  integer, optional,                  intent(in)    :: stock_index !< the coded index of a specific stock being sought.
+  integer                                           :: advection_test_stock !< the number of stocks calculated here.
 
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -476,6 +392,7 @@ function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
 end function advection_test_stock
 
+!> Deallocate memory associated with this module
 subroutine advection_test_tracer_end(CS)
   type(advection_test_tracer_CS), pointer :: CS !< The control structure returned by a previous
                                               !! call to register_advection_test_tracer.

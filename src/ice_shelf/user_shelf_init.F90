@@ -18,16 +18,17 @@ implicit none ; private
 
 public USER_initialize_shelf_mass, USER_update_shelf_mass
 public USER_init_ice_thickness
-logical :: first_call = .true.
 
+!> The control structure for the user_ice_shelf module
 type, public :: user_ice_shelf_CS ; private
-  real :: Rho_ocean  ! The ocean's typical density, in kg m-3.
-  real :: max_draft  ! The maximum ocean draft of the ice shelf, in m.
-  real :: min_draft  ! The minimum ocean draft of the ice shelf, in m.
-  real :: flat_shelf_width ! The range over which the shelf is min_draft thick.
-  real :: shelf_slope_scale ! The range over which the shelf slopes.
-  real :: pos_shelf_edge_0
-  real :: shelf_speed
+  real :: Rho_ocean  !< The ocean's typical density, in kg m-3.
+  real :: max_draft  !< The maximum ocean draft of the ice shelf, in m.
+  real :: min_draft  !< The minimum ocean draft of the ice shelf, in m.
+  real :: flat_shelf_width !< The range over which the shelf is min_draft thick.
+  real :: shelf_slope_scale !< The range over which the shelf slopes.
+  real :: pos_shelf_edge_0 !< The x-position of the shelf edge at time 0, in km.
+  real :: shelf_speed  !< The ice shelf speed of translation, in km day-1
+  logical :: first_call = .true. !< If true, this module has not been called before.
 end type user_ice_shelf_CS
 
 contains
@@ -75,7 +76,8 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   if (.not.associated(CS)) allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  if (first_call) call write_user_log(param_file)
+  if (CS%first_call) call write_user_log(param_file)
+  CS%first_call = .false.
   call get_param(param_file, mdl, "RHO_0", CS%Rho_ocean, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
@@ -213,7 +215,6 @@ subroutine write_user_log(param_file)
   character(len=40)  :: mdl = "user_shelf_init" ! This module's name.
 
   call log_version(param_file, mdl, version, tagname)
-  first_call = .false.
 
 end subroutine write_user_log
 

@@ -1,3 +1,4 @@
+!> A tracer package for using dyes to diagnose regional flows.
 module regional_dyes
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -13,7 +14,7 @@ use MOM_io,                 only : file_exists, read_data, slasher, vardesc, var
 use MOM_open_boundary,      only : ocean_OBC_type
 use MOM_restart,            only : query_initialized, MOM_restart_CS
 use MOM_sponge,             only : set_up_sponge_field, sponge_CS
-use MOM_time_manager,       only : time_type, get_time
+use MOM_time_manager,       only : time_type
 use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init,      only : tracer_Z_init
@@ -32,30 +33,28 @@ public dye_tracer_column_physics, dye_tracer_surface_state
 public dye_stock, regional_dyes_end
 
 
+!> The control structure for the regional dyes tracer package
 type, public :: dye_tracer_CS ; private
-  integer :: ntr    ! The number of tracers that are actually used.
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  real, allocatable, dimension(:) :: dye_source_minlon, & ! Minimum longitude of region dye will be injected.
-                                     dye_source_maxlon, & ! Maximum longitude of region dye will be injected.
-                                     dye_source_minlat, & ! Minimum latitude of region dye will be injected.
-                                     dye_source_maxlat, & ! Maximum latitude of region dye will be injected.
-                                     dye_source_mindepth, & ! Minimum depth of region dye will be injected (m).
-                                     dye_source_maxdepth  ! Maximum depth of region dye will be injected (m).
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
-                                           ! subroutine, in g m-3?
+  integer :: ntr    !< The number of tracers that are actually used.
+  logical :: coupled_tracers = .false.  !< These tracers are not offered to the coupler.
+  real, allocatable, dimension(:) :: dye_source_minlon !< Minimum longitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected, in Z.
+  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected, in Z.
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
 
-  integer, allocatable, dimension(:) :: &
-    ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
-               ! surface tracer concentrations are to be provided to the coupler.
+  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+                                               !! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  type(vardesc), allocatable :: tr_desc(:)
-  logical :: tracers_may_reinit = .false. ! hard-coding here (mjh)
+  type(vardesc), allocatable :: tr_desc(:) !< Descriptions and metadata for the tracers
+  logical :: tracers_may_reinit = .false. !< If true the tracers may be initialized if not found in a restart file
 end type dye_tracer_CS
 
 contains
@@ -136,17 +135,16 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%dye_source_mindepth(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MINDEPTH", CS%dye_source_mindepth, &
                  "This is the minumum depth at which we inject dyes.", &
-                 fail_if_missing=.true.)
-  if (minval(CS%dye_source_mindepth(:)) < -1.e29) &
+                 units="m", scale=GV%m_to_Z, fail_if_missing=.true.)
+  if (minval(CS%dye_source_mindepth(:)) < -1.e29*GV%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINDEPTH")
 
   CS%dye_source_maxdepth(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MAXDEPTH", CS%dye_source_maxdepth, &
                  "This is the maximum depth at which we inject dyes.", &
-                 fail_if_missing=.true.)
-  if (minval(CS%dye_source_maxdepth(:)) < -1.e29) &
+                 units="m", scale=GV%m_to_Z, fail_if_missing=.true.)
+  if (minval(CS%dye_source_maxdepth(:)) < -1.e29*GV%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
-
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
 
@@ -225,12 +223,12 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = -G%bathyT(i,j)
         do k = GV%ke, 1, -1
-          z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_m
+          z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_Z
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0
           endif
-          z_bot = z_bot + h(i,j,k)*GV%H_to_m
+          z_bot = z_bot + h(i,j,k)*GV%H_to_Z
         enddo
       endif
     enddo ; enddo
@@ -308,12 +306,12 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = -G%bathyT(i,j)
         do k=nz,1,-1
-          z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_m
+          z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_Z
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0
           endif
-          z_bot = z_bot + h_new(i,j,k)*GV%H_to_m
+          z_bot = z_bot + h_new(i,j,k)*GV%H_to_Z
         enddo
       endif
     enddo ; enddo
@@ -413,39 +411,13 @@ subroutine regional_dyes_end(CS)
   endif
 end subroutine regional_dyes_end
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2002                                           *
-!*                                                                     *
-!*    This file contains an example of the code that is needed to set  *
-!*  up and use a set (in this case two) of dynamically passive tracers *
-!*  for diagnostic purposes.  The tracers here are dye tracers which   *
-!*  are set to 1 within the geographical region specified. The depth   *
-!*  which a tracer is set is determined by calculating the depth from  *
-!*  the seafloor upwards through the column.                           *
-!*                                                                     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+!> \namespace regional_dyes
+!!
+!!    This file contains an example of the code that is needed to set
+!!  up and use a set (in this case two) of dynamically passive tracers
+!!  for diagnostic purposes.  The tracers here are dye tracers which
+!!  are set to 1 within the geographical region specified. The depth
+!!  which a tracer is set is determined by calculating the depth from
+!!  the seafloor upwards through the column.
 
 end module regional_dyes

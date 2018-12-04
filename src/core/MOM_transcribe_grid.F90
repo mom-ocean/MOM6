@@ -1,3 +1,5 @@
+!> Module with routines for copying information from a shared dynamic horizontal
+!! grid to an ocean-specific horizontal grid and the reverse.
 module MOM_transcribe_grid
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -42,6 +44,7 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   if ((isd > oG%isc) .or. (ied < oG%ied) .or. (jsd > oG%jsc) .or. (jed > oG%jed)) &
     call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
+  oG%Zd_to_m = dG%Zd_to_m
   do i=isd,ied ; do j=jsd,jed
     oG%geoLonT(i,j) = dG%geoLonT(i+ido,j+jdo)
     oG%geoLatT(i,j) = dG%geoLatT(i+ido,j+jdo)
@@ -141,7 +144,7 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   call pass_vector(oG%geoLatCu, oG%geoLatCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   call pass_var(oG%areaBu, oG%Domain, position=CORNER)
-  call pass_var(oG%geoLonBu, oG%Domain, position=CORNER)
+  call pass_var(oG%geoLonBu, oG%Domain, position=CORNER, inner_halo=oG%isc-isd)
   call pass_var(oG%geoLatBu, oG%Domain, position=CORNER)
   call pass_vector(oG%dxBu, oG%dyBu, oG%Domain, To_All+Scalar_Pair, BGRID_NE)
   call pass_var(oG%CoriolisBu, oG%Domain, position=CORNER)
@@ -185,6 +188,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
   if ((isd > dG%isc) .or. (ied < dG%ied) .or. (jsd > dG%jsc) .or. (jed > dG%jed)) &
     call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
+  dG%Zd_to_m = oG%Zd_to_m
   do i=isd,ied ; do j=jsd,jed
     dG%geoLonT(i,j) = oG%geoLonT(i+ido,j+jdo)
     dG%geoLatT(i,j) = oG%geoLatT(i+ido,j+jdo)
@@ -285,7 +289,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
   call pass_vector(dG%geoLatCu, dG%geoLatCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   call pass_var(dG%areaBu, dG%Domain, position=CORNER)
-  call pass_var(dG%geoLonBu, dG%Domain, position=CORNER)
+  call pass_var(dG%geoLonBu, dG%Domain, position=CORNER, inner_halo=dG%isc-isd)
   call pass_var(dG%geoLatBu, dG%Domain, position=CORNER)
   call pass_vector(dG%dxBu, dG%dyBu, dG%Domain, To_All+Scalar_Pair, BGRID_NE)
   call pass_var(dG%CoriolisBu, dG%Domain, position=CORNER)

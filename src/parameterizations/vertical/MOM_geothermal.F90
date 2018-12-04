@@ -1,40 +1,11 @@
+!> Implemented geothermal heating at the ocean bottom.
 module MOM_geothermal
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, 2010.                                          *
-!*                                                                     *
-!*    This file contains the subroutine (geothemal) that implements    *
-!*  a geothermal heating at the bottom.  This can be done either in a  *
-!*  layered isopycnal mode, in which the heating raises the density of *
-!*  the layer to the target density of the layer above, and then moves *
-!*  the water into that layer, or in a simple Eulerian mode, in which  *
-!*  the bottommost GEOTHERMAL_THICKNESS are heated.  Geothermal heating*
-!*  will also provide a buoyant source of bottom TKE that can be used  *
-!*  to further mix the near-bottom water.  In cold fresh water lakes   *
-!*  where heating increases density, water should be moved into deeper *
-!*  layers, but this is not implemented yet.                           *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, buoy, Rml, eaml, ebml, etc.           *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
+use MOM_domains,             only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, slasher
@@ -49,32 +20,32 @@ implicit none ; private
 
 public geothermal, geothermal_init, geothermal_end
 
+!> Control structure for geothermal heating
 type, public :: geothermal_CS ; private
-  real    :: dRcv_dT_inplace !   The value of dRcv_dT above which (dRcv_dT is
-                             ! negative) the water is heated in place instead
-                             ! of moving upward between layers, in kg m-3 K-1.
-  real, pointer :: geo_heat(:,:) => NULL()  ! The geothermal heat flux, in
-                             ! W m-2.
-  real    :: geothermal_thick !  The thickness over which geothermal heating is
-                             ! applied, in m.
-  logical :: apply_geothermal !  If true, geothermal heating will be applied
-                             ! otherwise GEOTHERMAL_SCALE has been set to 0 and
-                             ! there is no heat to apply.
+  real    :: dRcv_dT_inplace !<   The value of dRcv_dT above which (dRcv_dT is
+                             !! negative) the water is heated in place instead
+                             !! of moving upward between layers, in kg m-3 K-1.
+  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux, in W m-2.
+  real    :: geothermal_thick !< The thickness over which geothermal heating is
+                             !! applied, in m.
+  logical :: apply_geothermal !< If true, geothermal heating will be applied
+                             !! otherwise GEOTHERMAL_SCALE has been set to 0 and
+                             !! there is no heat to apply.
 
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                             !! regulate the timing of diagnostic output.
 end type geothermal_CS
 
 contains
 
-!>   This subroutine applies geothermal heating, including the movement of water
+!> Applies geothermal heating, including the movement of water
 !! between isopycnal layers to match the target densities.  The heating is
 !! applied to the bottommost layers that occur within ### of the bottom. If
 !! the partial derivative of the coordinate density with temperature is positive
 !! or very small, the layers are simply heated in place.  Any heat that can not
 !! be applied to the ocean is returned (WHERE)?
-subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
+subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid
                                                                 !! structure.
@@ -99,32 +70,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
   type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
                                                                 !! a previous call to
                                                                 !! geothermal_init.
-
-!   This subroutine applies geothermal heating, including the movement of water
-! between isopycnal layers to match the target densities.  The heating is
-! applied to the bottommost layers that occur within ### of the bottom. If
-! the partial derivative of the coordinate density with temperature is positive
-! or very small, the layers are simply heated in place.  Any heat that can not
-! be applied to the ocean is returned (WHERE)?
-
-! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)
-!                The units of h are referred to as H below.
-!  (in/out)  tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      dt - Time increment, in s.
-!  (in/out)  ea - The amount of fluid moved downward into a layer; this should
-!                 be increased due to mixed layer detrainment, in the same units
-!                 as h - usually m or kg m-2 (i.e., H).
-!  (in/out)  eb - The amount of fluid moved upward into a layer; this should
-!                 be increased due to mixed layer entrainment, in the same units
-!                 as h - usually m or kg m-2 (i.e., H).
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 geothermal_init.
-
-!  real :: resid(SZI_(G),SZJ_(G)) !z1l: never been used.
-
+  integer,                        optional, intent(in)    :: halo !< Halo width over which to work
+  ! Local variables
   real, dimension(SZI_(G)) :: &
     heat_rem,  & ! remaining heat (H * degC)
     h_geo_rem, & ! remaining thickness to apply geothermal heating (units of H)
@@ -160,6 +107,9 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  if (present(halo)) then
+    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  endif
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_geothermal: "//&
          "Module must be initialized before it is used.")
@@ -167,7 +117,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 
   nkmb      = GV%nk_rho_varies
   Irho_cp   = 1.0 / (GV%H_to_kg_m2 * tv%C_p)
-  Angstrom  = GV%Angstrom
+  Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
@@ -362,27 +312,19 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 
 end subroutine geothermal
 
+!> Initialize parameters and allocate memory associated with the geothermal heating module.
 subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
   type(geothermal_CS),     pointer       :: CS   !< Pointer pointing to the module control
                                                  !! structure.
-
-! Arguments:
-!  (in)      Time       - current model time
-!  (in)      G          - ocean grid structure
-!  (in)      param_file - structure indicating the open file to parse for
-!                         model parameter values
-!  (in)      diag       - structure used to regulate diagnostic output
-!  (in/out)  CS         - pointer pointing to the module control structure
-
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-
   character(len=40)  :: mdl = "MOM_geothermal"  ! module name
+  ! Local variables
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
   real :: scale
   integer :: i, j, isd, ied, jsd, jed, id
@@ -440,6 +382,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
       CS%geo_heat(i,j) = G%mask2dT(i,j) * scale
     enddo ; enddo
   endif
+  call pass_var(CS%geo_heat, G%domain)
 
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
@@ -452,11 +395,22 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
 
 end subroutine geothermal_init
 
+!> Clean up and deallocate memory associated with the geothermal heating module.
 subroutine geothermal_end(CS)
-  type(geothermal_CS), pointer :: CS
+  type(geothermal_CS), pointer :: CS !< Geothermal heating control structure that
+                                     !! will be deallocated in this subroutine.
 
   if (associated(CS%geo_heat)) deallocate(CS%geo_heat)
   if (associated(CS)) deallocate(CS)
 end subroutine geothermal_end
+
+!> \namespace mom_geothermal
+!!
+!! Geothermal heating can be added either in a layered isopycnal mode, in which the heating raises the density
+!! of the layer to the target density of the layer above, and then moves the water into that layer, or in a
+!! simple Eulerian mode, in which the bottommost GEOTHERMAL_THICKNESS are heated.  Geothermal heating will also
+!! provide a buoyant source of bottom TKE that can be used to further mix the near-bottom water. In cold fresh
+!! water lakes where heating increases density, water should be moved into deeper layers, but this is not
+!! implemented yet.
 
 end module MOM_geothermal

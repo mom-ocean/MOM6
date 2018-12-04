@@ -116,8 +116,8 @@ type, public :: KPP_CS ; private
   !> CVMix parameters
   type(CVMix_kpp_params_type), pointer :: KPP_params => NULL()
 
-  ! Diagnostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< Pointer to diagnostics control structure
+  !>@{ Diagnostic handles
   integer :: id_OBLdepth = -1, id_BulkRi   = -1
   integer :: id_N        = -1, id_N2       = -1
   integer :: id_Ws       = -1, id_Vt2      = -1
@@ -137,6 +137,7 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_saln_budget = -1
   integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
   integer :: id_OBLdepth_original = -1
+  !!@}
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
@@ -158,28 +159,25 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
   real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer (m/s)
   real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer (m/s)
-  real, allocatable, dimension(:,:,:)   :: EnhK      !< Enhancement for mixing coefficient
-  real, allocatable, dimension(:,:,:)   :: EnhVt2  !< Enhancement for Vt2
-
-
+  real, allocatable, dimension(:,:,:) :: EnhK      !< Enhancement for mixing coefficient
+  real, allocatable, dimension(:,:,:) :: EnhVt2    !< Enhancement for Vt2
 
 end type KPP_CS
 
-! Module data used for debugging only
-logical, parameter :: verbose = .False.
 #define __DO_SAFETY_CHECKS__
 
 contains
 
 !> Initialize the CVMix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
-logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
+logical function KPP_init(paramFile, G, GV, diag, Time, CS, passive, Waves)
 
   ! Arguments
   type(param_file_type),   intent(in)    :: paramFile !< File parser
   type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
+  type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
-  type(time_type),         intent(in)    :: Time      !< Time
+  type(time_type),         intent(in)    :: Time      !< Model time
   type(KPP_CS),            pointer       :: CS        !< Control structure
   logical,       optional, intent(out)   :: passive   !< Copy of %passiveMode
   type(wave_parameters_CS), optional, pointer :: Waves !< Wave CS
@@ -496,7 +494,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
-      'Diffusivity passed to KPP', 'm2/s')
+      'Diffusivity passed to KPP', 'm2/s', conversion=GV%Z_to_m**2)
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
@@ -536,7 +534,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%Vt2(:,:,:) = 0.
   if (CS%id_OBLdepth_original > 0) allocate( CS%OBLdepth_original( SZI_(G), SZJ_(G) ) )
 
-  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0
+  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) ) ; CS%OBLdepthprev(:,:) = 0.0
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
   if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
   if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -584,12 +582,12 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
-                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
-                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (m2/s)
-                                                                    !< (out) Vertical viscosity including KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP (Z2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (Z2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP (Z2/s)
+                                                                    !< (out) Vertical diffusivity including KPP (Z2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (Z2/s)
+                                                                    !< (out) Vertical viscosity including KPP (Z2/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
@@ -615,8 +613,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
     call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
     call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
-    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=GV%Z_to_m**2)
   endif
 #endif
 
@@ -624,9 +622,7 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
-  !$OMP parallel do default(private) firstprivate(nonLocalTrans) &
-  !$OMP                shared(G,GV,CS,uStar,h,Waves,&
-  !$OMP                       buoyFlux,nonLocalTransHeat,nonLocalTransScalar,Kt,Ks,Kv)
+  !$OMP parallel do default(shared) firstprivate(nonLocalTrans)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -663,7 +659,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
       if (CS%SW_METHOD == SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
       elseif (CS%SW_METHOD == SW_METHOD_MXL_SW) then
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1) ! We know the actual buoyancy flux into the OBL
+         ! We know the actual buoyancy flux into the OBL
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1)
       elseif (CS%SW_METHOD == SW_METHOD_LV1_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
@@ -673,9 +670,9 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
          Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
          Kviscosity(:)     = 0. ! Viscosity (m2/s)
       else
-         Kdiffusivity(:,1) = Kt(i,j,:)
-         Kdiffusivity(:,2) = Ks(i,j,:)
-         Kviscosity(:)=Kv(i,j,:)
+         Kdiffusivity(:,1) = GV%Z_to_m**2 * Kt(i,j,:)
+         Kdiffusivity(:,2) = GV%Z_to_m**2 * Ks(i,j,:)
+         Kviscosity(:) = GV%Z_to_m**2 * Kv(i,j,:)
       endif
 
       call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity (m2/s)
@@ -816,17 +813,17 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
       if (.not. CS%passiveMode) then
         if (CS%KPPisAdditive) then
           do k=1, G%ke+1
-            Kt(i,j,k) = Kt(i,j,k) + Kdiffusivity(k,1)
-            Ks(i,j,k) = Ks(i,j,k) + Kdiffusivity(k,2)
-            Kv(i,j,k) = Kv(i,j,k) + Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            Kt(i,j,k) = Kt(i,j,k) + GV%m_to_Z**2 * Kdiffusivity(k,1)
+            Ks(i,j,k) = Ks(i,j,k) + GV%m_to_Z**2 * Kdiffusivity(k,2)
+            Kv(i,j,k) = Kv(i,j,k) + GV%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, G%ke+1
-            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
-            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
-            if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = GV%m_to_Z**2 * Kdiffusivity(k,1)
+            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = GV%m_to_Z**2 * Kdiffusivity(k,2)
+            if (Kviscosity(k) /= 0.) Kv(i,j,k) = GV%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%Z_to_m**2 * Kv(i,j,k)
           enddo
         endif
       endif
@@ -839,8 +836,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt",G%HI,haloshift=0)
-    call hchksum(Ks, "KPP out: Ks",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=GV%Z_to_m**2)
+    call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=GV%Z_to_m**2)
   endif
 #endif
 
@@ -867,7 +864,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 
   ! Arguments
   type(KPP_CS),                               pointer       :: CS    !< Control structure
-  type(ocean_grid_type),                      intent(in)    :: G     !< Ocean grid
+  type(ocean_grid_type),                      intent(inout) :: G     !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
@@ -933,12 +930,10 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 #endif
 
   ! some constants
-  GoRho = GV%g_Earth / GV%Rho0
-
-!$OMP parallel do default(private) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho, &
-!$OMP                                  Waves,buoyFlux)                             &
+  GoRho = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
 
   ! loop over horizontal points on processor
+  !$OMP parallel do default(shared)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -1313,14 +1308,16 @@ end subroutine KPP_compute_BLD
 subroutine KPP_smooth_BLD(CS,G,GV,h)
   ! Arguments
   type(KPP_CS),                           pointer       :: CS             !< Control structure
-  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
+  type(ocean_grid_type),                  intent(inout) :: G              !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h              !< Layer/level thicknesses (units of H)
 
   ! local
   real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_original ! Original OBL depths computed by CVMix
-  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m) (negative in ocean)
+  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m)
+                                                        ! (negative in the ocean)
+  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m)
+                                                        ! (negative in the ocean)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   real :: dh                 ! The local thickness used for calculating interface positions (m)
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers (m)
@@ -1551,7 +1548,7 @@ subroutine KPP_end(CS)
 
 end subroutine KPP_end
 
-!> \namespace mom_kpp
+!> \namespace mom_cvmix_kpp
 !!
 !! \section section_KPP The K-Profile Parameterization
 !!

@@ -1,8 +1,10 @@
 module mom_cap_methods
 
-  use ESMF,                only: ESMF_time, ESMF_ClockGet, ESMF_TimeGet, ESMF_State, ESMF_Clock
+  use ESMF,                only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
+  use ESMF,                only: ESMF_TimeInterval, ESMF_TimeIntervalGet
+  use ESMF,                only: ESMF_State, ESMF_StateGet
   use ESMF,                only: ESMF_KIND_R8, ESMF_Field, ESMF_SUCCESS, ESMF_LogFoundError
-  use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_StateGet, ESMF_FieldGet
+  use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_FieldGet
   use ESMF,                only: ESMF_LogSetError, ESMF_RC_MEM_ALLOCATE
   use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
@@ -47,6 +49,7 @@ contains
     integer         :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec !< Grid indices
     integer         :: lbnd1, lbnd2
     real            :: slp_L, slp_R, slp_C, slope, u_min, u_max
+    real            :: I_time_int  !< The inverse of coupling time interval in s-1.
     integer         :: day, secs
     type(ESMF_time) :: currTime
     real(ESMF_KIND_R8), pointer :: dataPtr_omask(:,:)
@@ -54,10 +57,12 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_s(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_u(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_v(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_q(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_fioo_q(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_dhdx(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_dhdy(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_bldepth(:,:)
+    type(ESMF_TimeInterval)     :: timeStep
+    integer                     :: dt_int       !< time over which to advance the ocean (ocean_coupling_time_step), in sec
     character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
     character(len=*), parameter :: subname = '(mom_export)'
     !-----------------------------------------------------------------------
@@ -89,7 +94,7 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(exportState,"Fioo_q", dataPtr_q, rc=rc)
+    call State_getFldPtr(exportState,"Fioo_q", dataPtr_fioo_q, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -116,6 +121,23 @@ contains
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
+    ! Use Adcroft's rule of reciprocals; it does the right thing here.
+    call ESMF_ClockGet( clock, timeStep=timeStep, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call ESMF_TimeIntervalGet( timeStep, s=dt_int, rc=rc )
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    if (real(dt_int) > 0.0) then
+       I_time_int = 1.0 / real(dt_int)
+    else
+       I_time_int = 0.0
+    end if
+
     ! Copy from ocean_public to exportstate. ocean_public uses global indexing with no halos.
     ! The mask comes from "grid" that uses the usual MOM domain that has halos
     ! and does not use global indexing.
@@ -130,12 +152,20 @@ contains
         dataPtr_s(i1,j1)       = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
         dataPtr_u(i1,j1)       = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
         dataPtr_v(i1,j1)       = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
-        dataPtr_q(i1,j1)       = 0.
-        dataPtr_bldepth(i1,j1) = 0. ! TODO: this needs to be generalized
-        !dataPtr_u(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%u_surf(i,j) &
-        !                        - grid%sin_rot(ig,jg) * ocean_public%v_surf(i,j)) * grid%mask2dT(ig,jg)
-        !dataPtr_v(i1,j1)       = (grid%cos_rot(ig,jg) * ocean_public%v_surf(i,j) &
-        !                        + grid%sin_rot(ig,jg) * ocean_public%u_surf(i,j)) * grid%mask2dT(ig,jg)
+        dataPtr_bldepth(i1,j1) = ocean_public%OBLD(i,j)   * grid%mask2dT(ig,jg)
+        ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
+        if (ocean_public%frazil(ig,jg) > 0.0) then
+           ! Frazil: change from J/m^2 to W/m^2
+           dataPtr_Fioo_q(i1,j1) = ocean_public%frazil(i,j) * grid%mask2dT(ig,jg) * I_time_int
+        else
+           ! Melt_potential: change from J/m^2 to W/m^2
+           dataPtr_Fioo_q(i1,j1) = -ocean_public%melt_potential(i,j) * grid%mask2dT(ig,jg) * I_time_int !* ncouple_per_day
+
+           ! make sure Melt_potential is always <= 0
+           if (dataPtr_Fioo_q(i1,j1) > 0.0) then
+              dataPtr_Fioo_q(i1,j1) = 0.0
+           endif
+        end if
       end do
     end do
 

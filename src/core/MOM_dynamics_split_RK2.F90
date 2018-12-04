@@ -30,7 +30,7 @@ use MOM_get_input,         only : directories
 use MOM_io,                only : MOM_io_init, vardesc, var_desc
 use MOM_restart,           only : register_restart_field, query_initialized, save_restart
 use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
-use MOM_time_manager,      only : time_type, set_time, time_type_to_real, operator(+)
+use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE,                   only : ALE_CS
@@ -63,34 +63,38 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-!> Module control structure
+!> MOM_dynamics_split_RK2 module control structure
 type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &        !< CAu = f*v - u.grad(u) in m s-2.
-    PFu, &        !< PFu = -dM/dx, in m s-2.
-    diffu, &      !< Zonal acceleration due to convergence of the along-isopycnal
-                  !! stress tensor, in m s-2.
-    visc_rem_u, & !< Both the fraction of the zonal momentum originally in a
-                  !! layer that remains after a time-step of viscosity, and the
-                  !! fraction of a time-step's worth of a barotropic acceleration
-                  !! that a layer experiences after viscosity is applied.
-                  !! Nondimensional between 0 (at the bottom) and 1 (far above).
-    u_accel_bt    !< The layers' zonal accelerations due to the difference between
-                  !! the barotropic accelerations and the baroclinic accelerations
-                  !! that were fed into the barotopic calculation, in m s-2.
+    CAu, &    !< CAu = f*v - u.grad(u) in m s-2.
+    PFu, &    !< PFu = -dM/dx, in m s-2.
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &        !< CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &        !< PFv = -dM/dy, in m s-2.
-    diffv, &      !< Meridional acceleration due to convergence of the
-                  !! along-isopycnal stress tensor, in m s-2.
-    visc_rem_v, & !< Both the fraction of the meridional momentum originally in
-                  !! a layer that remains after a time-step of viscosity, and the
-                  !! fraction of a time-step's worth of a barotropic acceleration
-                  !! that a layer experiences after viscosity is applied.
-                  !! Nondimensional between 0 (at the bottom) and 1 (far above).
-    v_accel_bt    !< The layers' meridional accelerations due to the difference between
-                  !! the barotropic accelerations and the baroclinic accelerations
-                  !! that were fed into the barotopic calculation, in m s-2.
+    CAv, &    !< CAv = -f*u - u.grad(v) in m s-2.
+    PFv, &    !< PFv = -dM/dy, in m s-2.
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: visc_rem_u
+              !< Both the fraction of the zonal momentum originally in a
+              !! layer that remains after a time-step of viscosity, and the
+              !! fraction of a time-step worth of a barotropic acceleration
+              !! that a layer experiences after viscosity is applied.
+              !! Nondimensional between 0 (at the bottom) and 1 (far above).
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_accel_bt
+              !< The zonal layer accelerations due to the difference between
+              !! the barotropic accelerations and the baroclinic accelerations
+              !! that were fed into the barotopic calculation, in m s-2.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: visc_rem_v
+              !< Both the fraction of the meridional momentum originally in
+              !! a layer that remains after a time-step of viscosity, and the
+              !! fraction of a time-step worth of a barotropic acceleration
+              !! that a layer experiences after viscosity is applied.
+              !! Nondimensional between 0 (at the bottom) and 1 (far above).
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_accel_bt
+              !< The meridional layer accelerations due to the difference between
+              !! the barotropic accelerations and the baroclinic accelerations
+              !! that were fed into the barotopic calculation, in m s-2.
 
   ! The following variables are only used with the split time stepping scheme.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta    !< Instantaneous free surface height (in Boussinesq
@@ -142,8 +146,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
   logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
 
-  logical :: module_is_initialized = .false.
+  logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
 
+  !>@{ Diagnostic IDs
   integer :: id_uh     = -1, id_vh     = -1
   integer :: id_umo    = -1, id_vmo    = -1
   integer :: id_umo_2d = -1, id_vmo_2d = -1
@@ -153,6 +158,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
+  !!@}
 
   type(diag_ctrl), pointer       :: diag !< A structure that is used to regulate the
                                          !! timing of diagnostic output.
@@ -165,31 +171,40 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                          !! which can later be used to calculate
                                          !! derived diagnostics like energy budgets.
 
-  ! Remainder of the structure points to child subroutines' control strings.
+  ! The remainder of the structure points to child subroutines' control structures.
+  !> A pointer to the horizontal viscosity control structure
   type(hor_visc_CS),      pointer :: hor_visc_CSp      => NULL()
+  !> A pointer to the continuity control structure
   type(continuity_CS),    pointer :: continuity_CSp    => NULL()
+  !> A pointer to the CoriolisAdv control structure
   type(CoriolisAdv_CS),   pointer :: CoriolisAdv_CSp   => NULL()
+  !> A pointer to the PressureForce control structure
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  !> A pointer to the barotropic stepping control structure
   type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
+  !> A pointer to the vertical viscosity control structure
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
+  !> A pointer to the set_visc control structure
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
+  !> A pointer to the tidal forcing control structure
   type(tidal_forcing_CS), pointer :: tides_CSp         => NULL()
+  !> A pointer to the ALE control structure.
+  type(ALE_CS), pointer :: ALE_CSp => NULL()
 
   type(ocean_OBC_type),   pointer :: OBC => NULL() !< A pointer to an open boundary
      !! condition type that specifies whether, where, and  what open boundary
      !! conditions are used.  If no open BCs are used, this pointer stays
      !! nullified.  Flather OBCs use open boundary_CS as well.
+  !> A pointer to the update_OBC control structure
   type(update_OBC_CS),    pointer :: update_OBC_CSp => NULL()
 
-  ! This is a copy of the pointer in the top-level control structure.
-  type(ALE_CS), pointer :: ALE_CSp => NULL()
-
-  ! for group halo pass
-  type(group_pass_type) :: pass_eta
-  type(group_pass_type) :: pass_visc_rem, pass_uvp
-  type(group_pass_type) :: pass_hp_uv
-  type(group_pass_type) :: pass_uv
-  type(group_pass_type) :: pass_h, pass_av_uvh
+  type(group_pass_type) :: pass_eta  !< Structure for group halo pass
+  type(group_pass_type) :: pass_visc_rem  !< Structure for group halo pass
+  type(group_pass_type) :: pass_uvp  !< Structure for group halo pass
+  type(group_pass_type) :: pass_hp_uv  !< Structure for group halo pass
+  type(group_pass_type) :: pass_uv  !< Structure for group halo pass
+  type(group_pass_type) :: pass_h  !< Structure for group halo pass
+  type(group_pass_type) :: pass_av_uvh  !< Structure for group halo pass
 
 end type MOM_dyn_split_RK2_CS
 
@@ -199,11 +214,13 @@ public register_restarts_dyn_split_RK2
 public initialize_dyn_split_RK2
 public end_dyn_split_RK2
 
+!>@{ CPU time clock IDs
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
 integer :: id_clock_horvisc, id_clock_mom_update
 integer :: id_clock_continuity, id_clock_thick_diff
 integer :: id_clock_btstep, id_clock_btcalc, id_clock_btforce
 integer :: id_clock_pass, id_clock_pass_init
+!!@}
 
 contains
 
@@ -353,7 +370,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   BT_cont_BT_thick = .false.
   if (associated(CS%BT_cont)) BT_cont_BT_thick = &
-    (associated(CS%BT_cont%h_u) .and. associated(CS%BT_cont%h_v))
+    (allocated(CS%BT_cont%h_u) .and. allocated(CS%BT_cont%h_v))
 
   if (CS%split_bottom_stress) then
     taux_bot => CS%taux_bot ; tauy_bot => CS%tauy_bot
@@ -892,7 +909,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:)    = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
-  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom
+  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom_H
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
@@ -975,6 +992,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units, eta_rest_name
+  real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
+                     ! a restart file to the internal representation in this run.
+  real :: uH_rescale ! A rescaling factor for thickness transports from the representation in
+                     ! a restart file to the internal representation in this run.
   real :: H_convert
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
@@ -1093,11 +1114,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
     ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
     if (GV%Boussinesq) then
-      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) * GV%m_to_H ; enddo ; enddo
+      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -GV%Z_to_H * G%bathyT(i,j) ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
        CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)
     enddo ; enddo ; enddo
+  elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+    H_rescale = GV%m_to_H / GV%m_to_H_restart
+    do j=js,je ; do i=is,ie ; CS%eta(i,j) = H_rescale * CS%eta(i,j) ; enddo ; enddo
   endif
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
@@ -1124,8 +1148,17 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
     call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
     CS%h_av(:,:,:) = 0.5*(h(:,:,:) + h_tmp(:,:,:))
   else
-    if (.not. query_initialized(CS%h_av,"h2",restart_CS)) &
+    if (.not. query_initialized(CS%h_av,"h2",restart_CS)) then
       CS%h_av(:,:,:) = h(:,:,:)
+    elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+      H_rescale = GV%m_to_H / GV%m_to_H_restart
+      do k=1,nz ; do j=js,je ; do i=is,ie ; CS%h_av(i,j,k) = H_rescale * CS%h_av(i,j,k) ; enddo ; enddo ; enddo
+    endif
+    if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
+      uH_rescale = GV%m_to_H / GV%m_to_H_restart
+      do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB ; uh(I,j,k) = uH_rescale * uh(I,j,k) ; enddo ; enddo ; enddo
+      do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie ; vh(i,J,k) = uH_rescale * vh(i,J,k) ; enddo ; enddo ; enddo
+    endif
   endif
 
   call cpu_clock_begin(id_clock_pass_init)

@@ -1,43 +1,10 @@
+!> Routines used to calculate the opacity of the ocean.
 module MOM_opacity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*   This module contains the routines used to calculate the opacity   *
-!* of the ocean.                                                       *
-!*                                                                     *
-!* CHL_from_file:                                                      *
-!*   In this routine, the Morel (modified) and Manizza (modified)      *
-!* schemes use the "blue" band in the paramterizations to determine    *
-!* the e-folding depth of the incoming shortwave attenuation. The red  *
-!* portion is lumped into the net heating at the surface.              *
-!*                                                                     *
-!* Morel, A., 1988: Optical modeling of the upper ocean in relation    *
-!*   to itsbiogenous matter content (case-i waters)., J. Geo. Res.,    *
-!*   93, 10,749-10,768.                                                *
-!*                                                                     *
-!* Manizza, M., C. LeQuere, A. J. Watson, and E. T. Buitenhuis, 2005:  *
-!*  Bio-optical feedbacks amoung phytoplankton, upper ocean physics    *
-!*  and sea-ice in a global model, Geophys. Res. Let., 32, L05603,     *
-!*  doi:10.1029/2004GL020778.                                          *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, buoy, Rml, eaml, ebml, etc.           *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
-use MOM_time_manager, only :  get_time
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
@@ -55,50 +22,52 @@ implicit none ; private
 
 public set_opacity, opacity_init, opacity_end, opacity_manizza, opacity_morel
 
+!> The control structure with paramters for the MOM_opacity module
 type, public :: opacity_CS ; private
-  logical :: var_pen_sw      !   If true, use one of the CHL_A schemes
-                             ! (specified below) to determine the e-folding
-                             ! depth of incoming short wave radiation.
-                             ! The default is false.
-  integer :: opacity_scheme  !   An integer indicating which scheme should be
-                             ! used to translate water properties into the
-                             ! opacity (i.e., the e-folding depth) and (perhaps)
-                             ! the number of bands of penetrating shortwave
-                             ! radiation to use.
-  real :: pen_sw_scale       !   The vertical absorption e-folding depth of the
-                             ! penetrating shortwave radiation, in m.
-  real :: pen_sw_scale_2nd   !   The vertical absorption e-folding depth of the
-                             ! (2nd) penetrating shortwave radiation, in m.
-  real :: SW_1ST_EXP_RATIO   ! Ratio for 1st exp decay in Two Exp decay opacity
-  real :: pen_sw_frac        !   The fraction of shortwave radiation that is
-                             ! penetrating with a constant e-folding approach.
-  real :: blue_frac          !   The fraction of the penetrating shortwave
-                             ! radiation that is in the blue band, ND.
-  real :: opacity_land_value ! The value to use for opacity over land, in m-1.
-                             ! The default is 10 m-1 - a value for muddy water.
-  integer :: sbc_chl         ! An integer handle used in time interpolation of
-                             ! chlorophyll read from a file.
-  logical ::  chl_from_file  !   If true, chl_a is read from a file.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  logical :: var_pen_sw      !<   If true, use one of the CHL_A schemes (specified below) to
+                             !! determine the e-folding depth of incoming short wave radiation.
+                             !! The default is false.
+  integer :: opacity_scheme  !<   An integer indicating which scheme should be used to translate
+                             !! water properties into the opacity (i.e., the e-folding depth) and
+                             !! (perhaps) the number of bands of penetrating shortwave radiation to use.
+  real :: pen_sw_scale       !<   The vertical absorption e-folding depth of the
+                             !! penetrating shortwave radiation, in m.
+  real :: pen_sw_scale_2nd   !<   The vertical absorption e-folding depth of the
+                             !! (2nd) penetrating shortwave radiation, in m.
+  real :: SW_1ST_EXP_RATIO   !< Ratio for 1st exp decay in Two Exp decay opacity
+  real :: pen_sw_frac        !<   The fraction of shortwave radiation that is
+                             !! penetrating with a constant e-folding approach.
+  real :: blue_frac          !<   The fraction of the penetrating shortwave
+                             !! radiation that is in the blue band, ND.
+  real :: opacity_land_value !< The value to use for opacity over land, in m-1.
+                             !! The default is 10 m-1 - a value for muddy water.
+  integer :: sbc_chl         !< An integer handle used in time interpolation of
+                             !! chlorophyll read from a file.
+  logical ::  chl_from_file  !< If true, chl_a is read from a file.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                             !! regulate the timing of diagnostic output.
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp => NULL()
-                    ! A pointer to the control structure of the tracer modules.
+                    !< A pointer to the control structure of the tracer modules.
 
+  !>@{ Diagnostic IDs
   integer :: id_sw_pen = -1, id_sw_vis_pen = -1, id_chl = -1
   integer, pointer :: id_opacity(:) => NULL()
+  !!@}
 end type opacity_CS
 
-integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, &
-                      SINGLE_EXP = 3, DOUBLE_EXP = 4
+!>@{ Coded integers to specify the opacity scheme
+integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, SINGLE_EXP = 3, DOUBLE_EXP = 4
+!!@}
 
-character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05"
-character*(10), parameter :: MOREL_88_STRING = "MOREL_88"
-character*(10), parameter :: SINGLE_EXP_STRING = "SINGLE_EXP"
-character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP"
+character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05" !< String to specify the opacity scheme
+character*(10), parameter :: MOREL_88_STRING   = "MOREL_88"   !< String to specify the opacity scheme
+character*(10), parameter :: SINGLE_EXP_STRING = "SINGLE_EXP" !< String to specify the opacity scheme
+character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP" !< String to specify the opacity scheme
 
 contains
 
+!> This sets the opacity of sea water based based on one of several different schemes.
 subroutine set_opacity(optics, fluxes, G, GV, CS)
   type(optics_type),       intent(inout) :: optics !< An optics structure that has values
                                                    !! set based on the opacities.
@@ -146,14 +115,14 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
 
     ! Make sure there is no division by 0.
-    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
+    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_m, &
                                  GV%H_to_m*GV%H_subroundoff)
     if ( CS%Opacity_scheme == DOUBLE_EXP ) then
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
-             0.1*GV%Angstrom_z,GV%H_to_m*GV%H_subroundoff)
+             0.1*GV%Angstrom_m,GV%H_to_m*GV%H_subroundoff)
       enddo ; enddo ; enddo
       if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
         !$OMP parallel do default(shared)
@@ -227,6 +196,8 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
 end subroutine set_opacity
 
 
+!> This sets the "blue" band opacity based on chloophyll A concencentrations
+!! The red portion is lumped into the net heating at the surface.
 subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   type(optics_type),     intent(inout)  :: optics !< An optics structure that has values
                                                   !! set based on the opacities.
@@ -253,14 +224,13 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                             ! radiation, in W m-2.
   type(time_type) :: day
   character(len=128) :: mesg
-  integer :: days, seconds
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
   logical :: multiband_vis_input, multiband_nir_input
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
 !   In this model, the Morel (modified) and Manizza (modified) schemes
-! use the "blue" band in the paramterizations to determine the e-folding
+! use the "blue" band in the parameterizations to determine the e-folding
 ! depth of the incoming shortwave attenuation. The red portion is lumped
 ! into the net heating at the surface.
 !
@@ -299,7 +269,6 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   else
     ! Only the 2-d surface chlorophyll can be read in from a file.  The
     ! same value is assumed for all layers.
-    call get_time(CS%Time,seconds,days)
     call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
     do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
@@ -413,8 +382,10 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
 
 end subroutine opacity_from_chl
 
+!> This sets the blue-wavelength opacity according to the scheme proposed by
+!! Morel and Antoine (1994).
 function opacity_morel(chl_data)
-  real, intent(in)  :: chl_data
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
   real :: opacity_morel
 ! Argument : chl_data - The chlorophyll-A concentration in mg m-3.
 !   The following are coefficients for the optical model taken from Morel and
@@ -431,8 +402,10 @@ function opacity_morel(chl_data)
       ((Z2_coef(3) + Chl*Z2_coef(4)) + Chl2*(Z2_coef(5) + Chl*Z2_coef(6))) )
 end function
 
+!> This sets the penetrating shortwave fraction according to the scheme proposed by
+!! Morel and Antoine (1994).
 function SW_pen_frac_morel(chl_data)
-  real, intent(in)  :: chl_data
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
   real :: SW_pen_frac_morel
 ! Argument : chl_data - The chlorophyll-A concentration in mg m-3.
 !   The following are coefficients for the optical model taken from Morel and
@@ -449,8 +422,10 @@ function SW_pen_frac_morel(chl_data)
        ((V1_coef(3) + Chl*V1_coef(4)) + Chl2*(V1_coef(5) + Chl*V1_coef(6))) )
 end function SW_pen_frac_morel
 
+!>   This sets the blue-wavelength opacity according to the scheme proposed by
+!! Manizza, M. et al, 2005.
 function opacity_manizza(chl_data)
-  real, intent(in)  :: chl_data
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
   real :: opacity_manizza
 ! Argument : chl_data - The chlorophyll-A concentration in mg m-3.
 !   This sets the blue-wavelength opacity according to the scheme proposed by
@@ -467,7 +442,8 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
   type(tracer_flow_control_CS), &
-                  target, intent(in)     :: tracer_flow
+                   target, intent(in)    :: tracer_flow !< A pointer to the tracer flow control
+                                                 !! module's control structure
   type(opacity_CS),        pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module.
   type(optics_type),       pointer       :: optics !< An optics structure that has parameters
@@ -681,5 +657,22 @@ subroutine opacity_end(CS, optics)
   endif ; endif
 
 end subroutine opacity_end
+
+!> \namespace mom_opacity
+!!
+!! CHL_from_file:
+!!   In this routine, the Morel (modified) and Manizza (modified)
+!! schemes use the "blue" band in the paramterizations to determine
+!! the e-folding depth of the incoming shortwave attenuation. The red
+!! portion is lumped into the net heating at the surface.
+!!
+!! Morel, A., 1988: Optical modeling of the upper ocean in relation
+!!   to itsbiogenous matter content (case-i waters)., J. Geo. Res.,
+!!   93, 10,749-10,768.
+!!
+!! Manizza, M., C. LeQuere, A. J. Watson, and E. T. Buitenhuis, 2005:
+!!  Bio-optical feedbacks amoung phytoplankton, upper ocean physics
+!!  and sea-ice in a global model, Geophys. Res. Let., 32, L05603,
+!!  doi:10.1029/2004GL020778.
 
 end module MOM_opacity

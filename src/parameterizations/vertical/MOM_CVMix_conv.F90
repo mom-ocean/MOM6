@@ -34,11 +34,13 @@ type, public :: CVMix_conv_cs
   logical :: debug         !< If true, turn on debugging
 
   ! Daignostic handles and pointers
-  type(diag_ctrl), pointer :: diag => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< Pointer to diagnostics control structure
+  !>@{ Diagnostics handles
   integer :: id_N2 = -1, id_kd_conv = -1, id_kv_conv = -1
+  !!@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: N2         !< Squared Brunt-Vaisala frequency (1/s2)
+  real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection (m2/s)
   real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection (m2/s)
 
@@ -57,7 +59,6 @@ logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
   type(CVMix_conv_cs),    pointer        :: CS         !< This module's control structure.
-
   ! Local variables
   real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
   logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
@@ -131,9 +132,9 @@ logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
   CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2')
   CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
-      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s')
+      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=GV%Z_to_m**2)
   CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
-      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s')
+      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s', conversion=GV%Z_to_m**2)
 
   call CVMix_init_conv(convect_diff=CS%kd_conv_const, &
                        convect_visc=CS%kv_conv_const, &
@@ -153,20 +154,21 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
   type(CVMix_conv_cs),                            pointer :: CS !< The control structure returned
                                                                 !! by a previous call to CVMix_conv_init.
   real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer (m)
-
   ! local variables
   real, dimension(SZK_(G)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
                                       !! variable since here convection is always
                                       !! computed based on Brunt Vaisala.
   real, dimension(SZK_(G)) :: rho_1d  !< water density in a column, this is also
                                       !! a dummy variable, same reason as above.
+  real, dimension(SZK_(G)+1) :: kv_col !< Viscosities at interfaces in the column (m2 s-1)
+  real, dimension(SZK_(G)+1) :: kd_col !< Diffusivities at interfaces in the column (m2 s-1)
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
   integer :: kOBL                        !< level of OBL extent
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k
 
-  g_o_rho0 = GV%g_Earth / GV%Rho0
+  g_o_rho0 = (GV%g_Earth*GV%m_to_Z) / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
@@ -215,8 +217,9 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
       ! gets index of the level and interface above hbl
       kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
-      call CVMix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
-                               Tdiff_out=CS%kd_conv(i,j,:), &
+      kv_col(:) = 0.0 ; kd_col(:) = 0.0
+      call CVMix_coeffs_conv(Mdiff_out=kv_col(:), &
+                               Tdiff_out=kd_col(:), &
                                Nsqr=CS%N2(i,j,:), &
                                dens=rho_1d(:), &
                                dens_lwr=rho_lwr(:), &
@@ -224,11 +227,15 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
                                max_nlev=G%ke, &
                                OBL_ind=kOBL)
 
-    ! Do not apply mixing due to convection within the boundary layer
-    do k=1,kOBL
-      CS%kv_conv(i,j,k) = 0.0
-      CS%kd_conv(i,j,k) = 0.0
-    enddo
+      do K=1,G%ke+1
+        CS%kv_conv(i,j,K) = GV%m_to_Z**2 * kv_col(K)
+        CS%kd_conv(i,j,K) = GV%m_to_Z**2 * kd_col(K)
+      enddo
+      ! Do not apply mixing due to convection within the boundary layer
+      do k=1,kOBL
+        CS%kv_conv(i,j,k) = 0.0
+        CS%kd_conv(i,j,k) = 0.0
+      enddo
 
     enddo
   enddo
@@ -258,7 +265,8 @@ end function CVMix_conv_is_used
 
 !> Clear pointers and dealocate memory
 subroutine CVMix_conv_end(CS)
-  type(CVMix_conv_cs), pointer :: CS ! Control structure
+  type(CVMix_conv_cs), pointer :: CS !< Control structure for this module that
+                                     !! will be deallocated in this subroutine
 
   if (.not. associated(CS)) return
 
@@ -268,6 +276,5 @@ subroutine CVMix_conv_end(CS)
   deallocate(CS)
 
 end subroutine CVMix_conv_end
-
 
 end module MOM_CVMix_conv

@@ -1,5 +1,4 @@
-!> Initial conditions and forcing for the single column model (SCM) CVMix
-!! test set.
+!> Initial conditions and forcing for the single column model (SCM) CVMix test set.
 module SCM_CVMix_tests
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -9,11 +8,10 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, mech_forcing
 use MOM_grid,          only : ocean_grid_type
-use MOM_verticalgrid,  only: verticalGrid_type
+use MOM_verticalgrid,  only : verticalGrid_type
 use MOM_safe_alloc,    only : safe_alloc_ptr
-use MOM_time_manager,  only : time_type, operator(+), operator(/), get_time,&
-                             time_type_to_real
-use MOM_variables, only : thermo_var_ptrs, surface
+use MOM_time_manager,  only : time_type, operator(+), operator(/), time_type_to_real
+use MOM_variables,     only : thermo_var_ptrs, surface
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -42,7 +40,7 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mdl = "SCM_CVMix_tests" ! This module's name.
+character(len=40)  :: mdl = "SCM_CVMix_tests" !< This module's name.
 
 contains
 
@@ -122,9 +120,9 @@ end subroutine SCM_CVMix_tests_TS_init
 
 !> Initializes surface forcing for the CVMix test case suite
 subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
-  type(time_type),              intent(in) :: Time       !< Time
-  type(ocean_grid_type),        intent(in) :: G          !< Grid structure
-  type(param_file_type),        intent(in) :: param_file !< Input parameter structure
+  type(time_type),          intent(in) :: Time       !< Model time
+  type(ocean_grid_type),    intent(in) :: G          !< Grid structure
+  type(param_file_type),    intent(in) :: param_file !< Input parameter structure
   type(SCM_CVMix_tests_CS), pointer    :: CS         !< Parameter container
 
 ! This include declares and sets the variable "version".

@@ -37,7 +37,6 @@ use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
 use dumbbell_initialization, only : dumbbell_initialize_topography
 use shelfwave_initialization, only : shelfwave_initialize_topography
-use supercritical_initialization, only : supercritical_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
 use dense_water_initialization, only : dense_water_initialize_topography
 
@@ -166,7 +165,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 
 end subroutine MOM_initialize_fixed
 
-!> MOM_initialize_topography makes the appropriate call to set up the bathymetry.
+!> MOM_initialize_topography makes the appropriate call to set up the bathymetry.  At this
+!! point the topography is in units of m, but this can be changed later.
 subroutine MOM_initialize_topography(D, max_depth, G, PF)
   type(dyn_horgrid_type),           intent(in)  :: G  !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
@@ -177,7 +177,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
 !  This subroutine makes the appropriate call to set up the bottom depth.
 !  This is a separate subroutine so that it can be made public and shared with
 !  the ice-sheet code or other components.
-! Set up the bottom depth, G%bathyT either analytically or from file
   character(len=40)  :: mdl = "MOM_initialize_topography" ! This subroutine's name.
   character(len=200) :: config
 
@@ -204,7 +203,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
                  " \t dumbbell - Sloshing channel with reservoirs on both ends.\n"//&
                  " \t shelfwave - exponential slope for shelfwave test case.\n"//&
-                 " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
                  " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
@@ -226,7 +224,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
     case ("dumbbell");   call dumbbell_initialize_topography(D, G, PF, max_depth)
     case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
-    case ("supercritical");  call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
     case ("dense");     call dense_water_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)

@@ -1,3 +1,4 @@
+!> Initialization for the "external gravity wave wave" configuration
 module external_gwave_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -17,7 +18,6 @@ public external_gwave_initialize_thickness
 
 contains
 
-! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the external_gwave experiment.
 subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
@@ -28,13 +28,9 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
-  real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
-                          ! negative because it is positive upward.      !
-  real :: e_pert(SZK_(G)) ! Interface height perturbations, positive     !
-                          ! upward, in m.                                !
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
-                          ! positive upward, in m.                       !
+  ! Local variables
+  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
+                          ! positive upward, in depth units (Z).
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly
   real :: ssh_anomaly_width ! Lateral width of anomaly
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -54,7 +50,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
                  "The vertical displacement of the SSH anomaly. ", units="m", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 fail_if_missing=.not.just_read, do_not_log=just_read, scale=GV%m_to_Z)
   call get_param(param_file, mdl, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
                  "The lateral width of the SSH anomaly. ", units="coordinate", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -72,15 +68,10 @@ subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_p
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=1,nz
-      h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+      h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
     enddo
   enddo ; enddo
 
 end subroutine external_gwave_initialize_thickness
-! -----------------------------------------------------------------------------
 
-!> \namespace external_gwave_initialization
-!!
-!! The module configures the model for the "external_gwave" experiment.
-!! external_gwave = External Gravity Wave
 end module external_gwave_initialization
