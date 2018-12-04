@@ -352,10 +352,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
     call get_param(param_file, mdl, "HFREEZE", HFrz, &
-                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&           
-                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&             
-                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&             
-                 "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)                        
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&
+                 "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)
 
   if (HFrz .gt. 0.0) then
     use_melt_pot=.true.
@@ -1176,4 +1176,3 @@ subroutine get_ocean_grid(OS, Gridp)
 end subroutine get_ocean_grid
 
 end module MOM_ocean_model
-

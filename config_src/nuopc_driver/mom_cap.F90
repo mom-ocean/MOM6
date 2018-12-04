@@ -404,9 +404,9 @@ module mom_cap_mod
 
   use, intrinsic :: iso_fortran_env, only: output_unit
 
-  use ESMF                      
-  use NUOPC                     
-  use NUOPC_Model, &            
+  use ESMF
+  use NUOPC
+  use NUOPC_Model, &
     model_routine_SS           => SetServices, &
     model_label_Advance        => label_Advance, &
     model_label_DataInitialize => label_DataInitialize, &
@@ -456,7 +456,7 @@ module mom_cap_mod
   logical              :: grid_attach_area = .false.
   character(len=128)   :: scalar_field_name
   integer              :: scalar_field_count
-  integer              :: scalar_field_idx_grid_nx 
+  integer              :: scalar_field_idx_grid_nx
   integer              :: scalar_field_idx_grid_ny
   character(len=*),parameter :: u_file_u = &
        __FILE__
@@ -578,23 +578,23 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
-    
+         return
+
     write_diagnostics = .false.
     call NUOPC_CompAttributeGet(gcomp, name="DumpFields", value=value, &
          isPresent=isPresent, isSet=isSet, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
     if (isPresent .and. isSet) write_diagnostics=(trim(value)=="true")
-    
+
     write(logmsg,*) write_diagnostics
     call ESMF_LogWrite('mom_cap:DumpFields = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
 
     profile_memory = .false.
     call NUOPC_CompAttributeGet(gcomp, name="ProfileMemory", value=value, &
@@ -602,14 +602,14 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
     if (isPresent .and. isSet) profile_memory=(trim(value)=="true")
     write(logmsg,*) profile_memory
     call ESMF_LogWrite('mom_cap:ProfileMemory = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
 
     grid_attach_area = .false.
     call NUOPC_CompAttributeGet(gcomp, name="GridAttachArea", value=value, &
@@ -617,14 +617,14 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
     if (isPresent .and. isSet) grid_attach_area=(trim(value)=="true")
     write(logmsg,*) grid_attach_area
     call ESMF_LogWrite('mom_cap:GridAttachArea = '//trim(logmsg), ESMF_LOGMSG_INFO, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
 
     scalar_field_name = ""
     call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldName", value=value, &
@@ -632,14 +632,14 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
-    if (isPresent .and. isSet) then 
+         return
+    if (isPresent .and. isSet) then
        scalar_field_name = trim(value)
        call ESMF_LogWrite('mom_cap:ScalarFieldName = '//trim(scalar_field_name), ESMF_LOGMSG_INFO, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return  
+            return
     endif
 
     scalar_field_count = 0
@@ -648,7 +648,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
     if (isPresent .and. isSet) then
        read(value, '(i)', iostat=iostat) scalar_field_count
        if (iostat /= 0) then
@@ -662,7 +662,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return  
+            return
     endif
 
     scalar_field_idx_grid_nx = 0
@@ -671,7 +671,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
     if (isPresent .and. isSet) then
        read(value, '(i)', iostat=iostat) scalar_field_idx_grid_nx
        if (iostat /= 0) then
@@ -685,7 +685,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return  
+            return
     endif
 
     scalar_field_idx_grid_ny = 0
@@ -694,7 +694,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
+         return
     if (isPresent .and. isSet) then
        read(value, '(i)', iostat=iostat) scalar_field_idx_grid_ny
        if (iostat /= 0) then
@@ -708,16 +708,16 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return  
+            return
     endif
 
-    call NUOPC_CompAttributeAdd(gcomp, & 
+    call NUOPC_CompAttributeAdd(gcomp, &
          attrList=(/'RestartFileToRead', 'RestartFileToWrite'/), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return  
-      
+         return
+
   end subroutine
 
   !===============================================================================
@@ -768,7 +768,7 @@ contains
     character(len=*), parameter            :: subname='(mom_cap:InitializeAdvertise)'
     real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_frzmlt
     real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_dhdx
-    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_dhdy    
+    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_dhdy
 !--------------------------------
 
     rc = ESMF_SUCCESS
@@ -777,7 +777,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return         
+         return
 
     allocate(Ice_ocean_boundary)
     !allocate(ocean_state) ! ocean_model_init allocate this pointer
@@ -830,11 +830,11 @@ contains
 
     ! rsd need to figure out how to get this without share code
     !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
-    !inst_name = "OCN"//trim(inst_suffix) 
+    !inst_name = "OCN"//trim(inst_suffix)
 
     ! reset shr logging to my log file
     if (is_root_pe()) then
-       call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, & 
+       call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, &
             isPresent=isPresentDiro, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -845,7 +845,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return 
+            return
        if (isPresentDiro .and. isPresentLogfile) then
           open(newunit=logunit,file=trim(diro)//"/"//trim(logfile))
        else
@@ -856,7 +856,7 @@ contains
     endif
 
     starttype = ""
-    call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, & 
+    call NUOPC_CompAttributeGet(gcomp, name='start_type', value=cvalue, &
          isPresent=isPresent, isSet=isSet, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -870,7 +870,7 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return         
+            return
     endif
 
     runtype = ""
@@ -884,7 +884,7 @@ contains
        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
             msg=subname//": unknown starttype - "//trim(starttype), &
             line=__LINE__, file=__FILE__, rcToReturn=rc)
-       return 
+       return
     endif
 
     if (len_trim(runtype) > 0) then
@@ -892,9 +892,9 @@ contains
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return         
+            return
     endif
-    
+
     restartfile = ""
     if (runtype == "initial") then
        ! startup (new run) - 'n' is needed below if we don't specify input_filename in input.nml
@@ -917,36 +917,36 @@ contains
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return         
+               return
        endif
-       
+
        call NUOPC_CompAttributeGet(gcomp, name='RestartFileToRead', &
             value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
-            return  
+            return
        if (isPresent .and. isSet) then
           restartfile = trim(cvalue)
           call ESMF_LogWrite('mom_cap: RestartFileToRead = '//trim(restartfile), ESMF_LOGMSG_INFO, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return         
+               return
        else
-          call ESMF_LogWrite('mom_cap: restart requested but no RestartFileToRead attribute provided - will use input.nml', & 
+          call ESMF_LogWrite('mom_cap: restart requested but no RestartFileToRead attribute provided - will use input.nml', &
                ESMF_LOGMSG_WARNING, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return                   
+               return
        endif
 
     end if
- 
+
     ocean_public%is_ocean_pe = .true.
     if (len_trim(restartfile) > 0) then
-       call ocean_model_init(ocean_public, ocean_state, Time, Time, & 
+       call ocean_model_init(ocean_public, ocean_state, Time, Time, &
             input_restart_file=trim(restartfile))
     else
        call ocean_model_init(ocean_public, ocean_state, Time, Time)
@@ -1011,7 +1011,7 @@ contains
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr"    , "will provide") ! -> mean_net_sw_ir_dif_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr"    , "will provide") ! -> mean_net_sw_vis_dir_flx
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx 
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf"    , "will provide") ! -> mean_net_sw_vis_dif_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux"     , "will provide") ! -> mean_zonal_moment_flx
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy"     , "will provide") ! -> mean_merid_moment_flx
@@ -1023,7 +1023,7 @@ contains
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"     , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"       , "will provide") ! -> inst_pres_height_surface
-    
+
     ! EMC fields not used
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide") ! for CESM lwup + lwdn
@@ -1040,7 +1040,7 @@ contains
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"      , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth"    , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw"    , "will provide")
-    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide") 
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphidry" , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphodry" , "will provide")
     ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphiwet" , "will provide")
@@ -1108,7 +1108,7 @@ contains
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v"          , "will provide") ! -> ocn_current_merid
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"       , "will provide") ! -> sea_surface_slope_zonal
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"       , "will provide") ! -> sea_surface_slope_merid
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC 
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"        , "will provide") ! -> freezing_melting_potential
 
     ! EMC fields not used
@@ -1117,7 +1117,7 @@ contains
     ! Optional CESM fields currently not used
     ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen", "will provide") ! not in EMC
     ! if (flds_co2c) then
-    !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide") 
+    !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide")
     ! end if
 
 
@@ -1315,7 +1315,7 @@ contains
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
-    
+
     !---------------------------------
     ! number of tiles per PET, assumed to be 1, and number of pes (tiles) total
     !---------------------------------
@@ -1336,7 +1336,7 @@ contains
          line=__LINE__, &
          file=__FILE__)) &
          return
-    
+
     !---------------------------------
     ! get start and end indices of each tile and their PET
     !---------------------------------
@@ -1351,10 +1351,10 @@ contains
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
-               return       
+               return
        enddo
     end if
-    
+
 
     !---------------------------------
     ! create delayout and distgrid
@@ -1437,7 +1437,7 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return       
+         return
     call ESMF_DistGridGet(distgrid=distgrid, localDE=0, seqIndexList=indexList, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -1449,9 +1449,9 @@ contains
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
-         return       
+         return
     deallocate(IndexList)
-    
+
     !---------------------------------
     ! create grid
     !---------------------------------
@@ -1742,7 +1742,7 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
        call State_SetScalar(dble(nyg),scalar_field_idx_grid_ny, exportState, localPet, &
             scalar_field_name, scalar_field_count, rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1795,7 +1795,7 @@ contains
     !     line=__LINE__, &
     !     file=__FILE__)) &
     !     return  ! bail out
-    
+
   end subroutine InitializeRealize
 
   !===============================================================================
@@ -2107,7 +2107,7 @@ contains
         mzmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mzmf(i,j) &
                   - ocean_grid%sin_rot(i1,j1)*dataPtr_mmmf(i,j)
         mmmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mmmf(i,j) &
-                  + ocean_grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j) 
+                  + ocean_grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j)
       enddo
     enddo
     dataPtr_mzmf = mzmf
@@ -2365,26 +2365,26 @@ contains
     deallocate(ocz, ocm)
 
 #endif
-    
+
     ! If restart alarm is ringing - write restart file
     call ESMF_ClockGetAlarm(clock, alarmname='alarm_restart', alarm=alarm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
-    
+
     if (ESMF_AlarmIsRinging(alarm, rc=rc)) then
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
        call ESMF_AlarmRingerOff(alarm, rc=rc )
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
        ! call into system specific method to get desired restart filename
        restartname = ""
        call ESMF_MethodExecute(gcomp, label="GetRestartFileToWrite", &
@@ -2418,7 +2418,7 @@ contains
                   return  ! bail out
           endif
        endif
-       
+
        if (len_trim(restartname) == 0) then
           ! none provided, so use a default restart filename
           call ESMF_ClockGetNextTime(clock, MyTime, rc=rc)
@@ -2432,7 +2432,7 @@ contains
                line=__LINE__, &
                file=__FILE__)) &
                return  ! bail out
-          write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') & 
+          write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
                "ocn", year, month, day, hour, minute, seconds
           call ESMF_LogWrite("mom_cap: Using default restart filename:  "//trim(restartname), ESMF_LOGMSG_INFO, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -2440,15 +2440,15 @@ contains
                file=__FILE__)) &
                return  ! bail out
        endif
-       
+
        ! write restart file(s)
        call ocean_model_restart(ocean_state, restartname=restartname)
-       
+
        if (is_root_pe()) then
           write(logunit,*) subname//' writing restart file ',trim(restartname)
        end if
     endif
-    
+
     if (write_diagnostics) then
        call NUOPC_Write(exportState, fileNamePrefix='field_ocn_export_', &
             timeslice=export_slice, relaxedFlag=.true., rc=rc)
@@ -2458,9 +2458,9 @@ contains
             return  ! bail out
        export_slice = export_slice + 1
     endif
-    
+
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
-    
+
   end subroutine ModelAdvance
 
   !===============================================================================
@@ -2542,9 +2542,9 @@ contains
       return  ! bail out
 
     if (first_time) then
-       !--------------------------------                                                                                 
+       !--------------------------------
        ! set restart alarm
-       !--------------------------------                                                                                 
+       !--------------------------------
 
        ! defaults
        restart_n = 0
@@ -2578,7 +2578,7 @@ contains
        else
           restart_option = "none"
        endif
-       
+
        call AlarmInit(mclock, &
             alarm   = restart_alarm,         &
             option  = trim(restart_option),  &
@@ -2590,21 +2590,21 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
        call ESMF_AlarmSet(restart_alarm, clock=mclock, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
        first_time = .false.
-      
-       call ESMF_LogWrite(subname//" Set restart option = "//restart_option, & 
+
+       call ESMF_LogWrite(subname//" Set restart option = "//restart_option, &
             ESMF_LOGMSG_INFO, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
     end if
 
     !--------------------------------
@@ -2725,7 +2725,7 @@ contains
     integer,           intent(in)     :: scalar_id
     type(ESMF_State),  intent(inout)  :: State
     integer,           intent(in)     :: mytask
-    character(len=*),  intent(in)     :: scalar_name   
+    character(len=*),  intent(in)     :: scalar_name
     integer,           intent(in)     :: scalar_count
     integer,           intent(inout)  :: rc
 
@@ -2823,14 +2823,14 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-          
+
           ! initialize to zero
           call ESMF_FieldGet(field, farrayPtr=fldptr, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-          fldptr = 0.0 
+          fldptr = 0.0
 
         endif
 
