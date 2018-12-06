@@ -304,13 +304,12 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
     else ! Discontinuous reconstruction
       do k = 1, G%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
-        ! alpha, beta are calculated using T/S layer-averages as opposed to the polynomial
-        call calculate_density_derivs(T(:,j,k), S(:,j,k), ref_pres, &
+        call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
                                       CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS)
         if (CS%ref_pres<0) then
           ref_pres(:) = CS%Pint(:,j,k+1)
         endif
-        call calculate_density_derivs(T(:,j,k), S(:,j,k), ref_pres, &
+        call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
                                       CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS)
       enddo
     endif
