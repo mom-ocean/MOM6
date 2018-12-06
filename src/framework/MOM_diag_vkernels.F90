@@ -173,8 +173,8 @@ logical function diag_vkernels_unit_tests(verbose)
 
   v = verbose
 
-  write(0,*) '==== MOM_diag_kernels: diag_vkernels_unit_tests =========='
-  if (v) write(0,*) '- - - - - - - - - - interpolation tests  - - - - - - - - -'
+  write(6,*) '==== MOM_diag_kernels: diag_vkernels_unit_tests =========='
+  if (v) write(6,*) '- - - - - - - - - - interpolation tests  - - - - - - - - -'
 
   fail = test_interp(v,mv,'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./), &
@@ -302,12 +302,12 @@ logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, nd
     if (u_dest(k)/=u_true(k)) test_interp = .true.
   enddo
   if (verbose .or. test_interp) then
-    write(0,'(2a)') ' Test: ',msg
-    write(0,'(a3,3(a24))') 'k','u_result','u_true','error'
+    write(6,'(2a)') ' Test: ',msg
+    write(6,'(a3,3(a24))') 'k','u_result','u_true','error'
     do k=1,ndest+1
       error = u_dest(k)-u_true(k)
       if (error==0.) then
-        write(0,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
+        write(6,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
       else
         write(0,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
       endif
@@ -340,12 +340,12 @@ logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_s
     if (uh_dest(k)/=uh_true(k)) test_reintegrate = .true.
   enddo
   if (verbose .or. test_reintegrate) then
-    write(0,'(2a)') ' Test: ',msg
-    write(0,'(a3,3(a24))') 'k','uh_result','uh_true','error'
+    write(6,'(2a)') ' Test: ',msg
+    write(6,'(a3,3(a24))') 'k','uh_result','uh_true','error'
     do k=1,ndest
       error = uh_dest(k)-uh_true(k)
       if (error==0.) then
-        write(0,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
+        write(6,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
       else
         write(0,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
       endif
