@@ -630,7 +630,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             endif
           endif
           if (CS%Leith_Ah) &
-            AhLth = Vort_mag * (CS%BIHARM_CONST_xx(i,j))
+            AhLth = Vort_mag * (CS%BIHARM5_CONST_xx(i,j))
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
