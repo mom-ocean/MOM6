@@ -1989,12 +1989,12 @@ logical function ndiff_unit_tests_discontinuous(verbose)
              (/12.,0./), (/36.,-2./), 0.), "Salt Uniform Linearized Alpha/Beta"))
   ! EOS linear in T/S, uniform alpha/beta
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
-             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.2, 0.8, -0.2, 0.8, -0.2, 0.8, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, &
              (/12.,-4./), (/34.,-2./), 0.), "Temp/salt Uniform Linearized Alpha/Beta"))
   ! First EOS linear in T, insensitive to S
-!  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.25, &
-!             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.25, 0., -6., 0., -4., 0., &
-!             (/12.,-4./), (/34.,0./), 0.), "Temperature stratified Linearized Alpha/Beta"))
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.25, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.25, 0., -6., 0., -4., 0., &
+             (/12.,-4./), (/34.,0./), 0.), "Temperature stratified Linearized Alpha/Beta"))
 
   deallocate(EOS)
   deallocate(CS%ndiff_aux_CS)

@@ -377,6 +377,7 @@ function find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta_r
   S_z = evaluation_polynomial( ppoly_S, CS%nterm, zmax )
   drho_max = 0.5 * ( (alpha_bot + alpha_ref )*(T_z - T_ref) + (beta_bot + beta_ref)*(S_z - S_ref) )
 
+  z = z0
   do iter = 1, CS%max_iter
     ! Calculate quantities at the current nondimensional position
     a1 = 1.-z
@@ -405,6 +406,8 @@ function find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta_r
     dT_dz = first_derivative_polynomial( ppoly_T, CS%nterm, z )
     dS_dz = first_derivative_polynomial( ppoly_S, CS%nterm, z )
     drho_dz = 0.5*( (dalpha*deltaT + alpha_sum*dT_dz) + (dbeta*deltaS + beta_sum*dS_dz) )
+
+    ztest = z - drho/drho_dz
 
     ! Take a bisection if z falls out of [zmin,zmax]
     if (ztest < zmin .or. ztest > zmax) then
