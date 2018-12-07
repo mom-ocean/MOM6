@@ -16,6 +16,7 @@ public calc_drho
 public drho_at_pos
 public search_other_column
 public interpolate_for_nondim_position
+public find_neutral_pos_linear_alpha_beta
 public refine_nondim_position
 public check_neutral_positions
 public kahan_sum
@@ -340,8 +341,8 @@ end function interpolate_for_nondim_position
 !! fall out of the interval [0,1], a bisection step would be taken instead. Also this linearization of alpha, beta
 !! means that second derivatives of the EOS are not needed. Note that delta in variable names below refers to
 !! horizontal differences and 'd' refers to vertical differences
-subroutine find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta_ref, alpha_top, beta_top, alpha_bot, &
-                                               beta_bot, ppoly_T, ppoly_S, z0, z )
+function find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta_ref, alpha_top, beta_top, &
+                                                  alpha_bot, beta_bot, ppoly_T, ppoly_S, z0 ) result( z )
   type(ndiff_aux_CS_type),  intent(in) :: CS        !< Control structure with parameters for this module
   real,                     intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
   real,                     intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
@@ -356,7 +357,7 @@ subroutine find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta
   real, dimension(:),       intent(in) :: ppoly_S   !< Coefficients of the order N polynomial reconstruction of T within
                                                     !! the layer to be searched.
   real,                     intent(in)  :: z0       !< Lower bound of position, also serves as the initial guess
-  real,                     intent(out) :: z        !< Position where delta_rho = 0
+  real                                  :: z        !< Position where drho = 0
   ! Local variables
   real :: dalpha, dbeta, drho, drho_dz, alpha_z, beta_z, T_z, S_z, deltaT, deltaS, dT_dz, dS_dz, alpha_sum, beta_sum, dz
   real :: drho_min, drho_max, ztest, zmin, zmax
@@ -390,7 +391,7 @@ subroutine find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta
     beta_sum  = beta_ref  + beta_z
     drho      = 0.5 * ( alpha_sum*deltaT + beta_sum*deltaS )
     ! Check for convergence
-    if (ABS(drho) < CS%drho_tol) exit
+    if (ABS(drho) <= CS%drho_tol) exit
     ! Update bisection bracketing intervals
     if (drho < 0. .and. drho > drho_min) then
       drho_min = drho
@@ -403,8 +404,7 @@ subroutine find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta
     ! Calculate a Newton step
     dT_dz = first_derivative_polynomial( ppoly_T, CS%nterm, z )
     dS_dz = first_derivative_polynomial( ppoly_S, CS%nterm, z )
-    drho_dz = 0.5 * ( (dalpha*deltaT + alpha_sum*dT_dz) + (dbeta*deltaS + beta_sum*dS_dz) )
-    ztest = z - drho/drho_dz
+    drho_dz = 0.5*( (dalpha*deltaT + alpha_sum*dT_dz) + (dbeta*deltaS + beta_sum*dS_dz) )
 
     ! Take a bisection if z falls out of [zmin,zmax]
     if (ztest < zmin .or. ztest > zmax) then
@@ -416,13 +416,13 @@ subroutine find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta
     endif
 
     ! Test to ensure we haven't stalled out
-    if ( abs(z-ztest) < CS%xtol ) exit
+    if ( abs(z-ztest) <= CS%xtol ) exit
 
     ! Reset for next iteration
     z = ztest
   enddo
 
-end subroutine find_neutral_pos_linear_alpha_beta
+end function find_neutral_pos_linear_alpha_beta
 
 !> Use root-finding methods to find where dRho = 0, based on the equation of state and the polynomial
 !! reconstructions of temperature, salinity. Initial guess is based on the zero crossing of based on linear

@@ -17,7 +17,7 @@ use MOM_grid,                  only : ocean_grid_type
 use MOM_neutral_diffusion_aux, only : ndiff_aux_CS_type, set_ndiff_aux_params
 use MOM_neutral_diffusion_aux, only : mark_unstable_cells, increment_interface, calc_drho, drho_at_pos
 use MOM_neutral_diffusion_aux, only : search_other_column, interpolate_for_nondim_position, refine_nondim_position
-use MOM_neutral_diffusion_aux, only : check_neutral_positions
+use MOM_neutral_diffusion_aux, only : check_neutral_positions, find_neutral_pos_linear_alpha_beta
 use MOM_remapping,             only : remapping_CS, initialize_remapping
 use MOM_remapping,             only : extract_member_remapping_CS, build_reconstructions_1d
 use MOM_remapping,             only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
@@ -1977,8 +1977,27 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
             CS%ndiff_aux_CS, 20., 35., -1., 2., 0., 1., (/21., -2./), (/34., 2./), -1., 1., 0.), &
             "Temp/Salt stratified   (Brent)  "))
-  deallocate(EOS)
 
+  ! Tests for linearized version of searching the layer for neutral surface position
+  ! EOS linear in T, uniform alpha
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.2, 0., -0.2, 0., -0.2, 0., &
+             (/12.,-4./), (/34.,0./), 0.), "Temp Uniform Linearized Alpha/Beta"))
+  ! EOS linear in S, uniform beta
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., 0., 0.8, 0., 0.8, 0., 0.8, &
+             (/12.,0./), (/36.,-2./), 0.), "Salt Uniform Linearized Alpha/Beta"))
+  ! EOS linear in T/S, uniform alpha/beta
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.2, 0.8, -0.2, 0.8, -0.2, 0.8, &
+             (/12.,-4./), (/34.,-2./), 0.), "Temp/salt Uniform Linearized Alpha/Beta"))
+  ! First EOS linear in T, insensitive to S
+!  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.25, &
+!             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.25, 0., -6., 0., -4., 0., &
+!             (/12.,-4./), (/34.,0./), 0.), "Temperature stratified Linearized Alpha/Beta"))
+
+  deallocate(EOS)
+  deallocate(CS%ndiff_aux_CS)
   if (.not. ndiff_unit_tests_discontinuous) write(*,*) 'Pass'
 
 end function ndiff_unit_tests_discontinuous
