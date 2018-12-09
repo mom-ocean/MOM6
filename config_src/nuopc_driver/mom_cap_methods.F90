@@ -1,12 +1,18 @@
 module mom_cap_methods
 
+  ! Cap import/export methods for both NEMS and CMEPS
+
+  ! Masks, areas, center (tlat, tlon), and corner (ulat, ulon) coordinates are then added to the `ESMF_Grid`
+  ! by retrieving those fields from MOM with calls to `ocean_model_data_get()`.
+
+
   use ESMF,                only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
   use ESMF,                only: ESMF_TimeInterval, ESMF_TimeIntervalGet
-  use ESMF,                only: ESMF_State, ESMF_StateGet
-  use ESMF,                only: ESMF_KIND_R8, ESMF_Field, ESMF_SUCCESS, ESMF_LogFoundError
-  use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_FieldGet
+  use ESMF,                only: ESMF_State, ESMF_StateGet, ESMF_Field, ESMF_FieldGet 
+  use ESMF,                only: ESMF_KIND_R8, ESMF_SUCCESS, ESMF_LogFoundError
+  use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_LOGMSG_INFO, ESMF_LOGWRITE
   use ESMF,                only: ESMF_LogSetError, ESMF_RC_MEM_ALLOCATE
-  use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
+  use MOM_ocean_model,     only: ocean_public_type, ocean_state_type, ocean_model_data_get
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
   use MOM_domains,         only: pass_var
@@ -18,25 +24,23 @@ module mom_cap_methods
   private
 
   ! Public member functions
-#ifdef CESMCOUPLED
-  public :: mom_export
-  public :: mom_import
-#endif
+  public :: mom_export_cesm
+  public :: mom_import_cesm
+  public :: mom_export_nems
   public :: mom_import_nems
 
   integer            :: rc,dbrc
   integer            :: import_cnt = 0
   logical, parameter :: debug=.false.
 
-!-----------------------------------------------------------------------
+!===============================================================================
 contains
-!-----------------------------------------------------------------------
+!===============================================================================
 
-#ifdef CESMCOUPLED
   !> Maps outgoing ocean data to ESMF State
-  !! See \ref section_mom_export for a summary of the data
-  !! that is transferred from MOM6 to MCT.
-  subroutine mom_export(ocean_public, grid, exportState, logunit, clock, rc)
+  subroutine mom_export_cesm(ocean_public, grid, exportState, logunit, clock, rc)
+
+    ! Input/output variables
     type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
     type(ocean_grid_type)   , intent(in)    :: grid         !< Ocean model grid
     type(ESMF_State)        , intent(inout) :: exportState  !< outgoing data
@@ -45,9 +49,9 @@ contains
     integer                 , intent(inout) :: rc
 
     ! Local variables
-    real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
+    real            :: ssh(grid%isd:grid%ied,grid%jsd:grid%jed) !< Local copy of sea_lev with updated halo
     integer         :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec !< Grid indices
-    integer         :: lbnd1, lbnd2
+    integer         :: lbnd1, lbnd2, ubnd1, ubnd2
     real            :: slp_L, slp_R, slp_C, slope, u_min, u_max
     real            :: I_time_int  !< The inverse of coupling time interval in s-1.
     integer         :: day, secs
@@ -156,8 +160,7 @@ contains
         ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
         if (ocean_public%frazil(ig,jg) > 0.0) then
            ! Frazil: change from J/m^2 to W/m^2
-           ! NOTE: if this is uncommented - then restarts no longer work
-           !dataPtr_Fioo_q(i1,j1) = ocean_public%frazil(i,j) * grid%mask2dT(ig,jg) * I_time_int
+           ! dataPtr_Fioo_q(i1,j1) = ocean_public%frazil(i,j) * grid%mask2dT(ig,jg) * I_time_int
         else
            ! Melt_potential: change from J/m^2 to W/m^2
            dataPtr_Fioo_q(i1,j1) = -ocean_public%melt_potential(i,j) * grid%mask2dT(ig,jg) * I_time_int !* ncouple_per_day
@@ -264,9 +267,9 @@ contains
       end do
     end if
 
-  end subroutine mom_export
+  end subroutine mom_export_cesm
 
-!-----------------------------------------------------------------------
+!===============================================================================
 
   !> This function has a few purposes: 1) it allocates and initializes the data
   !! in the fluxes structure; 2) it imports surface fluxes using data from
@@ -274,7 +277,7 @@ contains
   !! See \ref section_ocn_import for a summary of the surface fluxes that are
   !! passed from MCT to MOM6, including fluxes that need to be included in
   !! the future.
-  subroutine mom_import(ocean_public, grid, importState, ice_ocean_boundary, &
+  subroutine mom_import_cesm(ocean_public, grid, importState, ice_ocean_boundary, &
        logunit, runtype, clock, rc)
 
     type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
@@ -500,25 +503,271 @@ contains
       end do
     end if
 
-  end subroutine mom_import
-#endif
-  !-----------------------------------------------------------------------------
+  end subroutine mom_import_cesm
 
-  subroutine mom_import_nems(ocean_public, grid, importState, ice_ocean_boundary, rc)
+!===============================================================================
 
+  subroutine mom_export_nems(ocean_state, ocean_public, ocean_grid, dt_cpld, exportState, rc)
+
+    ! Input/output variables
+    type (ocean_state_type)  , pointer       :: ocean_state
+    type (ocean_public_type) , pointer       :: ocean_public
+    type (ocean_grid_type)   , pointer       :: ocean_grid
+    integer                  , intent(in)    :: dt_cpld
+    type(ESMF_State)         , intent(inout) :: exportState  !< outgoing data
+    integer                  , intent(out)   :: rc
+
+    ! Local variables
+    integer                         :: lbnd1, lbnd2, ubnd1, ubnd2
+    integer                         :: i, j, i1, j1, ig, jg !< Grid indices
+    integer                         :: isc, iec, jsc, jec   !< Grid indices
+    real                            :: slp_L, slp_R, slp_C, slope, u_min, u_max !JW
+    real(ESMF_KIND_R8), allocatable :: ofld(:,:)
+    real(ESMF_KIND_R8), allocatable :: ocz(:,:)
+    real(ESMF_KIND_R8), allocatable :: ocm(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_mask(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_ocz(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_ocm(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_frazil(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_melt_potential(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_frzmlt(:,:)
+    real(ESMF_KIND_R8), pointer     :: dataPtr_dhdx(:,:) !JW
+    real(ESMF_KIND_R8), pointer     :: dataPtr_dhdy(:,:) !JW
+    real(ESMF_KIND_R8), allocatable :: ssh(:,:)
+    real(ESMF_KIND_R8), allocatable :: sshx(:,:)
+    real(ESMF_KIND_R8), allocatable :: sshy(:,:)
+    integer                         :: ijloc(2)
+    character(len=240)              :: msgString
+    !--------------------------------
+
+    call State_getFldPtr(exportState,'ocn_current_zonal',dataPtr_ocz,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'ocn_current_merid',dataPtr_ocm,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    !call State_getFldPtr(exportState,'freezing_melting_potential',dataPtr_frazil,rc=rc)
+    !if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    !  line=__LINE__, &
+    !  file=__FILE__)) &
+    !  return  ! bail out
+    ! fixfrzmlt !JW
+    call State_getFldPtr(exportState,'accum_heat_frazil',dataPtr_frazil,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'inst_melt_potential',dataPtr_melt_potential,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'freezing_melting_potential',dataPtr_frzmlt,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'sea_surface_slope_zonal',dataPtr_dhdx,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call State_getFldPtr(exportState,'sea_surface_slope_merid',dataPtr_dhdy,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out !JW
+
+    allocate( ssh(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !JW
+    allocate(sshx(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !JW
+    allocate(sshy(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !JW
+    ssh  = 0.0_ESMF_KIND_R8 !JW
+    sshx = 0.0_ESMF_KIND_R8 !JW
+    sshy = 0.0_ESMF_KIND_R8 !JW
+
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ! note: the following code is modified from NCAR nuopc driver mom_cap_methods
+    ! where is the rotation in that system?
+    !
+    ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
+    ! in order to update halos. i.e. does not use global indexing.
+    !
+    ! here, isc,iec,jsc,jec are global indices on cap domain (no halos)
+
+    do j=jsc,jec
+      do i=isc,iec
+        j1 = j - ocean_grid%jdg_offset
+        i1 = i - ocean_grid%idg_offset
+        ssh(i1,j1) = Ocean_public%sea_lev(i,j)
+      end do
+    end do
+
+    ! Update halo of ssh so we can calculate gradients
+    call pass_var(ssh, ocean_grid%domain)
+
+    ! calculation of slope on native mom domains (local indexing, halos)
+    ! stay inside of halos (ie 2:79,2:97)
+    ! d/dx ssh
+    do j = ocean_grid%jsd+1,ocean_grid%jed-1
+      do i = ocean_grid%isd+1,ocean_grid%ied-1
+        ! This is a simple second-order difference
+        !dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(ig,jg)
+        ! This is a PLM slope which might be less prone to the A-grid null mode
+        slp_L = (ssh(I,j) - ssh(I-1,j)) * ocean_grid%mask2dCu(i-1,j)
+        if (ocean_grid%mask2dCu(i-1,j)==0.) slp_L = 0.
+        slp_R = (ssh(I+1,j) - ssh(I,j)) * ocean_grid%mask2dCu(i,j)
+        if (ocean_grid%mask2dCu(i+1,j)==0.) slp_R = 0.
+        slp_C = 0.5 * (slp_L + slp_R)
+        if ( (slp_L * slp_R) > 0.0 ) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+        end if
+        sshx(i,j) = slope * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
+        if (ocean_grid%mask2dT(i,j)==0.) sshx(i,j) = 0.0
+      end do
+    end do
+
+    ! d/dy ssh
+    do j = ocean_grid%jsd+1,ocean_grid%jed-1
+      do i = ocean_grid%isd+1,ocean_grid%ied-1
+        ! This is a simple second-order difference
+        !dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(ig,jg)
+        ! This is a PLM slope which might be less prone to the A-grid null mode
+        slp_L = ssh(i,J) - ssh(i,J-1) * ocean_grid%mask2dCv(i,j-1)
+        if (ocean_grid%mask2dCv(i,j-1)==0.) slp_L = 0.
+        slp_R = ssh(i,J+1) - ssh(i,J) * ocean_grid%mask2dCv(i,j)
+        if (ocean_grid%mask2dCv(i,j+1)==0.) slp_R = 0.
+        slp_C = 0.5 * (slp_L + slp_R)
+        !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
+        if ((slp_L * slp_R) > 0.0) then
+          ! This limits the slope so that the edge values are bounded by the
+          ! two cell averages spanning the edge.
+          u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        else
+          ! Extrema in the mean values require a PCM reconstruction avoid generating
+          ! larger extreme values.
+          slope = 0.0
+        end if
+        sshy(i,j) = slope * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
+        if (ocean_grid%mask2dT(i,j)==0.) sshy(i,j) = 0.0
+      end do
+    end do
+    ! rotate slopes from tripolar grid back to lat/lon grid (CCW)
+    ! "grid" uses the usual MOM domain that has halos
+    ! and does not use global indexing.
+    ! x,y => latlon
+    do j  = lbnd2, ubnd2
+      do i = lbnd1, ubnd1
+        j1 = j + ocean_grid%jsc - lbnd2
+        i1 = i + ocean_grid%isc - lbnd1
+        dataPtr_dhdx(i,j) = ocean_grid%cos_rot(i1,j1)*sshx(i1,j1) &
+                          + ocean_grid%sin_rot(i1,j1)*sshy(i1,j1)
+        dataPtr_dhdy(i,j) = ocean_grid%cos_rot(i1,j1)*sshy(i1,j1) &
+                          - ocean_grid%sin_rot(i1,j1)*sshx(i1,j1)
+      enddo
+    enddo
+    deallocate(ssh); deallocate(sshx); deallocate(sshy)
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    dataPtr_frazil = dataPtr_frazil/dt_cpld !convert from J/m^2 to W/m^2 for CICE coupling
+
+    dataPtr_melt_potential = -dataPtr_melt_potential/dt_cpld !convert from J/m^2 to W/m^2 for CICE coupling
+                                                             !melt_potential, defined positive for T>Tfreeze
+                                                             !so change sign
+    !testing
+    ijloc = maxloc(dataPtr_frazil)
+    if((sum(ijloc) .gt. 2) .and. (dataPtr_frazil(ijloc(1),ijloc(2)) .gt. 0.0))then
+       i1 = ijloc(1) - lbnd1 + isc
+       j1 = ijloc(2) - lbnd2 + jsc  ! work around local vs global indexing
+
+       write (msgString,*)' MOM6 dataPtr_frazil at maxloc ',i1,j1,&
+            real(dataPtr_frazil(ijloc(1),ijloc(2)),4)
+       call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO)
+       
+       write (msgString,*)' MOM6 dataPtr_melt_potential at maxloc ',i1,j1,&
+            real(dataPtr_melt_potential(ijloc(1),ijloc(2)),4)
+       call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO)
+    endif
+    !testing
+
+    dataPtr_melt_potential = min(dataPtr_melt_potential,0.0)
+
+    do j  = lbnd2, ubnd2
+      do i = lbnd1, ubnd1
+       if(dataPtr_frazil(i,j) .eq. 0.0)then
+        dataPtr_frzmlt(i,j) = dataPtr_melt_potential(i,j)
+       else
+        dataPtr_frzmlt(i,j) = dataPtr_frazil(i,j)
+       endif
+      enddo
+    enddo
+    dataPtr_frzmlt = max(-1000.0,min(1000.0,dataPtr_frzmlt))
+
+    ! rotate ocn current from tripolar grid back to lat/lon grid (CCW)
+    ! "grid" uses the usual MOM domain that has halos and does not use global indexing.
+    ! x,y => latlon
+
+    allocate(ofld(isc:iec,jsc:jec))
+    call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
+    do j = lbnd2, ubnd2
+    do i = lbnd1, ubnd1
+      j1 = j - lbnd2 + jsc
+      i1 = i - lbnd1 + isc
+      dataPtr_mask(i,j) = nint(ofld(i1,j1))
+    enddo
+    enddo
+    deallocate(ofld)
+
+    allocate(ocz(lbnd1:ubnd1,lbnd2:ubnd2))
+    allocate(ocm(lbnd1:ubnd1,lbnd2:ubnd2))
+    ocz = dataPtr_ocz
+    ocm = dataPtr_ocm
+    do j  = lbnd2, ubnd2
+      do i = lbnd1, ubnd1
+        j1 = j + ocean_grid%jsc - lbnd2
+        i1 = i + ocean_grid%isc - lbnd1
+        dataPtr_ocz(i,j) = ocean_grid%cos_rot(i1,j1)*ocz(i,j) &
+                         + ocean_grid%sin_rot(i1,j1)*ocm(i,j)
+        dataPtr_ocm(i,j) = ocean_grid%cos_rot(i1,j1)*ocm(i,j) &
+                         - ocean_grid%sin_rot(i1,j1)*ocz(i,j)
+        ! multiply by mask to zero out non-ocean points
+        dataPtr_ocz(i,j) = dataPtr_ocz(i,j) * dataPtr_mask(i,j)
+        dataPtr_ocm(i,j) = dataPtr_ocm(i,j) * dataPtr_mask(i,j)
+      enddo
+    enddo
+    deallocate(ocz, ocm)
+
+  end subroutine mom_export_nems
+
+!===============================================================================
+
+  subroutine mom_import_nems(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc)
+
+    ! Input/output variables
     type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
-    type(ocean_grid_type)         , intent(in)    :: grid               !< Ocean model grid
+    type(ocean_grid_type)         , intent(in)    :: ocean_grid         !< Ocean model grid
     type(ESMF_State)              , intent(inout) :: importState        !< incoming data
     type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
     integer                       , intent(inout) :: rc
 
     ! Local Variables
-    integer                         :: i, j, i1, j1, ig, jg  ! Grid indices
-    integer                         :: isc, iec, jsc, jec    ! Grid indices
-    integer                         :: i0, j0, is, js, ie, je
-    integer                         :: lbnd1, lbnd2
-    integer                         :: ubnd1, ubnd2
-    real(ESMF_KIND_R8), pointer     :: dataPtr_mask(:,:)
+    integer                         :: lbnd1,ubnd1,lbnd2,ubnd2
+    integer                         :: i, j, i1, j1, ig, jg   ! Grid indices
+    integer                         :: isc, iec, jsc, jec     ! Grid indices
+    integer                         :: i0, j0, is, js, ie, je ! Grid indices
     real(ESMF_KIND_R8), pointer     :: dataPtr_p(:,:)
     real(ESMF_KIND_R8), pointer     :: dataPtr_mmmf(:,:)
     real(ESMF_KIND_R8), pointer     :: dataPtr_mzmf(:,:)
@@ -538,7 +787,6 @@ contains
     real(ESMF_KIND_R8), pointer     :: dataPtr_calving_hflx(:,:)
     real(ESMF_KIND_R8), pointer     :: dataPtr_mi(:,:)
 
-    real(ESMF_KIND_R8), allocatable :: ofld(:,:), ocz(:,:), ocm(:,:)
     real(ESMF_KIND_R8), allocatable :: mmmf(:,:), mzmf(:,:)
     integer                         :: day, secs
     type(ESMF_time)                 :: currTime
@@ -548,22 +796,22 @@ contains
 
     rc = ESMF_SUCCESS
 
-    call State_getFldPtr(importState,"mean_zonal_moment_flx", dataPtr_mzmf, rc=rc)
+    call State_getFldPtr(importState,'mean_zonal_moment_flx',dataPtr_mzmf,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"mean_merid_moment_flx", dataPtr_mmmf, rc=rc)
+    call State_getFldPtr(importState,'mean_merid_moment_flx',dataPtr_mmmf,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"mean_sensi_heat_flx", dataPtr_sensi, rc=rc)
+    call State_getFldPtr(importState,'mean_evap_rate',dataPtr_evap,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"mean_evap_rate" , dataPtr_evap, rc=rc)
+    call State_getFldPtr(importState,'mean_sensi_heat_flx',dataPtr_sensi,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -573,12 +821,12 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"mean_net_sw_ir_dif_flx" , dataPtr_swndr, rc=rc)
+    call State_getFldPtr(importState,"mean_net_sw_ir_dir_flx" , dataPtr_swndr, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"mean_net_sw_ir_dir_flx" , dataPtr_swndf, rc=rc)
+    call State_getFldPtr(importState,"mean_net_sw_ir_dif_flx" , dataPtr_swndf, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -634,23 +882,24 @@ contains
       file=__FILE__)) &
       return  ! bail out
 
+    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+
     lbnd1 = lbound(dataPtr_p,1)
     ubnd1 = ubound(dataPtr_p,1)
     lbnd2 = lbound(dataPtr_p,2)
     ubnd2 = ubound(dataPtr_p,2)
-
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+    print *, 'lbnd1,ubnd1,lbnd2,ubnd2', lbnd1, ubnd1, lbnd2, ubnd2
 
     allocate(mzmf(lbnd1:ubnd1,lbnd2:ubnd2))
     allocate(mmmf(lbnd1:ubnd1,lbnd2:ubnd2))
     do j  = lbnd2, ubnd2
       do i = lbnd1, ubnd1
-        j1 = j - lbnd2 + jsc  ! work around local vs global indexing
-        i1 = i - lbnd1 + isc
-        mzmf(i,j) = grid%cos_rot(i1,j1)*dataPtr_mzmf(i,j) &
-                  + grid%sin_rot(i1,j1)*dataPtr_mmmf(i,j)
-        mmmf(i,j) = grid%cos_rot(i1,j1)*dataPtr_mmmf(i,j) &
-                  - grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j)
+        j1 = j + ocean_grid%jsc - lbnd2
+        i1 = i + ocean_grid%isc - lbnd1
+        mzmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mzmf(i,j) &
+                  - ocean_grid%sin_rot(i1,j1)*dataPtr_mmmf(i,j)
+        mmmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mmmf(i,j) &
+                  + ocean_grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j)
       enddo
     enddo
     dataPtr_mzmf = mzmf
@@ -685,7 +934,7 @@ contains
 
   end subroutine mom_import_nems
 
-  !-----------------------------------------------------------------------------
+!===============================================================================
 
   subroutine State_GetFldPtr(ST, fldname, fldptr, rc)
     type(ESMF_State)            , intent(in)  :: ST
