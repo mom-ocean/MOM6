@@ -156,15 +156,14 @@ contains
         ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
         if (ocean_public%frazil(ig,jg) > 0.0) then
            ! Frazil: change from J/m^2 to W/m^2
-           dataPtr_Fioo_q(i1,j1) = ocean_public%frazil(i,j) * grid%mask2dT(ig,jg) * I_time_int
+           ! NOTE: if this is uncommented - then restarts no longer work
+           !dataPtr_Fioo_q(i1,j1) = ocean_public%frazil(i,j) * grid%mask2dT(ig,jg) * I_time_int
         else
            ! Melt_potential: change from J/m^2 to W/m^2
            dataPtr_Fioo_q(i1,j1) = -ocean_public%melt_potential(i,j) * grid%mask2dT(ig,jg) * I_time_int !* ncouple_per_day
 
            ! make sure Melt_potential is always <= 0
-           if (dataPtr_Fioo_q(i1,j1) > 0.0) then
-              dataPtr_Fioo_q(i1,j1) = 0.0
-           endif
+           if (dataPtr_Fioo_q(i1,j1) > 0.0) dataPtr_Fioo_q(i1,j1) = 0.0
         end if
       end do
     end do
