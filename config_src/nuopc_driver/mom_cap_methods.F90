@@ -8,7 +8,7 @@ module mom_cap_methods
 
   use ESMF,                only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
   use ESMF,                only: ESMF_TimeInterval, ESMF_TimeIntervalGet
-  use ESMF,                only: ESMF_State, ESMF_StateGet, ESMF_Field, ESMF_FieldGet 
+  use ESMF,                only: ESMF_State, ESMF_StateGet, ESMF_Field, ESMF_FieldGet
   use ESMF,                only: ESMF_KIND_R8, ESMF_SUCCESS, ESMF_LogFoundError
   use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_LOGMSG_INFO, ESMF_LOGWRITE
   use ESMF,                only: ESMF_LogSetError, ESMF_RC_MEM_ALLOCATE
@@ -300,7 +300,6 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_sen(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_lat(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_evap(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_osalt(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_lwdn(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_lwup(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_swvdr(:,:)
@@ -309,7 +308,7 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_swndf(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rofl(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rofi(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_iosalt(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_salt(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rain(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_snow(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_lamult(:,:)
@@ -394,7 +393,7 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Fioi_salt" , dataPtr_iosalt, rc=rc)
+    call State_getFldPtr(importState,"Fioi_salt" , dataPtr_salt, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -430,23 +429,23 @@ contains
           j1 = j + lbnd2 - jsc
           do i = isc, iec
              i1 = i + lbnd1 - isc
-
-             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)
-             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)
-             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)
-             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)
-             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)
-             ice_ocean_boundary%t_flux(i,j)          = -dataPtr_sen(i1,j1)
-             ice_ocean_boundary%q_flux(i,j)          = -dataPtr_evap(i1,j1)
-             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)
-             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1)
-             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1)
-             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1)
-             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1)
-             ice_ocean_boundary%salt_flux(i,j)       =  dataPtr_iosalt(i1,j1)
-             ice_ocean_boundary%runoff(i,j)          =  dataPtr_rofl(i1,j1) + dataPtr_rofi(i1,j1)
-             !ice_ocean_boundary%salt_flux(i,j)      =  dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j)
-             !ice_ocean_boundary%latent_flux(i,j)    =  dataPtr_lat(i1,j1)
+             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)     ! surface pressure
+             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)  ! zonal surface stress - taux
+             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)  ! meridional surface stress - tauy
+             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)  ! liquid precipitation (rain)
+             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)  ! frozen precipitation (snow)
+             ice_ocean_boundary%t_flux(i,j)          =  dataPtr_sen(i1,j1)   ! sensible heat flux (W/m2)
+             ice_ocean_boundary%latent_flux(i,j)     =  dataPtr_lat(i1,j1)   ! latent heat flux (W/m^2)
+             ice_ocean_boundary%q_flux(i,j)          =  dataPtr_evap(i1,j1)  ! specific humidity flux
+             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) &
+                                                      + dataPtr_lwdn(i1,j1)  ! longwave radiation, sum up and down (W/m2)
+             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1) ! visible, direct shortwave  (W/m2)
+             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1) ! visible, diffuse shortwave (W/m2)
+             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1) ! near-IR, direct shortwave  (W/m2)
+             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1) ! near-IR, diffuse shortwave (W/m2)
+             ice_ocean_boundary%rofl_flux(i,j)       =  dataPtr_rofl(i1,j1)  ! ice runoff
+             ice_ocean_boundary%rofi_flux(i,j)       =  dataPtr_rofi(i1,j1)  ! liquid runoff
+             ice_ocean_boundary%salt_flux(i,j)       = -dataPtr_salt(i1,j1)  ! salt flux (minus sign needed here -GMM)
           enddo
        enddo
 
@@ -460,6 +459,7 @@ contains
        !            GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
        !    end do
        ! end do
+
     end if
 
     ! debug output
@@ -696,7 +696,7 @@ contains
        write (msgString,*)' MOM6 dataPtr_frazil at maxloc ',i1,j1,&
             real(dataPtr_frazil(ijloc(1),ijloc(2)),4)
        call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO)
-       
+
        write (msgString,*)' MOM6 dataPtr_melt_potential at maxloc ',i1,j1,&
             real(dataPtr_melt_potential(ijloc(1),ijloc(2)),4)
        call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO)
@@ -913,8 +913,8 @@ contains
 
           ice_ocean_boundary%u_flux(i,j)            =  dataPtr_mzmf(i1,j1)
           ice_ocean_boundary%v_flux(i,j)            =  dataPtr_mmmf(i1,j1)
-          ice_ocean_boundary%q_flux(i,j)            = -dataPtr_evap(i1,j1)
-          ice_ocean_boundary%t_flux(i,j)            = -dataPtr_sensi(i1,j1)
+          ice_ocean_boundary%q_flux(i,j)            =  dataPtr_evap(i1,j1)
+          ice_ocean_boundary%t_flux(i,j)            =  dataPtr_sensi(i1,j1)
           ice_ocean_boundary%salt_flux(i,j)         =  dataPtr_salt(i1,j1)
           ice_ocean_boundary%lw_flux(i,j)           =  dataPtr_lwflux(i1,j1)
           ice_ocean_boundary%sw_flux_vis_dir(i,j)   =  dataPtr_swvdr(i1,j1)

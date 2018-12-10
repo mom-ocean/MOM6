@@ -45,11 +45,15 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public convert_IOB_to_fluxes, convert_IOB_to_forces
+public convert_IOB_to_fluxes
+public convert_IOB_to_forces
 public surface_forcing_init
-public ice_ocn_bnd_type_chksum
 public forcing_save_restart
+public ice_ocn_bnd_type_chksum
 
+private apply_flux_adjustments
+private apply_force_adjustments
+private surface_forcing_end
 
 ! surface_forcing_CS is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
@@ -147,11 +151,13 @@ type, public :: surface_forcing_CS ; private
   type(user_revise_forcing_CS), pointer :: urf_CS => NULL()
 end type surface_forcing_CS
 
-
 ! ice_ocean_boundary_type is a structure corresponding to forcing, but with
 ! the elements, units, and conventions that exactly conform to the use for
 ! MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
+  real, pointer, dimension(:,:) :: latent_flux     =>NULL() !< latent flux (W/m2)
+  real, pointer, dimension(:,:) :: rofl_flux       =>NULL() !< liquid runoff (W/m2)
+  real, pointer, dimension(:,:) :: rofi_flux       =>NULL() !< ice runoff (W/m2)
   real, pointer, dimension(:,:) :: u_flux          =>NULL() !< i-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: v_flux          =>NULL() !< j-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux (W/m2)
@@ -190,7 +196,15 @@ end type ice_ocean_boundary_type
 
 integer :: id_clock_forcing
 
+#ifdef CESMCOUPLED
+  logical :: cesm_coupled = .true.
+#else
+  logical :: cesm_coupled = .false.
+#endif
+
+!=======================================================================
 contains
+!=======================================================================
 
 !> This subroutine translates the Ice_ocean_boundary_type into a MOM
 !! thermodynamic forcing type, including changes of units, sign conventions,
@@ -418,50 +432,75 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
       fluxes%fprec(i,j) = IOB%fprec(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%q_flux)) &
-      fluxes%evap(i,j) = - IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%evap(i,j) = IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%runoff)) &
-      fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
+    ! Note: currently runoff is treated differently for nems and cesm coupling
+    if (cesm_coupled) then
+       ! liquid runoff flux
+       if (associated(fluxes%lrunoff)) &
+            fluxes%lrunoff(i,j) = G%mask2dT(i,j) * IOB%rofl_flux(i-i0,j-j0)
 
-    if (associated(IOB%calving)) &
-      fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
+       ! ice runoff flux
+       if (associated(fluxes%frunoff)) &
+            fluxes%frunoff(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)
 
-    if (associated(IOB%ustar_berg)) &
-      fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+       ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
+       ! heat_content_frunoff. I am seeting these to zero for now.
+       if (associated(IOB%runoff_hflx)) &
+            fluxes%heat_content_lrunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
-    if (associated(IOB%area_berg)) &
-      fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+       if (associated(IOB%calving_hflx)) &
+            fluxes%heat_content_frunoff(i,j) = 0.0 * G%mask2dT(i,j)
+    else
+       if (associated(IOB%runoff)) &
+            fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%mass_berg)) &
-      fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+       if (associated(IOB%calving)) &
+            fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%runoff_hflx)) &
-      fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+       if (associated(IOB%ustar_berg)) &
+            fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%calving_hflx)) &
-      fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+       if (associated(IOB%area_berg)) &
+            fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+       if (associated(IOB%mass_berg)) &
+            fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+       if (associated(IOB%runoff_hflx)) &
+            fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+
+       if (associated(IOB%calving_hflx)) &
+            fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+    end if
 
     if (associated(IOB%lw_flux)) &
       fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%t_flux)) &
-      fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%sens(i,j) = IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    fluxes%latent(i,j) = 0.0
-    if (associated(IOB%fprec)) then
-      fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-      fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-    endif
-    if (associated(IOB%calving)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-    endif
-    if (associated(IOB%q_flux)) then
-      fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-      fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-    endif
+    ! Note: currently latent heat flux is treated differently for nems and cesm
+    if (cesm_coupled) then
+       if (associated(IOB%latent_flux)) &
+            fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
+    else
+       fluxes%latent(i,j) = 0.0
+       if (associated(IOB%fprec)) then
+          fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+          fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+       endif
+       if (associated(IOB%calving)) then
+          fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+          fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+       endif
+       if (associated(IOB%q_flux)) then
+          fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+          fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+       endif
 
-    fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
+       fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
+    end if
 
     if (associated(IOB%sw_flux_vis_dir)) &
       fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
@@ -500,15 +539,15 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     enddo ; enddo
   endif
 
-!### if (associated(CS%ctrl_forcing_CSp)) then
-!###   do j=js,je ; do i=is,ie
-!###     SST_anom(i,j) = sfc_state%SST(i,j) - CS%T_Restore(i,j)
-!###     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
-!###     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
-!###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
-!###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
-!### endif
+  !### if (associated(CS%ctrl_forcing_CSp)) then
+  !###   do j=js,je ; do i=is,ie
+  !###     SST_anom(i,j) = sfc_state%SST(i,j) - CS%T_Restore(i,j)
+  !###     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
+  !###     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
+  !###   enddo ; enddo
+  !###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
+  !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
+  !### endif
 
   ! adjust the NET fresh-water flux to zero, if flagged
   if (CS%adjust_net_fresh_water_to_zero) then
@@ -559,6 +598,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
   call cpu_clock_end(id_clock_forcing)
 
 end subroutine convert_IOB_to_fluxes
+
+!=======================================================================
 
 !> This subroutine translates the Ice_ocean_boundary_type into a MOM
 !! mechanical forcing type, including changes of units, sign conventions,
@@ -844,6 +885,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   call cpu_clock_end(id_clock_forcing)
 end subroutine convert_IOB_to_forces
 
+!=======================================================================
+
 !> Adds thermodynamic flux adjustments obtained via data_override
 !! Component name is 'OCN'
 !! Available adjustments are:
@@ -888,6 +931,8 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%vprec, G%Domain)
 end subroutine apply_flux_adjustments
+
+!=======================================================================
 
 !> Adds mechanical forcing adjustments obtained via data_override
 !! Component name is 'OCN'
@@ -947,6 +992,8 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
 
 end subroutine apply_force_adjustments
 
+!=======================================================================
+
 !> Save any restart files associated with the surface forcing.
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
@@ -966,6 +1013,8 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
   call save_restart(directory, Time, G, CS%restart_CSp, time_stamped)
 
 end subroutine forcing_save_restart
+
+!=======================================================================
 
 !> Initialize the surface forcing, including setting parameters and allocating permanent memory.
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, restore_temp)
@@ -1299,6 +1348,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
   call cpu_clock_end(id_clock_forcing)
 end subroutine surface_forcing_init
 
+!=======================================================================
+
 !> Clean up and deallocate any memory associated with this module and its children.
 subroutine surface_forcing_end(CS, fluxes)
   type(surface_forcing_CS), pointer       :: CS !< A pointer to the control structure returned by
@@ -1316,6 +1367,8 @@ subroutine surface_forcing_end(CS, fluxes)
   CS => NULL()
 
 end subroutine surface_forcing_end
+
+!=======================================================================
 
 !> Write out a set of messages with checksums of the fields in an ice_ocen_boundary type
 subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)

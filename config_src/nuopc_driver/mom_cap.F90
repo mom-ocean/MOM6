@@ -467,7 +467,9 @@ module mom_cap_mod
   logical :: cesm_coupled = .false.
 #endif
 
+!=======================================================================
 contains
+!=======================================================================
 
   !===============================================================================
   !> NUOPC SetService method is the only public entry point.
@@ -979,6 +981,11 @@ contains
                Ice_ocean_boundary% calving_hflx (isc:iec,jsc:jec),    &
                Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
                Ice_ocean_boundary% p (isc:iec,jsc:jec))
+    if (cesm_coupled) then
+       allocate( Ice_ocean_boundary% rofl_flux (isc:iec,jsc:jec), &
+                 Ice_ocean_boundary% rofi_flux (isc:iec,jsc:jec), &
+                 Ice_ocean_boundary% latent_flux (isc:iec,jsc:jec))
+    end if
 
     Ice_ocean_boundary%u_flux          = 0.0
     Ice_ocean_boundary%v_flux          = 0.0
@@ -998,6 +1005,11 @@ contains
     Ice_ocean_boundary%calving_hflx    = 0.0
     Ice_ocean_boundary%mi              = 0.0
     Ice_ocean_boundary%p               = 0.0
+    if (cesm_coupled) then
+       Ice_ocean_boundary%rofl_flux   = 0.0
+       Ice_ocean_boundary%rofi_flux   = 0.0
+       Ice_ocean_boundary%latent_flux = 0.0
+    end if
 
     ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
     call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
@@ -1012,23 +1024,23 @@ contains
        if (len_trim(scalar_field_name) > 0) then
           call fld_list_add(fldsToOcn_num, fldsToOcn, trim(scalar_field_name), "will_provide") ! not in EMC
        endif
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_rain"     , "will provide") ! -> mean_prec_rat
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_snow"     , "will provide") ! -> mean_fprec_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn"     , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr"    , "will provide") ! -> mean_net_sw_ir_dif_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr"    , "will provide") ! -> mean_net_sw_vis_dir_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"    , "will provide") ! -> mean_net_sw_ir_dir_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf"    , "will provide") ! -> mean_net_sw_vis_dif_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux"     , "will provide") ! -> mean_zonal_moment_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy"     , "will provide") ! -> mean_merid_moment_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"      , "will provide") ! -> mean_sensi_heat_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lat"      , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup"     , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap"     , "will provide") ! -> mean_evap_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_salt"     , "will provide") ! -> mean_salt_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"     , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"     , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"       , "will provide") ! -> inst_pres_height_surface
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_rain" , "will provide") ! -> mean_prec_rat
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_snow" , "will provide") ! -> mean_fprec_rate
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn" , "will provide")
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr", "will provide") ! -> mean_net_sw_ir_dif_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr", "will provide") ! -> mean_net_sw_vis_dir_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf", "will provide") ! -> mean_net_sw_ir_dir_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf", "will provide") ! -> mean_net_sw_vis_dif_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux" , "will provide") ! -> mean_zonal_moment_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy" , "will provide") ! -> mean_merid_moment_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"  , "will provide") ! -> mean_sensi_heat_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lat"  , "will provide") ! -> mean latent heat flux
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup" , "will provide") ! -> mean long wave up
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap" , "will provide") ! -> mean_evap_rate
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_salt" , "will provide") ! -> mean_salt_rate
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl" , "will provide")
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi" , "will provide")
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"   , "will provide") ! -> inst_pres_height_surface
 
        ! EMC fields not used
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
