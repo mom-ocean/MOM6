@@ -293,14 +293,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
-    if (CS%use_limited_P_SSH) then
-      fluxes%p_surf_SSH => fluxes%p_surf
-    else
-      fluxes%p_surf_SSH => fluxes%p_surf_full
-    endif
-
+    if (.not. cesm_coupled) then
+       call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
+       call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
+       if (CS%use_limited_P_SSH) then
+          fluxes%p_surf_SSH => fluxes%p_surf
+       else
+          fluxes%p_surf_SSH => fluxes%p_surf_full
+       endif
+    end if
+       
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
@@ -515,22 +517,24 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
 
   enddo ; enddo
 
-  ! applied surface pressure from atmosphere and cryosphere
-  if (associated(IOB%p)) then
-    if (CS%max_p_surf >= 0.0) then
-      do j=js,je ; do i=is,ie
-        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
-        fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
-      enddo ; enddo
-    else
-      do j=js,je ; do i=is,ie
-        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
-        fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
-      enddo ; enddo
-    endif
-    fluxes%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
-  endif
-
+  if (.not. cesm_coupled) then
+     ! applied surface pressure from atmosphere and cryosphere
+     if (associated(IOB%p)) then
+        if (CS%max_p_surf >= 0.0) then
+           do j=js,je ; do i=is,ie
+              fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+              fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
+           enddo; enddo
+        else
+           do j=js,je ; do i=is,ie
+              fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+              fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
+           enddo; enddo
+        endif
+        fluxes%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
+     endif
+  end if
+     
   ! more salt restoring logic
   if (associated(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
@@ -656,16 +660,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   ! allocation and initialization if this is the first time that this
   ! mechanical forcing type has been used.
   if (.not.forces%initialized) then
-    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., &
-                               press=.true.)
+
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true.)
 
     call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
     call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
-    if (CS%use_limited_P_SSH) then
-      forces%p_surf_SSH => forces%p_surf
-    else
-      forces%p_surf_SSH => forces%p_surf_full
-    endif
 
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -689,6 +688,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
   ! applied surface pressure from atmosphere and cryosphere
+  if (CS%use_limited_P_SSH) then
+     forces%p_surf_SSH => forces%p_surf
+  else
+     forces%p_surf_SSH => forces%p_surf_full
+  endif
   if (associated(IOB%p)) then
     if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
