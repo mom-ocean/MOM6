@@ -600,7 +600,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
       endif
 
     endif
-  end do; end do
+  enddo; enddo
 
   if (CS%use_limited_P_SSH) then
     forces%p_surf_SSH => forces%p_surf
