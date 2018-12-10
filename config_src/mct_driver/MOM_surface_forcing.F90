@@ -599,13 +599,14 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
         forces%p_surf(i,j) = forces%p_surf_full(i,j)
       endif
 
-      if (CS%use_limited_P_SSH) then
-        forces%p_surf_SSH => forces%p_surf
-      else
-        forces%p_surf_SSH => forces%p_surf_full
-      endif
-    end if
+    endif
   end do; end do
+
+  if (CS%use_limited_P_SSH) then
+    forces%p_surf_SSH => forces%p_surf
+  else
+    forces%p_surf_SSH => forces%p_surf_full
+  endif
 
   ! GMM, CIME uses AGRID. All the BGRID_NE code can be cleaned later
   wind_stagger = AGRID
