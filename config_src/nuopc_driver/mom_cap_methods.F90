@@ -158,7 +158,7 @@ contains
         dataPtr_v(i1,j1)       = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
         dataPtr_bldepth(i1,j1) = ocean_public%OBLD(i,j)   * grid%mask2dT(ig,jg)
         ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
-        if (ocean_public%frazil(ig,jg) > 0.0) then
+        if (ocean_public%frazil(i,j) > 0.0) then
            ! Frazil: change from J/m^2 to W/m^2
            dataPtr_Fioo_q(i1,j1) = ocean_public%frazil(i,j) * grid%mask2dT(ig,jg) * I_time_int
         else

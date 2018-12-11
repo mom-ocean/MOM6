@@ -147,7 +147,7 @@
 !!
 !!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_public, Time, Time_step_coupled)
 !!
-!! Priori to the call to `update_ocean_model()`, the cap performs these steps 
+!! Priori to the call to `update_ocean_model()`, the cap performs these steps
 !! - the `Time` and `Time_step_coupled` parameters, based on FMS types, are derived from the incoming ESMF clock
 !! - there are calls to two stubs: `ice_ocn_bnd_from_data()` and `external_coupler_sbc_before()` - these are currently
 !!   inactive, but may be modified to read in import data from file or from an external coupler

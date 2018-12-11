@@ -302,7 +302,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
           fluxes%p_surf_SSH => fluxes%p_surf_full
        endif
     end if
-       
+
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
@@ -534,7 +534,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
         fluxes%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
      endif
   end if
-     
+
   ! more salt restoring logic
   if (associated(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
