@@ -1991,10 +1991,14 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
              find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, &
              (/12.,-4./), (/34.,2./), 0.), "Temp/salt Uniform Linearized Alpha/Beta"))
-  ! First EOS linear in T, insensitive to S
-  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.25, &
-             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.25, 0., -6., 0., -4., 0., &
-             (/12.,-4./), (/34.,0./), 0.), "Temperature stratified Linearized Alpha/Beta"))
+  ! EOS linear in T, insensitive to S
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.2, 0., -0.4, 0., -0.6, 0., &
+             (/12.,-4./), (/34.,0./), 0.), "Temp stratified Linearized Alpha/Beta"))
+  ! EOS linear in S, insensitive to T
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., 0., 0.8, 0., 1.0, 0., 0.5, &
+             (/12.,0./), (/34.,2./), 0.), "Salt stratified Linearized Alpha/Beta"))
 
   deallocate(EOS)
   deallocate(CS%ndiff_aux_CS)
@@ -2246,7 +2250,7 @@ logical function test_rnp(expected_pos, test_pos, title)
   character(len=*), intent(in) :: title    !< A label for this test
   ! Local variables
   integer :: stdunit = 6 ! Output to standard error
-  test_rnp = expected_pos /= test_pos
+  test_rnp = ABS(expected_pos - test_pos) > 2*EPSILON(test_pos)
   if (test_rnp) then
     write(stdunit,'(A, f20.16, " .neq. ", f20.16, " <-- WRONG")') title, expected_pos, test_pos
   else

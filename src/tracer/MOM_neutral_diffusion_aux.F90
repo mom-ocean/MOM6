@@ -408,6 +408,7 @@ function find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta_r
     drho_dz = 0.5*( (dalpha*deltaT + alpha_sum*dT_dz) + (dbeta*deltaS + beta_sum*dS_dz) )
 
     ztest = z - drho/drho_dz
+    print *, ztest, z, drho, drho_dz
 
     ! Take a bisection if z falls out of [zmin,zmax]
     if (ztest < zmin .or. ztest > zmax) then
