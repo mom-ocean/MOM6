@@ -29,9 +29,13 @@ module mom_cap_methods
   public :: mom_export_nems
   public :: mom_import_nems
 
+  interface State_GetFldPtr
+     module procedure State_GetFldPtr_1d
+     module procedure State_GetFldPtr_2d
+  end interface
+
   integer            :: rc,dbrc
   integer            :: import_cnt = 0
-  logical, parameter :: debug=.false.
 
 !===============================================================================
 contains
@@ -51,20 +55,20 @@ contains
     ! Local variables
     real            :: ssh(grid%isd:grid%ied,grid%jsd:grid%jed) !< Local copy of sea_lev with updated halo
     integer         :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec !< Grid indices
-    integer         :: lbnd1, lbnd2, ubnd1, ubnd2
+    integer         :: n
     real            :: slp_L, slp_R, slp_C, slope, u_min, u_max
     real            :: I_time_int  !< The inverse of coupling time interval in s-1.
     integer         :: day, secs
     type(ESMF_time) :: currTime
-    real(ESMF_KIND_R8), pointer :: dataPtr_omask(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_t(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_s(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_u(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_v(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fioo_q(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_dhdx(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_dhdy(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_bldepth(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_omask(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_t(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_s(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_u(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_v(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_fioo_q(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_dhdx(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_dhdy(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_bldepth(:)
     type(ESMF_TimeInterval)     :: timeStep
     integer                     :: dt_int       !< time over which to advance the ocean (ocean_coupling_time_step), in sec
     character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
@@ -120,11 +124,6 @@ contains
       file=__FILE__)) &
       return  ! bail out
 
-    lbnd1 = lbound(dataPtr_t,1)
-    lbnd2 = lbound(dataPtr_t,2)
-
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
-
     ! Use Adcroft's rule of reciprocals; it does the right thing here.
     call ESMF_ClockGet( clock, timeStep=timeStep, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -145,30 +144,31 @@ contains
     ! Copy from ocean_public to exportstate. ocean_public uses global indexing with no halos.
     ! The mask comes from "grid" that uses the usual MOM domain that has halos
     ! and does not use global indexing.
-    do j = jsc, jec
-      j1 = j + lbnd2 - jsc
-      jg = j + grid%jsc - jsc
-      do i = isc, iec
-        i1 = i + lbnd1 - isc
-        ig = i + grid%isc - isc
-        dataPtr_omask(i1,j1)   = grid%mask2dT(ig,jg)
-        dataPtr_t(i1,j1)       = ocean_public%t_surf(i,j) * grid%mask2dT(ig,jg) ! surface temp is in K
-        dataPtr_s(i1,j1)       = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
-        dataPtr_u(i1,j1)       = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
-        dataPtr_v(i1,j1)       = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
-        dataPtr_bldepth(i1,j1) = ocean_public%OBLD(i,j)   * grid%mask2dT(ig,jg)
-        ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
-        if (ocean_public%frazil(i,j) > 0.0) then
-           ! Frazil: change from J/m^2 to W/m^2
-           dataPtr_Fioo_q(i1,j1) = ocean_public%frazil(i,j) * grid%mask2dT(ig,jg) * I_time_int
-        else
-           ! Melt_potential: change from J/m^2 to W/m^2
-           dataPtr_Fioo_q(i1,j1) = -ocean_public%melt_potential(i,j) * grid%mask2dT(ig,jg) * I_time_int !* ncouple_per_day
 
-           ! make sure Melt_potential is always <= 0
-           if (dataPtr_Fioo_q(i1,j1) > 0.0) dataPtr_Fioo_q(i1,j1) = 0.0
-        end if
-      end do
+    n = 0
+    do j=grid%jsc, grid%jec
+       jg = j + grid%jdg_offset
+       do i=grid%isc,grid%iec
+          ig = i + grid%idg_offset
+          n = n+1
+          dataPtr_omask(n)   = grid%mask2dT(i,j)
+          dataPtr_t(n)       = ocean_public%t_surf(ig,jg) * grid%mask2dT(i,j) ! surface temp is in K
+          dataPtr_s(n)       = ocean_public%s_surf(ig,jg) * grid%mask2dT(i,j)
+          dataPtr_u(n)       = ocean_public%u_surf(ig,jg) * grid%mask2dT(i,j)
+          dataPtr_v(n)       = ocean_public%v_surf(ig,jg) * grid%mask2dT(i,j)
+          dataPtr_bldepth(n) = ocean_public%OBLD(ig,jg)   * grid%mask2dT(i,j)
+          ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
+          if (ocean_public%frazil(ig,jg) > 0.0) then
+             ! Frazil: change from J/m^2 to W/m^2
+             dataPtr_Fioo_q(n) = ocean_public%frazil(ig,jg) * grid%mask2dT(i,j) * I_time_int
+          else
+             ! Melt_potential: change from J/m^2 to W/m^2
+             dataPtr_Fioo_q(n) = -ocean_public%melt_potential(ig,jg) * grid%mask2dT(i,j) * I_time_int !* ncouple_per_day
+
+             ! make sure Melt_potential is always <= 0
+             if (dataPtr_Fioo_q(n) > 0.0) dataPtr_Fioo_q(n) = 0.0
+          end if
+       end do
     end do
 
     ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
@@ -185,87 +185,65 @@ contains
     call pass_var(ssh, grid%domain)
 
     ! d/dx ssh
-    do jg = jsc, jec
-      j  = jg + grid%jsc - jsc
-      j1 = jg + lbnd2 - jsc
-      do ig = isc,iec
-        i  = ig + grid%isc - isc
-        i1 = ig + lbnd1 - isc
-
-        ! This is a simple second-order difference
-        !dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(ig,jg)
-        ! This is a PLM slope which might be less prone to the A-grid null mode
-        slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(i-1,j)
-        if (grid%mask2dCu(i-1,j)==0.) slp_L = 0.
-        slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(i,j)
-        if (grid%mask2dCu(i+1,j)==0.) slp_R = 0.
-        slp_C = 0.5 * (slp_L + slp_R)
-        if ( (slp_L * slp_R) > 0.0 ) then
-          ! This limits the slope so that the edge values are bounded by the
-          ! two cell averages spanning the edge.
-          u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-          u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-        else
-          ! Extrema in the mean values require a PCM reconstruction avoid generating
-          ! larger extreme values.
-          slope = 0.0
-        end if
-        dataPtr_dhdx(i1,j1) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
-        if (grid%mask2dT(i,j)==0.) dataPtr_dhdx(i1,j1) = 0.0
-      end do
-    end do
+    n = 0
+    do j=grid%jsc, grid%jec
+       do i=grid%isc,grid%iec
+          n = n+1
+          ! This is a simple second-order difference
+          ! dataPtr_dhdx(n) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+          ! This is a PLM slope which might be less prone to the A-grid null mode
+          slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
+          if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
+          slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(I,j)
+          if (grid%mask2dCu(I+1,j)==0.) slp_R = 0.
+          slp_C = 0.5 * (slp_L + slp_R)
+          if ( (slp_L * slp_R) > 0.0 ) then
+             ! This limits the slope so that the edge values are bounded by the
+             ! two cell averages spanning the edge.
+             u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+             u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+             slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+          else
+             ! Extrema in the mean values require a PCM reconstruction avoid generating
+             ! larger extreme values.
+             slope = 0.0
+          endif
+          dataPtr_dhdx(n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+          if (grid%mask2dT(i,j)==0.) dataPtr_dhdx(n) = 0.0
+       enddo
+    enddo
 
     ! d/dy ssh
-    do jg = jsc, jec
-      j  = jg + grid%jsc - jsc
-      j1 = jg + lbnd2 - jsc
-      do ig = isc,iec
-        i  = ig + grid%isc - isc
-        i1 = ig + lbnd1 - isc
+    n = 0
+    do j=grid%jsc, grid%jec
+       do i=grid%isc,grid%iec
+          n = n+1
+          ! This is a simple second-order difference
+          ! dataPtr_dhdy(n) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
+          ! This is a PLM slope which might be less prone to the A-grid null mode
+          slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
+          if (grid%mask2dCv(i,J-1)==0.) slp_L = 0.
 
-        ! This is a simple second-order difference
-        !dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(ig,jg)
-        ! This is a PLM slope which might be less prone to the A-grid null mode
-        slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,j-1)
-        if (grid%mask2dCv(i,j-1)==0.) slp_L = 0.
-        slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,j)
-        if (grid%mask2dCv(i,j+1)==0.) slp_R = 0.
-        slp_C = 0.5 * (slp_L + slp_R)
-        !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
-        if ((slp_L * slp_R) > 0.0) then
-          ! This limits the slope so that the edge values are bounded by the
-          ! two cell averages spanning the edge.
-          u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-          u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-          slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-        else
-          ! Extrema in the mean values require a PCM reconstruction avoid generating
-          ! larger extreme values.
-          slope = 0.0
-        end if
-        dataPtr_dhdy(i1,j1) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
-        if (grid%mask2dT(i,j)==0.) dataPtr_dhdy(i1,j1) = 0.0
-      end do
-    end do
+          slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,J)
+          if (grid%mask2dCv(i,J+1)==0.) slp_R = 0.
 
-    if (debug .and. is_root_pe()) then
-      call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
-      call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
-
-      do j = jsc, jec
-        j1 = j + lbnd2 - jsc
-        do i = isc, iec
-          i1 = i + lbnd1 - isc
-          write(logunit,F01)'export: day, secs, j, i, t_surf = ',day,secs,j,i,dataPtr_t(i1,j1)
-          write(logunit,F01)'export: day, secs, j, i, s_surf = ',day,secs,j,i,dataPtr_s(i1,j1)
-          write(logunit,F01)'export: day, secs, j, i, u_surf = ',day,secs,j,i,dataPtr_u(i1,j1)
-          write(logunit,F01)'export: day, secs, j, i, v_surf = ',day,secs,j,i,dataPtr_v(i1,j1)
-          write(logunit,F01)'export: day, secs, j, i, dhdx   = ',day,secs,j,i,dataPtr_dhdx(i1,j1)
-          write(logunit,F01)'export: day, secs, j, i, dhdy   = ',day,secs,j,i,dataPtr_dhdy(i1,j1)
-        end do
-      end do
-    end if
+          slp_C = 0.5 * (slp_L + slp_R)
+          !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
+          if ((slp_L * slp_R) > 0.0) then
+             ! This limits the slope so that the edge values are bounded by the
+             ! two cell averages spanning the edge.
+             u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+             u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+             slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+          else
+             ! Extrema in the mean values require a PCM reconstruction avoid generating
+             ! larger extreme values.
+             slope = 0.0
+          endif
+          dataPtr_dhdy(n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+          if (grid%mask2dT(i,j)==0.) dataPtr_dhdy(n) = 0.0
+       enddo
+    enddo
 
   end subroutine mom_export_cesm
 
@@ -290,33 +268,31 @@ contains
     integer                       , intent(inout) :: rc
 
     ! Local Variables
-    integer                     :: i, j, i1, j1, ig, jg  ! Grid indices
-    integer                     :: isc, iec, jsc, jec    ! Grid indices
-    integer                     :: i0, j0, is, js, ie, je
-    integer                     :: lbnd1, lbnd2
-    real(ESMF_KIND_R8), pointer :: dataPtr_p(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_taux(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_tauy(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_sen(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_lat(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_evap(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_lwdn(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_lwup(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_swvdr(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_swvdf(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_swndr(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_swndf(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_rofl(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_rofi(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_salt(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_rain(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_snow(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_lamult(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_ustokes(:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_vstokes(:,:)
+    integer                     :: i, j, n
+    integer                     :: isc, iec, jsc, jec
     integer                     :: day, secs
     type(ESMF_time)             :: currTime
     logical                     :: do_import
+    real(ESMF_KIND_R8), pointer :: dataPtr_p(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_taux(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_tauy(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_sen(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_lat(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_evap(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_lwdn(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_lwup(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_swvdr(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_swvdf(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_swndr(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_swndf(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_rofl(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_rofi(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_salt(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_rain(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_snow(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_lamult(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_ustokes(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_vstokes(:)
     character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
     character(len=*), parameter :: subname = '(mom_import)'
     !-----------------------------------------------------------------------
@@ -409,98 +385,39 @@ contains
       file=__FILE__)) &
       return  ! bail out
 
-    lbnd1 = lbound(dataPtr_p,1)
-    lbnd2 = lbound(dataPtr_p,2)
-
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
-
     ! import_cnt is used to skip using the import state at the first count
     import_cnt = import_cnt + 1
-
     if ((trim(runtype) == 'initial' .and. import_cnt <= 2)) then
-      ! This will skip the first time import information is given
-      do_import = .false.
+       do_import = .false. ! This will skip the first time import information is given
     else
-      do_import = .true.
+       do_import = .true.
     end if
 
     if (do_import) then
-       do j = jsc, jec
-          j1 = j + lbnd2 - jsc
-          do i = isc, iec
-             i1 = i + lbnd1 - isc
-             ice_ocean_boundary%p(i,j)               =  dataPtr_p(i1,j1)     ! surface pressure
-             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(i1,j1)  ! zonal surface stress - taux
-             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(i1,j1)  ! meridional surface stress - tauy
-             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(i1,j1)  ! liquid precipitation (rain)
-             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(i1,j1)  ! frozen precipitation (snow)
-             ice_ocean_boundary%t_flux(i,j)          =  dataPtr_sen(i1,j1)   ! sensible heat flux (W/m2)
-             ice_ocean_boundary%latent_flux(i,j)     =  dataPtr_lat(i1,j1)   ! latent heat flux (W/m^2)
-             ice_ocean_boundary%q_flux(i,j)          =  dataPtr_evap(i1,j1)  ! specific humidity flux
-             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(i1,j1) &
-                                                      + dataPtr_lwdn(i1,j1)  ! longwave radiation, sum up and down (W/m2)
-             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(i1,j1) ! visible, direct shortwave  (W/m2)
-             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(i1,j1) ! visible, diffuse shortwave (W/m2)
-             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(i1,j1) ! near-IR, direct shortwave  (W/m2)
-             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(i1,j1) ! near-IR, diffuse shortwave (W/m2)
-             ice_ocean_boundary%rofl_flux(i,j)       =  dataPtr_rofl(i1,j1)  ! ice runoff
-             ice_ocean_boundary%rofi_flux(i,j)       =  dataPtr_rofi(i1,j1)  ! liquid runoff
-             ice_ocean_boundary%salt_flux(i,j)       = -dataPtr_salt(i1,j1)  ! salt flux (minus sign needed here -GMM)
+       call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+       n = 0
+       do j = jsc,jec
+          do i = isc,iec
+             n = n + 1 ! Increment position within gindex
+             ice_ocean_boundary%p(i,j)               =  dataPtr_p(n)     ! surface pressure
+             ice_ocean_boundary%u_flux(i,j)          =  dataPtr_taux(n)  ! zonal surface stress - taux
+             ice_ocean_boundary%v_flux(i,j)          =  dataPtr_tauy(n)  ! meridional surface stress - tauy
+             ice_ocean_boundary%lprec(i,j)           =  dataPtr_rain(n)  ! liquid precipitation (rain)
+             ice_ocean_boundary%fprec(i,j)           =  dataPtr_snow(n)  ! frozen precipitation (snow)
+             ice_ocean_boundary%t_flux(i,j)          =  dataPtr_sen(n)   ! sensible heat flux (W/m2)
+             ice_ocean_boundary%latent_flux(i,j)     =  dataPtr_lat(n)   ! latent heat flux (W/m^2)
+             ice_ocean_boundary%q_flux(i,j)          =  dataPtr_evap(n)  ! specific humidity flux
+             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(n) &
+                                                      + dataPtr_lwdn(n)  ! longwave radiation, sum up and down (W/m2)
+             ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(n) ! visible, direct shortwave  (W/m2)
+             ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(n) ! visible, diffuse shortwave (W/m2)
+             ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(n) ! near-IR, direct shortwave  (W/m2)
+             ice_ocean_boundary%sw_flux_nir_dif(i,j) =  dataPtr_swndf(n) ! near-IR, diffuse shortwave (W/m2)
+             ice_ocean_boundary%rofl_flux(i,j)       =  dataPtr_rofl(n)  ! ice runoff
+             ice_ocean_boundary%rofi_flux(i,j)       =  dataPtr_rofi(n)  ! liquid runoff
+             ice_ocean_boundary%salt_flux(i,j)       = -dataPtr_salt(n)  ! salt flux (minus sign needed here -GMM)
           enddo
        enddo
-
-       ! do j = jsc, jec
-       !    jg = j + grid%jsc - jsc
-       !    do i = isc, iec
-       !       ig = i + grid%jsc - isc
-       !       ice_ocean_boundary%u_flux(i,j)         = &
-       !            GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1)
-       !       ice_ocean_boundary%v_flux(i,j)         = &
-       !            GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) +  GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1)
-       !    end do
-       ! end do
-
-    end if
-
-    ! debug output
-    if (do_import .and. debug .and. is_root_pe()) then
-      call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
-      call ESMF_TimeGet(CurrTime, d=day, s=secs, rc=rc)
-
-      i0 = GRID%isc - isc
-      j0 = GRID%jsc - jsc
-      do j = GRID%jsc, GRID%jec
-        do i = GRID%isc, GRID%iec
-          write(logunit,F01)'import: day, secs, j, i, u_flux          = '&
-                            ,day,secs,j,i,ice_ocean_boundary%u_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, v_flux          = '&
-                            ,day,secs,j,i,ice_ocean_boundary%v_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, lprec           = '&
-                            ,day,secs,j,i,ice_ocean_boundary%lprec(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, lwrad           = '&
-                            ,day,secs,j,i,ice_ocean_boundary%lw_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, q_flux          = '&
-                            ,day,secs,j,i,ice_ocean_boundary%q_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, t_flux          = '&
-                            ,day,secs,j,i,ice_ocean_boundary%t_flux(i-i0,j-j0)
-          !write(logunit,F01)'import: day, secs, j, i, latent_flux     = '&
-          !                  ,day,secs,j,i,ice_ocean_boundary%latent_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, runoff          = '&
-                            ,day,secs,j,i,ice_ocean_boundary%runoff(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, psurf           = '&
-                            ,day,secs,j,i,ice_ocean_boundary%p(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, salt_flux       = '&
-                            ,day,secs,j,i,ice_ocean_boundary%salt_flux(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dir = '&
-                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dir(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_vis_dif = '&
-                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_vis_dif(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dir = '&
-                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
-          write(logunit,F01)'import: day, secs, j, i, sw_flux_nir_dif = '&
-                            ,day,secs,j,i,ice_ocean_boundary%sw_flux_nir_dir(i-i0,j-j0)
-        end do
-      end do
     end if
 
   end subroutine mom_import_cesm
@@ -936,10 +853,10 @@ contains
 
 !===============================================================================
 
-  subroutine State_GetFldPtr(ST, fldname, fldptr, rc)
-    type(ESMF_State)            , intent(in)  :: ST
+  subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
+    type(ESMF_State)            , intent(in)  :: State
     character(len=*)            , intent(in)  :: fldname
-    real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:)
+    real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:)
     integer, optional           , intent(out) :: rc
 
     ! local variables
@@ -947,7 +864,7 @@ contains
     integer :: lrc
     character(len=*),parameter :: subname='(mom_cap:State_GetFldPtr)'
 
-    call ESMF_StateGet(ST, itemName=trim(fldname), field=lfield, rc=lrc)
+    call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -960,6 +877,34 @@ contains
 
     if (present(rc)) rc = lrc
 
-  end subroutine State_GetFldPtr
+  end subroutine State_GetFldPtr_1d
+
+!===============================================================================
+
+  subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
+    type(ESMF_State)            , intent(in)  :: State
+    character(len=*)            , intent(in)  :: fldname
+    real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:)
+    integer, optional           , intent(out) :: rc
+
+    ! local variables
+    type(ESMF_Field) :: lfield
+    integer :: lrc
+    character(len=*),parameter :: subname='(mom_cap:State_GetFldPtr)'
+
+    call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+
+    if (present(rc)) rc = lrc
+
+  end subroutine State_GetFldPtr_2d
 
 end module mom_cap_methods

@@ -390,7 +390,7 @@ module mom_cap_mod
   use MOM_domains,              only: pass_var
   use MOM_error_handler,        only: is_root_pe
   use MOM_ocean_model,          only: ice_ocean_boundary_type
-  use MOM_grid,                 only: ocean_grid_type
+  use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
   use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
   use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
   use MOM_ocean_model,          only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
@@ -1207,6 +1207,7 @@ contains
   !! @param exportState an ESMF_State object for export fields
   !! @param clock an ESMF_Clock object
   !! @param rc return code
+
   subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     type(ESMF_GridComp)  :: gcomp
     type(ESMF_State)     :: importState, exportState
@@ -1215,14 +1216,15 @@ contains
 
     ! Local Variables
     type(ESMF_VM)                              :: vm
-    type(ESMF_Grid)                            :: gridIn
-    type(ESMF_Grid)                            :: gridOut
+    type(ESMF_Grid)                            :: gridIn, gridOut
+    type(ESMF_Mesh)                            :: Emesh, EmeshTemp
     type(ESMF_DeLayout)                        :: delayout
     type(ESMF_Distgrid)                        :: Distgrid
     type(ESMF_DistGridConnection), allocatable :: connectionList(:)
     type (ocean_public_type),      pointer     :: ocean_public   => NULL()
     type (ocean_state_type),       pointer     :: ocean_state => NULL()
     type(ice_ocean_boundary_type), pointer     :: Ice_ocean_boundary => NULL()
+    type(ocean_grid_type)        , pointer     :: ocean_grid
     type(ocean_internalstate_wrapper)          :: ocean_internalstate
     integer                                    :: npet, ntiles
     integer                                    :: nxg, nyg, cnt
@@ -1249,6 +1251,10 @@ contains
     type(ESMF_Field)                           :: field_t_surf
     integer                                    :: mpicom
     integer                                    :: localPet
+    integer                                    :: lsize
+    integer                                    :: ig,jg, ni,nj,k
+    integer, allocatable                       :: gindex(:) ! global index space
+    character(len=256)                         :: cvalue
     character(len=*), parameter                :: subname='(mom_cap:InitializeRealize)'
     !--------------------------------
 
@@ -1339,385 +1345,454 @@ contains
        enddo
     end if
 
-
     !---------------------------------
-    ! create delayout and distgrid
-    !---------------------------------
-
-    allocate(deBlockList(2,2,ntiles))
-    allocate(petMap(ntiles))
-    allocate(deLabelList(ntiles))
-
-    do n = 1, ntiles
-      deLabelList(n) = n
-      deBlockList(1,1,n) = xb(n)
-      deBlockList(1,2,n) = xe(n)
-      deBlockList(2,1,n) = yb(n)
-      deBlockList(2,2,n) = ye(n)
-      petMap(n) = pe(n)
-      ! write(tmpstr,'(a,3i8)') subname//' iglo = ',n,deBlockList(1,1,n),deBlockList(1,2,n)
-      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-      ! write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
-      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-      ! write(tmpstr,'(a,2i8)') subname//' pe  = ',n,petMap(n)
-      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-      !--- assume a tile with starting index of 1 has an equivalent wraparound tile on the other side
-    enddo
-
-    delayout = ESMF_DELayoutCreate(petMap, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    ! rsd this assumes tripole grid, but sometimes in CESM a bipole
-    ! grid is used -- need to introduce conditional logic here
-
-    allocate(connectionList(2))
-
-    ! bipolar boundary condition at top row: nyg
-    call ESMF_DistGridConnectionSet(connectionList(1), tileIndexA=1, &
-      tileIndexB=1, positionVector=(/nxg+1, 2*nyg+1/), &
-      orientationVector=(/-1, -2/), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    ! periodic boundary condition along first dimension
-    call ESMF_DistGridConnectionSet(connectionList(2), tileIndexA=1, &
-      tileIndexB=1, positionVector=(/nxg, 0/), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    distgrid = ESMF_DistGridCreate(minIndex=(/1,1/), maxIndex=(/nxg,nyg/), &
-!        indexflag = ESMF_INDEX_DELOCAL, &
-        deBlockList=deBlockList, &
-!        deLabelList=deLabelList, &
-        delayout=delayout, &
-        connectionList=connectionList, &
-        rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    deallocate(xb,xe,yb,ye,pe)
-    deallocate(connectionList)
-    deallocate(deLabelList)
-    deallocate(deBlockList)
-    deallocate(petMap)
-
-    call ESMF_DistGridGet(distgrid=distgrid, localDE=0, elementCount=cnt, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    allocate(indexList(cnt))
-    write(tmpstr,'(a,i8)') subname//' distgrid cnt= ',cnt
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return
-    call ESMF_DistGridGet(distgrid=distgrid, localDE=0, seqIndexList=indexList, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
-    write(tmpstr,'(a,4i8)') subname//' distgrid list= ',&
-         indexList(1),indexList(cnt),minval(indexList), maxval(indexList)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return
-    deallocate(IndexList)
-
-    !---------------------------------
-    ! create grid
+    ! Create either a grid or a mesh
     !---------------------------------
 
-    gridIn = ESMF_GridCreate(distgrid=distgrid, &
-      gridEdgeLWidth=(/0,0/), gridEdgeUWidth=(/0,1/), &
-      coordSys = ESMF_COORDSYS_SPH_DEG, &
-      rc = rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+    if (cesm_coupled) then
 
-    mom_grid_i = gridIn
+       !---------------------------------
+       ! Create a MOM6 mesh
+       !---------------------------------
 
-    call ESMF_GridAddCoord(gridIn, staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call ESMF_GridAddCoord(gridIn, staggerLoc=ESMF_STAGGERLOC_CORNER, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call ESMF_GridAddItem(gridIn, itemFlag=ESMF_GRIDITEM_MASK, itemTypeKind=ESMF_TYPEKIND_I4, &
-       staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+       ! Get the ocean grid and sizes of global and computational domains
+       call get_ocean_grid(ocean_state, ocean_grid)
+       call get_global_grid_size(ocean_grid, ni, nj)
+       lsize = ( ocean_grid%iec - ocean_grid%isc + 1 ) * ( ocean_grid%jec - ocean_grid%jsc + 1 )
 
-    ! Attach area to the Grid optionally. By default the cell areas are computed.
-    if(grid_attach_area) then
-      call ESMF_GridAddItem(gridIn, itemFlag=ESMF_GRIDITEM_AREA, itemTypeKind=ESMF_TYPEKIND_R8, &
-        staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-    endif
+       ! Create the global index space for the computational domain
+       allocate(gindex(lsize))
+       k = 0
+       do j = ocean_grid%jsc, ocean_grid%jec
+          jg = j + ocean_grid%jdg_offset 
+          do i = ocean_grid%isc, ocean_grid%iec
+             ig = i + ocean_grid%idg_offset 
+             k = k + 1 ! Increment position within gindex
+             gindex(k) = ni * (jg - 1) + ig
+          enddo
+       enddo
 
-    call ESMF_GridGetCoord(gridIn, coordDim=1, &
-        staggerloc=ESMF_STAGGERLOC_CENTER, &
-        farrayPtr=dataPtr_xcen, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call ESMF_GridGetCoord(gridIn, coordDim=2, &
-        staggerloc=ESMF_STAGGERLOC_CENTER, &
-        farrayPtr=dataPtr_ycen, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+       DistGrid = ESMF_DistGridCreate(arbSeqIndexList=gindex, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return
 
-    call ESMF_GridGetCoord(gridIn, coordDim=1, &
-        staggerloc=ESMF_STAGGERLOC_CORNER, &
-        farrayPtr=dataPtr_xcor, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call ESMF_GridGetCoord(gridIn, coordDim=2, &
-        staggerloc=ESMF_STAGGERLOC_CORNER, &
-        farrayPtr=dataPtr_ycor, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+       ! read in the mesh
+       call NUOPC_CompAttributeGet(gcomp, name='mesh_ocn', value=cvalue, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return
 
-    call ESMF_GridGetItem(gridIn, itemflag=ESMF_GRIDITEM_MASK, &
-        staggerloc=ESMF_STAGGERLOC_CENTER, &
-        farrayPtr=dataPtr_mask, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    if(grid_attach_area) then
-      call ESMF_GridGetItem(gridIn, itemflag=ESMF_GRIDITEM_AREA, &
-          staggerloc=ESMF_STAGGERLOC_CENTER, &
-          farrayPtr=dataPtr_area, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-    endif
+       EMeshTemp = ESMF_MeshCreate(filename=trim(cvalue), fileformat=ESMF_FILEFORMAT_ESMFMESH, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return
+       if (localPet == 0) then
+          write(logunit,*)'mesh file for mom6 domain is ',trim(cvalue)
+       end if
+       
+       ! recreate the mesh using the above distGrid
+       EMesh = ESMF_MeshCreate(EMeshTemp, elementDistgrid=Distgrid, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return
+
+       ! realize the import and export fields using the mesh
+       call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+    else
+
+       !---------------------------------
+       ! create a MOM6 grid
+       !---------------------------------
+       
+       ! generate delayout and dist_grid
+       
+       allocate(deBlockList(2,2,ntiles))
+       allocate(petMap(ntiles))
+       allocate(deLabelList(ntiles))
+
+       do n = 1, ntiles
+          deLabelList(n) = n
+          deBlockList(1,1,n) = xb(n)
+          deBlockList(1,2,n) = xe(n)
+          deBlockList(2,1,n) = yb(n)
+          deBlockList(2,2,n) = ye(n)
+          petMap(n) = pe(n)
+          ! write(tmpstr,'(a,3i8)') subname//' iglo = ',n,deBlockList(1,1,n),deBlockList(1,2,n)
+          ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+          ! write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
+          ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+          ! write(tmpstr,'(a,2i8)') subname//' pe  = ',n,petMap(n)
+          ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+          !--- assume a tile with starting index of 1 has an equivalent wraparound tile on the other side
+       enddo
+
+       delayout = ESMF_DELayoutCreate(petMap, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       ! rsd this assumes tripole grid, but sometimes in CESM a bipole
+       ! grid is used -- need to introduce conditional logic here
+
+       allocate(connectionList(2))
+
+       ! bipolar boundary condition at top row: nyg
+       call ESMF_DistGridConnectionSet(connectionList(1), tileIndexA=1, &
+            tileIndexB=1, positionVector=(/nxg+1, 2*nyg+1/), &
+            orientationVector=(/-1, -2/), rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       ! periodic boundary condition along first dimension
+       call ESMF_DistGridConnectionSet(connectionList(2), tileIndexA=1, &
+            tileIndexB=1, positionVector=(/nxg, 0/), rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       distgrid = ESMF_DistGridCreate(minIndex=(/1,1/), maxIndex=(/nxg,nyg/), &
+            !        indexflag = ESMF_INDEX_DELOCAL, &
+            deBlockList=deBlockList, &
+            !        deLabelList=deLabelList, &
+            delayout=delayout, &
+            connectionList=connectionList, &
+            rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       deallocate(xb,xe,yb,ye,pe)
+       deallocate(connectionList)
+       deallocate(deLabelList)
+       deallocate(deBlockList)
+       deallocate(petMap)
+
+       call ESMF_DistGridGet(distgrid=distgrid, localDE=0, elementCount=cnt, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       allocate(indexList(cnt))
+       write(tmpstr,'(a,i8)') subname//' distgrid cnt= ',cnt
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return
+       call ESMF_DistGridGet(distgrid=distgrid, localDE=0, seqIndexList=indexList, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       write(tmpstr,'(a,4i8)') subname//' distgrid list= ',&
+            indexList(1),indexList(cnt),minval(indexList), maxval(indexList)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return
+       deallocate(IndexList)
+
+       ! create grid
+
+       gridIn = ESMF_GridCreate(distgrid=distgrid, &
+            gridEdgeLWidth=(/0,0/), gridEdgeUWidth=(/0,1/), &
+            coordSys = ESMF_COORDSYS_SPH_DEG, &
+            rc = rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       mom_grid_i = gridIn
+
+       call ESMF_GridAddCoord(gridIn, staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       call ESMF_GridAddCoord(gridIn, staggerLoc=ESMF_STAGGERLOC_CORNER, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       call ESMF_GridAddItem(gridIn, itemFlag=ESMF_GRIDITEM_MASK, itemTypeKind=ESMF_TYPEKIND_I4, &
+            staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       ! Attach area to the Grid optionally. By default the cell areas are computed.
+       if(grid_attach_area) then
+          call ESMF_GridAddItem(gridIn, itemFlag=ESMF_GRIDITEM_AREA, itemTypeKind=ESMF_TYPEKIND_R8, &
+               staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+               line=__LINE__, &
+               file=__FILE__)) &
+               return  ! bail out
+       endif
+
+       call ESMF_GridGetCoord(gridIn, coordDim=1, &
+            staggerloc=ESMF_STAGGERLOC_CENTER, &
+            farrayPtr=dataPtr_xcen, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       call ESMF_GridGetCoord(gridIn, coordDim=2, &
+            staggerloc=ESMF_STAGGERLOC_CENTER, &
+            farrayPtr=dataPtr_ycen, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       call ESMF_GridGetCoord(gridIn, coordDim=1, &
+            staggerloc=ESMF_STAGGERLOC_CORNER, &
+            farrayPtr=dataPtr_xcor, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       call ESMF_GridGetCoord(gridIn, coordDim=2, &
+            staggerloc=ESMF_STAGGERLOC_CORNER, &
+            farrayPtr=dataPtr_ycor, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       call ESMF_GridGetItem(gridIn, itemflag=ESMF_GRIDITEM_MASK, &
+            staggerloc=ESMF_STAGGERLOC_CENTER, &
+            farrayPtr=dataPtr_mask, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       if(grid_attach_area) then
+          call ESMF_GridGetItem(gridIn, itemflag=ESMF_GRIDITEM_AREA, &
+               staggerloc=ESMF_STAGGERLOC_CENTER, &
+               farrayPtr=dataPtr_area, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+               line=__LINE__, &
+               file=__FILE__)) &
+               return  ! bail out
+       endif
+
+
+       ! load up area, mask, center and corner values
+       ! area, mask, and centers should be same size in mom and esmf grid
+       ! corner points may not be, need to offset corner points by 1 in i and j
+       !   for esmf and also need to "make up" j=1 values.  use wraparound in i
+
+       call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+
+       lbnd1 = lbound(dataPtr_mask,1)
+       ubnd1 = ubound(dataPtr_mask,1)
+       lbnd2 = lbound(dataPtr_mask,2)
+       ubnd2 = ubound(dataPtr_mask,2)
+
+       lbnd3 = lbound(dataPtr_xcor,1)
+       ubnd3 = ubound(dataPtr_xcor,1)
+       lbnd4 = lbound(dataPtr_xcor,2)
+       ubnd4 = ubound(dataPtr_xcor,2)
+
+       write(tmpstr,*) subname//' iscjsc = ',isc,iec,jsc,jec
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       write(tmpstr,*) subname//' lbub12 = ',lbnd1,ubnd1,lbnd2,ubnd2
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       write(tmpstr,*) subname//' lbub34 = ',lbnd3,ubnd3,lbnd4,ubnd4
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       if (iec-isc /= ubnd1-lbnd1 .or. jec-jsc /= ubnd2-lbnd2) then
+          call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+               msg=SUBNAME//": fld and grid do not have the same size.", &
+               line=__LINE__, file=__FILE__, rcToReturn=rc)
+          return
+       endif
+
+       allocate(ofld(isc:iec,jsc:jec))
+       allocate(gfld(nxg,nyg))
+
+       call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
+       write(tmpstr,*) subname//' ofld mask = ',minval(ofld),maxval(ofld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       call mpp_global_field(ocean_public%domain, ofld, gfld)
+       write(tmpstr,*) subname//' gfld mask = ',minval(gfld),maxval(gfld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       do j = lbnd2, ubnd2
+          do i = lbnd1, ubnd1
+             j1 = j - lbnd2 + jsc
+             i1 = i - lbnd1 + isc
+             dataPtr_mask(i,j) = nint(ofld(i1,j1))
+          enddo
+       enddo
+
+       if(grid_attach_area) then
+          call ocean_model_data_get(ocean_state, ocean_public, 'area', ofld, isc, jsc)
+          write(tmpstr,*) subname//' ofld area = ',minval(ofld),maxval(ofld)
+          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+          call mpp_global_field(ocean_public%domain, ofld, gfld)
+          write(tmpstr,*) subname//' gfld area = ',minval(gfld),maxval(gfld)
+          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+          do j = lbnd2, ubnd2
+             do i = lbnd1, ubnd1
+                j1 = j - lbnd2 + jsc
+                i1 = i - lbnd1 + isc
+                dataPtr_area(i,j) = ofld(i1,j1)
+             enddo
+          enddo
+       endif
+
+       call ocean_model_data_get(ocean_state, ocean_public, 'tlon', ofld, isc, jsc)
+       write(tmpstr,*) subname//' ofld xt = ',minval(ofld),maxval(ofld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       call mpp_global_field(ocean_public%domain, ofld, gfld)
+       write(tmpstr,*) subname//' gfld xt = ',minval(gfld),maxval(gfld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       do j = lbnd2, ubnd2
+          do i = lbnd1, ubnd1
+             j1 = j - lbnd2 + jsc
+             i1 = i - lbnd1 + isc
+             dataPtr_xcen(i,j) = ofld(i1,j1)
+             dataPtr_xcen(i,j) = mod(dataPtr_xcen(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
+          enddo
+       enddo
+
+       call ocean_model_data_get(ocean_state, ocean_public, 'tlat', ofld, isc, jsc)
+       write(tmpstr,*) subname//' ofld yt = ',minval(ofld),maxval(ofld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       call mpp_global_field(ocean_public%domain, ofld, gfld)
+       write(tmpstr,*) subname//' gfld yt = ',minval(gfld),maxval(gfld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       do j = lbnd2, ubnd2
+          do i = lbnd1, ubnd1
+             j1 = j - lbnd2 + jsc
+             i1 = i - lbnd1 + isc
+             dataPtr_ycen(i,j) = ofld(i1,j1)
+          enddo
+       enddo
+
+       call ocean_model_data_get(ocean_state, ocean_public, 'geoLonBu', ofld, isc, jsc)
+       write(tmpstr,*) subname//' ofld xu = ',minval(ofld),maxval(ofld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       call mpp_global_field(ocean_public%domain, ofld, gfld)
+       write(tmpstr,*) subname//' gfld xu = ',minval(gfld),maxval(gfld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       do j = lbnd4, ubnd4
+          do i = lbnd3, ubnd3
+             j1 = j - lbnd4 + jsc - 1
+             i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
+             if (j1 == 0) then
+                dataPtr_xcor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
+                !        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) > 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) - 360.
+                !        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) < 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) + 360.
+             elseif (j1 >= 1 .and. j1 <= nyg) then
+                dataPtr_xcor(i,j) = gfld(i1,j1)
+             else
+                rc=ESMF_FAILURE
+                call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+                     msg=SUBNAME//": error in xu j1.", &
+                     line=__LINE__, file=__FILE__, rcToReturn=rc)
+                return  ! bail out
+             endif
+             dataPtr_xcor(i,j) = mod(dataPtr_xcor(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
+             ! write(tmpstr,*) subname//' ijfld xu = ',i,i1,j,j1,dataPtr_xcor(i,j)
+             ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+          enddo
+       enddo
+
+       ! MOM6 runs on C-Grid.
+       call ocean_model_data_get(ocean_state, ocean_public, 'geoLatBu', ofld, isc, jsc)
+       write(tmpstr,*) subname//' ofld yu = ',minval(ofld),maxval(ofld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       call mpp_global_field(ocean_public%domain, ofld, gfld)
+       write(tmpstr,*) subname//' gfld yu = ',minval(gfld),maxval(gfld)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       do j = lbnd4, ubnd4
+          do i = lbnd3, ubnd3
+             j1 = j - lbnd4 + jsc - 1
+             i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
+             if (j1 == 0) then
+                dataPtr_ycor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
+             elseif (j1 >= 1 .and. j1 <= nyg) then
+                dataPtr_ycor(i,j) = gfld(i1,j1)
+             else
+                rc=ESMF_FAILURE
+                call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+                     msg=SUBNAME//": error in yu j1.", &
+                     line=__LINE__, file=__FILE__, rcToReturn=rc)
+                return  ! bail out
+             endif
+             ! write(tmpstr,*) subname//' ijfld yu = ',i,i1,j,j1,dataPtr_ycor(i,j)
+             ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+          enddo
+       enddo
+
+       write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       if(grid_attach_area) then
+          write(tmpstr,*) subname//' area = ',minval(dataPtr_area),maxval(dataPtr_area)
+          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+       endif
+
+       write(tmpstr,*) subname//' xcen = ',minval(dataPtr_xcen),maxval(dataPtr_xcen)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       write(tmpstr,*) subname//' ycen = ',minval(dataPtr_ycen),maxval(dataPtr_ycen)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       write(tmpstr,*) subname//' xcor = ',minval(dataPtr_xcor),maxval(dataPtr_xcor)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       write(tmpstr,*) subname//' ycor = ',minval(dataPtr_ycor),maxval(dataPtr_ycor)
+       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
+
+       deallocate(gfld)
+
+       gridOut = gridIn ! for now out same as in
+
+       call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", grid=gridIn, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       
+       call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", grid=gridOut, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       
+    end if
 
     !---------------------------------
-    ! load up area, mask, center and corner values
-    ! area, mask, and centers should be same size in mom and esmf grid
-    ! corner points may not be, need to offset corner points by 1 in i and j
-    !   for esmf and also need to "make up" j=1 values.  use wraparound in i
+    ! set scalar data in export state
     !---------------------------------
-
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
-
-    lbnd1 = lbound(dataPtr_mask,1)
-    ubnd1 = ubound(dataPtr_mask,1)
-    lbnd2 = lbound(dataPtr_mask,2)
-    ubnd2 = ubound(dataPtr_mask,2)
-
-    lbnd3 = lbound(dataPtr_xcor,1)
-    ubnd3 = ubound(dataPtr_xcor,1)
-    lbnd4 = lbound(dataPtr_xcor,2)
-    ubnd4 = ubound(dataPtr_xcor,2)
-
-    write(tmpstr,*) subname//' iscjsc = ',isc,iec,jsc,jec
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    write(tmpstr,*) subname//' lbub12 = ',lbnd1,ubnd1,lbnd2,ubnd2
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    write(tmpstr,*) subname//' lbub34 = ',lbnd3,ubnd3,lbnd4,ubnd4
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    if (iec-isc /= ubnd1-lbnd1 .or. jec-jsc /= ubnd2-lbnd2) then
-       call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-            msg=SUBNAME//": fld and grid do not have the same size.", &
-            line=__LINE__, file=__FILE__, rcToReturn=rc)
-       return
-    endif
-
-    allocate(ofld(isc:iec,jsc:jec))
-    allocate(gfld(nxg,nyg))
-
-    call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
-    write(tmpstr,*) subname//' ofld mask = ',minval(ofld),maxval(ofld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
-    write(tmpstr,*) subname//' gfld mask = ',minval(gfld),maxval(gfld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    do j = lbnd2, ubnd2
-    do i = lbnd1, ubnd1
-      j1 = j - lbnd2 + jsc
-      i1 = i - lbnd1 + isc
-      dataPtr_mask(i,j) = nint(ofld(i1,j1))
-    enddo
-    enddo
-
-    if(grid_attach_area) then
-      call ocean_model_data_get(ocean_state, ocean_public, 'area', ofld, isc, jsc)
-      write(tmpstr,*) subname//' ofld area = ',minval(ofld),maxval(ofld)
-      call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-      call mpp_global_field(ocean_public%domain, ofld, gfld)
-      write(tmpstr,*) subname//' gfld area = ',minval(gfld),maxval(gfld)
-      call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-      do j = lbnd2, ubnd2
-      do i = lbnd1, ubnd1
-        j1 = j - lbnd2 + jsc
-        i1 = i - lbnd1 + isc
-        dataPtr_area(i,j) = ofld(i1,j1)
-      enddo
-      enddo
-    endif
-
-    call ocean_model_data_get(ocean_state, ocean_public, 'tlon', ofld, isc, jsc)
-    write(tmpstr,*) subname//' ofld xt = ',minval(ofld),maxval(ofld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
-    write(tmpstr,*) subname//' gfld xt = ',minval(gfld),maxval(gfld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    do j = lbnd2, ubnd2
-    do i = lbnd1, ubnd1
-      j1 = j - lbnd2 + jsc
-      i1 = i - lbnd1 + isc
-      dataPtr_xcen(i,j) = ofld(i1,j1)
-      dataPtr_xcen(i,j) = mod(dataPtr_xcen(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
-    enddo
-    enddo
-
-    call ocean_model_data_get(ocean_state, ocean_public, 'tlat', ofld, isc, jsc)
-    write(tmpstr,*) subname//' ofld yt = ',minval(ofld),maxval(ofld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
-    write(tmpstr,*) subname//' gfld yt = ',minval(gfld),maxval(gfld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    do j = lbnd2, ubnd2
-    do i = lbnd1, ubnd1
-      j1 = j - lbnd2 + jsc
-      i1 = i - lbnd1 + isc
-      dataPtr_ycen(i,j) = ofld(i1,j1)
-    enddo
-    enddo
-
-    call ocean_model_data_get(ocean_state, ocean_public, 'geoLonBu', ofld, isc, jsc)
-    write(tmpstr,*) subname//' ofld xu = ',minval(ofld),maxval(ofld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
-    write(tmpstr,*) subname//' gfld xu = ',minval(gfld),maxval(gfld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    do j = lbnd4, ubnd4
-    do i = lbnd3, ubnd3
-      j1 = j - lbnd4 + jsc - 1
-      i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
-      if (j1 == 0) then
-        dataPtr_xcor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
-!        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) > 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) - 360.
-!        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) < 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) + 360.
-      elseif (j1 >= 1 .and. j1 <= nyg) then
-        dataPtr_xcor(i,j) = gfld(i1,j1)
-      else
-        rc=ESMF_FAILURE
-        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-          msg=SUBNAME//": error in xu j1.", &
-          line=__LINE__, file=__FILE__, rcToReturn=rc)
-        return  ! bail out
-      endif
-      dataPtr_xcor(i,j) = mod(dataPtr_xcor(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
-      ! write(tmpstr,*) subname//' ijfld xu = ',i,i1,j,j1,dataPtr_xcor(i,j)
-      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    enddo
-    enddo
-
-    ! MOM6 runs on C-Grid.
-    call ocean_model_data_get(ocean_state, ocean_public, 'geoLatBu', ofld, isc, jsc)
-    write(tmpstr,*) subname//' ofld yu = ',minval(ofld),maxval(ofld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
-    write(tmpstr,*) subname//' gfld yu = ',minval(gfld),maxval(gfld)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    do j = lbnd4, ubnd4
-    do i = lbnd3, ubnd3
-      j1 = j - lbnd4 + jsc - 1
-      i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
-      if (j1 == 0) then
-        dataPtr_ycor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
-      elseif (j1 >= 1 .and. j1 <= nyg) then
-        dataPtr_ycor(i,j) = gfld(i1,j1)
-      else
-        rc=ESMF_FAILURE
-        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-          msg=SUBNAME//": error in yu j1.", &
-          line=__LINE__, file=__FILE__, rcToReturn=rc)
-        return  ! bail out
-      endif
-      ! write(tmpstr,*) subname//' ijfld yu = ',i,i1,j,j1,dataPtr_ycor(i,j)
-      ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    enddo
-    enddo
-
-    write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    if(grid_attach_area) then
-      write(tmpstr,*) subname//' area = ',minval(dataPtr_area),maxval(dataPtr_area)
-      call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-    endif
-
-    write(tmpstr,*) subname//' xcen = ',minval(dataPtr_xcen),maxval(dataPtr_xcen)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    write(tmpstr,*) subname//' ycen = ',minval(dataPtr_ycen),maxval(dataPtr_ycen)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    write(tmpstr,*) subname//' xcor = ',minval(dataPtr_xcor),maxval(dataPtr_xcor)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    write(tmpstr,*) subname//' ycor = ',minval(dataPtr_ycor),maxval(dataPtr_ycor)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-    deallocate(gfld)
-
-    gridOut = gridIn ! for now out same as in
-
-    !---------------------------------
-    ! realize fields on grid
-    !---------------------------------
-
-
-    call MOM_RealizeFields(importState, gridIn , fldsToOcn_num, fldsToOcn, "Ocn import", rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    call MOM_RealizeFields(exportState, gridOut, fldsFrOcn_num, fldsFrOcn, "Ocn export", rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
 
     if (len_trim(scalar_field_name) > 0) then
        call State_SetScalar(dble(nxg),scalar_field_idx_grid_nx, exportState, localPet, &
@@ -1726,7 +1801,7 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
+       
        call State_SetScalar(dble(nyg),scalar_field_idx_grid_ny, exportState, localPet, &
             scalar_field_name, scalar_field_count, rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1734,6 +1809,10 @@ contains
             file=__FILE__)) &
             return  ! bail out
     endif
+    
+    !---------------------------------
+    ! realize fields on grid
+    !---------------------------------
 
     call ESMF_StateGet(exportState, itemSearch="sea_surface_temperature", itemCount=icount, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -2451,14 +2530,15 @@ contains
 
 !===============================================================================
 
-  subroutine MOM_RealizeFields(state, grid, nfields, field_defs, tag, rc)
+  subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
 
-    type(ESMF_State)    , intent(inout) :: state
-    type(ESMF_Grid)     , intent(in)    :: grid
-    integer             , intent(in)    :: nfields
-    type(fld_list_type) , intent(inout) :: field_defs(:)
-    character(len=*)    , intent(in)    :: tag
-    integer             , intent(inout) :: rc
+    type(ESMF_State)    , intent(inout)        :: state
+    integer             , intent(in)           :: nfields
+    type(fld_list_type) , intent(inout)        :: field_defs(:)
+    character(len=*)    , intent(in)           :: tag
+    type(ESMF_Grid)     , intent(in), optional :: grid
+    type(ESMF_Mesh)     , intent(in), optional :: mesh
+    integer             , intent(inout)        :: rc
 
     integer          :: i
     type(ESMF_Field) :: field
@@ -2496,34 +2576,58 @@ contains
             lbound(field_defs(i)%farrayPtr,1), ubound(field_defs(i)%farrayPtr,1), &
             lbound(field_defs(i)%farrayPtr,2), ubound(field_defs(i)%farrayPtr,2)
           call ESMF_LogWrite(tmpstr, ESMF_LOGMSG_INFO, rc=rc)
-          field = ESMF_FieldCreate(grid=grid, &
-            farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_DELOCAL, &
-           !farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_GLOBAL, &
-            name=field_defs(i)%shortname, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+
+          if (present(grid)) then
+             field = ESMF_FieldCreate(grid=grid, &
+                  farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_DELOCAL, &
+                 !farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_GLOBAL, &
+                  name=field_defs(i)%shortname, rc=rc)
+             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                  line=__LINE__, &
+                  file=__FILE__)) &
+                  return  ! bail out
+          else if (present(mesh)) then
+             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
+                  name=field_defs(i)%shortname, rc=rc)
+             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                  line=__LINE__, &
+                  file=__FILE__)) &
+                  return  ! bail out
+          end if
+
         else
+
           call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected.", &
             ESMF_LOGMSG_INFO, &
             line=__LINE__, &
             file=__FILE__, &
             rc=rc)
-          field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
-            name=field_defs(i)%shortname, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+          if (present(grid)) then
 
-          ! initialize to zero
-          call ESMF_FieldGet(field, farrayPtr=fldptr, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-          fldptr = 0.0
+             field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
+                  name=field_defs(i)%shortname, rc=rc)
+             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                  line=__LINE__, &
+                  file=__FILE__)) &
+                  return  ! bail out
+
+             ! initialize to zero
+             call ESMF_FieldGet(field, farrayPtr=fldptr, rc=rc)
+             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                  line=__LINE__, &
+                  file=__FILE__)) &
+                  return  ! bail out
+             fldptr = 0.0
+
+          else if (present(mesh)) then
+
+             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
+                  name=field_defs(i)%shortname, rc=rc)
+             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                  line=__LINE__, &
+                  file=__FILE__)) &
+                  return  ! bail out
+          end if
 
         endif
 
