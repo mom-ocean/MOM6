@@ -1364,9 +1364,9 @@ contains
        allocate(gindex(lsize))
        k = 0
        do j = ocean_grid%jsc, ocean_grid%jec
-          jg = j + ocean_grid%jdg_offset 
+          jg = j + ocean_grid%jdg_offset
           do i = ocean_grid%isc, ocean_grid%iec
-             ig = i + ocean_grid%idg_offset 
+             ig = i + ocean_grid%idg_offset
              k = k + 1 ! Increment position within gindex
              gindex(k) = ni * (jg - 1) + ig
           enddo
@@ -1393,7 +1393,7 @@ contains
        if (localPet == 0) then
           write(logunit,*)'mesh file for mom6 domain is ',trim(cvalue)
        end if
-       
+
        ! recreate the mesh using the above distGrid
        EMesh = ESMF_MeshCreate(EMeshTemp, elementDistgrid=Distgrid, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1418,9 +1418,9 @@ contains
        !---------------------------------
        ! create a MOM6 grid
        !---------------------------------
-       
+
        ! generate delayout and dist_grid
-       
+
        allocate(deBlockList(2,2,ntiles))
        allocate(petMap(ntiles))
        allocate(deLabelList(ntiles))
@@ -1781,13 +1781,13 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
        call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", grid=gridOut, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
     end if
 
     !---------------------------------
@@ -1801,7 +1801,7 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
        call State_SetScalar(dble(nyg),scalar_field_idx_grid_ny, exportState, localPet, &
             scalar_field_name, scalar_field_count, rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1809,7 +1809,7 @@ contains
             file=__FILE__)) &
             return  ! bail out
     endif
-    
+
     !---------------------------------
     ! realize fields on grid
     !---------------------------------
