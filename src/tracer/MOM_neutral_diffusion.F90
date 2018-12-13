@@ -43,6 +43,8 @@ type, public :: neutral_diffusion_CS ; private
   logical :: continuous_reconstruction = .true. !< True if using continuous PPM reconstruction at interfaces
   logical :: refine_position = .false. !< If true, iterate to refine the corresponding positions
                                        !! in neighboring columns
+  logical :: refine_lin = .true.       !< If true, assume that alpha and beta linearly vary from the top
+                                       !! and bottom of a cell
   logical :: debug = .false. !< If true, write verbose debugging messages
   integer :: max_iter !< Maximum number of iterations if refine_position is defined
   real :: tolerance   !< Convergence criterion representing difference from true neutrality
@@ -181,6 +183,10 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                     "The maximum number of iterations to be done before \n"//     &
                      "exiting the iterative loop to find the neutral surface",    &
                      default=10)
+      call get_param(param_file, mdl, "NDIFF_REFINE_LIN", CS%refine_lin,             &
+                    "Assume that alpha and beta vary linearly from the top\n"//     &
+                    "and bottom of the cell when iterating to find the    \n"//     &
+                    "neutral position", default=.true.)
       call set_ndiff_aux_params(CS%ndiff_aux_CS, max_iter = max_iter, drho_tol = drho_tol, xtol = xtol)
     endif
     call get_param(param_file, mdl, "NDIFF_DEBUG", CS%debug,             &
@@ -1147,9 +1153,16 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns, Pres_l, hcol
         if (k_surface > 1) then
           if ( KoL(k_surface) == KoL(k_surface-1) ) min_bound = PoL(k_surface-1)
         endif
-        PoL(k_surface) = refine_nondim_position( CS%ndiff_aux_CS, T_other, S_other, dRdT_other, dRdS_other, &
-                            Pres_l(kl_left), Pres_l(kl_left+1), ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), &
-                            dRhoTop, dRhoBot, min_bound )
+        if (CS%refine_lin) then
+            PoL(k_surface) = find_neutral_pos_linear_alpha_beta( CS%ndiff_aux_CS,                              &
+                                T_other, S_other, dRdT_other, dRdS_other,                                     &
+                                dRdT_l(kl_left,1), dRdS_l(kl_left,1), dRdT_l(kl_left,2), dRdS_r(kl_left,2), &
+                                ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), min_bound )
+        else
+            PoL(k_surface) = refine_nondim_position( CS%ndiff_aux_CS, T_other, S_other, dRdT_other, dRdS_other, &
+                                Pres_l(kl_left), Pres_l(kl_left+1), ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), &
+                                dRhoTop, dRhoBot, min_bound )
+        endif
       endif
       if (PoL(k_surface) == 0.) top_connected_l(KoL(k_surface)) = .true.
       if (PoL(k_surface) == 1.) bot_connected_l(KoL(k_surface)) = .true.
@@ -1200,9 +1213,16 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns, Pres_l, hcol
         if (k_surface > 1) then
           if ( KoR(k_surface) == KoR(k_surface-1) )  min_bound = PoR(k_surface-1)
         endif
-        PoR(k_surface) = refine_nondim_position(CS%ndiff_aux_CS, T_other, S_other, dRdT_other, dRdS_other,      &
-                            Pres_r(kl_right), Pres_r(kl_right+1), ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), &
-                            dRhoTop, dRhoBot, min_bound )
+        if (CS%refine_lin) then
+            PoL(k_surface) = find_neutral_pos_linear_alpha_beta( CS%ndiff_aux_CS,                               &
+                                T_other, S_other, dRdT_other, dRdS_other,                                       &
+                                dRdT_r(kl_right,1), dRdS_r(kl_right,1), dRdT_r(kl_right,2), dRdS_r(kl_right,2), &
+                                ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), min_bound )
+        else
+            PoR(k_surface) = refine_nondim_position(CS%ndiff_aux_CS, T_other, S_other, dRdT_other, dRdS_other,  &
+                                Pres_r(kl_right), Pres_r(kl_right+1), ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), &
+                                dRhoTop, dRhoBot, min_bound )
+        endif
       endif
       if (PoR(k_surface) == 0.) top_connected_r(KoR(k_surface)) = .true.
       if (PoR(k_surface) == 1.) bot_connected_r(KoR(k_surface)) = .true.
@@ -1728,7 +1748,22 @@ logical function ndiff_unit_tests_continuous(verbose)
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
                                    (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
-                                   'Indentical columns with mixed layer')
+                                   'Identical columns with mixed layer')
+
+  ! Identical columns with thick mixed layer
+  call find_neutral_surface_positions_continuous(3, &
+             (/0.,10.,20.,30./), (/14.,14.,14.,14./), (/0.,0.,0.,0./), & ! Left positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
+             (/0.,10.,20.,30./), (/14.,14.,14.,14./), (/0.,0.,0.,0./), & ! Right positions, T and S
+             (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
+             PiLRo, PiRLo, KoL, KoR, hEff)
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or.  test_nsp(v, 8, KoL, KoR, PiLRo, PiRLo, hEff, &
+                                   (/1,1,2,2,3,3,3,3/), & ! kL
+                                   (/1,1,2,2,3,3,3,3/), & ! kR
+                                   (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
+                                   (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
+                                   (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
+                                   'Identical columns with thick mixed layer')
 
   ! Right column with unstable mixed layer
   call find_neutral_surface_positions_continuous(3, &
