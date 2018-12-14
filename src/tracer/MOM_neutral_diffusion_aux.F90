@@ -10,11 +10,8 @@ use polynomial_functions,      only : evaluation_polynomial, first_derivative_po
 implicit none ; private
 
 public set_ndiff_aux_params
-public mark_unstable_cells
-public increment_interface
 public calc_drho
 public drho_at_pos
-public search_other_column
 public interpolate_for_nondim_position
 public refine_nondim_position
 public check_neutral_positions
@@ -57,33 +54,6 @@ subroutine set_ndiff_aux_params( CS, deg, max_iter, drho_tol, xtol, ref_pres, fo
   if (present( debug       )) CS%debug       =  debug
 
 end subroutine set_ndiff_aux_params
-
-!> Increments the interface which was just connected and also set flags if the bottom is reached
-subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column, searching_other_column)
-  integer, intent(in   )                :: nk                     !< Number of vertical levels
-  integer, intent(inout)                :: kl                     !< Current layer (potentially updated)
-  integer, intent(inout)                :: ki                     !< Current interface
-  logical, intent(inout)                :: reached_bottom         !< Updated when kl == nk and ki == 2
-  logical, intent(inout)                :: searching_this_column  !< Updated when kl == nk and ki == 2
-  logical, intent(inout)                :: searching_other_column !< Updated when kl == nk and ki == 2
-  integer :: k
-
-  reached_bottom = .false.
-  if (ki == 2) then ! At the bottom interface
-    if ((ki == 2) .and. (kl < nk) ) then ! Not at the bottom so just go to the next layer
-      kl = kl+1
-      ki = 1
-    elseif ((kl == nk) .and. (ki==2)) then
-      reached_bottom = .true.
-      searching_this_column = .false.
-      searching_other_column = .true.
-    endif
-  elseif (ki==1) ! At the top interface
-    ki = 2 ! Next interface is same layer, but bottom interface
-  else
-    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
-  endif
-end subroutine increment_interface
 
 !> Calculates difference in density at two points (rho1-rho2) with known density derivatives, T, and S
 real function calc_drho(T1, S1, dRdT1, dRdS1, T2, S2, dRdT2, dRdS2)
