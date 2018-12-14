@@ -58,89 +58,28 @@ subroutine set_ndiff_aux_params( CS, deg, max_iter, drho_tol, xtol, ref_pres, fo
 
 end subroutine set_ndiff_aux_params
 
-!> Given the reconsturcitons of dRdT, dRdS, T, S mark the cells which are stably stratified parts of the water column
-!! For an layer to be unstable the top interface must be denser than the bottom or the bottom interface of the layer
-subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
-  integer,                intent(in)    :: nk          !< Number of levels in a column
-  real, dimension(nk,2),  intent(in)    :: dRdT        !< drho/dT (kg/m3/degC) at interfaces
-  real, dimension(nk,2),  intent(in)    :: dRdS        !< drho/dS (kg/m3/ppt) at interfaces
-  real, dimension(nk,2),  intent(in)    :: T           !< drho/dS (kg/m3/ppt) at interfaces
-  real, dimension(nk,2),  intent(in)    :: S           !< drho/dS (kg/m3/ppt) at interfaces
-  logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
-  integer,                intent(  out) :: ns          !< Number of neutral surfaces in unmasked part of the column
-
-  integer :: k, first_stable, prev_stable
-  real :: delta_rho
-
-  ! First check to make sure that density profile between the two interfaces of the cell are stable
-  ! Note that we neglect a factor of 0.5 because we only care about the sign of delta_rho not magnitude
-  do k = 1,nk
-    ! Compare density of bottom interface to top interface, should be positive (or zero) if stable
-    delta_rho = (dRdT(k,2) + dRdT(k,1))*(T(k,2) - T(k,1)) + (dRdS(k,2) + dRdS(k,1))*(S(k,2) - S(k,1))
-    stable_cell(k) = delta_rho >= 0.
-  enddo
-
-  first_stable = 1
-  ! Check to see that bottom interface of upper cell is lighter than the upper interface of the lower cell
-  do k=1,nk
-    if (stable_cell(k)) then
-      first_stable = k
-      exit
-    endif
-  enddo
-  prev_stable = first_stable
-
-  ! Start either with the first stable cell or the layer just below the surface
-  do k = prev_stable+1, nk
-    ! Don't do anything if the cell has already been marked as unstable
-    if (.not. stable_cell(k)) cycle
-    ! Otherwise, we need to check to see if this cell's upper interface is denser than the previous stable_cell
-    ! Compare top interface of lower cell to bottom interface of upper cell, positive or zero if bottom cell is stable
-    delta_rho = (dRdT(k,1) + dRdT(prev_stable,2))*(T(k,1) - T(prev_stable,2)) + &
-                (dRdS(k,1) + dRdS(prev_stable,2))*(S(k,1) - S(prev_stable,2))
-    stable_cell(k) = delta_rho >= 0.
-    ! If the lower cell is marked as stable, then it should be the next reference cell
-    if (stable_cell(k)) prev_stable = k
-  enddo
-
-  ! Number of interfaces is the 2 times number of stable cells in the water column
-  ns = 0
-  do k = 1,nk
-    if (stable_cell(k)) ns = ns + 2
-  enddo
-
-end subroutine mark_unstable_cells
-
 !> Increments the interface which was just connected and also set flags if the bottom is reached
-subroutine increment_interface(nk, kl, ki, stable, reached_bottom, searching_this_column, searching_other_column)
+subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column, searching_other_column)
   integer, intent(in   )                :: nk                     !< Number of vertical levels
   integer, intent(inout)                :: kl                     !< Current layer (potentially updated)
   integer, intent(inout)                :: ki                     !< Current interface
-  logical, dimension(nk), intent(in   ) :: stable                 !< True if the cell is stably stratified
   logical, intent(inout)                :: reached_bottom         !< Updated when kl == nk and ki == 2
   logical, intent(inout)                :: searching_this_column  !< Updated when kl == nk and ki == 2
   logical, intent(inout)                :: searching_other_column !< Updated when kl == nk and ki == 2
   integer :: k
 
-  if (ki == 1) then
-    ki = 2
-  elseif ((ki == 2) .and. (kl < nk) ) then
-    do k = kl+1,nk
-      if (stable(kl)) then
-        kl = k
-        ki = 1
-        exit
-      endif
-      ! If we did not find another stable cell, then the current cell is essentially the bottom
-      ki = 2
+  reached_bottom = .false.
+  if (ki == 2) then ! At the bottom interface
+    if ((ki == 2) .and. (kl < nk) ) then ! Not at the bottom so just go to the next layer
+      kl = kl+1
+      ki = 1
+    elseif ((kl == nk) .and. (ki==2)) then
       reached_bottom = .true.
-      searching_this_column = .true.
-      searching_other_column = .false.
-    enddo
-  elseif ((kl == nk) .and. (ki==2)) then
-    reached_bottom = .true.
-    searching_this_column = .true.
-    searching_other_column = .false.
+      searching_this_column = .false.
+      searching_other_column = .true.
+    endif
+  elseif (ki==1) ! At the top interface
+    ki = 2 ! Next interface is same layer, but bottom interface
   else
     call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
   endif
@@ -213,89 +152,6 @@ subroutine drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppol
   if (present(delta_S_out)) delta_S_out = delta_S
 
 end subroutine drho_at_pos
-
-!> Searches the "other" (searched) column for the position of the neutral surface
-subroutine search_other_column(dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, kl_0, ki, &
-                               top_connected, bot_connected, out_P, out_K, search_layer)
-  real,                  intent(in   ) :: dRhoTop        !< Density difference across top interface
-  real,                  intent(in   ) :: dRhoBot        !< Density difference across top interface
-  real,                  intent(in   ) :: Ptop           !< Pressure at top interface
-  real,                  intent(in   ) :: Pbot           !< Pressure at bottom interface
-  real,                  intent(in   ) :: lastP          !< Last position connected in the searched column
-  integer,               intent(in   ) :: lastK          !< Last layer connected in the searched column
-  integer,               intent(in   ) :: kl             !< Layer in the searched column
-  integer,               intent(in   ) :: kl_0           !< Layer in the searched column
-  integer,               intent(in   ) :: ki             !< Interface of the searched column
-  logical, dimension(:), intent(inout) :: top_connected  !< True if the top interface was pointed to
-  logical, dimension(:), intent(inout) :: bot_connected  !< True if the top interface was pointed to
-  real,                  intent(  out) :: out_P          !< Position within searched column
-  integer,               intent(  out) :: out_K          !< Layer within searched column
-  logical,               intent(  out) :: search_layer   !< Neutral surface within cell
-
-  search_layer = .false.
-  if (kl > kl_0) then ! Away from top cell
-    if (kl == lastK) then ! Searching in the same layer
-      if (dRhoTop > 0.) then
-        if (lastK == kl) then
-          out_P = lastP
-        else
-          out_P = 0.
-        endif
-        out_K = kl
-!        out_P = max(0.,lastP) ; out_K = kl
-      elseif ( dRhoTop == dRhoBot ) then
-        if (top_connected(kl)) then
-          out_P = 1. ; out_K = kl
-        else
-          out_P = max(0.,lastP) ; out_K = kl
-        endif
-      elseif (dRhoTop >= dRhoBot) then
-        out_P = 1. ; out_K = kl
-      elseif (dRhoTop < 0. .and. dRhoBot < 0.)then
-        out_P = 1. ; out_K = kl
-      else
-        out_K = kl
-        out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
-        search_layer = .true.
-      endif
-    else ! Searching across the interface
-      if (.not. bot_connected(kl-1) ) then
-        out_K = kl-1
-        out_P = 1.
-      else
-        out_K = kl
-        out_P = 0.
-      endif
-    endif
-  else ! At the top cell
-    if (ki == 1) then
-      out_P = 0. ; out_K = kl
-    elseif (dRhoTop > 0.) then
-      if (lastK == kl) then
-        out_P = lastP
-      else
-        out_P = 0.
-      endif
-      out_K = kl
-!      out_P = max(0.,lastP) ; out_K = kl
-    elseif ( dRhoTop == dRhoBot ) then
-      if (top_connected(kl)) then
-        out_P = 1. ; out_K = kl
-      else
-        out_P = max(0.,lastP) ; out_K = kl
-      endif
-    elseif (dRhoTop >= dRhoBot) then
-      out_P = 1. ; out_K = kl
-    elseif (dRhoTop < 0. .and. dRhoBot < 0.)then
-      out_P = 1. ; out_K = kl
-    else
-      out_K = kl
-      out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
-      search_layer = .true.
-    endif
-  endif
-
-end subroutine search_other_column
 
 !> Returns the non-dimensional position between Pneg and Ppos where the
 !! interpolated density difference equals zero.
