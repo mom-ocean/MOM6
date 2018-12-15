@@ -33,6 +33,10 @@ implicit none ; private
 
 public write_energy, accumulate_net_input, MOM_sum_output_init
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 integer, parameter :: NUM_FIELDS = 17 !< Number of diagnostic fields
 
 !> A list of depths and corresponding globally integrated ocean area at each

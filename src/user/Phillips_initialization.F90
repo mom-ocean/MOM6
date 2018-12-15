@@ -24,6 +24,10 @@ public Phillips_initialize_velocity
 public Phillips_initialize_sponges
 public Phillips_initialize_topography
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 

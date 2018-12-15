@@ -26,6 +26,10 @@ implicit none ; private
 public Calculate_kappa_shear, Calc_kappa_shear_vertex, kappa_shear_init
 public kappa_shear_is_used, kappa_shear_at_vertex
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> This control structure holds the parameters that regulate shear mixing
 type, public :: Kappa_shear_CS ; private
   real    :: RiNo_crit       !< The critical shear Richardson number for

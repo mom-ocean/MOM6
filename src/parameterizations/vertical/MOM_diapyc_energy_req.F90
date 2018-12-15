@@ -18,6 +18,10 @@ implicit none ; private
 
 public diapyc_energy_req_init, diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> This control structure holds parameters for the MOM_diapyc_energy_req module
 type, public :: diapyc_energy_req_CS ; private
   logical :: initialized = .false. !< A variable that is here because empty

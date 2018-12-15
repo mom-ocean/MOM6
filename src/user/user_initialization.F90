@@ -25,6 +25,10 @@ public USER_set_coord, USER_initialize_topography, USER_initialize_thickness
 public USER_initialize_velocity, USER_init_temperature_salinity
 public USER_initialize_sponges, USER_set_OBC_data, USER_set_rotation
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> A module variable that should not be used.
 !! \todo Move this module variable into a control structure.
 logical :: first_call = .true.

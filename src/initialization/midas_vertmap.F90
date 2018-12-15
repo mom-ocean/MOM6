@@ -13,6 +13,10 @@ public tracer_z_init, determine_temperature, fill_boundaries
 public find_interfaces, meshgrid
 #endif
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Fill grid edges
 interface fill_boundaries
    module procedure fill_boundaries_real
