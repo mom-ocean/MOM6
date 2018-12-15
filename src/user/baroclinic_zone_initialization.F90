@@ -19,6 +19,10 @@ character(len=40) :: mdl = "baroclinic_zone_initialization" !< This module's nam
 
 public baroclinic_zone_init_temperature_salinity
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 contains
 
 !> Reads the parameters unique to this module

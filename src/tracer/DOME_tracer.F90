@@ -32,6 +32,10 @@ implicit none ; private
 public register_DOME_tracer, initialize_DOME_tracer
 public DOME_tracer_column_physics, DOME_tracer_surface_state, DOME_tracer_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 integer, parameter :: ntr = 11 !< The number of tracers in this module.
 
 !> The DOME_tracer control structure

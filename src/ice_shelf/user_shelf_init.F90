@@ -20,6 +20,10 @@ implicit none ; private
 public USER_initialize_shelf_mass, USER_update_shelf_mass
 public USER_init_ice_thickness
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> The control structure for the user_ice_shelf module
 type, public :: user_ice_shelf_CS ; private
   real :: Rho_ocean  !< The ocean's typical density, in kg m-2 Z-1.

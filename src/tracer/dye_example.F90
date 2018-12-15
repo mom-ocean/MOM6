@@ -33,6 +33,9 @@ public register_dye_tracer, initialize_dye_tracer
 public dye_tracer_column_physics, dye_tracer_surface_state
 public dye_stock, regional_dyes_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
 
 !> The control structure for the regional dyes tracer package
 type, public :: dye_tracer_CS ; private

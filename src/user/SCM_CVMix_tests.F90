@@ -14,6 +14,7 @@ use MOM_unit_scaling,  only : unit_scale_type
 use MOM_time_manager,  only : time_type, operator(+), operator(/), time_type_to_real
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -23,6 +24,10 @@ public SCM_CVMix_tests_surface_forcing_init
 public SCM_CVMix_tests_wind_forcing
 public SCM_CVMix_tests_buoyancy_forcing
 public SCM_CVMix_tests_CS
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
 
 !> Container for surface forcing parameters
 type SCM_CVMix_tests_CS

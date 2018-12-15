@@ -18,6 +18,10 @@ implicit none ; private
 
 public user_change_diff, user_change_diff_init, user_change_diff_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Control structure for user_change_diffusivity
 type, public :: user_change_diff_CS ; private
   real :: Kd_add        !< The scale of a diffusivity that is added everywhere

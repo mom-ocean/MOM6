@@ -62,6 +62,10 @@ implicit none ; private
 
 public USER_wind_forcing, USER_buoyancy_forcing, USER_surface_forcing_init
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 type, public :: user_surface_forcing_CS ; private
   !   This control structure should be used to store any run-time variables
   ! associated with the user-specified forcing.  It can be readily modified

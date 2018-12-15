@@ -47,6 +47,10 @@ public set_BBL_TKE
 public set_diffusivity_init
 public set_diffusivity_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> This control structure contains parameters for MOM_set_diffusivity.
 type, public :: set_diffusivity_CS ; private
   logical :: debug           !< If true, write verbose checksums for debugging.
