@@ -23,6 +23,10 @@ implicit none ; private
 
 public bulkmixedlayer, bulkmixedlayer_init
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> The control structure with parameters for the MOM_bulk_mixed_layer module
 type, public :: bulkmixedlayer_CS ; private
   integer :: nkml            !< The number of layers in the mixed layer.

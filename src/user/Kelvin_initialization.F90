@@ -27,6 +27,10 @@ implicit none ; private
 public Kelvin_set_OBC_data, Kelvin_initialize_topography
 public register_Kelvin_OBC, Kelvin_OBC_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Control structure for Kelvin wave open boundaries.
 type, public :: Kelvin_OBC_CS ; private
   integer :: mode = 0          !< Vertical mode

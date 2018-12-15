@@ -13,6 +13,10 @@ implicit none ; private
 public create_dyn_horgrid, destroy_dyn_horgrid, set_derived_dyn_horgrid
 public rescale_dyn_horgrid_bathymetry
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Describes the horizontal ocean grid with only dynamic memory arrays
 type, public :: dyn_horgrid_type
   type(MOM_domain_type), pointer :: Domain => NULL() !< Ocean model domain

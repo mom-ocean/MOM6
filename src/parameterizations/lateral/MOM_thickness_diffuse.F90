@@ -20,10 +20,14 @@ use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
 
+#include <MOM_memory.h>
+
 public thickness_diffuse, thickness_diffuse_init, thickness_diffuse_end
 public vert_fill_TS
 
-#include <MOM_memory.h>
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
 
 !> Control structure for thickness diffusion
 type, public :: thickness_diffuse_CS ; private

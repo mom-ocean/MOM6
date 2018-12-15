@@ -26,6 +26,10 @@ implicit none ; private
 
 public set_int_tide_input, int_tide_input_init, int_tide_input_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> This control structure holds parameters that regulate internal tide energy inputs.
 type, public :: int_tide_input_CS ; private
   logical :: debug      !< If true, write verbose checksums for debugging.

@@ -17,9 +17,7 @@ use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
 use data_override_mod, only : data_override_init, data_override
 
-implicit none
-
-private
+implicit none ; private
 
 #include <MOM_memory.h>
 
@@ -40,6 +38,9 @@ public CoriolisStokes ! NOT READY - Public interface to add Coriolis-Stokes acce
                       ! CL2 effects.
 public Waves_end ! public interface to deallocate and free wave related memory.
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
 
 !> Container for all surface wave related parameters
 type, public :: wave_parameters_CS ; private

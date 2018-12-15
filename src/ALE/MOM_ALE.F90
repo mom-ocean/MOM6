@@ -120,6 +120,10 @@ public ALE_update_regrid_weights
 public ALE_remap_init_conds
 public ALE_register_diags
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 contains
 
 !> This routine is typically called (from initialize_MOM in file MOM.F90)

@@ -85,6 +85,10 @@ public adiabatic
 public adiabatic_driver_init
 public legacy_diabatic
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Control structure for this module
 type, public:: diabatic_CS; private
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with

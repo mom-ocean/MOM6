@@ -51,6 +51,10 @@ public surface_forcing_init
 public ice_ocn_bnd_type_chksum
 public forcing_save_restart
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> surface_forcing_CS is a structure containing pointers to the forcing fields
 !! which may be used to drive MOM.  All fluxes are positive downward.
 type, public :: surface_forcing_CS ; private

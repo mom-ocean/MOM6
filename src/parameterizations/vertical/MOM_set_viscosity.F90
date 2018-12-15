@@ -34,6 +34,10 @@ implicit none ; private
 public set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_end
 public set_visc_register_restarts
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
   real    :: Hbbl           !< The static bottom boundary layer thickness, in

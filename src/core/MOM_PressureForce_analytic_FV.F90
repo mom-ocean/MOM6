@@ -27,6 +27,10 @@ implicit none ; private
 public PressureForce_AFV, PressureForce_AFV_init, PressureForce_AFV_end
 public PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Finite volume pressure gradient control structure
 type, public :: PressureForce_AFV_CS ; private
   logical :: tides          !< If true, apply tidal momentum forcing.

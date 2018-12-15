@@ -24,6 +24,10 @@ implicit none ; private
 
 public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Global positioning system (aka container for information to describe the grid)
 type, public :: GPS ; private
   real :: len_lon  !< The longitudinal or x-direction length of the domain.

@@ -62,6 +62,10 @@ implicit none ; private
 public shelf_calc_flux, add_shelf_flux, initialize_ice_shelf, ice_shelf_end
 public ice_shelf_save_restart, solo_time_step, add_shelf_forces
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Control structure that contains ice shelf parameters and diagnostics handles
 type, public :: ice_shelf_CS ; private
   ! Parameters
