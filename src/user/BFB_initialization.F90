@@ -20,6 +20,10 @@ implicit none ; private
 public BFB_set_coord
 public BFB_initialize_sponges_southonly
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Unsafe model variable
 !! \todo Remove this module variable
 logical :: first_call = .true.

@@ -19,6 +19,10 @@ implicit none ; private
 
 public wave_speed, wave_speeds, wave_speed_init, wave_speed_set_param
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Control structure for MOM_wave_speed
 type, public :: wave_speed_CS ; private
   logical :: use_ebt_mode = .false.    !< If true, calculate the equivalent barotropic wave speed instead

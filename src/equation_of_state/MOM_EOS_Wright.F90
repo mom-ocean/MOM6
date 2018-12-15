@@ -20,6 +20,10 @@ public calculate_density_derivs_wright, calculate_specvol_derivs_wright
 public calculate_density_second_derivs_wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 
 !> Compute the in situ density of sea water (in units of kg/m^3), or its anomaly with respect to
 !! a reference density, from salinity (in psu), potential temperature (in deg C), and pressure in Pa,

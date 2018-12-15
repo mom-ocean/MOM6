@@ -58,6 +58,10 @@ implicit none ; private
 public btcalc, bt_mass_source, btstep, barotropic_init, barotropic_end
 public register_barotropic_restarts, set_dtbt
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> The barotropic stepping open boundary condition type
 type, private :: BT_OBC_type
   real, dimension(:,:), pointer :: Cg_u => NULL()  !< The external wave speed at u-points, in m s-1.

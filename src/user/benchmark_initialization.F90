@@ -23,6 +23,10 @@ public benchmark_initialize_topography
 public benchmark_initialize_thickness
 public benchmark_init_temperature_salinity
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 contains
 
 !> This subroutine sets up the benchmark test case topography.

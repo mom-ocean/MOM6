@@ -22,6 +22,10 @@ implicit none ; private
 public set_up_sponge_field, set_up_sponge_ML_density
 public initialize_sponge, apply_sponge, sponge_end, init_sponge_diags
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> A structure for creating arrays of pointers to 3D arrays
 type, public :: p3d
   real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array

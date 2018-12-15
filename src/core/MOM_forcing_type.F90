@@ -35,6 +35,10 @@ public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcin
 public set_derived_forcing_fields, copy_back_forcing_fields
 public set_net_mass_forcing, get_net_mass_forcing
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Structure that contains pointers to the boundary forcing used to drive the
 !! liquid ocean simulated by MOM.
 !!

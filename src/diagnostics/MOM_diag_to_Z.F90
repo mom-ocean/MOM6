@@ -38,6 +38,10 @@ public find_limited_slope
 public register_Zint_diag
 public calc_Zint_diags
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> The control structure for the MOM_diag_to_Z module
 type, public :: diag_to_Z_CS ; private
   ! The following arrays are used to store diagnostics calculated in this

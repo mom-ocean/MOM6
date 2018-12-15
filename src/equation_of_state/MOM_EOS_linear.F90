@@ -16,6 +16,10 @@ public calculate_density_scalar_linear, calculate_density_array_linear
 public calculate_density_second_derivs_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> Compute the density of sea water (in kg/m^3), or its anomaly from a reference density,
 !! using a simple linear equation of state from salinity (in psu), potential temperature (in deg C)
 !! and pressure in Pa.

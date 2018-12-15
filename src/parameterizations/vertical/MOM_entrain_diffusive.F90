@@ -20,6 +20,10 @@ implicit none ; private
 
 public entrainment_diffusive, entrain_diffusive_init, entrain_diffusive_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+
 !> The control structure holding parametes for the MOM_entrain_diffusive module
 type, public :: entrain_diffusive_CS ; private
   logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
