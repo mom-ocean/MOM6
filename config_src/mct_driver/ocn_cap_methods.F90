@@ -33,7 +33,7 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
   real(kind=8), optional        , intent(in)    :: c1, c2, c3, c4     !< Coeffs. used in the shortwave decomposition
 
   ! Local variables
-  integer         :: i, j, ig, jg, isc, iec, jsc, jec  ! Grid indices
+  integer         :: i, j, isc, iec, jsc, jec  ! Grid indices
   integer         :: k
   integer         :: day, secs, rc
   type(ESMF_time) :: currTime
@@ -44,9 +44,7 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
 
   k = 0
   do j = jsc, jec
-    jg = j + grid%jsc - jsc
     do i = isc, iec
-      ig = i + grid%jsc - isc
       k = k + 1 ! Increment position within gindex
 
       ! taux
@@ -65,25 +63,31 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
       ice_ocean_boundary%lw_flux(i,j) = (x2o(ind%x2o_Faxa_lwdn,k) + x2o(ind%x2o_Foxx_lwup,k))
 
       ! specific humitidy flux
-      ice_ocean_boundary%q_flux(i,j) = x2o(ind%x2o_Foxx_evap,k) !???TODO: should this be a minus sign
+      ice_ocean_boundary%q_flux(i,j) = x2o(ind%x2o_Foxx_evap,k)
 
       ! sensible heat flux (W/m2)
-      ice_ocean_boundary%t_flux(i,j) = x2o(ind%x2o_Foxx_sen,k)  !???TODO: should this be a minus sign
+      ice_ocean_boundary%t_flux(i,j) = x2o(ind%x2o_Foxx_sen,k)
 
       ! latent heat flux (W/m^2)
-      ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k) !???TODO: should this be a minus sign
+      ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k)
+
+      ! snow&ice melt heat flux  (W/m^2)
+      ice_ocean_boundary%melth(i,j) = x2o(ind%x2o_Fioi_melth,k)
+
+      ! water flux from snow&ice melt (kg/m2/s)
+      ice_ocean_boundary%meltw(i,j) = x2o(ind%x2o_Fioi_meltw,k)
 
       ! liquid runoff
-      ice_ocean_boundary%rofl_flux(i,j) = x2o(ind%x2o_Foxx_rofl,k) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%rofl_flux(i,j) = x2o(ind%x2o_Foxx_rofl,k) * GRID%mask2dT(i,j)
 
       ! ice runoff
-      ice_ocean_boundary%rofi_flux(i,j) = x2o(ind%x2o_Foxx_rofi,k) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%rofi_flux(i,j) = x2o(ind%x2o_Foxx_rofi,k) * GRID%mask2dT(i,j)
 
       ! surface pressure
-      ice_ocean_boundary%p(i,j) = x2o(ind%x2o_Sa_pslv,k) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%p(i,j) = x2o(ind%x2o_Sa_pslv,k) * GRID%mask2dT(i,j)
 
       ! salt flux (minus sign needed here -GMM)
-      ice_ocean_boundary%salt_flux(i,j) = -x2o(ind%x2o_Fioi_salt,k) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%salt_flux(i,j) = -x2o(ind%x2o_Fioi_salt,k) * GRID%mask2dT(i,j)
 
       ! 1) visible, direct shortwave  (W/m2)
       ! 2) visible, diffuse shortwave (W/m2)
@@ -91,15 +95,15 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
       ! 4) near-IR, diffuse shortwave (W/m2)
       if (present(c1) .and. present(c2) .and. present(c3) .and. present(c4)) then
         ! Use runtime coefficients to decompose net short-wave heat flux into 4 components
-        ice_ocean_boundary%sw_flux_vis_dir(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c1 * GRID%mask2dT(ig,jg)
-        ice_ocean_boundary%sw_flux_vis_dif(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c2 * GRID%mask2dT(ig,jg)
-        ice_ocean_boundary%sw_flux_nir_dir(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c3 * GRID%mask2dT(ig,jg)
-        ice_ocean_boundary%sw_flux_nir_dif(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c4 * GRID%mask2dT(ig,jg)
+        ice_ocean_boundary%sw_flux_vis_dir(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c1 * GRID%mask2dT(i,j)
+        ice_ocean_boundary%sw_flux_vis_dif(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c2 * GRID%mask2dT(i,j)
+        ice_ocean_boundary%sw_flux_nir_dir(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c3 * GRID%mask2dT(i,j)
+        ice_ocean_boundary%sw_flux_nir_dif(i,j) = x2o(ind%x2o_Foxx_swnet,k) * c4 * GRID%mask2dT(i,j)
       else
-        ice_ocean_boundary%sw_flux_vis_dir(i,j) = x2o(ind%x2o_Faxa_swvdr,k) * GRID%mask2dT(ig,jg)
-        ice_ocean_boundary%sw_flux_vis_dif(i,j) = x2o(ind%x2o_Faxa_swvdf,k) * GRID%mask2dT(ig,jg)
-        ice_ocean_boundary%sw_flux_nir_dir(i,j) = x2o(ind%x2o_Faxa_swndr,k) * GRID%mask2dT(ig,jg)
-        ice_ocean_boundary%sw_flux_nir_dif(i,j) = x2o(ind%x2o_Faxa_swndf,k) * GRID%mask2dT(ig,jg)
+        ice_ocean_boundary%sw_flux_vis_dir(i,j) = x2o(ind%x2o_Faxa_swvdr,k) * GRID%mask2dT(i,j)
+        ice_ocean_boundary%sw_flux_vis_dif(i,j) = x2o(ind%x2o_Faxa_swvdf,k) * GRID%mask2dT(i,j)
+        ice_ocean_boundary%sw_flux_nir_dir(i,j) = x2o(ind%x2o_Faxa_swndr,k) * GRID%mask2dT(i,j)
+        ice_ocean_boundary%sw_flux_nir_dif(i,j) = x2o(ind%x2o_Faxa_swndf,k) * GRID%mask2dT(i,j)
       endif
     enddo
   enddo
@@ -116,6 +120,8 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
         write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i,j)
+        write(logunit,F01)'import: day, secs, j, i, melth           = ',day,secs,j,i,ice_ocean_boundary%melth(i,j)
+        write(logunit,F01)'import: day, secs, j, i, meltw           = ',day,secs,j,i,ice_ocean_boundary%meltw(i,j)
         write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',&
                           day,secs,j,i,ice_ocean_boundary%latent_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, runoff          = ',&

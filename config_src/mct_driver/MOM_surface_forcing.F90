@@ -152,11 +152,13 @@ end type surface_forcing_CS
 ! MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: latent_flux     =>NULL() !< latent flux (W/m2)
-  real, pointer, dimension(:,:) :: rofl_flux       =>NULL() !< liquid runoff (W/m2)
-  real, pointer, dimension(:,:) :: rofi_flux       =>NULL() !< ice runoff (W/m2)
+  real, pointer, dimension(:,:) :: rofl_flux       =>NULL() !< liquid runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: rofi_flux       =>NULL() !< ice runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: u_flux          =>NULL() !< i-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: v_flux          =>NULL() !< j-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux (W/m2)
+  real, pointer, dimension(:,:) :: melth           =>NULL() !< sea ice and snow melt heat flux (W/m2)
+  real, pointer, dimension(:,:) :: meltw           =>NULL() !< water flux due to sea ice and snow melting (kg/m2/s)
   real, pointer, dimension(:,:) :: q_flux          =>NULL() !< specific humidity flux (kg/m2/s)
   real, pointer, dimension(:,:) :: salt_flux       =>NULL() !< salt flux (kg/m2/s)
   real, pointer, dimension(:,:) :: lw_flux         =>NULL() !< long wave radiation (W/m2)
@@ -166,7 +168,6 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: sw_flux_nir_dif =>NULL() !< diffuse Near InfraRed sw radiation (W/m2)
   real, pointer, dimension(:,:) :: lprec           =>NULL() !< mass flux of liquid precip (kg/m2/s)
   real, pointer, dimension(:,:) :: fprec           =>NULL() !< mass flux of frozen precip (kg/m2/s)
-  real, pointer, dimension(:,:) :: runoff          =>NULL() !< mass flux of liquid runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: calving         =>NULL() !< mass flux of frozen runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: ustar_berg      =>NULL() !< frictional velocity beneath icebergs (m/s)
   real, pointer, dimension(:,:) :: area_berg       =>NULL() !< area covered by icebergs(m2/m2)
@@ -443,6 +444,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, &
     if (associated(fluxes%sens)) &
       fluxes%sens(i,j) = G%mask2dT(i,j) * IOB%t_flux(i-i0,j-j0)
 
+    ! sea ice and snow melt heat flux (W/m2)
+    if (associated(fluxes%melth)) &
+      fluxes%melth(i,j) = G%mask2dT(i,j) * IOB%melth(i-i0,j-j0)
+
+    ! water flux due to sea ice and snow melt (kg/m2/s)
+    if (associated(fluxes%meltw)) &
+      fluxes%meltw(i,j) = G%mask2dT(i,j) * IOB%meltw(i-i0,j-j0)
+
     ! latent heat flux (W/m^2)
     if (associated(fluxes%latent)) &
       fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
@@ -474,7 +483,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, &
     sign_for_net_FW_bug = 1.
     if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
-      net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
+      net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j) + fluxes%meltw(i,j)) + &
           (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
           (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * G%areaT(i,j)
       !   The following contribution appears to be calculating the volume flux of sea-ice
@@ -483,9 +492,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, &
       !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
-      if (associated(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-          net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * G%areaT(i,j) * &
-          (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
+      ! GMM: as stated above, the following is wrong. CIME deals with volume/mass and
+      ! heat from sea ice/snow via meltw and melth, respectively.
+      if (associated(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
+          net_FW(i,j) = net_FW(i,j) + G%areaT(i,j) * &
+          (fluxes%salt_flux(i,j) / CS%ice_salt_concentration)
+
       net_FW2(i,j) = net_FW(i,j)/G%areaT(i,j)
     enddo; enddo
 
@@ -775,6 +787,8 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
              IOB% u_flux (isc:iec,jsc:jec),          &
              IOB% v_flux (isc:iec,jsc:jec),          &
              IOB% t_flux (isc:iec,jsc:jec),          &
+             IOB% melth (isc:iec,jsc:jec),          &
+             IOB% meltw (isc:iec,jsc:jec),          &
              IOB% q_flux (isc:iec,jsc:jec),          &
              IOB% salt_flux (isc:iec,jsc:jec),       &
              IOB% lw_flux (isc:iec,jsc:jec),         &
@@ -784,7 +798,6 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
              IOB% sw_flux_nir_dif (isc:iec,jsc:jec), &
              IOB% lprec (isc:iec,jsc:jec),           &
              IOB% fprec (isc:iec,jsc:jec),           &
-             IOB% runoff (isc:iec,jsc:jec),          &
              IOB% ustar_berg (isc:iec,jsc:jec),      &
              IOB% area_berg (isc:iec,jsc:jec),       &
              IOB% mass_berg (isc:iec,jsc:jec),       &
@@ -800,6 +813,8 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
   IOB%u_flux          = 0.0
   IOB%v_flux          = 0.0
   IOB%t_flux          = 0.0
+  IOB%melth           = 0.0
+  IOB%meltw           = 0.0
   IOB%q_flux          = 0.0
   IOB%salt_flux       = 0.0
   IOB%lw_flux         = 0.0
@@ -809,7 +824,6 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
   IOB%sw_flux_nir_dif = 0.0
   IOB%lprec           = 0.0
   IOB%fprec           = 0.0
-  IOB%runoff          = 0.0
   IOB%ustar_berg      = 0.0
   IOB%area_berg       = 0.0
   IOB%mass_berg       = 0.0
@@ -1320,7 +1334,11 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   write(outunit,100) 'iobt%u_flux         ', mpp_chksum( iobt%u_flux         )
   write(outunit,100) 'iobt%v_flux         ', mpp_chksum( iobt%v_flux         )
   write(outunit,100) 'iobt%t_flux         ', mpp_chksum( iobt%t_flux         )
+  write(outunit,100) 'iobt%melth          ', mpp_chksum( iobt%melth          )
+  write(outunit,100) 'iobt%meltw          ', mpp_chksum( iobt%meltw          )
   write(outunit,100) 'iobt%q_flux         ', mpp_chksum( iobt%q_flux         )
+  write(outunit,100) 'iobt%rofl_flux      ', mpp_chksum( iobt%rofl_flux      )
+  write(outunit,100) 'iobt%rofi_flux      ', mpp_chksum( iobt%rofi_flux      )
   write(outunit,100) 'iobt%salt_flux      ', mpp_chksum( iobt%salt_flux      )
   write(outunit,100) 'iobt%lw_flux        ', mpp_chksum( iobt%lw_flux        )
   write(outunit,100) 'iobt%sw_flux_vis_dir', mpp_chksum( iobt%sw_flux_vis_dir)
@@ -1329,7 +1347,6 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   write(outunit,100) 'iobt%sw_flux_nir_dif', mpp_chksum( iobt%sw_flux_nir_dif)
   write(outunit,100) 'iobt%lprec          ', mpp_chksum( iobt%lprec          )
   write(outunit,100) 'iobt%fprec          ', mpp_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
   write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
   write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
   if (associated(iobt%ustar_berg)) &

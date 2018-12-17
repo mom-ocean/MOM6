@@ -41,7 +41,7 @@ module ocn_cpl_indices
     integer :: x2o_Faxa_swndr    !< near-IR, direct shortwave (W/m2)
     integer :: x2o_Faxa_swndf    !< near-IR, direct shortwave (W/m2)
     integer :: x2o_Fioi_melth    !< Heat flux from snow & ice melt (W/m2)
-    integer :: x2o_Fioi_meltw    !< Snow melt flux (kg/m2/s)
+    integer :: x2o_Fioi_meltw    !< Water flux from sea ice and snow melt (kg/m2/s)
     integer :: x2o_Fioi_bcpho    !< Black Carbon hydrophobic release from sea ice component
     integer :: x2o_Fioi_bcphi    !< Black Carbon hydrophilic release from sea ice component
     integer :: x2o_Fioi_flxdst   !< Dust release from sea ice component
