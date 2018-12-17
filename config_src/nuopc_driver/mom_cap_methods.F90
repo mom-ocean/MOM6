@@ -308,7 +308,6 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_ustokes(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_vstokes(:)
     !
-    real(ESMF_KIND_R8), parameter :: const_lhvap = 2.501e6_ESMF_KIND_R8  ! latent heat of evaporation ~ J/kg
     character(len=*)  , parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
     character(len=*)  , parameter :: subname = '(mom_import)'
     !-----------------------------------------------------------------------
@@ -320,6 +319,8 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+    ! TODO: remove these
     call State_getFldPtr(importState,"Faxa_swndr" , dataPtr_swndr, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -340,6 +341,29 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+    ! TODO: add these
+    ! call State_getFldPtr(importState,"mean_net_sw_ir_dir_flx" , dataPtr_swndr, rc=rc)
+    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    !   line=__LINE__, &
+    !   file=__FILE__)) &
+    !   return  ! bail out
+    ! call State_getFldPtr(importState,"mean_net_sw_ir_dif_flx" , dataPtr_swndf, rc=rc)
+    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    !   line=__LINE__, &
+    !   file=__FILE__)) &
+    !   return  ! bail out
+    ! call State_getFldPtr(importState,"mean_net_sw_vis_dir_flx" , dataPtr_swvdr, rc=rc)
+    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    !   line=__LINE__, &
+    !   file=__FILE__)) &
+    !   return  ! bail out
+    ! call State_getFldPtr(importState,"mean_net_sw_vis_dif_flx" , dataPtr_swvdf, rc=rc)
+    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    !   line=__LINE__, &
+    !   file=__FILE__)) &
+    !   return  ! bail out
+
     call State_getFldPtr(importState,"Foxx_taux" , dataPtr_taux, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
