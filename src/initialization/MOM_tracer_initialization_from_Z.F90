@@ -49,7 +49,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(in)    :: h   !< Layer thickness, in H (often m or kg m-2).
+                              intent(in)    :: h   !< Layer thickness, in H ~> m or kg m-2.
   real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
   type(param_file_type),      intent(in)    :: PF  !< parameter file
   character(len=*),           intent(in)    :: src_file !< source filename
@@ -81,7 +81,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   real, allocatable, dimension(:), target :: z_edges_in, z_in
 
   ! Local variables for ALE remapping
-  real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses in H units.
+  real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses in H ~> m or kg m-2.
   real, dimension(:), allocatable :: h1 ! A 1-d column of source thicknesses in Z ~> m.
   real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights in Z ~> m.
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays

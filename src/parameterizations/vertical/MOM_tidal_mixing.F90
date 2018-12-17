@@ -466,7 +466,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
       CS%h2(i,j) = hamp*hamp
 
       utide = CS%tideamp(i,j)
-      ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
+      ! Compute the fixed part of internal tidal forcing; units are [J m-2 = kg s-2] here.
       CS%TKE_itidal(i,j) = 0.5*US%Z_to_m * CS%kappa_h2_factor*GV%Rho0*&
            CS%kappa_itides * CS%h2(i,j) * utide*utide
     enddo ; enddo
@@ -657,7 +657,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, C
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2)
+                                    intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2
   real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy
                                                             !! frequency, in s-2.
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
@@ -707,7 +707,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
   real, dimension(SZI_(G),SZK_(G)+1), intent(in) :: N2_int !< The squared buoyancy
                                                   !! frequency at the interfaces, in s-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h     !< Layer thicknesses, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: Kd_lay!< The diapycnal diffusivities in the layers, in Z2 s-1 ~> m2 s-1.
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
@@ -929,7 +929,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2)
+                                    intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2
   real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy frequency
                                                             !! frequency, in s-2.
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
@@ -1420,7 +1420,7 @@ subroutine post_tidal_diagnostics(G, GV, h ,CS)
   type(ocean_grid_type),    intent(in)   :: G   !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)   :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                            intent(in)   :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+                            intent(in)   :: h   !< Layer thicknesses, in H ~> m or kg m-2.
   type(tidal_mixing_cs),    pointer      :: CS  !< The control structure for this module
 
   ! local

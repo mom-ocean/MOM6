@@ -42,7 +42,7 @@ type, public :: regularize_layers_CS ; private
   real    :: h_def_tol4      !< The value of the relative thickness deficit at which to do
                              !! detrainment from the buffer layers to the interior at full
                              !! force, now 50% of the way from h_def_tol1 to 1.
-  real    :: Hmix_min        !< The minimum mixed layer thickness in H.
+  real    :: Hmix_min        !< The minimum mixed layer thickness in H ~> m or kg m-2.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
@@ -78,7 +78,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
   type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: h  !< Layer thicknesses, in H (usually m or kg m-2).
+                              intent(inout) :: h  !< Layer thicknesses, in H ~> m or kg m-2.
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
                                                   !! have NULL ptrs.
@@ -86,13 +86,11 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
                                                   !! layer; this should be increased due to mixed
-                                                  !! layer detrainment, in the same units as
-                                                  !! h - usually m or kg m-2 (i.e., H).
+                                                  !! layer detrainment, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
-                                                  !! entrainment, in the same units as h - usually
-                                                  !! m or kg m-2 (i.e., H).
+                                                  !! entrainment, in H ~> m or kg m-2.
   type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
                                                   !! call to regularize_layers_init.
   ! Local variables
@@ -118,7 +116,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
   type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: h  !< Layer thicknesses, in H (usually m or kg m-2).
+                              intent(inout) :: h  !< Layer thicknesses, in H ~> m or kg m-2.
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
                                                   !! have NULL ptrs.
@@ -126,13 +124,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
                                                   !! layer; this should be increased due to mixed
-                                                  !! layer detrainment, in the same units as h -
-                                                  !! usually m or kg m-2 (i.e., H).
+                                                  !! layer detrainment, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
-                                                  !! entrainment, in the same units as h - usually
-                                                  !! m or kg m-2 (i.e., H).
+                                                  !! entrainment, in H ~> m or kg m-2.
   type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
                                                   !! call to regularize_layers_init.
   ! Local variables
@@ -143,7 +139,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     def_rat_h   ! The ratio of the thickness deficit to the minimum depth, ND.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    e           ! The interface depths, in H, positive upward.
+    e           ! The interface depths, in H ~> m or kg m-2, positive upward.
 
 #ifdef DEBUG_CODE
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -153,24 +149,24 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G)) :: &
     def_rat_h2, def_rat_h3
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    ef          ! The filtered interface depths, in H, positive upward.
+    ef          ! The filtered interface depths, in H ~> m or kg m-2, positive upward.
 #endif
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    e_filt, e_2d  ! The interface depths, in H, positive upward.
+    e_filt, e_2d  ! The interface depths, in H ~> m or kg m-2, positive upward.
   real, dimension(SZI_(G),SZK_(G)) :: &
-    h_2d, &     !   A 2-d version of h, in H.
+    h_2d, &     !   A 2-d version of h, in H ~> m or kg m-2.
     T_2d, &     !   A 2-d version of tv%T, in deg C.
     S_2d, &     !   A 2-d version of tv%S, in PSU.
     Rcv, &      !   A 2-d version of the coordinate density, in kg m-3.
-    h_2d_init, &  ! The initial value of h_2d, in H.
+    h_2d_init, &  ! The initial value of h_2d, in H ~> m or kg m-2.
     T_2d_init, &  ! THe initial value of T_2d, in deg C.
     S_2d_init, &  ! The initial value of S_2d, in PSU.
     d_eb, &     !   The downward increase across a layer in the entrainment from
-                ! below, in H.  The sign convention is that positive values of
+                ! below, in H ~> m or kg m-2.  The sign convention is that positive values of
                 ! d_eb correspond to a gain in mass by a layer by upward motion.
     d_ea        !   The upward increase across a layer in the entrainment from
-                ! above, in H.  The sign convention is that positive values of
+                ! above, in H ~> m or kg m-2.  The sign convention is that positive values of
                 ! d_ea mean a net gain in mass by a layer from downward motion.
   real, dimension(SZI_(G)) :: &
     p_ref_cv, & !   Reference pressure for the potential density which defines
@@ -182,15 +178,15 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
     h_tot3, Th_tot3, Sh_tot3, &
     h_tot2, Th_tot2, Sh_tot2
   real, dimension(SZK_(G)) :: &
-    h_prev_1d     ! The previous thicknesses, in H.
+    h_prev_1d     ! The previous thicknesses, in H ~> m or kg m-2.
   real :: I_dtol  ! The inverse of the tolerance changes, nondim.
   real :: I_dtol34 ! The inverse of the tolerance changes, nondim.
-  real :: h1, h2  ! Temporary thicknesses, in H.
-  real :: e_e, e_w, e_n, e_s  ! Temporary interface heights, in H.
+  real :: h1, h2  ! Temporary thicknesses, in H ~> m or kg m-2.
+  real :: e_e, e_w, e_n, e_s  ! Temporary interface heights, in H ~> m or kg m-2.
   real :: wt    ! The weight of the filted interfaces in setting the targets, ND.
   real :: scale ! A scaling factor, ND.
   real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in H.
+                    ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real, dimension(SZK_(G)+1) :: &
     int_flux, int_Tflux, int_Sflux, int_Rflux
   real :: h_add
@@ -727,7 +723,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   type(ocean_grid_type),      intent(in)  :: G         !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV        !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
-                              intent(in)  :: e         !< Interface depths, in m or kg m-2.
+                              intent(in)  :: e         !< Interface depths, in H ~> m or kg m-2
   real, dimension(SZIB_(G),SZJ_(G)),          &
                               intent(out) :: def_rat_u !< The thickness deficit ratio at u points,
                                                        !! nondim.
@@ -746,25 +742,24 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                                        !! are aggregated into 1 layer, nondim.
   integer,          optional, intent(in)  :: halo      !< An extra-wide halo size, 0 by default.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
-                    optional, intent(in)  :: h         !< Layer thicknesses, in H (usually m or kg
-                                                       !! m-2); if h is not present, vertical
-                                                       !! differences in interface heights are used
-                                                       !! instead.
+                    optional, intent(in)  :: h         !< Layer thicknesses, in H ~> m or kg m-2.
+                                                       !! If h is not present, vertical differences
+                                                       !! in interface heights are used instead.
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    h_def_u, &  ! The vertically summed thickness deficits at u-points, in H.
+    h_def_u, &  ! The vertically summed thickness deficits at u-points, in H ~> m or kg m-2.
     h_norm_u, & ! The vertically summed arithmetic mean thickness by which
-                ! h_def_u is normalized, in H.
+                ! h_def_u is normalized, in H ~> m or kg m-2.
     h_def2_u
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    h_def_v, &  ! The vertically summed thickness deficits at v-points, in H.
+    h_def_v, &  ! The vertically summed thickness deficits at v-points, in H ~> m or kg m-2.
     h_norm_v, & ! The vertically summed arithmetic mean thickness by which
-                ! h_def_v is normalized, in H.
+                ! h_def_v is normalized, in H ~> m or kg m-2.
     h_def2_v
   real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in H.
+                    ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real :: Hmix_min  ! CS%Hmix_min converted to units of H.
-  real :: h1, h2  ! Temporary thicknesses, in H.
+  real :: h1, h2  ! Temporary thicknesses, in H ~> m or kg m-2.
   integer :: i, j, k, is, ie, js, je, nz, nkmb
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

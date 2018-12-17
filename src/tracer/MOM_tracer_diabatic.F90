@@ -230,7 +230,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Tr !< Tracer concentration on T-cell
   real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness in H units
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness in H ~> m or kg m-2
   real,                                       intent(in   ) :: evap_CFL_limit !< Limit on the fraction of the
                                                                   !! water that can be fluxed out of the top
                                                                   !! layer in a timestep (nondim)
@@ -250,9 +250,9 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real :: fractionOfForcing, hOld, Ithickness
   real :: RivermixConst  ! A constant used in implementing river mixing, in Pa s.
   real, dimension(SZI_(G)) :: &
-    netMassInOut, &  ! surface water fluxes (H units) over time step
-    netMassIn,    &  ! mass entering ocean surface (H units) over a time step
-    netMassOut       ! mass leaving ocean surface (H units) over a time step
+    netMassInOut, &  ! surface water fluxes (H ~> m or kg m-2) over time step
+    netMassIn,    &  ! mass entering ocean surface (H ~> m or kg m-2) over a time step
+    netMassOut       ! mass leaving ocean surface (H ~> m or kg m-2) over a time step
 
   real, dimension(SZI_(G), SZK_(G)) :: h2d, Tr2d
   real, dimension(SZI_(G),SZJ_(G))  :: in_flux  ! The total time-integrated amount of tracer!
@@ -318,7 +318,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     ! We aggregate the thermodynamic forcing for a time step into the following:
     ! These should have been set and stored during a call to applyBoundaryFluxesInOut
     ! netMassIn    = net mass entering at ocean surface over a timestep
-    ! netMassOut   = net mass leaving ocean surface (H units) over a time step.
+    ! netMassOut   = net mass leaving ocean surface (H ~> m or kg m-2) over a time step.
     !                netMassOut < 0 means mass leaves ocean.
 
     ! Note here that the aggregateFW flag has already been taken care of in the call to

@@ -279,7 +279,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
   type(verticalGrid_type),               intent(in)    :: GV      !< The ocean's vertical grid
                                                                   !! structure.
   type(unit_scale_type),                 intent(in)    :: US      !< A dimensional unit scaling type
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thicknesses, in H
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thicknesses, in H ~> m or kg m-2
                                                                   !! (usually m or kg m-2)
   type(param_file_type),                 intent(in)    :: param_file !< A structure to parse for
                                                                   !! run-time parameters
@@ -598,7 +598,7 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
                               num_stocks, stock_index, got_min_max, global_min, global_max, &
                               xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    &
-                                  intent(in)  :: h          !< Layer thicknesses, in H
+                                  intent(in)  :: h          !< Layer thicknesses, in H ~> m or kg m-2
                                                             !! (usually m or kg m-2).
   real, dimension(:),             intent(out) :: stock_values !< The integrated amounts of a tracer
                              !! on the current PE, usually in kg x concentration.
@@ -798,7 +798,7 @@ subroutine call_tracer_surface_state(state, h, G, CS)
   type(surface),                intent(inout) :: state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   real, dimension(NIMEM_,NJMEM_,NKMEM_), &
-                                intent(in)    :: h     !< Layer thicknesses, in H
+                                intent(in)    :: h     !< Layer thicknesses, in H ~> m or kg m-2
                                                        !! (usually m or kg m-2).
   type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure.
   type(tracer_flow_control_CS), pointer       :: CS    !< The control structure returned by a

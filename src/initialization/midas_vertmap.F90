@@ -174,7 +174,7 @@ function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlev
   integer, dimension(size(tr_in,1),size(tr_in,2)) :: nlevs_data !< number of valid levels in the input dataset
   integer :: n,i,j,k,l,nx,ny,nz,nt,kz
   integer :: k_top,k_bot,k_bot_prev,kk,kstart
-  real    :: sl_tr    ! The tracer concentration slope times the layer thickess, in tracer units.
+  real    :: sl_tr    ! The tracer concentration slope times the layer thickness, in tracer units.
   real    :: epsln_Z  ! A negligibly thin layer thickness, in Z ~> m.
   real, dimension(size(tr_in,3)) :: wt !< The fractional weight for each layer in the range between z1 and z2
   real, dimension(size(tr_in,3)) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom

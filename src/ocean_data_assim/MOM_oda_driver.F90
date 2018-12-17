@@ -323,7 +323,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   type(time_type), intent(in)    :: Time !< The current model time
   type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
   type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 
   type(ODA_CS), pointer :: CS !< ocean DA control structure
@@ -383,7 +383,7 @@ end subroutine set_prior_tracer
 subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   type(time_type), intent(in) :: Time !< the current model time
   type(ODA_CS), pointer :: CS !< ocean DA control structure
-  real, dimension(:,:,:), pointer :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(:,:,:), pointer :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs), pointer :: tv   !< A structure pointing to various thermodynamic variables
   logical, optional, intent(in) :: increment !< True if returning increment only
 

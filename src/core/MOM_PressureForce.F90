@@ -49,7 +49,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)  :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out) :: PFu  !< Zonal pressure force acceleration (m/s2)
@@ -65,7 +65,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
                                                !! due to eta anomalies, in m2 s-2 H-1.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out) :: eta  !< The bottom mass used to calculate PFu and PFv,
-                                               !! in H, with any tidal contributions.
+                                               !! in H ~> m or kg m-2, with any tidal contributions.
 
   if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
     if (GV%Boussinesq) then

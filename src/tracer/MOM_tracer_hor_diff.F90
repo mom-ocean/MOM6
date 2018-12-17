@@ -587,7 +587,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   real, dimension(SZK_(G)) :: &
     h_demand_L, & ! The thickness in the left (_L) or right (_R) column that
-    h_demand_R, & ! is demanded to match the thickness in the counterpart, in H.
+    h_demand_R, & ! is demanded to match the thickness in the counterpart, in H ~> m or kg m-2.
     h_used_L, &   ! The summed thickness from the left or right columns that
     h_used_R, &   ! have actually been used, in m or kg m-2 (H).
     h_supply_frac_L, &  ! The fraction of the demanded thickness that can

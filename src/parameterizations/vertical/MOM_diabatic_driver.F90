@@ -325,7 +325,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
              ! These are targets so that the space can be shared with eaml & ebml.
     eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
-             ! near the boundaries in H (m for Bouss and kg/m^2 for non-Bouss)
+             ! near the boundaries in H ~> m or kg m-2 (for Bous or non-Bouss)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
     Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
@@ -340,7 +340,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
-    eaml, &  ! The equivalent of ea and eb due to mixed layer processes, in H
+    eaml, &  ! The equivalent of ea and eb due to mixed layer processes, in H ~> m or kg m-2
     ebml     ! (m for Bouss and kg/m^2 for non-Bouss).  These will be
              ! pointers to eatr and ebtr so as to reuse the memory as
              ! the arrays are not needed at the same time.
@@ -372,7 +372,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
                        ! coupled to the bottom within a timestep (m)
 
-  real :: htot(SZIB_(G))             ! The summed thickness from the bottom, in H.
+  real :: htot(SZIB_(G))             ! The summed thickness from the bottom, in H ~> m or kg m-2.
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
@@ -1211,7 +1211,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
              ! near the boundaries (m for Bouss and kg/m^2 for non-Bouss)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
-    Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
+    Kd_int,   & ! diapycnal diffusivity of interfaces (Z^2/s)
     Kd_heat,  & ! diapycnal diffusivity of heat (Z^2/s)
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (Z^2/s)
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (Z^2/s)

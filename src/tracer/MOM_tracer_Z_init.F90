@@ -33,7 +33,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(out)   :: tr   !< The tracer to initialize
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                         intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                         intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
   character(len=*),      intent(in)    :: filename !< The name of the file to read from
   character(len=*),      intent(in)    :: tr_name !< The name of the tracer in the file
 ! type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters

@@ -281,7 +281,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: v   !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in)    :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h   !< Layer thicknesses, in H ~> m or kg m-2.
   type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
                                                 !! thermodynamic variables.
   type(time_type),         intent(in)    :: day !< The current model time.

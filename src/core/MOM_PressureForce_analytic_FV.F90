@@ -78,7 +78,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbc
                                                            !! anomaly in each layer due to eta anomalies,
                                                            !! in m2 s-2 H-1.
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
-                                                           !! calculate PFu and PFv, in H, with any tidal
+                                                           !! calculate PFu and PFv, in H ~> m or kg m-2, with any tidal
                                                            !! contributions or compressibility compensation.
 
   if (GV%Boussinesq) then
@@ -115,7 +115,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
                                                            !! anomaly in each layer due to eta anomalies,
                                                            !! in m2 s-2 H-1.
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
-                                                           !! calculate PFu and PFv, in H, with any tidal
+                                                           !! calculate PFu and PFv, in H ~> m or kg m-2, with any tidal
                                                            !! contributions or compressibility compensation.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure in Pa.
@@ -457,8 +457,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
                                                          !! anomaly in each layer due to eta anomalies,
                                                          !! in m2 s-2 H-1.
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
-                                                         !! calculate PFu and PFv, in H, with any tidal
-                                                         !! contributions or compressibility compensation.
+                                                         !! calculate PFu and PFv, in H ~> m or kg m-2, with any
+                                                         !! tidal contributions or compressibility compensation.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: e ! Interface height in depth units (Z ~> m).
   real, dimension(SZI_(G),SZJ_(G))  :: &
@@ -475,8 +475,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
                 ! the interface atop a layer, in Pa.
     dpa, &      ! The change in pressure anomaly between the top and bottom
                 ! of a layer, in Pa.
-    intz_dpa    ! The vertical integral in depth of the pressure anomaly less
-                ! the pressure anomaly at the top of the layer, in H Pa (m Pa).
+    intz_dpa    ! The vertical integral in depth of the pressure anomaly less the
+                ! pressure anomaly at the top of the layer, in H Pa ~> m Pa or kg m-2 Pa.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     intx_pa, &  ! The zonal integral of the pressure anomaly along the interface
                 ! atop a layer, divided by the grid spacing, in Pa.
