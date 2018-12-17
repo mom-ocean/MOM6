@@ -95,10 +95,9 @@ end subroutine PressureForce_AFV
 !! the analytic finite volume form of the Pressure gradient, and does not
 !! make the Boussinesq approximation.
 !!
-!! To work, the following fields must be set outside of the usual
-!! ie to ie, je to je range before this subroutine is called:
-!!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
-!!  T[je+1], and S[je+1].
+!! To work, the following fields must be set outside of the usual (is:ie,js:je)
+!! range before this subroutine is called:
+!!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
 subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
@@ -437,10 +436,9 @@ end subroutine PressureForce_AFV_nonBouss
 !! Determines the acceleration due to hydrostatic pressure forces, using
 !! the finite volume form of the terms and analytic integrals in depth.
 !!
-!! To work, the following fields must be set outside of the usual
-!! ie to ie, je to je range before this subroutine is called:
-!!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
-!!  T[je+1], and S[je+1].
+!! To work, the following fields must be set outside of the usual (is:ie,js:je)
+!! range before this subroutine is called:
+!!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
 subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
