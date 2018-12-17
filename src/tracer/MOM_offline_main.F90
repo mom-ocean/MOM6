@@ -168,7 +168,7 @@ type, public :: offline_transport_CS ; private
 
   real, allocatable, dimension(:,:) :: netMassIn  !< Freshwater fluxes into the ocean
   real, allocatable, dimension(:,:) :: netMassOut !< Freshwater fluxes out of the ocean
-  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points, in H.
+  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points, in H ~> m or kg m-2.
 
   ! Allocatable arrays to read in entire fields during initialization
   real, allocatable, dimension(:,:,:,:) :: uhtr_all !< Entire field of zonal transport
@@ -749,7 +749,7 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
   type(verticalGrid_type),    intent(in)    :: GV !< ocean vertical grid structure
   type(forcing),              intent(inout) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: h  !< Layer thickness in H units
+                              intent(inout) :: h  !< Layer thickness in H ~> m or kg m-2
   real, dimension(SZI_(G),SZJ_(G)), &
                     optional, intent(in)    :: in_flux_optional !< The total time-integrated amount
                                                   !! of tracer that leaves with freshwater
@@ -799,7 +799,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
   type(verticalGrid_type),    intent(in)    :: GV !< ocean vertical grid structure
   type(forcing),              intent(inout) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: h  !< Layer thickness in H units
+                              intent(inout) :: h  !< Layer thickness in H ~> m or kg m-2
   real, dimension(SZI_(G),SZJ_(G)), &
                     optional, intent(in)    :: out_flux_optional !< The total time-integrated amount
                                                   !! of tracer that leaves with freshwater

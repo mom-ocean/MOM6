@@ -39,7 +39,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h          !< The thickness that is being initialized, in H.
+                           intent(out) :: h          !< The thickness that is being initialized, in H ~> m or kg m-2.
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file
                                                      !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -95,11 +95,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   enddo ; enddo
 
   do j=js,je ; do i=is,ie
-!    This sets the initial thickness (in H) of the layers.  The      !
-!  thicknesses are set to insure that: 1.  each layer is at least an !
-!  Angstrom thick, and 2.  the interfaces are where they should be   !
-!  based on the resting depths and interface height perturbations,   !
-!  as long at this doesn't interfere with 1.                         !
+    !   This sets the initial thickness (in H ~> m or kg m-2) of the layers.  The
+    ! thicknesses are set to insure that: 1. each layer is at least an Angstrom thick, and
+    ! 2. the interfaces are where they should be based on the resting depths and interface
+    !    height perturbations, as long at this doesn't interfere with 1.  
     eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)
@@ -207,7 +206,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
                                             !! the control structure for the
                                             !! sponge module.
-  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field, in units of H.
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field, in H ~> m or kg m-2.
 
   ! Local variables
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.

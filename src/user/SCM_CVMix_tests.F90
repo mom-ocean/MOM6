@@ -55,7 +55,7 @@ contains
 subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_params)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T  !< Potential temperature (degC)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S  !< Salinity (psu)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h  !< Layer thickness in H (often m or Pa)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h  !< Layer thickness in H ~> m or kg m-2
   type(ocean_grid_type),                  intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                  intent(in)  :: US !< A dimensional unit scaling type

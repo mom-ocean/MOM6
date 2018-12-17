@@ -86,7 +86,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h  !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)    :: h  !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any available
                                                !! thermodynamic fields.
   type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
@@ -219,7 +219,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
                                                  !! available thermodynamic fields.
   type(vertvisc_type),     intent(in)    :: visc !< Structure containing vertical viscosities, bottom
@@ -228,20 +228,20 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
 
   ! local variables
   real, dimension(SZI_(G)) :: &
-    b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S, in H.
+    b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S, in H ~> m or kg m-2.
     d1_T, d1_S     !  Variables used by the tridiagonal solvers, nondim.
   real, dimension(SZI_(G),SZK_(G)) :: &
-    c1_T, c1_S     !  Variables used by the tridiagonal solvers, in H.
+    c1_T, c1_S     !  Variables used by the tridiagonal solvers, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    mix_T, mix_S   !  Mixing distances in both directions across each interface, in H.
+    mix_T, mix_S   !  Mixing distances in both directions across each interface, in H ~> m or kg m-2.
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness, in H.
+                       ! added to ensure positive definiteness, in H ~> m or kg m-2.
   real :: h_neglect    ! A thickness that is so small it is usually lost
-                       ! in roundoff and can be neglected, in H.
+                       ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real :: I_h_int      ! The inverse of the thickness associated with an
-                       ! interface, in H-1.
+                       ! interface, in H-1 ~> m-1 or m2 kg-1.
   real :: b_denom_T    ! The first term in the denominators for the expressions
-  real :: b_denom_S    ! for b1_T and b1_S, both in H.
+  real :: b_denom_S    ! for b1_T and b1_S, both in H ~> m or kg m-2.
   real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
   real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities in Z2 s-1 ~> m2 s-1.
   integer :: i, j, k, is, ie, js, je, nz
@@ -322,7 +322,7 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
                                                  !! available thermodynamic fields.
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
@@ -385,7 +385,7 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
                                                  !! available thermodynamic fields
   type(forcing),           intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
@@ -508,11 +508,12 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   integer,                                  intent(in)    :: ie   !< The end i-index to work on.
   integer,                                  intent(in)    :: js   !< The start j-index to work on.
   integer,                                  intent(in)    :: je   !< The end j-index to work on.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold !< The layer thicknesses before entrainment,
+                                                                  !! in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: ea !< The amount of fluid entrained from the layer
-                                                 !! above within this time step, in units of H.
+                                                 !! above within this time step, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: eb !< The amount of fluid entrained from the layer
-                                                 !! below within this time step, in units of H.
+                                                 !! below within this time step, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T  !< Layer potential temperatures, in degC.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities, in PSU.
 
@@ -557,18 +558,18 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                              intent(in)  :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                             intent(in)  :: h    !< Layer thicknesses, in H ~> m or kg m-2
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(out)   :: u_h !< Zonal velocity interpolated to h points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(out)   :: v_h !< Meridional velocity interpolated to h points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in)  :: ea !< The amount of fluid entrained from the layer
-                                                 !! above within this time step, in units of H.
+                                                 !! above within this time step, in H ~> m or kg m-2.
                                                  !! Omitting ea is the same as setting it to 0.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in)  :: eb !< The amount of fluid entrained from the layer
-                                                 !! below within this time step, in units of H.
+                                                 !! below within this time step, in H ~> m or kg m-2.
                                                  !! Omitting eb is the same as setting it to 0.
 
   ! local variables
@@ -656,7 +657,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
   integer,                 intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h           !< Layer thickness, in H (usually m or kg m-3)
+                           intent(in) :: h           !< Layer thickness, in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
                                                      !! available thermodynamic fields.
   real,                    intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
@@ -779,7 +780,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),       pointer       :: optics !< Optical properties container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: h  !< Layer thickness in H units
+                           intent(inout) :: h  !< Layer thickness in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any
                                                !! available thermodynamic fields.
   logical,                 intent(in)    :: aggregate_FW_forcing !< If False, treat in/out fluxes separately.
@@ -810,9 +811,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
     d_pres,       &  ! pressure change across a layer (Pa)
     p_lay,        &  ! average pressure in a layer (Pa)
     pres,         &  ! pressure at an interface (Pa)
-    netMassInOut, &  ! surface water fluxes (H units) over time step
-    netMassIn,    &  ! mass entering ocean surface (H units) over a time step
-    netMassOut,   &  ! mass leaving ocean surface (H units) over a time step
+    netMassInOut, &  ! surface water fluxes (H ~> m or kg m-2) over time step
+    netMassIn,    &  ! mass entering ocean surface (H ~> m or kg m-2) over a time step
+    netMassOut,   &  ! mass leaving ocean surface (H ~> m or kg m-2) over a time step
     netHeat,      &  ! heat (degC * H) via surface fluxes, excluding
                      ! Pen_SW_bnd and netMassOut
     netSalt,      &  ! surface salt flux ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
@@ -926,10 +927,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
-    ! netMassInOut = surface water fluxes (H units) over time step
+    ! netMassInOut = surface water fluxes (H ~> m or kg m-2) over time step
     !              = lprec + fprec + vprec + evap + lrunoff + frunoff
     !                note that lprec generally has sea ice melt/form included.
-    ! netMassOut   = net mass leaving ocean surface (H units) over a time step.
+    ! netMassOut   = net mass leaving ocean surface (H ~> m or kg m-2) over a time step.
     !                netMassOut < 0 means mass leaves ocean.
     ! netHeat      = heat (degC * H) via surface fluxes, excluding the part
     !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0.

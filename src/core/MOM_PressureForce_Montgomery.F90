@@ -621,7 +621,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
                                                             !! compensated), times g/rho_0, in m2 Z-1 s-2 ~> m s-2.
 
   ! Local variables
-  real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses, in H-1.
+  real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses, in H-1 ~> m-1 or m2 kg-1.
   real :: press(SZI_(G))     ! Interface pressure, in Pa.
   real :: T_int(SZI_(G))     ! Interface temperature in C.
   real :: S_int(SZI_(G))     ! Interface salinity in PSU.
@@ -629,7 +629,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   real :: dR_dS(SZI_(G))     ! and salinity in kg m-3 K-1 and kg m-3 PSU-1.
   real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer.
   real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1.
-  real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-1 Z-1 ~> kg m-2 m-2.
+  real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-1 Z-1 ~> kg s-2 m-2.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
   real :: z_neglect          ! A thickness that is so small it is usually lost

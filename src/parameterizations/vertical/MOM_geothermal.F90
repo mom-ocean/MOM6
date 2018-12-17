@@ -49,8 +49,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid
                                                                 !! structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses, in H
-                                                                !! (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),                    intent(inout) :: tv !< A structure containing pointers
                                                                 !! to any available thermodynamic
                                                                 !! fields. Absent fields have NULL
@@ -59,14 +58,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The amount of fluid moved
                                                                 !! downward into a layer; this
                                                                 !! should be increased due to mixed
-                                                                !! layer detrainment, in the same
-                                                                !! units as h - usually m or kg m-2
-                                                                !! (i.e., H).
+                                                                !! layer detrainment, in H ~> m or kg m-2
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: eb !< The amount of fluid moved upward
                                                                 !! into a layer; this should be
                                                                 !! increased due to mixed layer
-                                                                !! entrainment, in the same units as
-                                                                !! h - usually m or kg m-2 (i.e., H)
+                                                                !! entrainment, in H ~> m or kg m-2.
   type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
                                                                 !! a previous call to
                                                                 !! geothermal_init.
@@ -74,7 +70,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   ! Local variables
   real, dimension(SZI_(G)) :: &
     heat_rem,  & ! remaining heat (H * degC)
-    h_geo_rem, & ! remaining thickness to apply geothermal heating (units of H)
+    h_geo_rem, & ! remaining thickness to apply geothermal heating (H ~> m or kg m-2)
     Rcv_BL,    & ! coordinate density in the deepest variable density layer (kg/m3)
     p_ref        ! coordiante densities reference pressure (Pa)
 
@@ -83,19 +79,19 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
     dRcv_dT_, & ! partial derivative of coordinate density wrt temp (kg m-3 K-1)
     dRcv_dS_    ! partial derivative of coordinate density wrt saln (kg m-3 ppt-1)
 
-  real :: Angstrom, H_neglect  ! small thicknesses in H
+  real :: Angstrom, H_neglect  ! small thicknesses in H ~> m or kg m-2
   real :: Rcv           ! coordinate density of present layer (kg m-3)
   real :: Rcv_tgt       ! coordinate density of target layer (kg m-3)
   real :: dRcv          ! difference between Rcv and Rcv_tgt (kg m-3)
   real :: dRcv_dT       ! partial derivative of coordinate density wrt temp
                         ! in the present layer (kg m-3 K-1); usually negative
-  real :: h_heated      ! thickness that is being heated (units of H)
+  real :: h_heated      ! thickness that is being heated (H ~> m or kg m-2)
   real :: heat_avail    ! heating available for the present layer (units of Kelvin * H)
   real :: heat_in_place ! heating to warm present layer w/o movement between layers (K * H)
   real :: heat_trans    ! heating available to move water from present layer to target layer (K * H)
   real :: heating       ! heating used to move water from present layer to target layer (K * H)
                         ! 0 <= heating <= heat_trans
-  real :: h_transfer    ! thickness moved between layers (units of H)
+  real :: h_transfer    ! thickness moved between layers (H ~> m or kg m-2)
   real :: wt_in_place   ! relative weighting that goes from 0 to 1 (non-dim)
   real :: I_h           ! inverse thickness (units of 1/H)
   real :: dTemp         ! temperature increase in a layer (Kelvin)

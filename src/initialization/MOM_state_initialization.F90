@@ -129,8 +129,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                               intent(out)   :: v    !< The meridional velocity that is being
                                                     !! initialized, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                              intent(out)   :: h    !< Layer thicknesses, in H (usually m or
-                                                    !! kg m-2)
+                              intent(out)   :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(thermo_var_ptrs),      intent(inout) :: tv   !< A structure pointing to various thermodynamic
                                                     !! variables
   type(time_type),            intent(inout) :: Time !< Time at the start of the run segment.
@@ -705,7 +704,7 @@ subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h)
   type(verticalGrid_type),                    intent(in)    :: GV  !< The ocean's vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: eta !< Interface heights, in Z ~> m.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h   !< Layer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h   !< Layer thicknesses, in H ~> m or kg m-2
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
   real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
@@ -778,7 +777,7 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -834,7 +833,7 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -915,9 +914,9 @@ subroutine convert_thickness(h, G, GV, US, tv)
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: h    !< Input geometric layer thicknesses (in H units),
-                                                 !! being converted to layer pressure
-                                                 !! thicknesses (also in H units).
+                           intent(inout) :: h    !< Input geometric layer thicknesses (in H ~> m
+                                                 !! or kg m-2), being converted to layer pressure
+                                                 !! thicknesses (also in H ~> m or kg m-2).
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables
   ! Local variables
@@ -994,7 +993,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(inout) :: h    !< Layer thicknesses, in H ~> m or kg m-2
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
@@ -1901,7 +1900,7 @@ end subroutine set_velocity_depth_min
 subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_params)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(out)   :: h    !< Layer thicknesses being initialized, in H
+                           intent(out)   :: h    !< Layer thicknesses being initialized, in H ~> m or kg m-2
   type(thermo_var_ptrs),   intent(inout) :: tv   !< A structure pointing to various thermodynamic
                                                  !! variables including temperature and salinity
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -1973,7 +1972,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real, dimension(:,:), allocatable, target :: frac_shelf_h
   real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
   real, dimension(:,:,:), allocatable :: tmp_mask_in
-  real, dimension(:,:,:), allocatable :: h1 ! Thicknesses in H.
+  real, dimension(:,:,:), allocatable :: h1 ! Thicknesses in H ~> m or kg m-2.
   real, dimension(:,:,:), allocatable :: dz_interface ! Change in position of interface due to regridding
   real :: zTopOfCell, zBottomOfCell ! Heights in Z units, Z ~> m.
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays

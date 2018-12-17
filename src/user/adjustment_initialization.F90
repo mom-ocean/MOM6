@@ -36,7 +36,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -187,7 +187,7 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, G, GV, param_file
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< The temperature that is being initialized.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< The salinity that is being initialized.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< The model thicknesses in H (m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< The model thicknesses in H ~> m or kg m-2.
   type(param_file_type),   intent(in) :: param_file   !< A structure indicating the open file to
                                                       !! parse for model parameter values.
   type(EOS_type),                 pointer     :: eqn_of_state !< Equation of state.

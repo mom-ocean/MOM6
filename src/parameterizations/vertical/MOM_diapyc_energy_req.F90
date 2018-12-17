@@ -50,7 +50,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   type(verticalGrid_type),        intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),          intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke), &
-                                  intent(in)    :: h_3d !< Layer thickness before entrainment, in H.
+                                  intent(in)    :: h_3d !< Layer thickness before entrainment, in H ~> m or kg m-2.
   type(thermo_var_ptrs),          intent(inout) :: tv   !< A structure containing pointers to any
                                                         !! available thermodynamic fields.
                                                         !! Absent fields have NULL ptrs.
@@ -63,10 +63,10 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   ! Local variables
   real, dimension(GV%ke) :: &
     T0, S0, &   ! T0 & S0 are columns of initial temperatures and salinities, in degC and g/kg.
-    h_col       ! h_col is a column of thicknesses h at tracer points, in H (m or kg m-2).
+    h_col       ! h_col is a column of thicknesses h at tracer points, in H ~> m or kg m-2.
   real, dimension(GV%ke+1) :: &
     Kd, &       ! A column of diapycnal diffusivities at interfaces, in Z2 s-1 ~> m2 s-1.
-    h_top, h_bot ! Distances from the top or bottom, in H.
+    h_top, h_bot ! Distances from the top or bottom, in H ~> m or kg m-2.
   real :: ustar, absf, htot
   real :: energy_Kd ! The energy used by diapycnal mixing in W m-2.
   real :: tmp1  ! A temporary array.
@@ -123,7 +123,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
-                                                  !! in H (m or kg m-2).
+                                                  !! in H ~> m or kg m-2.
   real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures, in degC.
   real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities, in g kg-1.
   real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities,
@@ -185,10 +185,10 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                     ! of mixing with layers lower in the water column, in
                     ! units of J m-2 K-1 and J m-2 ppt-1.
     hp_a, &     ! An effective pivot thickness of the layer including the effects
-                ! of coupling with layers above, in H.  This is the first term
+                ! of coupling with layers above, in H ~> m or kg m-2.  This is the first term
                 ! in the denominator of b1 in a downward-oriented tridiagonal solver.
     hp_b, &     ! An effective pivot thickness of the layer including the effects
-                ! of coupling with layers below, in H.  This is the first term
+                ! of coupling with layers below, in H ~> m or kg m-2.  This is the first term
                 ! in the denominator of b1 in an upward-oriented tridiagonal solver.
     c1_a, &     ! c1_a is used by a downward-oriented tridiagonal solver, ND.
     c1_b, &     ! c1_b is used by an upward-oriented tridiagonal solver, ND.
@@ -198,16 +198,16 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     pres, &     ! Interface pressures in Pa.
     pres_Z, &   ! Interface pressures with a rescaling factor to convert interface height
                 ! movements into changes in column potential energy, in J m-2 Z-1.
-    z_Int, &    ! Interface heights relative to the surface, in H.
+    z_Int, &    ! Interface heights relative to the surface, in H ~> m or kg m-2.
     N2, &       ! An estimate of the buoyancy frequency in s-2.
     Kddt_h, &   ! The diapycnal diffusivity times a timestep divided by the
-                ! average thicknesses around a layer, in H (m or kg m-2).
+                ! average thicknesses around a layer, in H ~> m or kg m-2.
     Kddt_h_a, & ! The value of Kddt_h for layers above the central point in the
-                ! tridiagonal solver, in H.
+                ! tridiagonal solver, in H ~> m or kg m-2.
     Kddt_h_b, & ! The value of Kddt_h for layers below the central point in the
-                ! tridiagonal solver, in H.
+                ! tridiagonal solver, in H ~> m or kg m-2.
     Kd_so_far   ! The value of Kddt_h that has been applied already in
-                ! calculating the energy changes, in H (m or kg m-2).
+                ! calculating the energy changes, in H ~> m or kg m-2.
   real, dimension(GV%ke+1,4) :: &
     PE_chg_k, &     ! The integrated potential energy change within a timestep due
                     ! to the diffusivity at interface K for 4 different orders of
@@ -215,18 +215,18 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     ColHt_cor_k     ! The correction to the potential energy change due to
                     ! changes in the net column height, in J m-2.
   real :: &
-    b1              ! b1 is used by the tridiagonal solver, in H-1.
+    b1              ! b1 is used by the tridiagonal solver, in H-1 ~> m-1 or m2 kg-1.
   real :: &
-    I_b1            ! The inverse of b1, in H.
-  real :: Kd0       ! The value of Kddt_h that has already been applied, in H.
-  real :: dKd       ! The change in the value of Kddt_h, in H.
+    I_b1            ! The inverse of b1, in H ~> m or kg m-2.
+  real :: Kd0       ! The value of Kddt_h that has already been applied, in H ~> m or kg m-2.
+  real :: dKd       ! The change in the value of Kddt_h, in H ~> m or kg m-2.
   real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in H.
+                    ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real :: dTe_term  ! A diffusivity-independent term related to the temperature
                     ! change in the layer below the interface, in K H.
   real :: dSe_term  ! A diffusivity-independent term related to the salinity
                     ! change in the layer below the interface, in ppt H.
-  real :: Kddt_h_guess ! A guess of the final value of Kddt_h, in H.
+  real :: Kddt_h_guess ! A guess of the final value of Kddt_h, in H ~> m or kg m-2.
   real :: dMass     ! The mass per unit area within a layer, in kg m-2.
   real :: dPres     ! The hydrostatic pressure change across a layer, in Pa.
   real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
@@ -238,7 +238,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                     ! present interface, in J m-2.
   real :: ColHt_cor ! The correction to PE_chg that is made due to a net
                     ! change in the column height, in J m-2.
-  real :: htot      ! A running sum of thicknesses, in H.
+  real :: htot      ! A running sum of thicknesses, in H ~> m or kg m-2.
   real :: dTe_t2, dT_km1_t2, dT_k_t2  ! Temporary arrays describing temperature changes.
   real :: dSe_t2, dS_km1_t2, dS_k_t2  ! Temporary arrays describing salinity changes.
   logical :: do_print
@@ -970,18 +970,18 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                        PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0, ColHt_cor)
   real, intent(in)  :: Kddt_h0  !< The previously used diffusivity at an interface times
                                 !! the time step and  divided by the average of the
-                                !! thicknesses around the interface, in units of H (m or kg-2).
+                                !! thicknesses around the interface, in H ~> m or kg m-2.
   real, intent(in)  :: dKddt_h  !< The trial change in the diffusivity at an interface times
                                 !! the time step and  divided by the average of the
-                                !! thicknesses around the interface, in units of H (m or kg-2).
+                                !! thicknesses around the interface, in H ~> m or kg m-2.
   real, intent(in)  :: hp_a     !< The effective pivot thickness of the layer above the
                                 !! interface, given by h_k plus a term that
                                 !! is a fraction (determined from the tridiagonal solver) of
-                                !! Kddt_h for the interface above, in H.
+                                !! Kddt_h for the interface above, in H ~> m or kg m-2.
   real, intent(in)  :: hp_b     !< The effective pivot thickness of the layer below the
                                 !! interface, given by h_k plus a term that
                                 !! is a fraction (determined from the tridiagonal solver) of
-                                !! Kddt_h for the interface above, in H.
+                                !! Kddt_h for the interface above, in H ~> m or kg m-2.
   real, intent(in)  :: Th_a     !< An effective temperature times a thickness in the layer
                                 !! above, including implicit mixing effects with other
                                 !! yet higher layers, in K H.
@@ -1042,8 +1042,8 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real, optional, intent(out) :: ColHt_cor  !< The correction to PE_chg that is made due to a net
                                             !! change in the column height, in J m-2.
 
-  real :: hps ! The sum of the two effective pivot thicknesses, in H.
-  real :: bdt1 ! A product of the two pivot thicknesses plus a diffusive term, in H2.
+  real :: hps  ! The sum of the two effective pivot thicknesses, in H ~> m or kg m-2.
+  real :: bdt1 ! A product of the two pivot thicknesses plus a diffusive term, in H2 ~> m2 or k2 m-4.
   real :: dT_c ! The core term in the expressions for the temperature changes, in K H2.
   real :: dS_c ! The core term in the expressions for the salinity changes, in psu H2.
   real :: PEc_core ! The diffusivity-independent core term in the expressions
@@ -1120,12 +1120,12 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                             PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0)
   real, intent(in)  :: Kddt_h   !< The diffusivity at an interface times the time step and
                                 !! divided by the average of the thicknesses around the
-                                !! interface, in units of H (m or kg-2).
-  real, intent(in)  :: h_k      !< The thickness of the layer below the interface, in H.
+                                !! interface, in H ~> m or kg m-2.
+  real, intent(in)  :: h_k      !< The thickness of the layer below the interface, in H ~> m or kg m-2.
   real, intent(in)  :: b_den_1  !< The first term in the denominator of the pivot
                                 !! for the tridiagonal solver, given by h_k plus a term that
                                 !! is a fraction (determined from the tridiagonal solver) of
-                                !! Kddt_h for the interface above, in H.
+                                !! Kddt_h for the interface above, in H ~> m or kg m-2.
   real, intent(in)  :: dTe_term !< A diffusivity-independent term related to the
                                 !! temperature change in the layer below the interface, in K H.
   real, intent(in)  :: dSe_term !< A diffusivity-independent term related to the
@@ -1189,14 +1189,15 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 ! this routine can also be used for an upward pass with the sense of direction
 ! reversed.
 
-  real :: b1            ! b1 is used by the tridiagonal solver, in H-1.
+  real :: b1            ! b1 is used by the tridiagonal solver, in H-1 ~> m-1 or m2 kg-1.
   real :: b1Kd          ! Temporary array (nondim.)
   real :: ColHt_chg     ! The change in column thickness in m.
-  real :: dColHt_max    ! The change in column thickess for infinite diffusivity, in m.
-  real :: dColHt_dKd    ! The partial derivative of column thickess with diffusivity, in s m-1.
+  real :: dColHt_max    ! The change in column thickness for infinite diffusivity, in m.
+  real :: dColHt_dKd    ! The partial derivative of column thickness with diffusivity, in s m-1.
   real :: dT_k, dT_km1  ! Temporary arrays in K.
   real :: dS_k, dS_km1  ! Temporary arrays in ppt.
-  real :: I_Kr_denom, dKr_dKd   ! Temporary arrays in H-2 and nondim.
+  real :: I_Kr_denom    ! Temporary arrays in H-2 ~> m-2 or m4 kg-2.
+  real :: dKr_dKd       ! Nondimensional temporary array.
   real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays in K H-1.
   real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays in ppt H-1.
 
