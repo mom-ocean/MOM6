@@ -952,12 +952,20 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
     endif
   endif
 
+  if (associated(fluxes%meltw)) then ; do j=js,je ; do i=is,ie
+    FW_in(i,j) = FW_in(i,j) + dt * G%areaT(i,j) * fluxes%meltw(i,j)
+  enddo ; enddo ; endif
+
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0
   if (CS%use_temperature) then
 
     if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
+    enddo ; enddo ; endif
+
+    if (associated(fluxes%melth)) then ; do j=js,je ; do i=is,ie
+       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * fluxes%melth(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
