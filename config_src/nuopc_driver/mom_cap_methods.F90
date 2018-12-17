@@ -12,6 +12,8 @@ module mom_cap_methods
   use ESMF,                only: ESMF_KIND_R8, ESMF_SUCCESS, ESMF_LogFoundError
   use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_LOGMSG_INFO, ESMF_LOGWRITE
   use ESMF,                only: ESMF_LogSetError, ESMF_RC_MEM_ALLOCATE
+  use ESMF,                only: ESMF_StateItem_Flag, ESMF_STATEITEM_NOTFOUND
+  use ESMF,                only: operator(/=), operator(==)
   use MOM_ocean_model,     only: ocean_public_type, ocean_state_type, ocean_model_data_get
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
@@ -258,6 +260,7 @@ contains
   subroutine mom_import_cesm(ocean_public, grid, importState, ice_ocean_boundary, &
        logunit, runtype, clock, rc)
 
+    ! Input/output variables
     type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
     type(ocean_grid_type)         , intent(in)    :: grid               !< Ocean model grid
     type(ESMF_State)              , intent(inout) :: importState        !< incoming data
@@ -268,11 +271,19 @@ contains
     integer                       , intent(inout) :: rc
 
     ! Local Variables
+    type(ESMF_StateItem_Flag)   :: itemFlag
     integer                     :: i, j, n
     integer                     :: isc, iec, jsc, jec
+    integer                     :: lsize
     integer                     :: day, secs
     type(ESMF_time)             :: currTime
     logical                     :: do_import
+    ! import fields that are different for cam and fv3
+    logical                     :: isPresent_lwup
+    logical                     :: isPresent_lwdn
+    logical                     :: isPresent_lwnet
+    logical                     :: isPresent_evap
+    ! from atm
     real(ESMF_KIND_R8), pointer :: dataPtr_p(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_taux(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_tauy(:)
@@ -281,20 +292,25 @@ contains
     real(ESMF_KIND_R8), pointer :: dataPtr_evap(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_lwdn(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_lwup(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_lwnet(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_rain(:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_snow(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_swvdr(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_swvdf(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_swndr(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_swndf(:)
+    ! from river
     real(ESMF_KIND_R8), pointer :: dataPtr_rofl(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_rofi(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_salt(:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_rain(:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_snow(:)
+    ! from wave
     real(ESMF_KIND_R8), pointer :: dataPtr_lamult(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_ustokes(:)
     real(ESMF_KIND_R8), pointer :: dataPtr_vstokes(:)
-    character(len=*), parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
-    character(len=*), parameter :: subname = '(mom_import)'
+    !
+    real(ESMF_KIND_R8), parameter :: const_lhvap = 2.501e6_ESMF_KIND_R8  ! latent heat of evaporation ~ J/kg
+    character(len=*)  , parameter :: F01  = "('(mom_import) ',a,4(i6,2x),d21.14)"
+    character(len=*)  , parameter :: subname = '(mom_import)'
     !-----------------------------------------------------------------------
 
     rc = ESMF_SUCCESS
@@ -349,16 +365,6 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Faxa_lwdn" , dataPtr_lwdn, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(importState,"Foxx_lwup" , dataPtr_lwup, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
     call State_getFldPtr(importState,"Foxx_rofl" , dataPtr_rofl, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -385,7 +391,62 @@ contains
       file=__FILE__)) &
       return  ! bail out
 
+    ! -------
+    ! Different treatment of long wave dependent on if cam, datm or fv3
+    ! -------
+    ! When running with cam or datm - need Foxx_lwup and Faxa_lwdn
+    ! When running with fv3 - need mean_net_lw_flx
+
+    call ESMF_StateGet(importState, 'Foxx_lwup', itemFlag, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    if (itemflag /= ESMF_STATEITEM_NOTFOUND) then
+       isPresent_lwup = .true.
+       call State_getFldPtr(importState,"Foxx_lwup", dataPtr_lwup, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+    else
+       isPresent_lwup = .false.
+    end if
+    call ESMF_StateGet(importState, 'Faxa_lwdn', itemFlag, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    if (itemflag /= ESMF_STATEITEM_NOTFOUND) then
+       isPresent_lwdn = .true.
+       call State_getFldPtr(importState, "Faxa_lwdn", dataPtr_lwdn, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+    else
+       isPresent_lwdn = .false.
+    end if
+    call ESMF_StateGet(importState, "mean_net_lw_flx", itemFlag, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    if (itemflag /= ESMF_STATEITEM_NOTFOUND) then
+       isPresent_lwnet = .true.
+       call State_getFldPtr(importState,"mean_net_lw_flx" , dataPtr_lwnet, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+    else
+       isPresent_lwnet = .false.
+    end if
+
+    ! -------
     ! import_cnt is used to skip using the import state at the first count
+    ! -------
+
     import_cnt = import_cnt + 1
     if ((trim(runtype) == 'initial' .and. import_cnt <= 2)) then
        do_import = .false. ! This will skip the first time import information is given
@@ -407,8 +468,12 @@ contains
              ice_ocean_boundary%t_flux(i,j)          =  dataPtr_sen(n)   ! sensible heat flux (W/m2)
              ice_ocean_boundary%latent_flux(i,j)     =  dataPtr_lat(n)   ! latent heat flux (W/m^2)
              ice_ocean_boundary%q_flux(i,j)          =  dataPtr_evap(n)  ! specific humidity flux
-             ice_ocean_boundary%lw_flux(i,j)         =  dataPtr_lwup(n) &
+             if (isPresent_lwup .and. isPresent_lwdn) then
+                ice_ocean_boundary%lw_flux(i,j)      =  dataPtr_lwup(n) &
                                                       + dataPtr_lwdn(n)  ! longwave radiation, sum up and down (W/m2)
+             else if (isPresent_lwnet) then
+                ice_ocean_boundary%lw_flux(i,j)      =  dataPtr_lwnet(n) ! net longwave radiation, sum up and down (W/m2)
+             end if
              ice_ocean_boundary%sw_flux_vis_dir(i,j) =  dataPtr_swvdr(n) ! visible, direct shortwave  (W/m2)
              ice_ocean_boundary%sw_flux_vis_dif(i,j) =  dataPtr_swvdf(n) ! visible, diffuse shortwave (W/m2)
              ice_ocean_boundary%sw_flux_nir_dir(i,j) =  dataPtr_swndr(n) ! near-IR, direct shortwave  (W/m2)

@@ -1026,7 +1026,6 @@ contains
        endif
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_rain" , "will provide") ! -> mean_prec_rat
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_snow" , "will provide") ! -> mean_fprec_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn" , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr", "will provide") ! -> mean_net_sw_ir_dif_flx
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr", "will provide") ! -> mean_net_sw_vis_dir_flx
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf", "will provide") ! -> mean_net_sw_ir_dir_flx
@@ -1035,12 +1034,16 @@ contains
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy" , "will provide") ! -> mean_merid_moment_flx
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"  , "will provide") ! -> mean_sensi_heat_flx
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lat"  , "will provide") ! -> mean latent heat flux
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup" , "will provide") ! -> mean long wave up
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap" , "will provide") ! -> mean_evap_rate
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_salt" , "will provide") ! -> mean_salt_rate
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl" , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi" , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"   , "will provide") ! -> inst_pres_height_surface
+       ! when coupled to cam
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup" , "will provide") ! -> mean long wave up
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn" , "will provide") ! -> mean long wave down
+       ! when coupled to fv3
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx", "will_provide")
 
        ! EMC fields not used
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
