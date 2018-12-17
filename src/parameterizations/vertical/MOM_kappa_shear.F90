@@ -101,7 +101,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2.
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
@@ -390,7 +390,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   &
                            intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: T_in   !< Layer potential temperatures in degC
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
@@ -452,7 +452,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real :: dz_in_lay     !   The running sum of the thickness in a layer, in Z ~> m.
   real :: k0dt          ! The background diffusivity times the timestep, in Z2 ~> m2.
   real :: dz_massless   ! A layer thickness that is considered massless, in Z ~> m.
-  real :: I_hwt ! The inverse of the masked thickness weights, in H-1.
+  real :: I_hwt ! The inverse of the masked thickness weights, in H-1 ~> m-1 or m2 kg-1.
   real :: I_Prandtl
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.

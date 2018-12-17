@@ -52,7 +52,7 @@ end subroutine end_coord_zlike
 !> Set parameters in the zlike structure
 subroutine set_zlike_params(CS, min_thickness)
   type(zlike_CS), pointer    :: CS !< Coordinate control structure
-  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness, in H
+  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness, in H ~> m or kg m-2
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_zlike_params: CS not associated")
 

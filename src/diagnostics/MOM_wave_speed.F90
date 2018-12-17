@@ -51,7 +51,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)  :: h  !< Layer thickness in units of H (m or kg/m2)
+                                    intent(in)  :: h  !< Layer thickness in H ~> m or kg m-2
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed (m/s)
   type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
@@ -84,7 +84,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
   real :: lam, dlam, lam0
   real :: min_h_frac
-  real :: Z_to_Pa  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
+  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses in Z ~> m.
     H_here, HxT_here, HxS_here, HxR_here
@@ -455,7 +455,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               mode_struct(1:kc)=0.
             endif
             ! Note that remapping_core_h requires that the same units be used
-            ! for both the source and target grid thicknesses, here in H.
+            ! for both the source and target grid thicknesses, here in H ~> m or kg m-2.
             call remapping_core_h(CS%remapping_CS, kc, GV%Z_to_H*Hc(:), mode_struct, &
                                   nz, h(i,j,:), modal_structure(i,j,:), 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
           endif
@@ -563,7 +563,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: min_h_frac
-  real :: Z_to_Pa  ! A conversion factor from thickesses (in Z) to pressure (in Pa)
+  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
     htot, hmin, &    ! Thicknesses in Z ~> m.
     H_here, HxT_here, HxS_here, HxR_here

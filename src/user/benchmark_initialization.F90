@@ -87,7 +87,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects the
@@ -172,13 +172,10 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
 
     do k=1,nz ; e_pert(K) = 0.0 ; enddo
 
-!  The remainder of this subroutine should not be changed.           !
-
-!    This sets the initial thickness (in H) of the layers.  The      !
-!  thicknesses are set to insure that: 1.  each layer is at least    !
-!  Gv%Angstrom_m thick, and 2.  the interfaces are where they should be    !
-!  based on the resting depths and interface height perturbations,   !
-!  as long at this doesn't interfere with 1.                         !
+    !   This sets the initial thickness (in H ~> m or kg m-2) of the layers.  The thicknesses
+    ! are set to insure that: 1. each layer is at least  Gv%Angstrom_m thick, and
+    ! 2. the interfaces are where they should be based on the resting depths and interface
+    ! height perturbations, as long at this doesn't interfere with 1.
     eta1D(nz+1) = -G%bathyT(i,j)
 
     do k=nz,2,-1

@@ -588,7 +588,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: H_cutoff      ! Local estimate of a minimum thickness for masking (m)
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H.
+                        ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real :: S2            ! Interface slope squared (non-dim)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
   real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)

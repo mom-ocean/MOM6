@@ -250,7 +250,7 @@ type, public :: MOM_control_struct ; private
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
 
   real, dimension(:,:,:), pointer :: &
-    h_pre_dyn => NULL(), &      !< The thickness before the transports, in H.
+    h_pre_dyn => NULL(), &      !< The thickness before the transports, in H ~> m or kg m-2.
     T_pre_dyn => NULL(), &      !< Temperature before the transports, in degC.
     S_pre_dyn => NULL()         !< Salinity before the transports, in psu.
   type(accel_diag_ptrs) :: ADp  !< structure containing pointers to accelerations,
