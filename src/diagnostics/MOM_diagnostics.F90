@@ -193,13 +193,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: v    !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: uh   !< Transport through zonal faces = u*h*dy, in H m2 s-1.
-                                                 !! I.e. units are m3/s(Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: uh   !< Transport through zonal faces = u*h*dy,
+                                                 !! in H m2 s-1 ~> m3 s-1 or kg s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: vh   !< Transport through meridional faces = v*h*dx, in H m2 s-1.
-                                                 !! I.e. units are m3/s(Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: vh   !< Transport through meridional faces = v*h*dx,
+                                                 !! in H m2 s-1 ~> m3 s-1 or kg s-1.
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< structure with pointers to
@@ -769,7 +769,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2.
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
   real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure, in Pa.
@@ -887,13 +887,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: v    !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: uh   !< Transport through zonal faces=u*h*dy, in H m2 s-1.
-                                                 !! I.e. units are m3/s (Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: uh   !< Transport through zonal faces=u*h*dy,
+                                                 !! in H m2 s-1 ~> m3 s-1 or kg s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: vh   !< Transport through merid faces=v*h*dx, in H m2 s-1.
-                                                 !! I.e. units are m3/s (Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: vh   !< Transport through merid faces=v*h*dx,
+                                                 !! in H m2 s-1 ~> m3 s-1 or kg s-1.
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< Structure pointing to accelerations in momentum equation.
   type(cont_diag_ptrs),    intent(in)    :: CDp  !< Structure pointing to terms in continuity equations.
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a previous call to
@@ -1322,7 +1322,7 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vhtr !< Accumulated meridional thickness fluxes
                                                  !! used to advect tracers (m3 or kg)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h   !< The updated layer thicknesses, in H
+                            intent(in)    :: h   !< The updated layer thicknesses, in H ~> m or kg m-2
   type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
   type(diag_grid_storage),  intent(inout) :: diag_pre_dyn !< Stored grids from before dynamics
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output

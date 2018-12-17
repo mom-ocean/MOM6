@@ -872,7 +872,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
                                 !! LA outputs are desired that are different than
                                 !! those used by the dynamical model.
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: H     !< Grid layer thickness in H (m or kg/m2)
+       intent(in)      :: H     !< Grid layer thickness in H ~> m or kg m-2
   real, dimension(SZK_(GV)), optional, &
        intent(in)      :: U_H   !< Zonal velocity at H point (m/s)
   real, dimension(SZK_(GV)), optional, &
@@ -1189,7 +1189,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
        intent(in)    :: GV    !< Ocean vertical grid
   real, intent(in)   :: Dt    !< Time step of MOM6 [s] for explicit solver
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
-       intent(in)    :: h     !< Layer/level thicknesses (units of H)
+       intent(in)    :: h     !< Layer/level thicknesses (H ~> m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
        intent(inout) :: u     !< Velocity i-component (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1257,7 +1257,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
        intent(in)   :: GV     !< Ocean vertical grid
   real, intent(in)  :: Dt     !< Time step of MOM6 [s] CHECK IF PASSING RIGHT TIMESTEP
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-       intent(in)    :: h     !< Layer/level thicknesses (units of H)
+       intent(in)    :: h     !< Layer/level thicknesses (H ~> m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
        intent(inout) :: u     !< Velocity i-component (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &

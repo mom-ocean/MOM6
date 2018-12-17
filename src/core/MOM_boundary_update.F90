@@ -115,7 +115,7 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs),                    intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thicknesses, in H ~> m or kg m-2
   type(ocean_OBC_type),                     pointer       :: OBC  !< Open boundary structure
   type(update_OBC_CS),                      pointer       :: CS   !< Control structure for OBCs
   type(time_type),                          intent(in)    :: Time !< Model time

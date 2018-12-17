@@ -320,16 +320,16 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: h   !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(inout) :: h   !< Layer thicknesses, in H ~> m or kg m-2
   real,                    intent(in)    :: dt  !< The amount of time covered by this call, in s.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: ea  !< An array to which the amount of fluid entrained
                                                 !! from the layer above during this call will be
-                                                !! added, in H.
+                                                !! added, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: eb  !< An array to which the amount of fluid entrained
                                                 !! from the layer below during this call will be
-                                                !! added, in H.
+                                                !! added, in H ~> m or kg m-2.
   type(sponge_CS),         pointer       :: CS  !< A pointer to the control structure for this module
                                                 !! that is set by a previous call to initialize_sponge.
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -342,7 +342,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     w_int, &       ! Water moved upward across an interface within a timestep,
-                   ! in H.
+                   ! in H ~> m or kg m-2.
     e_D            ! Interface heights that are dilated to have a value of 0
                    ! at the surface, in the same units as G%bathyT (m or Z).
   real, dimension(SZI_(G), SZJ_(G)) :: &
@@ -355,8 +355,8 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   real, allocatable, dimension(:,:,:) :: &
     fld_mean_anom  ! THe i-mean tracer concentration anomalies.
   real, dimension(SZI_(G), SZK_(G)+1) :: &
-    h_above, &     ! The total thickness above an interface, in H.
-    h_below        ! The total thickness below an interface, in H.
+    h_above, &     ! The total thickness above an interface, in H ~> m or kg m-2.
+    h_below        ! The total thickness below an interface, in H ~> m or kg m-2.
   real, dimension(SZI_(G)) :: &
     dilate         ! A nondimensional factor by which to dilate layers to
                    ! give 0 at the surface.
@@ -367,11 +367,11 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
                    ! profile must be stretched for the free surfaces
                    ! heights in the two profiles to agree.
   real :: w        ! The thickness of water moving upward through an
-                   ! interface within 1 timestep, in H.
-  real :: wm       ! wm is w if w is negative and 0 otherwise, in H.
-  real :: wb       ! w at the interface below a layer, in H.
-  real :: wpb      ! wpb is wb if wb is positive and 0 otherwise, in H.
-  real :: ea_k, eb_k ! in H
+                   ! interface within 1 timestep, in H ~> m or kg m-2.
+  real :: wm       ! wm is w if w is negative and 0 otherwise, in H ~> m or kg m-2.
+  real :: wb       ! w at the interface below a layer, in H ~> m or kg m-2.
+  real :: wpb      ! wpb is wb if wb is positive and 0 otherwise, in H ~> m or kg m-2.
+  real :: ea_k, eb_k ! in H ~> m or kg m-2
   real :: damp     ! The timestep times the local damping  coefficient.  ND.
   real :: I1pdamp  ! I1pdamp is 1/(1 + damp).  Nondimensional.
   real :: damp_1pdamp ! damp_1pdamp is damp/(1 + damp).  Nondimensional.

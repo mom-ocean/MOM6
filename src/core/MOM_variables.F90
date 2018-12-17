@@ -128,10 +128,10 @@ type, public :: ocean_internal_state
     S => NULL(), & !< Pointer to the salinity state variable, in PSU or g/kg
     u => NULL(), & !< Pointer to the zonal velocity, in m s-1
     v => NULL(), & !< Pointer to the meridional velocity, in m s-1
-    h => NULL()    !< Pointer to the layer thicknesses, in H (often m or kg m-2)
+    h => NULL()    !< Pointer to the layer thicknesses, in H ~> m or kg m-2
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), & !<  Pointer to zonal transports, in H m2 s-1
-    vh => NULL()    !<  Pointer to meridional transports, in H m2 s-1
+    uh => NULL(), & !<  Pointer to zonal transports, in H m2 s-1 ~> m2 s-1 or kg s-1
+    vh => NULL()    !<  Pointer to meridional transports, in H m2 s-1 ~> m2 s-1 or kg s-1
   real, pointer, dimension(:,:,:) :: &
     CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration, in m s-2
     CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration, in m s-2
@@ -226,7 +226,7 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: nkml_visc_v => NULL()
                 !< The number of layers in the viscous surface mixed layer at v-points (nondimensional).
   real, pointer, dimension(:,:) :: &
-    MLD => NULL()      !< Instantaneous active mixing layer depth (H units).
+    MLD => NULL()      !< Instantaneous active mixing layer depth (H ~> m or kg m-2).
   real, pointer, dimension(:,:,:) :: &
     Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points, in Z s-1 ~> m s-1.
     Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points, in Z s-1 ~> m s-1.
@@ -262,31 +262,31 @@ end type vertvisc_type
 !! and how they will vary as the barotropic velocity is changed.
 type, public :: BT_cont_type
   real, allocatable :: FA_u_EE(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from locations far to the east, in H m.
+                                    !! drawing from locations far to the east, in H m ~> m2 or kg m-1.
   real, allocatable :: FA_u_E0(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from nearby to the east, in H m.
+                                    !! drawing from nearby to the east, in H m ~> m2 or kg m-1.
   real, allocatable :: FA_u_W0(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from nearby to the west, in H m.
+                                    !! drawing from nearby to the west, in H m ~> m2 or kg m-1.
   real, allocatable :: FA_u_WW(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from locations far to the west, in H m.
+                                    !! drawing from locations far to the west, in H m ~> m2 or kg m-1.
   real, allocatable :: uBT_WW(:,:)  !< uBT_WW is the barotropic velocity, in m s-1, beyond which the marginal
                                     !! open face area is FA_u_WW.  uBT_WW must be non-negative.
   real, allocatable :: uBT_EE(:,:)  !< uBT_EE is a barotropic velocity, in m s-1, beyond which the marginal
                                     !! open face area is FA_u_EE. uBT_EE must be non-positive.
   real, allocatable :: FA_v_NN(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from locations far to the north, in H m.
+                                    !! drawing from locations far to the north, in H m ~> m2 or kg m-1.
   real, allocatable :: FA_v_N0(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from nearby to the north, in H m.
+                                    !! drawing from nearby to the north, in H m ~> m2 or kg m-1.
   real, allocatable :: FA_v_S0(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from nearby to the south, in H m.
+                                    !! drawing from nearby to the south, in H m ~> m2 or kg m-1.
   real, allocatable :: FA_v_SS(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from locations far to the south, in H m.
+                                    !! drawing from locations far to the south, in H m ~> m2 or kg m-1.
   real, allocatable :: vBT_SS(:,:)  !< vBT_SS is the barotropic velocity, in m s-1, beyond which the marginal
                                     !! open face area is FA_v_SS. vBT_SS must be non-negative.
   real, allocatable :: vBT_NN(:,:)  !< vBT_NN is the barotropic velocity, in m s-1, beyond which the marginal
                                     !! open face area is FA_v_NN.  vBT_NN must be non-positive.
-  real, allocatable :: h_u(:,:,:)   !< An effective thickness at zonal faces, in H.
-  real, allocatable :: h_v(:,:,:)   !< An effective thickness at meridional faces, in H.
+  real, allocatable :: h_u(:,:,:)   !< An effective thickness at zonal faces, in H ~> m or kg m-2.
+  real, allocatable :: h_v(:,:,:)   !< An effective thickness at meridional faces, in H ~> m or kg m-2.
   type(group_pass_type) :: pass_polarity_BT !< Structure for polarity group halo updates
   type(group_pass_type) :: pass_FA_uv !< Structure for face area group halo updates
 end type BT_cont_type

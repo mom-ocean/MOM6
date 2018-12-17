@@ -38,7 +38,7 @@ public updateCFLtruncationValue
 type, public :: vertvisc_CS ; private
   real    :: Hmix            !< The mixed layer thickness in thickness units (H).
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
-                             !! stress is applied with direct_stress, in H.
+                             !! stress is applied with direct_stress, in H ~> m or kg m-2.
   real    :: Kvml            !< The mixed layer vertical viscosity in m2 s-1.
   real    :: Kv              !< The interior vertical viscosity in m2 s-1.
   real    :: Hbbl            !< The static bottom boundary layer thickness, in m.
@@ -152,7 +152,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: v      !< Meridional velocity in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: h      !< Layer thickness in H
+                           intent(in)    :: h      !< Layer thickness in H ~> m or kg m-2
   type(mech_forcing),    intent(in)      :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),   intent(inout)   :: visc   !< Viscosities and bottom drag
   real,                  intent(in)      :: dt     !< Time increment in s
@@ -179,7 +179,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                                 ! while b1 has units of inverse thickness.
   real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
   real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity, in Z s-1 ~> m s-1.
-  real :: b_denom_1             ! The first term in the denominator of b1, in H.
+  real :: b_denom_1             ! The first term in the denominator of b1, in H ~> m or kg m-2.
 
   real :: Hmix             ! The mixed layer thickness over which stress
                            ! is applied with direct_stress, translated into
@@ -578,7 +578,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v      !< Meridional velocity in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: h      !< Layer thickness in H
+                           intent(in)    :: h      !< Layer thickness in H ~> m or kg m-2
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(in)    :: visc   !< Viscosities and bottom drag
   real,                    intent(in)    :: dt     !< Time increment in s
@@ -596,8 +596,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                 ! given by 2*(h+ * h-)/(h+ + h-), in m or kg m-2 (H for short).
     h_arith, &  ! The arithmetic mean thickness, in m or kg m-2.
     h_delta, &  ! The lateral difference of thickness, in m or kg m-2.
-    hvel, &     ! hvel is the thickness used at a velocity grid point, in H.
-    hvel_shelf  ! The equivalent of hvel under shelves, in H.
+    hvel, &     ! hvel is the thickness used at a velocity grid point, in H ~> m or kg m-2.
+    hvel_shelf  ! The equivalent of hvel under shelves, in H ~> m or kg m-2.
   real, dimension(SZIB_(G),SZK_(G)+1) :: &
     a_cpl, &    ! The drag coefficients across interfaces, in Z s-1 ~> m s-1.  a_cpl times
                 ! the velocity difference gives the stress across an interface.
@@ -614,7 +614,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                   ! of H-1 (i.e., m-1 or m2 kg-1).
     zcol1, &      ! The height of the interfaces to the north and south of a
     zcol2, &      ! v-point, in m or kg m-2.
-    Ztop_min, &   ! The deeper of the two adjacent surface heights, in H.
+    Ztop_min, &   ! The deeper of the two adjacent surface heights, in H ~> m or kg m-2.
     Dmin, &       ! The shallower of the two adjacent bottom depths converted to
                   ! thickness units, in m or kg m-2.
     zh, &         ! An estimate of the interface's distance from the bottom
@@ -624,16 +624,16 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   real, allocatable, dimension(:,:) :: hML_v ! Diagnostic of the mixed layer depth at v points, in m.
   real, allocatable, dimension(:,:,:) :: Kv_u !< Total vertical viscosity at u-points, in m2 s-1.
   real, allocatable, dimension(:,:,:) :: Kv_v !< Total vertical viscosity at v-points, in m2 s-1.
-  real :: zcol(SZI_(G)) ! The height of an interface at h-points, in H (m or kg m-2).
+  real :: zcol(SZI_(G)) ! The height of an interface at h-points, in H ~> m or kg m-2.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
                   ! than Htbl into the interior.
   real :: z2      ! The distance from the bottom, normalized by Hbbl, nondim.
   real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2.
-  real :: z_clear ! The clearance of an interface above the surrounding topography, in H.
+  real :: z_clear ! The clearance of an interface above the surrounding topography, in H ~> m or kg m-2.
   real :: h_neglect  ! A thickness that is so small it is usually lost
-                     ! in roundoff and can be neglected, in H.
+                     ! in roundoff and can be neglected, in H ~> m or kg m-2.
 
   real :: I_valBL ! The inverse of a scaling factor determining when water is
                   ! still within the boundary layer, as determined by the sum
@@ -1048,18 +1048,18 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real, dimension(SZIB_(G),SZK_(GV)+1), &
                              intent(out) :: a_cpl !< Coupling coefficient across interfaces, in Z s-1 ~> m s-1.
   real, dimension(SZIB_(G),SZK_(GV)), &
-                             intent(in)  :: hvel !< Thickness at velocity points, in H
+                             intent(in)  :: hvel !< Thickness at velocity points, in H ~> m or kg m-2
   logical, dimension(SZIB_(G)), &
                              intent(in)  :: do_i !< If true, determine coupling coefficient for a column
   real, dimension(SZIB_(G),SZK_(GV)), &
                              intent(in)  :: h_harm !< Harmonic mean of thicknesses around a velocity
-                                                   !! grid point, in H
-  real, dimension(SZIB_(G)), intent(in)  :: bbl_thick !< Bottom boundary layer thickness, in H
+                                                   !! grid point, in H ~> m or kg m-2
+  real, dimension(SZIB_(G)), intent(in)  :: bbl_thick !< Bottom boundary layer thickness, in H ~> m or kg m-2
   real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, in Z2 s-1 ~> m2 s-1.
   real, dimension(SZIB_(G),SZK_(GV)+1), &
                              intent(in)  :: z_i  !< Estimate of interface heights above the bottom,
                                                  !! normalized by the bottom boundary layer thickness
-  real, dimension(SZIB_(G)), intent(out) :: h_ml !< Mixed layer depth, in H
+  real, dimension(SZIB_(G)), intent(out) :: h_ml !< Mixed layer depth, in H ~> m or kg m-2
   integer,                   intent(in)  :: j    !< j-index to find coupling coefficient for
   real,                      intent(in)  :: dt   !< Time increment, in s
   type(vertvisc_CS),         pointer     :: CS   !< Vertical viscosity control structure
@@ -1084,16 +1084,16 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     tbl_thick
   real, dimension(SZIB_(G),SZK_(GV)) :: &
     Kv_add      ! A viscosity to add, in Z2 s-1 ~> m2 s-1.
-  real :: h_shear ! The distance over which shears occur, H.
-  real :: r       ! A thickness to compare with Hbbl, in H.
+  real :: h_shear ! The distance over which shears occur, in H ~> m or kg m-2.
+  real :: r       ! A thickness to compare with Hbbl, in H ~> m or kg m-2.
   real :: visc_ml ! The mixed layer viscosity, in Z2 s-1 ~> m2 s-1.
-  real :: I_Hmix  ! The inverse of the mixed layer thickness, in H-1.
+  real :: I_Hmix  ! The inverse of the mixed layer thickness, in H-1 ~> m-1 or m2 kg-1.
   real :: a_ml    ! The layer coupling coefficient across an interface in
                   ! the mixed layer, in m s-1.
   real :: I_amax  ! The inverse of the maximum coupling coefficient, in Z-1 ~> m-1.???
   real :: temp1   ! A temporary variable in H Z
   real :: h_neglect   ! A thickness that is so small it is usually lost
-                      ! in roundoff and can be neglected, in H.
+                      ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real :: z2      ! A copy of z_i, nondim.
   real :: topfn
   real :: a_top
@@ -1365,7 +1365,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: v      !< Meridional velocity in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: h      !< Layer thickness in H
+                           intent(in)    :: h      !< Layer thickness in H ~> m or kg m-2
   type(accel_diag_ptrs),   intent(in)    :: ADp    !< Acceleration diagnostic pointers
   type(cont_diag_ptrs),    intent(in)    :: CDp    !< Continuity diagnostic pointers
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces

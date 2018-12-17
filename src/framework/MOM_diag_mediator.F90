@@ -950,7 +950,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
   real,    optional, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
   real, dimension(:,:,:), &
          target, optional, intent(in) :: alt_h  !< An alternate thickness to use for vertically
-                                                !! remapping this diagnostic, in H.
+                                                !! remapping this diagnostic, in H ~> m or kg m-2.
 
   ! Local variables
   type(diag_type), pointer :: diag => null()
