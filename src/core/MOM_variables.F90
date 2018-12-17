@@ -254,8 +254,8 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
                 !< The turbulent kinetic energy per unit mass at the interfaces, in m2 s-2.
                 !! This may be at the tracer or corner points
-  logical :: add_Kv_slow !< If True, add Kv_slow when calculating the 'coupling coefficient' (a[k])
-                         !! at the interfaces. This is done in find_coupling_coef.
+  logical :: add_Kv_slow !< If True, add Kv_slow when calculating the 'coupling coefficient' (a_cpl)
+                         !! at the interfaces in find_coupling_coef.
 end type vertvisc_type
 
 !> Container for information about the summed layer transports
