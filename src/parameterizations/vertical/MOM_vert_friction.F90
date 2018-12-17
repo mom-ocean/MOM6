@@ -716,7 +716,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     endif ; endif
 
 !    The following block calculates the thicknesses at velocity
-!  grid points for the vertical viscosity (hvel[k]).  Near the
+!  grid points for the vertical viscosity (hvel).  Near the
 !  bottom an upwind biased thickness is used to control the effect
 !  of spurious Montgomery potential gradients at the bottom where
 !  nearly massless layers layers ride over the topography.
@@ -883,7 +883,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     endif ; endif
 
 !    The following block calculates the thicknesses at velocity
-!  grid points for the vertical viscosity (hvel[k]).  Near the
+!  grid points for the vertical viscosity (hvel).  Near the
 !  bottom an upwind biased thickness is used to control the effect
 !  of spurious Montgomery potential gradients at the bottom where
 !  nearly massless layers layers ride over the topography.
@@ -1037,9 +1037,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
 end subroutine vertvisc_coef
 
-!> Calculate the 'coupling coefficient' (a[k]) at the
-!! interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
-!! adjacent layer thicknesses are used to calculate a[k] near the bottom.
+!> Calculate the 'coupling coefficient' (a_cpl) at the interfaces.
+!! If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the adjacent
+!! layer thicknesses are used to calculate a_cpl near the bottom.
 subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                               dt, j, G, GV, US, CS, visc, forces, work_on_u, OBC, shelf)
   type(ocean_grid_type),     intent(in)  :: G  !< Ocean grid structure
