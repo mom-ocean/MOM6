@@ -98,7 +98,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
     !   This sets the initial thickness (in H ~> m or kg m-2) of the layers.  The
     ! thicknesses are set to insure that: 1. each layer is at least an Angstrom thick, and
     ! 2. the interfaces are where they should be based on the resting depths and interface
-    !    height perturbations, as long at this doesn't interfere with 1.  
+    !    height perturbations, as long at this doesn't interfere with 1.
     eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)

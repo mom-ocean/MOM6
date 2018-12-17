@@ -240,7 +240,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 ! This is a simple example of a set of advected passive tracers.
 
 ! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
   real :: Isecs_per_year = 1.0 / (365.0*86400.0)

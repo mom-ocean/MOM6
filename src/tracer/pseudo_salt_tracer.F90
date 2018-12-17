@@ -205,7 +205,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
 ! tracer physics or chemistry to the tracers from this file.
 
 ! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
   real :: year, h_total, scale, htot, Ih_limit
