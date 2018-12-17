@@ -212,7 +212,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
 !   v(is-1:ie+2,js-1:je+1), u(is-1:ie+1,js-1:je+2), h(is-1:ie+2,js-1:je+2),
-!   uh(is-1,ie,js:je+1) and vh(is:ie+1,js-1:je). 
+!   uh(is-1,ie,js:je+1) and vh(is:ie+1,js-1:je).
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
