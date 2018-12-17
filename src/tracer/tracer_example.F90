@@ -261,7 +261,7 @@ end subroutine USER_initialize_tracer
 !! tracer physics or chemistry to the tracers from this file.
 !! This is a simple example of a set of advected passive tracers.
 !! The arguments to this subroutine are redundant in that
-!!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure

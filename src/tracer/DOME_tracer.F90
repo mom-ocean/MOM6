@@ -284,7 +284,7 @@ end subroutine initialize_DOME_tracer
 !! This is a simple example of a set of advected passive tracers.
 !!
 !! The arguments to this subroutine are redundant in that
-!!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
