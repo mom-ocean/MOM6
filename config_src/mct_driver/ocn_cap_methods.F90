@@ -47,11 +47,14 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
     do i = isc, iec
       k = k + 1 ! Increment position within gindex
 
+      ! rotate taux and tauy from true zonal/meridional to local coordinates
       ! taux
-      ice_ocean_boundary%u_flux(i,j) = x2o(ind%x2o_Foxx_taux,k)
+      ice_ocean_boundary%u_flux(i,j) = GRID%cos_rot(i,j) * x2o(ind%x2o_Foxx_taux,k) &
+                                      + GRID%sin_rot(i,j) * x2o(ind%x2o_Foxx_tauy,k)
 
       ! tauy
-      ice_ocean_boundary%v_flux(i,j) = x2o(ind%x2o_Foxx_tauy,k)
+      ice_ocean_boundary%v_flux(i,j) = GRID%cos_rot(i,j) * x2o(ind%x2o_Foxx_tauy,k) &
+                                      - GRID%sin_rot(i,j) * x2o(ind%x2o_Foxx_taux,k)
 
       ! liquid precipitation (rain)
       ice_ocean_boundary%lprec(i,j) = x2o(ind%x2o_Faxa_rain,k)
@@ -158,6 +161,8 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
 
   ! Local variables
   real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
+  real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: sshx!< Zonal SSH gradient, local coordinate.
+  real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: sshy!< Meridional SSH gradient, local coordinate.
   integer :: i, j, n, ig, jg  !< Grid indices
   real    :: slp_L, slp_R, slp_C, slope, u_min, u_max
   real :: I_time_int  !< The inverse of coupling time interval in s-1.
@@ -180,8 +185,13 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! surface temperature in Kelvin
       o2x(ind%o2x_So_t, n) = ocn_public%t_surf(ig,jg) * grid%mask2dT(i,j)
       o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
-      o2x(ind%o2x_So_u, n) = ocn_public%u_surf(ig,jg) * grid%mask2dT(i,j)
-      o2x(ind%o2x_So_v, n) = ocn_public%v_surf(ig,jg) * grid%mask2dT(i,j)
+      ! rotate ocn current from local tripolar grid to true zonal/meridional (inverse transformation)
+      o2x(ind%o2x_So_u, n) = (grid%cos_rot(i,j) * ocn_public%u_surf(ig,jg) - &
+                              grid%sin_rot(i,j) * ocn_public%v_surf(ig,jg)) * grid%mask2dT(i,j)
+      o2x(ind%o2x_So_v, n) = (grid%cos_rot(i,j) * ocn_public%v_surf(ig,jg) + &
+                              grid%sin_rot(i,j) * ocn_public%u_surf(ig,jg)) * grid%mask2dT(i,j)
+
+      ! boundary layer depth (m)
       o2x(ind%o2x_So_bldepth, n) = ocn_public%OBLD(ig,jg) * grid%mask2dT(i,j)
       ! ocean melt and freeze potential (o2x_Fioo_q), W m-2
       if (ocn_public%frazil(ig,jg) > 0.0) then
@@ -203,9 +213,7 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
   call pass_var(ssh, grid%domain)
 
   ! d/dx ssh
-  n = 0
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
-    n = n+1
     ! This is a simple second-order difference
     ! o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
@@ -225,14 +233,12 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! larger extreme values.
       slope = 0.0
     endif
-    o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
-    if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdx, n) = 0.0
+    sshx(i,j) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+    if (grid%mask2dT(i,j)==0.) sshx(i,j) = 0.0
   enddo; enddo
 
   ! d/dy ssh
-  n = 0
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
-    n = n+1
     ! This is a simple second-order difference
     ! o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
@@ -243,7 +249,6 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
     if (grid%mask2dCv(i,J+1)==0.) slp_R = 0.
 
     slp_C = 0.5 * (slp_L + slp_R)
-    !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
     if ((slp_L * slp_R) > 0.0) then
       ! This limits the slope so that the edge values are bounded by the
       ! two cell averages spanning the edge.
@@ -255,8 +260,16 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! larger extreme values.
       slope = 0.0
     endif
-    o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
-    if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdy, n) = 0.0
+    sshy(i,j) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+    if (grid%mask2dT(i,j)==0.) sshy(i,j) = 0.0
+  enddo; enddo
+
+  ! rotate ssh gradients from local coordinates to true zonal/meridional (inverse transformation)
+  n = 0
+  do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+    n = n+1
+    o2x(ind%o2x_So_dhdx, n) = grid%cos_rot(i,j) * sshx(i,j) - grid%sin_rot(i,j) * sshy(i,j)
+    o2x(ind%o2x_So_dhdy, n) = grid%cos_rot(i,j) * sshy(i,j) + grid%sin_rot(i,j) * sshx(i,j)
   enddo; enddo
 
 end subroutine ocn_export
