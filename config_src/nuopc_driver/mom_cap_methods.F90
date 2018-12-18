@@ -319,50 +319,26 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-
-    ! TODO: remove these
-    call State_getFldPtr(importState,"Faxa_swndr" , dataPtr_swndr, rc=rc)
+    call State_getFldPtr(importState,"mean_net_sw_ir_dir_flx" , dataPtr_swndr, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Faxa_swndf" , dataPtr_swndf, rc=rc)
+    call State_getFldPtr(importState,"mean_net_sw_ir_dif_flx" , dataPtr_swndf, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Faxa_swvdr" , dataPtr_swvdr, rc=rc)
+    call State_getFldPtr(importState,"mean_net_sw_vis_dir_flx" , dataPtr_swvdr, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call State_getFldPtr(importState,"Faxa_swvdf" , dataPtr_swvdf, rc=rc)
+    call State_getFldPtr(importState,"mean_net_sw_vis_dif_flx" , dataPtr_swvdf, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-
-    ! TODO: add these
-    ! call State_getFldPtr(importState,"mean_net_sw_ir_dir_flx" , dataPtr_swndr, rc=rc)
-    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !   line=__LINE__, &
-    !   file=__FILE__)) &
-    !   return  ! bail out
-    ! call State_getFldPtr(importState,"mean_net_sw_ir_dif_flx" , dataPtr_swndf, rc=rc)
-    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !   line=__LINE__, &
-    !   file=__FILE__)) &
-    !   return  ! bail out
-    ! call State_getFldPtr(importState,"mean_net_sw_vis_dir_flx" , dataPtr_swvdr, rc=rc)
-    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !   line=__LINE__, &
-    !   file=__FILE__)) &
-    !   return  ! bail out
-    ! call State_getFldPtr(importState,"mean_net_sw_vis_dif_flx" , dataPtr_swvdf, rc=rc)
-    ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !   line=__LINE__, &
-    !   file=__FILE__)) &
-    !   return  ! bail out
 
     call State_getFldPtr(importState,"Foxx_taux" , dataPtr_taux, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &

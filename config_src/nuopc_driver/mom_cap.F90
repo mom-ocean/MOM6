@@ -1026,10 +1026,6 @@ contains
        endif
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_rain"               , "will provide") ! -> mean_prec_rat
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_snow"               , "will provide") ! -> mean_fprec_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndr"              , "will provide") ! incorrect - remove
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr"              , "will provide") ! incorrect - remove
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swndf"              , "will provide") ! incorrect - remove
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf"              , "will provide") ! incorrect - remove
        call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dir_flx" , "will provide") ! -> mean_net_sw_ir_dif_flx
        call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_vis_dif_flx" , "will provide") ! -> mean_net_sw_vis_dir_flx
        call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dir_flx"  , "will provide") ! -> mean_net_sw_ir_dir_flx
