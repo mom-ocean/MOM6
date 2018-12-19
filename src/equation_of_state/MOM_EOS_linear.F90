@@ -330,7 +330,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_t       !< Height at the top of the layer in depth units (Z ~> m).
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b       !< Height at the top of the layer in Z ~> m.
+                        intent(in)  :: z_b       !< Height at the top of the layer [Z ~> m].
   real,                 intent(in)  :: rho_ref   !< A mean density, in kg m-3, that is subtracted
                                                  !! out to reduce the magnitude of each of the
                                                  !! integrals.
@@ -361,16 +361,16 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
                                                  !! layer divided by the y grid spacing, in Pa.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
               optional, intent(in)  :: bathyT    !< The depth of the bathymetry in units of Z.
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change in Z ~> m.
+  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                  !! interpolate T/S for top and bottom integrals.
   ! Local variables
   real :: rho_anom      ! The density anomaly from rho_ref, in kg m-3.
   real :: raL, raR      ! rho_anom to the left and right, in kg m-3.
-  real :: dz, dzL, dzR  ! Layer thicknesses in Z ~> m.
-  real :: hWght      ! A pressure-thickness below topography, in Z ~> m.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Z ~> m.
-  real :: iDenom     ! The inverse of the denominator in the weights, in Z-2 ~> m-2.
+  real :: dz, dzL, dzR  ! Layer thicknesses [Z ~> m].
+  real :: hWght      ! A pressure-thickness below topography [Z ~> m].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
+  real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
   real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.

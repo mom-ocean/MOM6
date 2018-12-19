@@ -103,7 +103,7 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: frhatv
           !< The fraction of the total column thickness interpolated to v grid points in each layer, nondim.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: IDatu
-          !< Inverse of the basin depth at u grid points, in Z-1 ~> m-1.
+          !< Inverse of the basin depth at u grid points [Z-1 ~> m-1].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: lin_drag_u
           !< A spatially varying linear drag coefficient acting on the zonal barotropic flow,
           !! in H s-1 ~> m s-1 or kg m-2 s-1.
@@ -116,7 +116,7 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: ubtav
           !< The barotropic zonal velocity averaged over the baroclinic time step, m s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: IDatv
-          !< Inverse of the basin depth at v grid points, in Z-1 ~> m-1.
+          !< Inverse of the basin depth at v grid points [Z-1 ~> m-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: lin_drag_v
           !< A spatially varying linear drag coefficient acting on the zonal barotropic flow,
           !! in H s-1 ~> m s-1 or kg m-2 s-1.
@@ -143,15 +143,15 @@ type, public :: barotropic_CS ; private
                     !<   This is a copy of G%IareaT with wide halos, but will
                     !! still utilize the macro IareaT when referenced, m-2.
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMW_) :: &
-    D_u_Cor, &      !<   A simply averaged depth at u points, in Z ~> m.
+    D_u_Cor, &      !<   A simply averaged depth at u points [Z ~> m].
     dy_Cu, &        !<   A copy of G%dy_Cu with wide halos, in m.
     IdxCu           !<   A copy of G%IdxCu with wide halos, in m-1.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMBW_) :: &
-    D_v_Cor, &      !<   A simply averaged depth at v points, in Z ~> m.
+    D_v_Cor, &      !<   A simply averaged depth at v points [Z ~> m].
     dx_Cv, &        !<   A copy of G%dx_Cv with wide halos, in m.
     IdyCv           !<   A copy of G%IdyCv with wide halos, in m-1.
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMBW_) :: &
-    q_D             !< f / D at PV points, in Z-1 s-1 ~> m-1 s-1.
+    q_D             !< f / D at PV points [Z-1 s-1 ~> m-1 s-1].
 
   real, dimension(:,:,:), pointer :: frhatu1 => NULL() !< Predictor step values of frhatu stored for diagnostics.
   real, dimension(:,:,:), pointer :: frhatv1 => NULL() !< Predictor step values of frhatv stored for diagnostics.
@@ -505,7 +505,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     Rayleigh_u, & ! A Rayleigh drag timescale operating at u-points, in s-1.
     PFu_bt_sum, & ! The summed zonal barotropic pressure gradient force, in m s-2.
     Coru_bt_sum, & ! The summed zonal barotropic Coriolis acceleration, in m s-2.
-    DCor_u, &     ! A simply averaged depth at u points, in Z ~> m.
+    DCor_u, &     ! A simply averaged depth at u points [Z ~> m].
     Datu          ! Basin depth at u-velocity grid points times the y-grid
                   ! spacing, in H m ~> m2 or kg m-1.
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
@@ -536,7 +536,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! in m s-2.
     Corv_bt_sum, & ! The summed meridional barotropic Coriolis acceleration,
                   ! in m s-2.
-    DCor_v, &     ! A simply averaged depth at v points, in Z ~> m.
+    DCor_v, &     ! A simply averaged depth at v points [Z ~> m].
     Datv          ! Basin depth at v-velocity grid points times the x-grid
                   ! spacing, in H m ~> m2 or kg m-1.
   real, target, dimension(SZIW_(CS),SZJW_(CS)) :: &
@@ -2282,7 +2282,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                                                       !! acceleration, in m2 Z-1 s-2 ~> m s-2.
   real,               optional, intent(in)    :: SSH_add  !< An additional contribution to SSH to
                                                       !! provide a margin of error when
-                                                      !! calculating the external wave speed, in Z ~> m.
+                                                      !! calculating the external wave speed [Z ~> m].
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -2306,7 +2306,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                   ! order 1.  For stability, this may be made larger
                   ! than physical problem would suggest.
   real :: add_SSH ! An additional contribution to SSH to provide a margin of error
-                  ! when calculating the external wave speed, in Z ~> m.
+                  ! when calculating the external wave speed [Z ~> m].
   real :: min_max_dt2, Idt_max2, dtbt_max
   logical :: use_BT_cont
   type(memory_size_type) :: MS
@@ -3550,7 +3550,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
                                                !! or column mass anomaly, in H ~> m or kg m-2.
   integer,       optional, intent(in)  :: halo !< The halo size to use, default = 1.
   real,          optional, intent(in)  :: add_max !< A value to add to the maximum depth (used
-                                               !! to overestimate the external wave speed) in Z ~> m.
+                                               !! to overestimate the external wave speed) [Z ~> m].
 
   ! Local variables
   real :: H1, H2      ! Temporary total thicknesses, in m or kg m-2.
@@ -3732,7 +3732,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   real :: Datv(SZI_(G),SZJBS_(G))   ! Meridional open face area in H m ~> m2 or kg m-1.
   real :: gtot_estimate ! Summed GV%g_prime, in m2 Z-1 s-2 ~> m s-2, to give an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
-                        ! in calculating the safe external wave speed, in Z ~> m.
+                        ! in calculating the safe external wave speed [Z ~> m].
   real :: dtbt_input, dtbt_tmp
   real :: wave_drag_scale ! A scaling factor for the barotropic linear wave drag
                           ! piston velocities.

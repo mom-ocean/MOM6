@@ -308,11 +308,11 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 
   ! Local variables
   real :: m_to_Z               ! A dimensional rescaling factor.
-  real :: min_depth            ! The minimum depth in Z ~> m.
+  real :: min_depth            ! The minimum depth [Z ~> m].
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum  basin depth MAXIMUM_DEPTH.
   real :: expdecay             ! A decay scale of associated with the sloping boundaries, in m.
-  real :: Dedge                ! The depth, in Z ~> m, at the basin edge
+  real :: Dedge                ! The depth [Z ~> m], at the basin edge
 ! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   character(len=40)  :: mdl = "initialize_topography_named" ! This subroutine's name.

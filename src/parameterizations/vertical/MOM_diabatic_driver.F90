@@ -153,11 +153,11 @@ type, public:: diabatic_CS; private
                                      !! operating.
   real    :: Kd_BBL_tr               !< A bottom boundary layer tracer diffusivity that
                                      !! will allow for explicitly specified bottom fluxes
-                                     !! in Z2 s-1 ~> m2 s-1.  The entrainment at the bottom is at
+                                     !! [Z2 s-1 ~> m2 s-1].  The entrainment at the bottom is at
                                      !! least sqrt(Kd_BBL_tr*dt) over the same distance.
   real    :: Kd_min_tr               !< A minimal diffusivity that should always be
                                      !! applied to tracers, especially in massless layers
-                                     !! near the bottom, in Z2 s-1 ~> m2 s-1.
+                                     !! near the bottom [Z2 s-1 ~> m2 s-1].
   real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
                                            !! fluxes are applied, in m.
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
@@ -391,7 +391,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   logical :: avg_enabled ! for testing internal tides (BDM)
-  real :: Kd_add_here    ! An added diffusivity, in Z2 s-1 ~> m2 s-1.
+  real :: Kd_add_here    ! An added diffusivity [Z2 s-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1274,7 +1274,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   logical :: avg_enabled ! for testing internal tides (BDM)
-  real :: Kd_add_here    ! An added diffusivity, in Z2 s-1 ~> m2 s-1.
+  real :: Kd_add_here    ! An added diffusivity [Z2 s-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB

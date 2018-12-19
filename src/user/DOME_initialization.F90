@@ -47,7 +47,7 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
 
   ! Local variables
   real :: m_to_Z  ! A dimensional rescaling factor.
-  real :: min_depth ! The minimum and maximum depths in Z ~> m.
+  real :: min_depth ! The minimum and maximum depths [Z ~> m].
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "DOME_initialize_topography" ! This subroutine's name.
@@ -98,9 +98,9 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
                                                       !! only read parameters without changing h.
 
   real :: e0(SZK_(GV)+1)    ! The resting interface heights, in m, usually
-                            ! negative because it is positive upward, in Z ~> m.
+                            ! negative because it is positive upward [Z ~> m].
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
-                            ! positive upward, in Z ~> m.
+                            ! positive upward [Z ~> m].
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
@@ -161,7 +161,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
 
-  real :: H0(SZK_(G))  ! Interface heights in Z ~> m.
+  real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
   real :: min_depth
   real :: damp, e_dense, damp_new
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
@@ -265,7 +265,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
-  real :: D_edge            ! The thickness, in Z ~> m, of the dense fluid at the
+  real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the
                             ! inner edge of the inflow.
   real :: g_prime_tot       ! The reduced gravity across all layers, in m2 Z-1 s-2 ~> m s-2.
   real :: Def_Rad           ! The deformation radius, based on fluid of

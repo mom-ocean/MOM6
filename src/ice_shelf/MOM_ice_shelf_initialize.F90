@@ -28,7 +28,7 @@ contains
 subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness, in Z ~> m.
+                         intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -147,7 +147,7 @@ end subroutine initialize_ice_thickness_from_file
 subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: h_shelf !< The ice shelf thickness, in Z ~> m.
+                         intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
   real, dimension(SZDI_(G),SZDJ_(G)), &

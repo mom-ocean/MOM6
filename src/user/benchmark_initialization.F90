@@ -40,7 +40,7 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth, US)
   type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: min_depth            ! The minimum and maximum depths in Z ~> m.
+  real :: min_depth            ! The minimum and maximum depths [Z ~> m].
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
@@ -110,7 +110,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   real :: thermocline_scale ! The e-folding scale of the thermocline, in depth units (Z ~> m).
   real, dimension(SZK_(GV)) :: T0, pres, S0, rho_guess, drho, drho_dT, drho_dS
   real :: a_exp      ! The fraction of the overall stratification that is exponential.
-  real :: I_ts, I_md ! Inverse lengthscales in Z-1 ~> m-1.
+  real :: I_ts, I_md ! Inverse lengthscales [Z-1 ~> m-1].
   real :: T_frac     ! A ratio of the interface temperature to the range
                      ! between SST and the bottom temperature.
   real :: err, derr_dz  ! The error between the profile's temperature and the

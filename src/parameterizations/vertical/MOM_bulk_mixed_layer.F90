@@ -52,9 +52,8 @@ type, public :: bulkmixedlayer_CS ; private
   real    :: H_limit_fluxes  !< When the total ocean depth is less than this
                              !! value, in H ~> m or kg m-2, scale away all surface forcing to
                              !! avoid boiling the ocean.
-  real    :: ustar_min       !< A minimum value of ustar to avoid numerical problems,
-                             !! in Z s-1 ~> m s-1.  If the value is small enough, this should
-                             !! not affect the solution.
+  real    :: ustar_min       !< A minimum value of ustar to avoid numerical problems [Z s-1 ~> m s-1].
+                             !! If the value is small enough, this should not affect the solution.
   real    :: omega           !<   The Earth's rotation rate, in s-1.
   real    :: dT_dS_wt        !<   When forced to extrapolate T & S to match the
                              !! layer densities, this factor (in deg C / PSU) is
@@ -88,7 +87,7 @@ type, public :: bulkmixedlayer_CS ; private
   logical :: TKE_diagnostics = .false. !< If true, calculate extensive diagnostics of the TKE budget
   logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff
                              !! at the river mouths to rivermix_depth
-  real    :: rivermix_depth = 0.0  !< The depth of mixing if do_rivermix is true, in Z ~> m.
+  real    :: rivermix_depth = 0.0  !< The depth of mixing if do_rivermix is true [Z ~> m].
   logical :: limit_det       !< If true, limit the extent of buffer layer
                              !! detrainment to be consistent with neighbors.
   real    :: lim_det_dH_sfc  !< The fractional limit in the change between grid
@@ -111,7 +110,7 @@ type, public :: bulkmixedlayer_CS ; private
   real    :: Allowed_S_chg   !< The amount by which salinity is allowed
                              !! to exceed previous values during detrainment, PSU.
 
-  ! These are terms in the mixed layer TKE budget, all in Z m2 s-3 ~> m3 s-3.
+  ! These are terms in the mixed layer TKE budget, all in [Z m2 s-3 ~> m3 s-3].
   real, allocatable, dimension(:,:) :: &
     ML_depth, &        !< The mixed layer depth in H ~> m or kg m-2.
     diag_TKE_wind, &   !< The wind source of TKE.
@@ -254,12 +253,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   integer, dimension(SZI_(G),SZK_(GV)) :: &
     ksort       !   The sorted k-index that each original layer goes to.
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    h_miss      !   The summed absolute mismatch, in Z ~> m.
+    h_miss      !   The summed absolute mismatch [Z ~> m].
   real, dimension(SZI_(G)) :: &
     TKE, &      !   The turbulent kinetic energy available for mixing over a
-                ! time step, in Z m2 s-2 ~> m3 s-2.
+                ! time step [Z m2 s-2 ~> m3 s-2].
     Conv_En, &  !   The turbulent kinetic energy source due to mixing down to
-                ! the depth of free convection, in Z m2 s-2 ~> m3 s-2.
+                ! the depth of free convection [Z m2 s-2 ~> m3 s-2].
     htot, &     !   The total depth of the layers being considered for
                 ! entrainment, in H ~> m or kg m-2.
     R0_tot, &   !   The integrated potential density referenced to the surface
@@ -295,7 +294,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     dRcv_dS, &  !   Partial derivative of the coordinate variable potential
                 ! density in the mixed layer with salinity, in kg m-3 psu-1.
     TKE_river   ! The turbulent kinetic energy available for mixing at rivermouths over a
-                ! time step, in Z m2 s-2 ~> m3 s-2.
+                ! time step [Z m2 s-2 ~> m3 s-2].
 
   real, dimension(max(CS%nsw,1),SZI_(G)) :: &
     Pen_SW_bnd  !   The penetrating fraction of the shortwave heating integrated
@@ -313,22 +312,22 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   real :: RmixConst
 
   real, dimension(SZI_(G)) :: &
-    dKE_FC, &   !   The change in mean kinetic energy due to free convection,
-                ! in Z m2 s-2 ~> m3 s-2.
+    dKE_FC, &   !   The change in mean kinetic energy due to free convection
+                ! [Z m2 s-2 ~> m3 s-2].
     h_CA        !   The depth to which convective adjustment has gone in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZK_(GV)) :: &
     dKE_CA, &   !   The change in mean kinetic energy due to convective
-                ! adjustment, in Z m2 s-2 ~> m3 s-2.
+                ! adjustment [Z m2 s-2 ~> m3 s-2].
     cTKE        !   The turbulent kinetic energy source due to convective
-                ! adjustment, Z m2 s-2.
+                ! adjustment [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Hsfc_max, & ! The thickness of the surface region (mixed and buffer layers)
-                ! after entrainment but before any buffer layer detrainment, in Z ~> m.
+                ! after entrainment but before any buffer layer detrainment [Z ~> m].
     Hsfc_used, & ! The thickness of the surface region after buffer layer
                 ! detrainment, in units of Z.
     Hsfc_min, & ! The minimum thickness of the surface region based on the
                 ! new mixed layer depth and the previous thickness of the
-                ! neighboring water columns, in Z ~> m.
+                ! neighboring water columns [Z ~> m].
     h_sum, &    ! The total thickness of the water column, in H ~> m or kg m-2.
     hmbl_prev   ! The previous thickness of the mixed and buffer layers, in H ~> m or kg m-2.
   real, dimension(SZI_(G)) :: &
@@ -339,9 +338,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   real :: dHsfc, dHD ! Local copies of nondimensional parameters.
   real :: H_nbr ! A minimum thickness based on neighboring thicknesses, in H ~> m or kg m-2.
 
-  real :: absf_x_H  ! The absolute value of f times the mixed layer thickness,
-                    ! in units of Z s-1.
-  real :: kU_star   ! Ustar times the Von Karmen constant, in Z s-1 ~> m s-1.
+  real :: absf_x_H  ! The absolute value of f times the mixed layer thickness [Z s-1 ~> m s-1].
+  real :: kU_star   ! Ustar times the Von Karmen constant [Z s-1 ~> m s-1].
   real :: dt__diag ! A copy of dt_diag (if present) or dt, in s.
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
@@ -821,10 +819,10 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                                                            !! that will be left in each layer, in H ~> m or kg m-2.
   real, dimension(SZI_(G),SZK_(GV)), intent(out)   :: dKE_CA !< The vertically integrated change in
                                                            !! kinetic energy due to convective
-                                                           !! adjustment, in Z m2 s-2 ~> m3 s-2.
+                                                           !! adjustment [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G),SZK_(GV)), intent(out)   :: cTKE !< The buoyant turbulent kinetic energy
-                                                           !! source due to convective adjustment,
-                                                           !! in Z m2 s-2 ~> m3 s-2.
+                                                           !! source due to convective adjustment
+                                                           !! [Z m2 s-2 ~> m3 s-2].
   integer,                           intent(in)    :: j    !< The j-index to work on.
   type(bulkmixedlayer_CS),           pointer       :: CS   !< The control structure for this module.
   integer,                 optional, intent(in)    :: nz_conv !< If present, the number of layers
@@ -1002,9 +1000,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                                    !! shortwave radiation, in H-1 ~> m-1 or m2 kg-1.
                                                    !! The indicies of opacity_band are band, i, k.
   real, dimension(SZI_(G)), intent(out)   :: Conv_en !< The buoyant turbulent kinetic energy source
-                                                   !! due to free convection, in Z m2 s-2 ~> m3 s-2.
+                                                   !! due to free convection [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G)), intent(out)   :: dKE_FC !< The vertically integrated change in kinetic
-                                                   !! energy due to free convection, in Z m2 s-2 ~> m3 s-2.
+                                                   !! energy due to free convection [Z m2 s-2 ~> m3 s-2].
   integer,                  intent(in)    :: j     !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: ksort !< The density-sorted k-indices.
@@ -1314,25 +1312,25 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
                                                        !! possible forcing fields.  Unused fields
                                                        !! have NULL ptrs.
   real, dimension(SZI_(G)),   intent(inout) :: Conv_En !< The buoyant turbulent kinetic energy source
-                                                       !! due to free convection, in Z m2 s-2 ~> m3 s-2.
+                                                       !! due to free convection [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G)),   intent(in)    :: dKE_FC  !< The vertically integrated change in
-                                                       !! kinetic energy due to free convection,
-                                                       !! in Z m2 s-2 ~> m3 s-2.
+                                                       !! kinetic energy due to free convection
+                                                       !! [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G),SZK_(GV)), &
                               intent(in)    :: cTKE    !< The buoyant turbulent kinetic energy
-                                                       !! source due to convective adjustment,
-                                                       !! in Z m2 s-2 ~> m3 s-2.
+                                                       !! source due to convective adjustment
+                                                       !! [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G),SZK_(GV)), &
                               intent(in)    :: dKE_CA  !< The vertically integrated change in
                                                        !! kinetic energy due to convective
-                                                       !! adjustment, in Z m2 s-2 ~> m3 s-2.
+                                                       !! adjustment [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G)),   intent(out)   :: TKE     !< The turbulent kinetic energy available for
-                                                       !! mixing over a time step, in Z m2 s-2 ~> m3 s-2.
+                                                       !! mixing over a time step [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G)),   intent(out)   :: Idecay_len_TKE !< The inverse of the vertical decay
                                                        !! scale for TKE, in H-1 ~> m-1 or m2 kg-1.
   real, dimension(SZI_(G)),   intent(in)    :: TKE_river !< The turbulent kinetic energy available
                                                        !! for driving mixing at river mouths
-                                                       !! integrated over a time step, in Z m2 s-2 ~> m3 s-2.
+                                                       !! integrated over a time step [Z m2 s-2 ~> m3 s-2].
   real, dimension(2,SZI_(G)), intent(out)   :: cMKE    !< Coefficients of HpE and HpE^2 in
                                                        !! calculating the denominator of MKE_rate,
                                                        !! in H-1 and H-2.
@@ -1348,22 +1346,22 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 ! convection to drive mechanical entrainment.
 
   ! Local variables
-  real :: dKE_conv  ! The change in mean kinetic energy due to all convection, in Z m2 s-2 ~> m3 s-2.
+  real :: dKE_conv  ! The change in mean kinetic energy due to all convection [Z m2 s-2 ~> m3 s-2].
   real :: nstar_FC  ! The effective efficiency with which the energy released by
                     ! free convection is converted to TKE, often ~0.2, ND.
   real :: nstar_CA  ! The effective efficiency with which the energy released by
                     ! convective adjustment is converted to TKE, often ~0.2, ND.
   real :: TKE_CA    ! The potential energy released by convective adjustment if
-                    ! that release is positive, in Z m2 s-2 ~> m3 s-2.
+                    ! that release is positive [Z m2 s-2 ~> m3 s-2].
   real :: MKE_rate_CA ! MKE_rate for convective adjustment, ND, 0 to 1.
   real :: MKE_rate_FC ! MKE_rate for free convection, ND, 0 to 1.
   real :: totEn_Z   ! The total potential energy released by convection, Z3 s-2.
   real :: Ih        ! The inverse of a thickness, in H-1 ~> m-1 or m2 kg-1.
   real :: exp_kh    ! The nondimensional decay of TKE across a layer, ND.
   real :: absf      ! The absolute value of f averaged to thickness points, s-1.
-  real :: U_star    ! The friction velocity in Z s-1 ~> m s-1.
-  real :: absf_Ustar  ! The absolute value of f divided by U_star, in Z-1 ~> m-1.
-  real :: wind_TKE_src ! The surface wind source of TKE, in Z m2 s-3 ~> m3 s-3.
+  real :: U_star    ! The friction velocity [Z s-1 ~> m s-1].
+  real :: absf_Ustar  ! The absolute value of f divided by U_star [Z-1 ~> m-1].
+  real :: wind_TKE_src ! The surface wind source of TKE [Z m2 s-3 ~> m3 s-3].
   real :: diag_wt   ! The ratio of the current timestep to the diagnostic
                     ! timestep (which may include 2 calls), ND.
   integer :: is, ie, nz, i
@@ -1549,7 +1547,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                                    !! The indicies of opacity_band are band, i, k.
   real, dimension(SZI_(G)), intent(inout) :: TKE   !< The turbulent kinetic energy
                                                    !! available for mixing over a time
-                                                   !! step, in Z m2 s-2 ~> m3 s-2.
+                                                   !! step [Z m2 s-2 ~> m3 s-2].
   real, dimension(SZI_(G)), intent(inout) :: Idecay_len_TKE !< The vertical TKE decay rate, in H-1 ~> m-1 or m2 kg-1.
   integer,                  intent(in)    :: j     !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
@@ -1584,10 +1582,10 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real :: C1        ! A temporary variable in units of m2 s-2.
   real :: dMKE      ! A temporary variable related to the release of mean
                     ! kinetic energy, with units of H Z m2 s-2.
-  real :: TKE_ent   ! The TKE that remains if h_ent were entrained, in Z m2 s-2 ~> m3 s-2.
+  real :: TKE_ent   ! The TKE that remains if h_ent were entrained [Z m2 s-2 ~> m3 s-2].
   real :: TKE_ent1  ! The TKE that would remain, without considering the
-                    ! release of mean kinetic energy, in Z m2 s-2 ~> m3 s-2.
-  real :: dTKE_dh   ! The partial derivative of TKE with h_ent, in Z m2 s-2 H-1 ~> m2 s-2 or m5 s-2 kg-1.
+                    ! release of mean kinetic energy [Z m2 s-2 ~> m3 s-2].
+  real :: dTKE_dh   ! The partial derivative of TKE with h_ent [Z m2 s-2 H-1 ~> m2 s-2 or m5 s-2 kg-1].
   real :: Pen_dTKE_dh_Contrib ! The penetrating shortwave contribution to
                     ! dTKE_dh, in m2 s-2.
   real :: EF4_val   ! The result of EF4() (see later), in H-1 ~> m-1 or m2 kg-1.
@@ -2387,7 +2385,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real :: Rho0xG                  ! Rho0 times G_Earth, in kg m-1 Z-1 s-2 ~> kg m-2 s-2.
   real :: I2Rho0                  ! 1 / (2 Rho0), in m3 kg-1.
   real :: Idt_H2                  ! The square of the conversion from thickness to Z
-                                  ! divided by the time step, in Z2 H-2 s-1 ~> s-1 or m6 kg-2 s-1.
+                                  ! divided by the time step [Z2 H-2 s-1 ~> s-1 or m6 kg-2 s-1].
   logical :: stable_Rcv           ! If true, the buffer layers are stable with
                                   ! respect to the coordinate potential density.
   real :: h_neglect ! A thickness that is so small it is usually lost
