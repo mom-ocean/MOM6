@@ -58,7 +58,8 @@ public initialize_ALE_sponge, apply_ALE_sponge, ALE_sponge_end, init_ALE_sponge_
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
-! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> A structure for creating arrays of pointers to 3D arrays with extra gridding information
 type :: p3d
