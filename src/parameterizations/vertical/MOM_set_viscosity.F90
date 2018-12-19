@@ -55,8 +55,8 @@ type, public :: set_visc_CS ; private
   real    :: Htbl_shelf     !< A nominal thickness of the surface boundary layer for use
                             !! in calculating the near-surface velocity, in H ~> m or kg m-2.
   real    :: Htbl_shelf_min !< The minimum surface boundary layer thickness in H ~> m or kg m-2.
-  real    :: KV_BBL_min     !< The minimum viscosity in the bottom boundary layer, in Z2 s-1 ~> m2 s-1.
-  real    :: KV_TBL_min     !< The minimum viscosity in the top boundary layer, in Z2 s-1 ~> m2 s-1.
+  real    :: KV_BBL_min     !< The minimum viscosity in the bottom boundary layer [Z2 s-1 ~> m2 s-1].
+  real    :: KV_TBL_min     !< The minimum viscosity in the top boundary layer [Z2 s-1 ~> m2 s-1].
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
                             !! drag law c_drag*|u|*u. The velocity magnitude
                             !! may be an assumed value or it may be based on the
@@ -75,7 +75,7 @@ type, public :: set_visc_CS ; private
                             !! thickness of the viscous mixed layer.  Nondim.
   real    :: omega          !<   The Earth's rotation rate, in s-1.
   real    :: ustar_min      !< A minimum value of ustar to avoid numerical
-                            !! problems, in Z s-1 ~> m s-1.  If the value is small enough,
+                            !! problems [Z s-1 ~> m s-1].  If the value is small enough,
                             !! this should not affect the solution.
   real    :: TKE_decay      !< The ratio of the natural Ekman depth to the TKE
                             !! decay scale, nondimensional.
@@ -171,7 +171,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! Rho0 divided by G_Earth and the conversion
                            ! from m to thickness units, in kg m-2 or kg2 m-5.
   real :: cdrag_sqrt_Z     ! Square root of the drag coefficient, times a unit conversion
-                           ! factor from lateral lengths to vertical depths, in Z m-1 ~> 1.
+                           ! factor from lateral lengths to vertical depths [Z m-1 ~> 1].
   real :: cdrag_sqrt       ! Square root of the drag coefficient, nd.
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
@@ -181,7 +181,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: Dh               ! The increment in layer thickness from
                            ! the present layer, in H ~> m or kg m-2.
   real :: bbl_thick        ! The thickness of the bottom boundary layer in H ~> m or kg m-2.
-  real :: bbl_thick_Z      ! The thickness of the bottom boundary layer in Z ~> m.
+  real :: bbl_thick_Z      ! The thickness of the bottom boundary layer [Z ~> m].
   real :: C2f              ! C2f = 2*f at velocity points.
 
   real :: U_bg_sq          ! The square of an assumed background
@@ -248,7 +248,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: Cell_width       ! The transverse width of the velocity cell, in m.
   real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's
                            ! velocity magnitude to give the Rayleigh drag velocity, times
-                           ! a lateral to vertical distance conversion factor, in Z L-1 ~> 1.
+                           ! a lateral to vertical distance conversion factor [Z L-1 ~> 1].
   real :: gam              ! The ratio of the change in the open interface width
                            ! to the open interface width atop a cell, nondim.
   real :: BBL_frac         ! The fraction of a layer's drag that goes into the
@@ -1040,7 +1040,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     dR_dS, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with salinity, in units
                 ! of kg m-3 psu-1.
-    ustar, &    !   The surface friction velocity under ice shelves, in Z s-1 ~> m s-1.
+    ustar, &    !   The surface friction velocity under ice shelves [Z s-1 ~> m s-1].
     press, &    ! The pressure at which dR_dT and dR_dS are evaluated, in Pa.
     T_EOS, &    ! T_EOS and S_EOS are the potential temperature and salnity at which dR_dT and dR_dS
     S_EOS       ! which dR_dT and dR_dS are evaluated, in degC and PSU.
@@ -1068,7 +1068,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                     ! velocity magnitudes, in H m s-1 ~> m2 s-1 or kg m-1 s-1.
   real :: hweight   ! The thickness of a layer that is within Hbbl
                     ! of the bottom, in H ~> m or kg m-2.
-  real :: tbl_thick_Z  ! The thickness of the top boundary layer in Z ~> m.
+  real :: tbl_thick_Z  ! The thickness of the top boundary layer [Z ~> m].
 
   real :: hlay      ! The layer thickness at velocity points, in H ~> m or kg m-2.
   real :: I_2hlay   ! 1 / 2*hlay, in H-1 ~> m-1 or m2 kg-1.
@@ -1092,7 +1092,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                       ! Rho0 divided by G_Earth and the conversion
                       ! from m to thickness units, in kg m-2 or kg2 m-5.
   real :: cdrag_sqrt_Z  ! Square root of the drag coefficient, times a unit conversion
-                      ! factor from lateral lengths to vertical depths, in Z m-1 ~> 1.
+                      ! factor from lateral lengths to vertical depths [Z m-1 ~> 1].
   real :: cdrag_sqrt  ! Square root of the drag coefficient, ND.
   real :: oldfn       ! The integrated energy required to
                       ! entrain up to the bottom of the layer,
@@ -1107,7 +1107,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: h_tiny    ! A very small thickness, in H ~> m or kg m-2. Layers that are less than
                     ! h_tiny can not be the deepest in the viscous mixed layer.
   real :: absf      ! The absolute value of f averaged to velocity points, s-1.
-  real :: U_star    ! The friction velocity at velocity points, in Z s-1 ~> m s-1.
+  real :: U_star    ! The friction velocity at velocity points [Z s-1 ~> m s-1].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real :: Rho0x400_G ! 400*Rho0/G_Earth, times unit conversion factors, in kg s2 H m-3 Z-2.

@@ -29,12 +29,12 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (in Z ~> m or units
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights [Z ~> m] or units
                                                                      !! given by 1/eta_to_m)
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
   real,                                        intent(in)    :: dt_kappa_smooth !< A smoothing vertical diffusivity
-                                                                     !! times a smoothing timescale, in Z2 ~> m2.
+                                                                     !! times a smoothing timescale [Z2 ~> m2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: slope_x !< Isopycnal slope in i-direction (nondim)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y !< Isopycnal slope in j-direction (nondim)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), &
@@ -88,7 +88,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
                         ! in roundoff and can be neglected, in H ~> m or kg m-2.
   real :: h_neglect2    ! h_neglect^2, in H2 ~> m2 or kg2 m-4.
   real :: dz_neglect    ! A change in interface heighs that is so small it is usually lost
-                        ! in roundoff and can be neglected, in Z ~> m.
+                        ! in roundoff and can be neglected [Z ~> m].
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   real :: G_Rho0, N2, dzN2,  H_x(SZIB_(G)), H_y(SZI_(G))
@@ -337,7 +337,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Salinity (psu)
   real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
-                                                                !! times a smoothing timescale, in Z2 ~> m2.
+                                                                !! times a smoothing timescale [Z2 ~> m2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f  !< Filled temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filed salinity (psu)
   integer,                        optional, intent(in)  :: halo_here !< Halo width over which to compute

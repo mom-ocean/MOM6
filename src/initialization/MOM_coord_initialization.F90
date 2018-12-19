@@ -44,7 +44,7 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
   logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
   character(len=*),        intent(in)    :: output_dir !< The directory into which to write files.
   type(thermo_var_ptrs),   intent(inout) :: tv         !< The thermodynamic variable structure.
-  real,                    intent(in)    :: max_depth  !< The ocean's maximum depth, in Z ~> m.
+  real,                    intent(in)    :: max_depth  !< The ocean's maximum depth [Z ~> m].
   ! Local
   character(len=200) :: config
   logical :: debug

@@ -352,7 +352,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
     fld_anom       ! Anomalies in a tracer concentration, relative to the
                    ! i-mean target value.
   real, dimension(SZJ_(G), SZK_(G)+1) :: &
-    eta_mean_anom  ! The i-mean interface height anomalies, in Z ~> m.
+    eta_mean_anom  ! The i-mean interface height anomalies [Z ~> m].
   real, allocatable, dimension(:,:,:) :: &
     fld_mean_anom  ! THe i-mean tracer concentration anomalies.
   real, dimension(SZI_(G), SZK_(G)+1) :: &
@@ -362,8 +362,8 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
     dilate         ! A nondimensional factor by which to dilate layers to
                    ! give 0 at the surface.
 
-  real :: e(SZK_(G)+1)  ! The interface heights, in Z ~> m, usually negative.
-  real :: e0       ! The height of the free surface in Z ~> m.
+  real :: e(SZK_(G)+1)  ! The interface heights [Z ~> m], usually negative.
+  real :: e0       ! The height of the free surface [Z ~> m].
   real :: e_str    ! A nondimensional amount by which the reference
                    ! profile must be stretched for the free surfaces
                    ! heights in the two profiles to agree.

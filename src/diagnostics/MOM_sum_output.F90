@@ -62,7 +62,7 @@ type, public :: sum_output_CS ; private
   logical :: read_depth_list    !<   Read the depth list from a file if it exists
                                 !! and write it if it doesn't.
   character(len=200) :: depth_list_file  !< The name of the depth list file.
-  real    :: D_list_min_inc     !<  The minimum increment, in Z ~> m, between the depths of the
+  real    :: D_list_min_inc     !<  The minimum increment [Z ~> m], between the depths of the
                                 !! entries in the depth-list file, 0 by default.
   logical :: use_temperature    !<   If true, temperature and salinity are state variables.
   real    :: fresh_water_input  !<   The total mass of fresh water added by surface fluxes
@@ -296,21 +296,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                     optional, pointer    :: OBC !< Open boundaries control structure.
   type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces, in Z ~> m.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces [Z ~> m].
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT, in m2.
   real :: KE(SZK_(G))  ! The total kinetic energy of a layer, in J.
   real :: PE(SZK_(G)+1)! The available potential energy of an interface, in J.
   real :: KE_tot       ! The total kinetic energy, in J.
   real :: PE_tot       ! The total available potential energy, in J.
   real :: Z_0APE(SZK_(G)+1) ! The uniform depth which overlies the same
-                       ! volume as is below an interface, in Z ~> m.
+                       ! volume as is below an interface [Z ~> m].
   real :: H_0APE(SZK_(G)+1) ! A version of Z_0APE, converted to m, usually positive.
   real :: toten        ! The total kinetic & potential energies of
                        ! all layers, in Joules (i.e. kg m2 s-2).
   real :: En_mass      ! The total kinetic and potential energies divided by
                        ! the total mass of the ocean, in m2 s-2.
-  real :: vol_lay(SZK_(G))  ! The volume of fluid in a layer, in Z m2 ~> m3.
-  real :: volbelow     ! The volume of all layers beneath an interface in Z m2 ~> m3.
+  real :: vol_lay(SZK_(G))  ! The volume of fluid in a layer [Z m2 ~> m3].
+  real :: volbelow     ! The volume of all layers beneath an interface [Z m2 ~> m3].
   real :: mass_lay(SZK_(G)) ! The mass of fluid in a layer, in kg.
   real :: mass_tot     ! The total mass of the ocean in kg.
   real :: vol_tot      ! The total ocean volume in m3.
@@ -334,17 +334,17 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                        ! to this subroutine, in Joules.
   real :: Heat_anom    ! The change in heat that cannot be accounted for by
                        ! the surface fluxes, in Joules.
-  real :: temp         ! The mean potential temperature of the ocean, in C.
+  real :: temp         ! The mean potential temperature of the ocean, in degC.
   real :: temp_chg     ! The change in total heat divided by total heat capacity
-                       ! of the ocean since the last call to this subroutine, C.
+                       ! of the ocean since the last call to this subroutine, degC.
   real :: temp_anom    ! The change in total heat that cannot be accounted for
                        ! by the surface fluxes, divided by the total heat
-                       ! capacity of the ocean, in C.
-  real :: hint         ! The deviation of an interface from H, in Z ~> m.
+                       ! capacity of the ocean, in degC.
+  real :: hint         ! The deviation of an interface from H [Z ~> m].
   real :: hbot         ! 0 if the basin is deeper than H, or the
-                       ! height of the basin depth over H otherwise,
-                       ! in Z ~> m. This makes PE only include real fluid.
-  real :: hbelow       ! The depth of fluid in all layers beneath an interface, in Z ~> m.
+                       ! height of the basin depth over H otherwise [Z ~> m].
+                       ! This makes PE only include real fluid.
+  real :: hbelow       ! The depth of fluid in all layers beneath an interface [Z ~> m].
   type(EFP_type) :: &
     mass_EFP, &        ! Extended fixed point sums of total mass, etc.
     salt_EFP, heat_EFP, salt_chg_EFP, heat_chg_EFP, mass_chg_EFP, &
@@ -1065,15 +1065,15 @@ subroutine create_depth_list(G, CS)
                                           !! in which the ordered depth list is stored.
   ! Local variables
   real, dimension(G%Domain%niglobal*G%Domain%njglobal + 1) :: &
-    Dlist, &  !< The global list of bottom depths, in Z ~> m.
+    Dlist, &  !< The global list of bottom depths [Z ~> m].
     AreaList  !< The global list of cell areas, in m2.
   integer, dimension(G%Domain%niglobal*G%Domain%njglobal+1) :: &
     indx2     !< The position of an element in the original unsorted list.
-  real    :: Dnow  !< The depth now being considered for sorting, in Z ~> m.
-  real    :: Dprev !< The most recent depth that was considered, in Z ~> m.
-  real    :: vol   !< The running sum of open volume below a deptn, in Z m2 ~> m3.
+  real    :: Dnow  !< The depth now being considered for sorting [Z ~> m].
+  real    :: Dprev !< The most recent depth that was considered [Z ~> m].
+  real    :: vol   !< The running sum of open volume below a deptn [Z m2 ~> m3].
   real    :: area  !< The open area at the current depth, in m2.
-  real    :: D_list_prev !< The most recent depth added to the list, in Z ~> m.
+  real    :: D_list_prev !< The most recent depth added to the list [Z ~> m].
   logical :: add_to_list !< This depth should be included as an entry on the list.
 
   integer :: ir, indxt

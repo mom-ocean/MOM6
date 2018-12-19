@@ -807,10 +807,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(inout) :: tauy !< The meridional wind stresses on a C-grid, in Pa.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(inout) :: ustar !< The surface friction velocity, in Z s-1 ~> m s-1.
+                 optional, intent(inout) :: ustar !< The surface friction velocity [Z s-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: gustless_ustar !< The surface friction velocity without
-                                                 !! any contributions from gustiness, in Z s-1 ~> m s-1.
+                                                 !! any contributions from gustiness [Z s-1 ~> m s-1].
   integer,       optional, intent(in)    :: tau_halo !< The halo size of wind stresses to set, 0 by default.
 
   ! Local variables

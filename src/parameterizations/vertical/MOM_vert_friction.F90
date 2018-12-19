@@ -66,17 +66,17 @@ type, public :: vertvisc_CS ; private
   type(time_type) :: rampStartTime !< The time at which the ramping of CFL_trunc starts
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
-    a_u                !< The u-drag coefficient across an interface, in Z s-1 ~> m s-1.
+    a_u                !< The u-drag coefficient across an interface [Z s-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    h_u                !< The effective layer thickness at u-points, m or kg m-2.
+    h_u                !< The effective layer thickness at u-points [H ~> m or kg m-2].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: &
-    a_v                !< The v-drag coefficient across an interface, in Z s-1 ~> m s-1.
+    a_v                !< The v-drag coefficient across an interface [Z s-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    h_v                !< The effective layer thickness at v-points, m or kg m-2.
+    h_v                !< The effective layer thickness at v-points [H ~> m or kg m-2].
   real, pointer, dimension(:,:) :: a1_shelf_u => NULL() !< The u-momentum coupling coefficient under
-                           !! ice shelves in m s-1. Retained to determine stress under shelves.
+                           !! ice shelves [Z s-1 ~> m s-1]. Retained to determine stress under shelves.
   real, pointer, dimension(:,:) :: a1_shelf_v => NULL() !< The v-momentum coupling coefficient under
-                           !! ice shelves in m s-1. Retained to determine stress under shelves.
+                           !! ice shelves [Z s-1 ~> m s-1]. Retained to determine stress under shelves.
 
   logical :: split          !< If true, use the split time stepping scheme.
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
@@ -179,7 +179,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: c1(SZIB_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
                                 ! while b1 has units of inverse thickness.
   real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
-  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity, in Z s-1 ~> m s-1.
+  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity [Z s-1 ~> m s-1].
   real :: b_denom_1             ! The first term in the denominator of b1, in H ~> m or kg m-2.
 
   real :: Hmix             ! The mixed layer thickness over which stress
@@ -600,14 +600,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     hvel, &     ! hvel is the thickness used at a velocity grid point, in H ~> m or kg m-2.
     hvel_shelf  ! The equivalent of hvel under shelves, in H ~> m or kg m-2.
   real, dimension(SZIB_(G),SZK_(G)+1) :: &
-    a_cpl, &    ! The drag coefficients across interfaces, in Z s-1 ~> m s-1.  a_cpl times
+    a_cpl, &    ! The drag coefficients across interfaces [Z s-1 ~> m s-1].  a_cpl times
                 ! the velocity difference gives the stress across an interface.
     a_shelf, &  ! The drag coefficients across interfaces in water columns under
-                ! ice shelves, in Z s-1 ~> m s-1.
+                ! ice shelves [Z s-1 ~> m s-1].
     z_i         ! An estimate of each interface's height above the bottom,
                 ! normalized by the bottom boundary layer thickness, nondim.
   real, dimension(SZIB_(G)) :: &
-    kv_bbl, &     ! The bottom boundary layer viscosity in Z2 s-1 ~> m2 s-1.
+    kv_bbl, &     ! The bottom boundary layer viscosity [Z2 s-1 ~> m2 s-1].
     bbl_thick, &  ! The bottom boundary layer thickness in m or kg m-2.
     I_Hbbl, &     ! The inverse of the bottom boundary layer thickness, in units
                   ! of H-1 (i.e., m-1 or m2 kg-1).
@@ -1047,7 +1047,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   type(verticalGrid_type),   intent(in)  :: GV !< Ocean vertical grid structure
   type(unit_scale_type),     intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZK_(GV)+1), &
-                             intent(out) :: a_cpl !< Coupling coefficient across interfaces, in Z s-1 ~> m s-1.
+                             intent(out) :: a_cpl !< Coupling coefficient across interfaces [Z s-1 ~> m s-1].
   real, dimension(SZIB_(G),SZK_(GV)), &
                              intent(in)  :: hvel !< Thickness at velocity points, in H ~> m or kg m-2
   logical, dimension(SZIB_(G)), &
@@ -1056,7 +1056,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
                              intent(in)  :: h_harm !< Harmonic mean of thicknesses around a velocity
                                                    !! grid point, in H ~> m or kg m-2
   real, dimension(SZIB_(G)), intent(in)  :: bbl_thick !< Bottom boundary layer thickness, in H ~> m or kg m-2
-  real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, in Z2 s-1 ~> m2 s-1.
+  real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity [Z2 s-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1), &
                              intent(in)  :: z_i  !< Estimate of interface heights above the bottom,
                                                  !! normalized by the bottom boundary layer thickness
@@ -1075,23 +1075,23 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   ! Local variables
 
   real, dimension(SZIB_(G)) :: &
-    u_star, &   ! ustar at a velocity point, in Z s-1 ~> m s-1.
+    u_star, &   ! ustar at a velocity point [Z s-1 ~> m s-1].
     absf, &     ! The average of the neighboring absolute values of f, in s-1.
 !      h_ml, &     ! The mixed layer depth, in m or kg m-2.
     nk_visc, &  ! The (real) interface index of the base of mixed layer.
     z_t, &      ! The distance from the top, sometimes normalized
                 ! by Hmix, in H or nondimensional.
-    kv_tbl, &   ! The viscosity in a top boundary layer under ice, in Z2 s-1 ~> m2 s-1.
+    kv_tbl, &   ! The viscosity in a top boundary layer under ice [Z2 s-1 ~> m2 s-1].
     tbl_thick
   real, dimension(SZIB_(G),SZK_(GV)) :: &
-    Kv_add      ! A viscosity to add, in Z2 s-1 ~> m2 s-1.
+    Kv_add      ! A viscosity to add [Z2 s-1 ~> m2 s-1].
   real :: h_shear ! The distance over which shears occur, in H ~> m or kg m-2.
   real :: r       ! A thickness to compare with Hbbl, in H ~> m or kg m-2.
-  real :: visc_ml ! The mixed layer viscosity, in Z2 s-1 ~> m2 s-1.
+  real :: visc_ml ! The mixed layer viscosity [Z2 s-1 ~> m2 s-1].
   real :: I_Hmix  ! The inverse of the mixed layer thickness, in H-1 ~> m-1 or m2 kg-1.
   real :: a_ml    ! The layer coupling coefficient across an interface in
                   ! the mixed layer, in m s-1.
-  real :: I_amax  ! The inverse of the maximum coupling coefficient, in Z-1 ~> m-1.???
+  real :: I_amax  ! The inverse of the maximum coupling coefficient [Z-1 ~> m-1].???
   real :: temp1   ! A temporary variable in H Z
   real :: h_neglect   ! A thickness that is so small it is usually lost
                       ! in roundoff and can be neglected, in H ~> m or kg m-2.
