@@ -18,7 +18,8 @@ public int_density_dz_linear, int_spec_vol_dp_linear
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
-! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Compute the density of sea water (in kg/m^3), or its anomaly from a reference density,
 !! using a simple linear equation of state from salinity (in psu), potential temperature (in deg C)

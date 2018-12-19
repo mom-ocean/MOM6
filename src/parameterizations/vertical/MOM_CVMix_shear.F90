@@ -24,7 +24,8 @@ public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
-! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Control structure including parameters for CVMix interior shear schemes.
 type, public :: CVMix_shear_cs ! TODO: private
