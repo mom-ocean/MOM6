@@ -63,8 +63,8 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness, in Z ~> m.
-  real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness, in Z ~> m.
+  real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness [Z ~> m].
+  real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness [Z ~> m].
   real :: UpperLayerTemp !< Upper layer temperature (SST if thickness 0) (deg C)
   real :: UpperLayerSalt !< Upper layer salinity (SSS if thickness 0) (PPT)
   real :: LowerLayerTemp !< Temp at top of lower layer (deg C)
@@ -72,7 +72,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
   real :: LowerLayerdTdz !< Temp gradient in lower layer, in degC / Z ~> degC m-1.
   real :: LowerLayerdSdz !< Salt gradient in lower layer, in PPT / Z ~> PPT m-1.
   real :: LowerLayerMinTemp !< Minimum temperature in lower layer
-  real :: zC, DZ, top, bottom ! Depths and thicknesses in Z ~> m.
+  real :: zC, DZ, top, bottom ! Depths and thicknesses [Z ~> m].
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 

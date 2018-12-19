@@ -130,7 +130,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real :: min_h_frac
   real :: H_to_pres
   real, dimension(SZI_(G)) :: &
-    hmin, &  ! Thicknesses in Z ~> m.
+    hmin, &  ! Thicknesses [Z ~> m].
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum

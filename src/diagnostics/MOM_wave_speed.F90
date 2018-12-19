@@ -35,7 +35,7 @@ type, public :: wave_speed_CS ; private
                                        !! wave speed. This parameter controls the default behavior of
                                        !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
-                                       !! calculating the equivalent barotropic wave speed, in Z ~> m.
+                                       !! calculating the equivalent barotropic wave speed [Z ~> m].
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
@@ -87,11 +87,11 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real :: min_h_frac
   real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &  ! Thicknesses in Z ~> m.
+    htot, hmin, &  ! Thicknesses [Z ~> m].
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
-  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths, in Z2 m-2 ~> 1.
+  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 m-2 ~> 1].
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
@@ -566,7 +566,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real :: min_h_frac
   real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &    ! Thicknesses in Z ~> m.
+    htot, hmin, &    ! Thicknesses [Z ~> m].
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot ! overestimate of the mode-1 speed squared, m2 s-2
   real :: speed2_min ! minimum mode speed (squared) to consider in root searching

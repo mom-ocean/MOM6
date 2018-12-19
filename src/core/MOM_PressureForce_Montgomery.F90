@@ -104,7 +104,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     dp_star, &    ! Layer thickness after compensation for compressibility, in Pa.
     SSH, &        ! The sea surface height anomaly, in depth units (Z ~> m).
     e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from
-                  ! astronomical sources and self-attraction and loading, in Z ~> m.
+                  ! astronomical sources and self-attraction and loading [Z ~> m].
     geopot_bot    !   Bottom geopotential relative to time-mean sea level,
                   ! including any tidal contributions, in units of m2 s-2.
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
@@ -393,7 +393,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real :: Rho_cv_BL(SZI_(G)) !   The coordinate potential density in
                 ! the deepest variable density near-surface layer, in kg m-3.
   real :: h_star(SZI_(G),SZJ_(G)) ! Layer thickness after compensation
-                             ! for compressibility, in Z ~> m.
+                             ! for compressibility [Z ~> m].
   real :: e_tidal(SZI_(G),SZJ_(G)) ! Bottom geopotential anomaly due to tidal
                              ! forces from astronomical sources and self-
                              ! attraction and loading, in depth units (Z ~> m).
@@ -405,7 +405,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                              ! compensated density gradients, in m s-2.
   real :: dr                 ! Temporary variables.
   real :: h_neglect          ! A thickness that is so small it is usually lost
-                             ! in roundoff and can be neglected, in Z ~> m.
+                             ! in roundoff and can be neglected [Z ~> m].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
@@ -606,7 +606,7 @@ end subroutine PressureForce_Mont_Bouss
 subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in Z ~> m.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height [Z ~> m].
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density, in kg m-3.
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
@@ -632,7 +632,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
   real :: z_neglect          ! A thickness that is so small it is usually lost
-                             ! in roundoff and can be neglected, in Z ~> m.
+                             ! in roundoff and can be neglected [Z ~> m].
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
