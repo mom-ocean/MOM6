@@ -1189,7 +1189,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
        intent(in)    :: GV    !< Ocean vertical grid
   real, intent(in)   :: Dt    !< Time step of MOM6 [s] for explicit solver
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
-       intent(in)    :: h     !< Layer/level thicknesses (H ~> m or kg m-2)
+       intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
        intent(inout) :: u     !< Velocity i-component (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1257,11 +1257,11 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
        intent(in)   :: GV     !< Ocean vertical grid
   real, intent(in)  :: Dt     !< Time step of MOM6 [s] CHECK IF PASSING RIGHT TIMESTEP
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-       intent(in)    :: h     !< Layer/level thicknesses (H ~> m or kg m-2)
+       intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(inout) :: u     !< Velocity i-component (m/s)
+       intent(inout) :: u     !< Velocity i-component [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(inout) :: v     !< Velocity j-component (m/s)
+       intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   ! Local variables

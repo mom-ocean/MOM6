@@ -30,10 +30,9 @@ public SCM_CVMix_tests_CS
 ! their mks counterparts with notation like "a velocity, in Z T-1 ~> m s-1."
 
 !> Container for surface forcing parameters
-type SCM_CVMix_tests_CS
-private
+type SCM_CVMix_tests_CS ; private
   logical :: UseWindStress  !< True to use wind stress
-  logical :: UseHeatFlux  !< True to use heat flux
+  logical :: UseHeatFlux    !< True to use heat flux
   logical :: UseEvaporation !< True to use evaporation
   logical :: UseDiurnalSW   !< True to use diurnal sw radiation
   real :: tau_x !< (Constant) Wind stress, X (Pa)
@@ -112,8 +111,8 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
     top = 0. ! Reference to surface
     bottom = 0.
     do k=1,nz
-      bottom = bottom - h(i,j,k)*GV%H_to_Z ! Interface below layer (in m)
-      zC = 0.5*( top + bottom )        ! Z of middle of layer (in m)
+      bottom = bottom - h(i,j,k)*GV%H_to_Z ! Interface below layer [Z ~> m]
+      zC = 0.5*( top + bottom )        ! Z of middle of layer [Z ~> m]
       DZ = min(0., zC + UpperLayerTempMLD)
       T(i,j,k) = max(LowerLayerMinTemp,LowerLayerTemp + LowerLayerdTdZ * DZ)
       DZ = min(0., zC + UpperLayerSaltMLD)
@@ -255,7 +254,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
 
   if (CS%UseEvaporation) then
     do J=Jsq,Jeq ; do i=is,ie
-    ! Note CVMix test inputs give evaporation in m/s
+    ! Note CVMix test inputs give evaporation in [m s-1]
     ! This therefore must be converted to mass flux
     ! by multiplying by density
       fluxes%evap(i,J) = CS%surf_evap * CS%Rho0

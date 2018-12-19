@@ -39,18 +39,20 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h          !< The thickness that is being initialized, in H ~> m or kg m-2.
+                           intent(out) :: h          !< The thickness that is being initialized [H ~> m or kg m-2]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file
                                                      !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
-  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces, in Z ~> m.
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in Z ~> m.
-  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface
-                            ! positive upward, in Z ~> m.
-  real :: damp_rate, jet_width, jet_height, y_2
-  real :: half_strat, half_depth
+  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces [Z ~> m]
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m]
+  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface, positive upward [Z ~> m]
+  real :: jet_width         ! The width of the zonal-mean jet [km]
+  real :: jet_height        ! The interface height scale associated with the zonal-mean jet [Z ~> m]
+  real :: y_2
+  real :: half_strat      ! The fractional depth where the stratification is centered [nondim]
+  real :: half_depth      ! The depth where the stratification is centered [Z ~> m]
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -64,8 +66,9 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
-                 "The maximum depth of the ocean.", units="nondim", &
-                 default = 0.5, do_not_log=just_read)
+!### UNCOMMENT TO FIX THIS "The fractional depth where the stratification is centered.", &
+                 "The maximum depth of the ocean.", &
+                 units="nondim", default = 0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -119,15 +122,15 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< i-component of velocity [m/s]
+                           intent(out) :: u  !< i-component of velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< j-component of velocity [m/s]
+                           intent(out) :: v  !< j-component of velocity [m s-1]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file to
                                                      !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
-  real :: damp_rate, jet_width, jet_height, x_2, y_2
+  real :: jet_width, jet_height, x_2, y_2
   real :: velocity_amplitude, pi
   integer :: i, j, k, is, ie, js, je, nz, m
   logical :: just_read    ! If true, just read parameters but set nothing.
