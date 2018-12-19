@@ -214,17 +214,17 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
 
   ! Local variables
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in Z ~> m.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in Z ~> m.
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m].
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
   real :: damp_rate    ! The inverse zonal-mean damping rate, in s-1.
   real :: jet_width    ! The width of the zonal mean jet, in km.
-  real :: jet_height   ! The interface height scale associated with the zonal-mean jet, in Z ~> m.
+  real :: jet_height   ! The interface height scale associated with the zonal-mean jet [Z ~> m].
   real :: y_2          ! The y-position relative to the channel center, in km.
   real :: half_strat   ! The fractional depth where the straficiation is centered, ND.
-  real :: half_depth   ! The depth where the stratification is centered, in Z ~> m.
+  real :: half_depth   ! The depth where the stratification is centered [Z ~> m].
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz

@@ -88,7 +88,7 @@ type, public :: ice_shelf_CS ; private
   real, pointer, dimension(:,:) :: &
     utide   => NULL()  !< tidal velocity, in m/s
 
-  real :: ustar_bg     !< A minimum value for ustar under ice shelves, in Z s-1 ~> m s-1.
+  real :: ustar_bg     !< A minimum value for ustar under ice shelves [Z s-1 ~> m s-1].
   real :: cdrag        !< drag coefficient under ice shelves , non-dimensional.
   real :: g_Earth      !< The gravitational acceleration in m s-2.
   real :: Cp           !< The heat capacity of sea water, in J kg-1 K-1.
@@ -130,7 +130,7 @@ type, public :: ice_shelf_CS ; private
                             !! shelf front(until we think of a better way to do it-
                             !! but any difference will be negligible)
   logical :: calve_to_mask  !< If true, calve any ice that passes outside of a masked area
-  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving, in Z ~> m.
+  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
   real :: T0                !< temperature at ocean surface in the restoring region, in degC
   real :: S0                !< Salinity at ocean surface in the restoring region, in ppt.
   real :: input_flux        !< Ice volume flux at an upstream open boundary, in m3 s-1.
@@ -880,7 +880,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   type(time_type) :: Time0!< The previous time (Time-dt)
   real, dimension(SZDI_(G),SZDJ_(G)) :: last_mass_shelf !< Ice shelf mass
                           !! at at previous time (Time-dt), in kg/m^2
-  real, dimension(SZDI_(G),SZDJ_(G))  :: last_h_shelf !< Ice shelf thickness in Z ~> m.
+  real, dimension(SZDI_(G),SZDJ_(G))  :: last_h_shelf !< Ice shelf thickness [Z ~> m].
                           !! at at previous time (Time-dt), in m
   real, dimension(SZDI_(G),SZDJ_(G))  :: last_hmask !< Ice shelf mask
                           !! at at previous time (Time-dt)

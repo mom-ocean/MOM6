@@ -46,8 +46,8 @@ type, public :: dye_tracer_CS ; private
   real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be injected.
   real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be injected.
   real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be injected.
-  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected, in Z ~> m.
-  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected, in Z ~> m.
+  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected [Z ~> m].
+  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected [Z ~> m].
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
 

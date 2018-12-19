@@ -72,7 +72,7 @@ type, public :: diag_to_Z_CS ; private
   integer :: num_tr_used = 0 !< Th enumber of tracers in use.
   integer :: nk_zspace = -1 !< The number of levels in the z-space output
 
-  real, pointer :: Z_int(:) => NULL()  !< interface depths of the z-space file, in Z ~> m.
+  real, pointer :: Z_int(:) => NULL()  !< interface depths of the z-space file [Z ~> m].
 
   !>@{ Axis groups for z-space diagnostic output
   type(axes_grp) :: axesBz,  axesTz,  axesCuz,  axesCvz
@@ -164,7 +164,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
   ! Local variables
   ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
   real :: ssh(SZI_(G),SZJ_(G))   ! copy of ssh_in whose halos can be updated (meter or kg/m2)
-  real :: e(SZK_(G)+2)           ! z-star interface heights in Z ~> m.
+  real :: e(SZK_(G)+2)           ! z-star interface heights [Z ~> m].
   real :: h_f(SZK_(G)+1,SZI_(G)) ! thicknesses of massive layers (meter or kg/m2)
   real :: u_f(SZK_(G)+1,SZIB_(G))! zonal velocity component in any massive layer
   real :: v_f(SZK_(G)+1,SZI_(G)) ! meridional velocity component in any massive layer
@@ -172,8 +172,8 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
   real :: tr_f(SZK_(G),max(CS%num_tr_used,1),SZI_(G)) ! tracer concentration in massive layers
   integer :: nk_valid(SZIB_(G))  ! number of massive layers in a column
 
-  real :: D_pt(SZIB_(G))        ! bottom depth in Z ~> m.
-  real :: shelf_depth(SZIB_(G)) ! ice shelf depth in Z ~> m.
+  real :: D_pt(SZIB_(G))        ! bottom depth [Z ~> m].
+  real :: shelf_depth(SZIB_(G)) ! ice shelf depth [Z ~> m].
   real :: htot           ! summed layer thicknesses (meter or kg/m2)
   real :: dilate         ! proportion by which to dilate every layer
   real :: wt(SZK_(G)+1)  ! fractional weight for each layer in the
@@ -509,7 +509,6 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int !< Time integrated meridional
                                                                    !! transport (m3 or kg).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
-                                                                   !! (usually m or kg m-2).
   real,                                      intent(in)    :: dt   !< The time difference in s since
                                                                    !! the last call to this
                                                                    !! subroutine.
@@ -520,7 +519,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
   real, dimension(SZI_(G), SZJ_(G)) :: &
     htot, &        ! total layer thickness, in H ~> m or kg m-2
     dilate         ! Factor by which to dilate layers to convert them
-                   ! into z* space, in Z H-1 ~> 1 or m3 kg-1.  (-G%D < z* < 0)
+                   ! into z* space [Z H-1 ~> 1 or m3 kg-1].  (-G%D < z* < 0)
 
   real, dimension(SZI_(G), max(CS%nk_zspace,1)) :: &
     uh_Z           ! uh_int interpolated into depth space (m3 or kg)
@@ -528,15 +527,15 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
     vh_Z           ! vh_int interpolated into depth space (m3 or kg)
 
   real :: h_rem    ! dilated thickness of a layer that has yet to be mapped
-                   ! into depth space (in Z ~> m)
+                   ! into depth space [Z ~> m]
   real :: uh_rem   ! integrated zonal transport of a layer that has yet to be
                    ! mapped into depth space (m3 or kg)
   real :: vh_rem   ! integrated meridional transport of a layer that has yet
                    ! to be mapped into depth space (m3 or kg)
   real :: h_here   ! thickness of a layer that is within the range of the
-                   ! current depth level (in Z ~> m)
+                   ! current depth level [Z ~> m]
   real :: h_above  ! thickness of a layer that is above the current depth
-                   ! level (in Z ~> m)
+                   ! level [Z ~> m]
   real :: uh_here  ! zonal transport of a layer that is attributed to the
                    ! current depth level (m3 or kg)
   real :: vh_here  ! meridional transport of a layer that is attributed to

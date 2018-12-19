@@ -780,9 +780,9 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
                                                  !! previous call to diagnostics_init.
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    z_top, &  ! Height of the top of a layer or the ocean, in Z ~> m.
+    z_top, &  ! Height of the top of a layer or the ocean [Z ~> m].
     z_bot, &  ! Height of the bottom of a layer (for id_mass) or the
-              ! (positive) depth of the ocean (for id_col_ht), in Z ~> m.
+              ! (positive) depth of the ocean (for id_col_ht) [Z ~> m].
     mass, &   ! integrated mass of the water column, in kg m-2.  For
               ! non-Boussinesq models this is rho*dz. For Boussinesq
               ! models, this is either the integral of in-situ density
