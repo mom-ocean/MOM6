@@ -99,12 +99,12 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   type(hycom_CS),        intent(in)    :: CS !< Coordinate control structure
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H ~> m or kg m-2)
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive [H ~> m or kg m-2])
   real, dimension(nz),   intent(in)    :: T !< Temperature of column (degC)
   real, dimension(nz),   intent(in)    :: S !< Salinity of column (psu)
   real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, (in m or H)
   real, dimension(nz),   intent(in)    :: p_col !< Layer pressure in Pa
-  real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H ~> m or kg m-2
+  real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
   real, optional,        intent(in)    :: zScale !< Scaling factor from the input thicknesses in m
                                                  !! to desired units for zInterface, perhaps m_to_H.

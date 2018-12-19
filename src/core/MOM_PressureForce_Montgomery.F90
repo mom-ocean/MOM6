@@ -102,7 +102,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                   ! enable the use of a reduced gravity form of the equations,
                   ! in m2 s-2.
     dp_star, &    ! Layer thickness after compensation for compressibility, in Pa.
-    SSH, &        ! The sea surface height anomaly, in depth units (Z ~> m).
+    SSH, &        ! The sea surface height anomaly, in depth units [Z ~> m].
     e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from
                   ! astronomical sources and self-attraction and loading [Z ~> m].
     geopot_bot    !   Bottom geopotential relative to time-mean sea level,
@@ -396,7 +396,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                              ! for compressibility [Z ~> m].
   real :: e_tidal(SZI_(G),SZJ_(G)) ! Bottom geopotential anomaly due to tidal
                              ! forces from astronomical sources and self-
-                             ! attraction and loading, in depth units (Z ~> m).
+                             ! attraction and loading, in depth units [Z ~> m].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, in Pa (usually 2e7 Pa = 2000 dbar).
   real :: I_Rho0             ! 1/Rho0, in m3 kg-1.
@@ -617,18 +617,18 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
                                                             !! to free surface height anomalies, in m2 H-1 s-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               optional, intent(in)  :: rho_star !< The layer densities (maybe compressibility
-                                                            !! compensated), times g/rho_0, in m2 Z-1 s-2 ~> m s-2.
+                                                            !! compensated), times g/rho_0 [m2 Z-1 s-2 ~> m s-2].
 
   ! Local variables
-  real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses, in H-1 ~> m-1 or m2 kg-1.
+  real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses [H-1 ~> m-1 or m2 kg-1].
   real :: press(SZI_(G))     ! Interface pressure, in Pa.
   real :: T_int(SZI_(G))     ! Interface temperature in C.
   real :: S_int(SZI_(G))     ! Interface salinity in PSU.
   real :: dR_dT(SZI_(G))     ! Partial derivatives of density with temperature
   real :: dR_dS(SZI_(G))     ! and salinity in kg m-3 K-1 and kg m-3 PSU-1.
   real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer.
-  real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1.
-  real :: Rho0xG             ! g_Earth * Rho0 in kg s-2 m-1 Z-1 ~> kg s-2 m-2.
+  real :: G_Rho0             ! G_Earth / Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
+  real :: Rho0xG             ! g_Earth * Rho0 [kg s-2 m-1 Z-1 ~> kg s-2 m-2]
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
   real :: z_neglect          ! A thickness that is so small it is usually lost

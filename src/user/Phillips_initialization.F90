@@ -99,7 +99,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   enddo ; enddo
 
   do j=js,je ; do i=is,ie
-    !   This sets the initial thickness (in H ~> m or kg m-2) of the layers.  The
+    !   This sets the initial thickness in [H ~> m or kg m-2] of the layers.  The
     ! thicknesses are set to insure that: 1. each layer is at least an Angstrom thick, and
     ! 2. the interfaces are where they should be based on the resting depths and interface
     !    height perturbations, as long at this doesn't interfere with 1.
@@ -210,7 +210,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
                                             !! the control structure for the
                                             !! sponge module.
-  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field, in H ~> m or kg m-2.
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field [H ~> m or kg m-2].
 
   ! Local variables
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.

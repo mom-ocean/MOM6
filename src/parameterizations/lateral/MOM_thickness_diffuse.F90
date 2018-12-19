@@ -119,7 +119,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
   real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity (m2/s)
   real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in H ~> m or kg m-2.
+                    ! in roundoff and can be neglected [H ~> m or kg m-2].
   real, dimension(:,:), pointer :: cg1 => null() !< Wave speed (m/s)
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct
   integer :: i, j, k, is, ie, js, je, nz
@@ -408,7 +408,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   type(ocean_grid_type),                       intent(in)  :: G      !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)  :: GV     !< Vertical grid structure
   type(unit_scale_type),                       intent(in)  :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h      !< Layer thickness in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)  :: e      !< Interface positions (Z)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: Kh_u   !< Thickness diffusivity on interfaces
                                                                      !! at u points (m2/s)
@@ -441,12 +441,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     Rho, &        ! Density itself, when a nonlinear equation of state is
                   ! not in use.
     h_avail, &    ! The mass available for diffusion out of each face, divided
-                  ! by dt, in H m2 s-1 ~> m2 s-1 or kg s-1.
+                  ! by dt [H m2 s-1 ~> m3 s-1 or kg s-1].
     h_frac        ! The fraction of the mass in the column above the bottom
                   ! interface of a layer that is within a layer, ND. 0<h_frac<=1
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     pres, &       ! The pressure at an interface, in Pa.
-    h_avail_rsum  ! The running sum of h_avail above an interface, in H m2 s-1 ~> m2 s-1 or kg s-1.
+    h_avail_rsum  ! The running sum of h_avail above an interface [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivatives of density with temperature and
     drho_dS_u     ! salinity at u points, in kg m-3 K-1 and kg m-3 psu-1.
@@ -475,13 +475,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                        ! [Z kg m-3 ~> kg m-2].
   real :: drdkDe_v(SZI_(G),SZK_(G)+1)  ! Lateral difference of product of drdk and e at v-points
                                        ! [Z kg m-3 ~> kg m-2].
-  real :: hg2A, hg2B, hg2L, hg2R ! Squares of geometric mean thicknesses, in H2 ~> m2 or kg2 m-4.
-  real :: haA, haB, haL, haR     ! Arithmetic mean thicknesses in H ~> m or kg m-2.
+  real :: hg2A, hg2B, hg2L, hg2R ! Squares of geometric mean thicknesses [H2 ~> m2 or kg2 m-4].
+  real :: haA, haB, haL, haR     ! Arithmetic mean thicknesses [H ~> m or kg m-2].
   real :: dzaL, dzaR    ! Temporary thicknesses [Z ~> m].
   real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
   real :: drdx, drdy    ! Zonal and meridional density gradients, in kg m-4.
   real :: drdz          ! Vertical density gradient [kg m-3 Z-1 ~> kg m-4].
-  real :: h_harm        ! Harmonic mean layer thickness, in H ~> m or kg m-2.
+  real :: h_harm        ! Harmonic mean layer thickness [H ~> m or kg m-2].
   real :: c2_h_u(SZIB_(G), SZK_(G)+1) ! Wave speed squared divided by h at u-points [m2 Z-1 s-2 ~> m s-2].
   real :: c2_h_v(SZI_(G), SZK_(G)+1)  ! Wave speed squared divided by h at v-points [m2 Z-1 s-2 ~> m s-2].
   real :: hN2_u(SZIB_(G), SZK_(G)+1)  ! Thickness in m times N2 at interfaces above u-points [m2 Z-1 s-2 ~> m s-2].
@@ -492,7 +492,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: Sfn_unlim_v(SZI_(G), SZK_(G)+1)  ! Streamfunction for v-points [Z m2 s-1 ~> m3 s-1].
   real :: slope2_Ratio_u(SZIB_(G), SZK_(G)+1) ! The ratio of the slope squared to slope_max squared.
   real :: slope2_Ratio_v(SZI_(G), SZK_(G)+1)  ! The ratio of the slope squared to slope_max squared.
-  real :: Sfn_in_h      ! The overturning streamfunction, in H m2 s-1 ~> m2 s-1 or kg s-1 (note that
+  real :: Sfn_in_h      ! The overturning streamfunction [H m2 s-1 ~> m3 s-1 or kg s-1] (note that
                         ! the units are different from other Sfn vars).
   real :: Sfn_safe      ! The streamfunction that goes linearly back to 0 at the surface.  This is a
                         ! good thing to use when the slope is so large as to be meaningless [Z m2 s-1 ~> m3 s-1].
@@ -501,18 +501,18 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient, in kg2 m-8.
   real :: I_slope_max2  ! The inverse of slope_max squared, nondimensional.
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H ~> m or kg m-2.
-  real :: h_neglect2    ! h_neglect^2, in H2 ~> m2 or kg2 m-4.
+                        ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
   real :: dz_neglect    ! A thickness [Z ~> m], that is so small it is usually lost
                         ! in roundoff and can be neglected [Z ~> m].
   real :: G_scale       ! The gravitational acceleration times some unit conversion
-                        ! factors, in m3 Z-1 H-1 s-2 ~> m s-2 or m4 kg-1 s-2.
+                        ! factors [m3 Z-1 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: find_work  ! If true, find the change in energy due to the fluxes.
   integer :: nk_linear  ! The number of layers over which the streamfunction
                         ! goes to 0.
-  real :: G_rho0        ! g/Rho0, in m5 Z-1 s-2 ~> m4 s-2.
+  real :: G_rho0        ! g/Rho0 [m5 Z-1 s-2 ~> m4 s-2].
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
                         ! times unit conversion factors (s-2 m2 Z-2)
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: diag_sfn_x, diag_sfn_unlim_x ! Diagnostics
@@ -1219,7 +1219,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     de_top     ! The distances between the top of a layer and the top of the
-               ! region where the detangling is applied, in H ~> m or kg m-2.
+               ! region where the detangling is applied [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     Kh_lay_u   ! The tentative interface height diffusivity for each layer at
                ! u points, in m2 s-1.
@@ -1228,8 +1228,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                ! v points, in m2 s-1.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     de_bot     ! The distances from the bottom of the region where the
-               ! detangling is applied, in H ~> m or kg m-2.
-  real :: h1, h2    ! The thinner and thicker surrounding thicknesses, in H ~> m or kg m-2,
+               ! detangling is applied [H ~> m or kg m-2].
+  real :: h1, h2    ! The thinner and thicker surrounding thicknesses [H ~> m or kg m-2],
                     ! with the thinner modified near the boundaries to mask out
                     ! thickness variations due to topography, etc.
   real :: jag_Rat   ! The nondimensional jaggedness ratio for a layer, going
@@ -1240,7 +1240,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                     ! layers, nondim.
   real :: Kh_det    ! The detangling diffusivity, in m2 s-1.
   real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in H ~> m or kg m-2.
+                    ! in roundoff and can be neglected [H ~> m or kg m-2].
 
   real :: I_sl      ! The absolute value of the larger in magnitude of the slopes
                     ! above and below.
@@ -1613,7 +1613,7 @@ end subroutine add_detangling_Kh
 subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   type(ocean_grid_type),                    intent(in)  :: G     !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV    !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature (C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity (ppt)
   real,                                     intent(in)  :: kappa !< Constant diffusivity to use (Z2/s)

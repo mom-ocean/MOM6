@@ -91,7 +91,7 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -267,7 +267,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the
                             ! inner edge of the inflow.
-  real :: g_prime_tot       ! The reduced gravity across all layers, in m2 Z-1 s-2 ~> m s-2.
+  real :: g_prime_tot       ! The reduced gravity across all layers [m2 Z-1 s-2 ~> m s-2].
   real :: Def_Rad           ! The deformation radius, based on fluid of
                             ! thickness D_edge, in the same units as lat.
   real :: Ri_trans          ! The shear Richardson number in the transition

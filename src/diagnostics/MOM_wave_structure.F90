@@ -92,7 +92,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   type(ocean_grid_type),                    intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2]
                                                               !! (usually m or kg m-2).
   type(thermo_var_ptrs),                    intent(in)  :: tv !< A structure pointing to various
                                                               !! thermodynamic variables.
@@ -114,7 +114,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2 ~> m s-2.
+    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it,

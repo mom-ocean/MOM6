@@ -328,7 +328,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S         !< Salinity in PSU.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t       !< Height at the top of the layer in depth units (Z ~> m).
+                        intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_b       !< Height at the top of the layer [Z ~> m].
   real,                 intent(in)  :: rho_ref   !< A mean density, in kg m-3, that is subtracted
@@ -338,7 +338,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
                                                  !! the pressure (as p~=-z*rho_0_pres*G_e) used in
                                                  !! the equation of state. rho_0_pres is not used
                                                  !! here.
-  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
+  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
                                                  !! in kg m-3 C-1.

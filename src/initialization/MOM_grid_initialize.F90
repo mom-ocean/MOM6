@@ -1227,8 +1227,8 @@ subroutine initialize_masks(G, PF, US)
   type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   real :: m_to_Z_scale ! A unit conversion factor from m to Z.
-  real :: Dmin       ! The depth for masking in the same units as G%bathyT (Z ~> m).
-  real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT (Z ~> m).
+  real :: Dmin       ! The depth for masking in the same units as G%bathyT [Z ~> m].
+  real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT [Z ~> m].
   real :: mask_depth ! The depth shallower than which to mask a point as land [Z ~> m].
   character(len=40)  :: mdl = "MOM_grid_init initialize_masks"
   integer :: i, j

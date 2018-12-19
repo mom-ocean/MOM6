@@ -306,7 +306,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
-                                                                   !! last time step in H ~> m or kg m-2
+                                                                   !! last time step [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field (m/s)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
@@ -567,9 +567,9 @@ subroutine check_grid( G, GV, h, threshold )
   type(ocean_grid_type),                     intent(in) :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h  !< Current 3D grid obtained after the
-                                                              !! last time step (H ~> m or kg m-2)
+                                                              !! last time step [H ~> m or kg m-2]
   real,                                      intent(in) :: threshold !< Value below which to flag issues,
-                                                              !! in H ~> m or kg m-2
+                                                              !! [H ~> m or kg m-2]
   ! Local variables
   integer :: i, j
 
@@ -967,7 +967,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
                            intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
   type(thermo_var_ptrs),   intent(in)    :: tv   !< thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: h    !< layer thickness in H ~> m or kg m-2
+                           intent(in)    :: h    !< layer thickness [H ~> m or kg m-2]
   logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
                                                  !! extrapolation within boundary cells
 
@@ -1041,7 +1041,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
                            intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
   type(thermo_var_ptrs),   intent(in)    :: tv   !< thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: h    !< layer thicknesses in H ~> m or kg m-2
+                           intent(in)    :: h    !< layer thicknesses [H ~> m or kg m-2]
   logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
                                                  !! extrapolation within boundary cells
 
@@ -1229,7 +1229,7 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
   type(ALE_CS), intent(inout)                            :: CS  !< module control structure
   type(ocean_grid_type), intent(in)                      :: G   !< module grid structure
   type(verticalGrid_type), intent(in)                    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness [H ~> m or kg m-2]
 
   ! Local variables
   integer :: i, j, k

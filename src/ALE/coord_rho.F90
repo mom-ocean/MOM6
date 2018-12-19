@@ -96,7 +96,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   type(rho_CS),        intent(in)    :: CS !< coord_rho control structure
   integer,             intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
   real,                intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz), intent(in)    :: h  !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(nz), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nz), intent(in)    :: T  !< T for source column
   real, dimension(nz), intent(in)    :: S  !< S for source column
   type(EOS_type),      pointer       :: eqn_of_state !< Equation of state structure

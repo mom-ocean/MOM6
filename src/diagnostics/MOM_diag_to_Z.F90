@@ -154,7 +154,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: v    !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2.
+                           intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: ssh_in !< Sea surface height in meters.
   real, dimension(:,:),    pointer       :: frac_shelf_h !< The fraction of the cell area covered by
@@ -185,7 +185,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
                          ! Note that -1/2 <= z1 < z2 <= 1/2.
   real :: sl_tr(max(CS%num_tr_used,1)) ! normalized slope of the tracer
                                        ! within the cell, in tracer units
-  real :: Angstrom ! A minimal layer thickness, in H ~> m or kg m-2.
+  real :: Angstrom ! A minimal layer thickness [H ~> m or kg m-2].
   real :: slope ! normalized slope of a variable within the cell
 
   real :: layer_ave(CS%nk_zspace)
@@ -508,7 +508,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
                                                                    !! transport (m3 or kg).
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int !< Time integrated meridional
                                                                    !! transport (m3 or kg).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real,                                      intent(in)    :: dt   !< The time difference in s since
                                                                    !! the last call to this
                                                                    !! subroutine.
@@ -517,7 +517,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
                                                                    !! diag_to_Z_init.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    htot, &        ! total layer thickness, in H ~> m or kg m-2
+    htot, &        ! total layer thickness [H ~> m or kg m-2]
     dilate         ! Factor by which to dilate layers to convert them
                    ! into z* space [Z H-1 ~> 1 or m3 kg-1].  (-G%D < z* < 0)
 
@@ -751,7 +751,7 @@ end subroutine find_limited_slope
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2.
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(p3d), dimension(:), intent(in) :: in_ptrs !< Pointers to the diagnostics to be regridded
   integer,   dimension(:), intent(in) :: ids  !< The diagnostic IDs of the diagnostics
   integer,                 intent(in) :: num_diags !< The number of diagnostics to regrid

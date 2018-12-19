@@ -64,8 +64,8 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! timing of diagnostic output.
 
   real, dimension(:,:), pointer :: &
-         MLD_filtered => NULL(), &   !< Time-filtered MLD (H ~> m or kg m-2)
-         MLD_filtered_slow => NULL() !< Slower time-filtered MLD (H ~> m or kg m-2)
+         MLD_filtered => NULL(), &   !< Time-filtered MLD [H ~> m or kg m-2]
+         MLD_filtered_slow => NULL() !< Slower time-filtered MLD [H ~> m or kg m-2]
 
   !>@{
   !! Diagnostic identifier
@@ -101,7 +101,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment (sec)
   real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by the
-                                                                     !! PBL scheme (H ~> m or kg m-2)
+                                                                     !! PBL scheme [H ~> m or kg m-2]
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
 
@@ -140,13 +140,13 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
                           ! sublayer of the mixed layer, divided by dt, in units
                           ! of H * m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    MLD_fast, &           ! Mixed layer depth actually used in MLE restratification parameterization (H ~> m or kg m-2)
-    htot_fast, &          ! The sum of the thicknesses of layers in the mixed layer (H ~> m or kg m-2)
+    MLD_fast, &           ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
+    htot_fast, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av_fast, &        ! g_Rho0 times the average mixed layer density (m s-2)
-    MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization (H ~> m or kg m-2)
-    htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer (H ~> m or kg m-2)
+    MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
+    htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av_slow           ! g_Rho0 times the average mixed layer density (m s-2)
-  real :: g_Rho0          ! G_Earth/Rho0 (m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1)
+  real :: g_Rho0          ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
   real :: rho_ml(SZI_(G)) ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
@@ -165,9 +165,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
                           ! the mixed layer must be 0.
   real :: b(SZK_(G))      ! As for a(k) but for the slow-filtered MLD
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
-  real :: vDml(SZI_(G))   ! half of the mixed layer in H m2 s-1 ~> m3 s-1 or kg s-1.
+  real :: vDml(SZI_(G))   ! half of the mixed layer [H m2 s-1 ~> m3 s-1 or kg s-1].
   real :: uDml_slow(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
-  real :: vDml_slow(SZI_(G))   ! half of the mixed layer in H m2 s-1 ~> m3 s-1 or kg s-1.
+  real :: vDml_slow(SZI_(G))   ! half of the mixed layer [H m2 s-1 ~> m3 s-1 or kg s-1].
   real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! restratification timescales
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions, in s, stored in 2-D
@@ -175,7 +175,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK
-  real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers, in H ~> m or kg m-2.
+  real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer densities, in Pa.
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
@@ -566,9 +566,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
                           ! sublayer of the mixed layer, divided by dt, in units
                           ! of H m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    htot, &               ! The sum of the thicknesses of layers in the mixed layer (H ~> m or kg m-2)
+    htot, &               ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
-  real :: g_Rho0          ! G_Earth/Rho0 (m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1)
+  real :: g_Rho0          ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
   real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
@@ -577,18 +577,18 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: u_star          ! surface friction velocity, interpolated to velocity points [Z s-1 ~> m s-1].
   real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer (s-1)
   real :: timescale       ! mixing growth timescale (sec)
-  real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected (H ~> m or kg m-2)
+  real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! tiny thickness that usually lost in roundoff and can be neglected [Z ~> m]
   real :: I4dt            ! 1/(4 dt)
-  real :: I2htot          ! Twice the total mixed layer thickness at velocity points (H ~> m or kg m-2)
-  real :: z_topx2         ! depth of the top of a layer at velocity points (H ~> m or kg m-2)
-  real :: hx2             ! layer thickness at velocity points (H ~> m or kg m-2)
+  real :: I2htot          ! Twice the total mixed layer thickness at velocity points [H ~> m or kg m-2]
+  real :: z_topx2         ! depth of the top of a layer at velocity points [H ~> m or kg m-2]
+  real :: hx2             ! layer thickness at velocity points [H ~> m or kg m-2]
   real :: a(SZK_(G))      ! A non-dimensional value relating the overall flux
                           ! magnitudes (uDml & vDml) to the realized flux in a
                           ! layer.  The vertical sum of a() through the pieces of
                           ! the mixed layer must be 0.
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
-  real :: vDml(SZI_(G))   ! half of the mixed layer in H m2 s-1 ~> m3 s-1 or kg s-1.
+  real :: vDml(SZI_(G))   ! half of the mixed layer [H m2 s-1 ~> m3 s-1 or kg s-1].
   real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! The restratification timescales
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions (sec), stored in 2-D
