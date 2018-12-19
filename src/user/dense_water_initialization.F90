@@ -25,8 +25,8 @@ public dense_water_initialize_sponges
 
 character(len=40) :: mdl = "dense_water_initialization" !< Module name
 
-real, parameter :: default_sill  = 0.2 !< Default depth of the sill [nondim]
-real, parameter :: default_shelf = 0.4 !< Default depth of the shelf [nondim]
+real, parameter :: default_sill  = 0.2  !< Default depth of the sill [nondim]
+real, parameter :: default_shelf = 0.4  !< Default depth of the shelf [nondim]
 real, parameter :: default_mld   = 0.25 !< Default depth of the mixed layer [nondim]
 
 contains
@@ -100,9 +100,9 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid control structure
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< EOS structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature (degC)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity (ppt)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables

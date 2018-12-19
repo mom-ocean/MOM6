@@ -65,9 +65,9 @@ end subroutine soliton_initialize_thickness
 !> Initialization of u and v in the equatorial Rossby soliton test
 subroutine soliton_initialize_velocity(u, v, h, G)
   type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
 
   real    :: x, y, x0, y0
   real    :: val1, val2, val3, val4
