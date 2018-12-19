@@ -318,7 +318,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
   type(verticalGrid_type),        intent(in) :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),          intent(in) :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                  intent(in) :: h          !< Layer thicknesses, in H ~> m or kg m-2
+                                  intent(in) :: h          !< Layer thicknesses [H ~> m or kg m-2]
                                                            !! (usually m or kg m-2).
   type(diag_ctrl), target,        intent(in) :: diag       !< A structure that is used to regulate
                                                            !! diagnostic output.
@@ -362,7 +362,7 @@ end subroutine initialize_OCMIP2_CFC
 subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(unit_scale_type),                    intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: tr   !< The tracer concentration array
   character(len=*),                         intent(in)  :: name !< The tracer name
   real,                                     intent(in)  :: land_val !< A value the tracer takes over land
@@ -496,7 +496,7 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                   intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2
+                                   intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
                                                            !! (usually m or kg m-2).
   real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount
                                                            !! of each tracer, in kg times

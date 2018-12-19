@@ -630,14 +630,14 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S   !< Salinity (PSU)
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer in depth units (Z ~> m).
+                        intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m].
   real,                 intent(in)  :: rho_ref !< A mean density, in kg m-3, that is subtracted out to
                                            !! reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density, in kg m-3, that is used to calculate the
                                            !! pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa !< The change in the pressure anomaly across the layer, in Pa.
@@ -881,7 +881,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S  !< Salinity of the layer in PSU.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t !< Height at the top of the layer in depth units (Z ~> m).
+                        intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_b !< Height at the bottom of the layer [Z ~> m].
   real,                 intent(in)  :: rho_ref !< A mean density, in kg m-3, that is
@@ -890,7 +890,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real,                 intent(in)  :: rho_0 !< A density, in kg m-3, that is used
                                           !! to calculate the pressure (as p~=-z*rho_0*G_e)
                                           !! used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa !< The change in the pressure anomaly
@@ -1073,14 +1073,14 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                         intent(in)  :: S_b !< Salinity at the cell bottom (ppt)
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_t !< The geometric height at the top of the layer,
-                                           !! in depth units (Z ~> m).
+                                           !! in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m].
   real,                 intent(in)  :: rho_ref !< A mean density, in kg m-3, that is subtracted out to
                                            !! reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density, in kg m-3, that is used to calculate the
                                            !! pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real,                 intent(in)  :: dz_subroundoff !< A miniscule thickness
                                            !! change with the same units as z_t
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &

@@ -328,11 +328,11 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev !< cell volume at the end of previous
-                                                                  !! tracer change, in H m2 ~> m3 or kg
+                                                                  !! tracer change [H m2 ~> m3 or kg]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr !< accumulated volume/mass flux through
-                                                                  !! the zonal face, in H m2 ~> m3 or kg
+                                                                  !! the zonal face [H m2 ~> m3 or kg]
    real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect !< A tiny zonal mass flux that can
-                                                                  !! be neglected, in H m2 ~> m3 or kg
+                                                                  !! be neglected [H m2 ~> m3 or kg]
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u !< If true, there is more advection to be
                                                                   !! done in this u-row
@@ -656,11 +656,11 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev !< cell volume at the end of previous
-                                                                  !! tracer change, in H m2 ~> m3 or kg
+                                                                  !! tracer change [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr !< accumulated volume/mass flux through
-                                                                  !! the meridional face, in H m2 ~> m3 or kg
+                                                                  !! the meridional face [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect !< A tiny meridional mass flux that can
-                                                                  !! be neglected, in H m2 ~> m3 or kg
+                                                                  !! be neglected [H m2 ~> m3 or kg]
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v !< If true, there is more advection to be
                                                                   !! done in this v-row

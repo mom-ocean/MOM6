@@ -33,7 +33,7 @@ subroutine soliton_initialize_thickness(h, G, GV, US)
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h    !< The thickness that is being initialized, in H ~> m or kg m-2.
+                           intent(out) :: h    !< The thickness that is being initialized [H ~> m or kg m-2].
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, x0, y0

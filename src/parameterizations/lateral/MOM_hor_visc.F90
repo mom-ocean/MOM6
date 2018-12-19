@@ -183,7 +183,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(in)  :: v      !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                 intent(in)  :: h      !< Layer thicknesses, in H ~> m or kg m-2
+                                 intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2]
                                                        !! (usually m or kg m-2).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
@@ -201,10 +201,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     u0, &   ! Laplacian of u (m-1 s-1)
-    h_u     ! Thickness interpolated to u points, in H ~> m or kg m-2.
+    h_u     ! Thickness interpolated to u points [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     v0, &   ! Laplacian of v (m-1 s-1)
-    h_v     ! Thickness interpolated to v points, in H ~> m or kg m-2.
+    h_v     ! Thickness interpolated to v points [H ~> m or kg m-2].
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
@@ -248,12 +248,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag  ! magnitude of the shear (1/s)
   real :: Vort_mag   ! magnitude of the vorticity (1/s)
-  real :: h2uq, h2vq ! temporary variables in H2 ~> m2 or kg2 m-4.
+  real :: h2uq, h2vq ! temporary variables [H2 ~> m2 or kg2 m-4].
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
-                     ! points where masks are applied, in H ~> m or kg m-2.
+                     ! points where masks are applied [H ~> m or kg m-2].
   real :: hq         ! harmonic mean of the harmonic means of the u- & v- poing thicknesses,
-                     ! in H ~> m or kg m-2; This form guarantees that hq/hu < 4.
+                     ! [H ~> m or kg m-2]; This form guarantees that hq/hu < 4.
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected (H)
   real :: h_neglect3 ! h_neglect^3, in H3
   real :: hrat_min   ! minimum thicknesses at the 4 neighboring
