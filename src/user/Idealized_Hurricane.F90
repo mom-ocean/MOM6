@@ -45,15 +45,15 @@ public SCM_idealized_hurricane_wind_forcing !Public interface to the legacy idea
 type, public :: idealized_hurricane_CS ; private
 
   ! Parameters used to compute Holland radial wind profile
-  real    :: rho_a                !< Mean air density [kg/m3]
+  real    :: rho_a                !< Mean air density [kg m-3]
   real    :: pressure_ambient     !< Pressure at surface of ambient air [Pa]
   real    :: pressure_central     !< Pressure at surface at hurricane center [Pa]
   real    :: rad_max_wind         !< Radius of maximum winds [m]
-  real    :: max_windspeed        !< Maximum wind speeds [m/s]
-  real    :: hurr_translation_spd !< Hurricane translation speed [m/s]
-  real    :: hurr_translation_dir !< Hurricane translation speed [m/s]
-  real    :: gustiness            !< Gustiness (optional, used in u*) [m/s]
-  real    :: Rho0                 !< A reference ocean density [kg/m3]
+  real    :: max_windspeed        !< Maximum wind speeds [m s-1]
+  real    :: hurr_translation_spd !< Hurricane translation speed [m s-1]
+  real    :: hurr_translation_dir !< Hurricane translation speed [m s-1]
+  real    :: gustiness            !< Gustiness (optional, used in u*) [m s-1]
+  real    :: Rho0                 !< A reference ocean density [kg m-3]
   real    :: Hurr_cen_Y0          !< The initial y position of the hurricane
                                   !!  This experiment is conducted in a Cartesian
                                   !!  grid and this is assumed to be in meters [m]
@@ -69,7 +69,7 @@ type, public :: idealized_hurricane_CS ; private
 
 
   ! Parameters used if in SCM (single column model) mode
-  logical :: SCM_mode        !< Single Column Model Mode [nd]
+  logical :: SCM_mode        !< If true this being used in Single Column Model mode
   logical :: BR_BENCH        !< A "benchmark" configuration (which is meant to
                              !!  provide identical wind to reproduce a previous
                              !!  experiment, where that wind formula contained
@@ -198,10 +198,10 @@ end subroutine idealized_hurricane_wind_init
 
 !> Computes the surface wind for the idealized hurricane test cases
 subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
-  type(surface),          intent(in)    :: state  !< Surface state structure
-  type(mech_forcing),     intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),        intent(in)    :: day    !< Time in days
-  type(ocean_grid_type),  intent(inout) :: G      !< Grid structure
+  type(surface),                intent(in)    :: state  !< Surface state structure
+  type(mech_forcing),           intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(time_type),              intent(in)    :: day    !< Time in days
+  type(ocean_grid_type),        intent(inout) :: G      !< Grid structure
   type(unit_scale_type),        intent(in)    :: US     !< A dimensional unit scaling type
   type(idealized_hurricane_CS), pointer       :: CS     !< Container for idealized hurricane parameters
 
