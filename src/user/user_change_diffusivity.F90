@@ -47,7 +47,7 @@ contains
 subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in H ~> m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
                                                                  !! to any available thermodynamic
                                                                  !! fields. Absent fields have NULL ptrs.

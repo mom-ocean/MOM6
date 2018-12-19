@@ -407,7 +407,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: S        !< Salinity in PSU.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t      !< Height at the top of the layer in depth units (Z ~> m).
+                        intent(in)  :: z_t      !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: z_b      !< Height at the top of the layer [Z ~> m].
   real,                 intent(in)  :: rho_ref  !< A mean density, in kg m-3, that is subtracted out
@@ -416,7 +416,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real,                 intent(in)  :: rho_0    !< Density, in kg m-3, that is used to calculate the
                                                 !! pressure (as p~=-z*rho_0*G_e) used in the
                                                 !! equation of state.
-  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration, in m2 Z-1 s-2 ~> m s-2.
+  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa      !< The change in the pressure anomaly across the
                                                 !! layer, in Pa.

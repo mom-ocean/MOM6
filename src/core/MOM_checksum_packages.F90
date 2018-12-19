@@ -48,7 +48,7 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmet
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in) :: v    !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2.
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: uh   !< Volume flux through zonal faces = u*h*dy, m3 s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -84,7 +84,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift, symmetric)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in) :: v    !< Meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2.
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                    !! computationoal domain.
@@ -220,7 +220,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in) :: v    !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2.
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:),           &
                            intent(in) :: Temp !< Temperature in degree C.
   real, pointer, dimension(:,:,:),           &

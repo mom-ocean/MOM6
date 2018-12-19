@@ -52,7 +52,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)  :: h  !< Layer thickness in H ~> m or kg m-2
+                                    intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed (m/s)
   type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
@@ -73,7 +73,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2 ~> m s-2.
+    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it,
@@ -456,7 +456,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               mode_struct(1:kc)=0.
             endif
             ! Note that remapping_core_h requires that the same units be used
-            ! for both the source and target grid thicknesses, here in H ~> m or kg m-2.
+            ! for both the source and target grid thicknesses, here [H ~> m or kg m-2].
             call remapping_core_h(CS%remapping_CS, kc, GV%Z_to_H*Hc(:), mode_struct, &
                                   nz, h(i,j,:), modal_structure(i,j,:), 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
           endif

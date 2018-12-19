@@ -338,7 +338,7 @@ end function get_ALE_sponge_nz_data
 subroutine get_ALE_sponge_thicknesses(G, data_h, sponge_mask, CS)
   type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
   real, allocatable, dimension(:,:,:), &
-                         intent(inout) :: data_h !< The thicknesses of the sponge input layers, in H ~> m or kg m-2.
+                         intent(inout) :: data_h !< The thicknesses of the sponge input layers [H ~> m or kg m-2].
   logical, dimension(SZI_(G),SZJ_(G)), &
                          intent(out)   :: sponge_mask !< A logical mask that is true where
                                                  !! sponges are being applied.
@@ -846,7 +846,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   type(verticalGrid_type),   intent(in)    :: GV !< ocean vertical grid structure
   type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(inout) :: h  !< Layer thickness, in H ~> m or kg m-2 (in)
+                             intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2] (in)
   real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_sponge (in).

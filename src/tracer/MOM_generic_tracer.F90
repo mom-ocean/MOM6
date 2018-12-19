@@ -231,7 +231,7 @@ contains
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(unit_scale_type),                 intent(in)    :: US   !< A dimensional unit scaling type
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag    !< Regulates diagnostic output.
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
@@ -600,7 +600,7 @@ contains
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses, in H ~> m or kg m-2
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
     real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
                                                                 !! tracer, in kg times concentration units.
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
@@ -750,7 +750,7 @@ contains
     type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
     type(surface),                         intent(inout) :: state !< A structure containing fields that
                                                                  !! describe the surface state of the ocean.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
 
 ! Local variables

@@ -38,7 +38,7 @@ contains
 subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
   real, dimension(NKMEM_), intent(out) :: Rlay !< Layer potential density.
   real, dimension(NKMEM_), intent(out) :: g_prime !< The reduced gravity at
-                                                  !! each interface, in m2 Z-1 s-2 ~> m s-2.
+                                                  !! each interface [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
@@ -86,13 +86,13 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),         pointer    :: CSp  !< A pointer to the sponge control structure
   real, dimension(NIMEM_, NJMEM_, NKMEM_), &
-                           intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units (Z ~> m).
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units [Z ~> m].
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-  real :: H0(SZK_(G))               ! Resting layer thicknesses in depth units (Z ~> m).
-  real :: min_depth                 ! The minimum ocean depth in depth units (Z ~> m).
+  real :: H0(SZK_(G))               ! Resting layer thicknesses in depth units [Z ~> m].
+  real :: min_depth                 ! The minimum ocean depth in depth units [Z ~> m].
   real :: damp, e_dense, damp_new, slat, wlon, lenlat, lenlon, nlat
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz

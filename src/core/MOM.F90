@@ -251,7 +251,7 @@ type, public :: MOM_control_struct ; private
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
 
   real, dimension(:,:,:), pointer :: &
-    h_pre_dyn => NULL(), &      !< The thickness before the transports, in H ~> m or kg m-2.
+    h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
     T_pre_dyn => NULL(), &      !< Temperature before the transports, in degC.
     S_pre_dyn => NULL()         !< Salinity before the transports, in psu.
   type(accel_diag_ptrs) :: ADp  !< structure containing pointers to accelerations,
@@ -2712,10 +2712,10 @@ subroutine extract_surface_state(CS, sfc_state)
     u => NULL(), & !< u : zonal velocity component (m/s)
     v => NULL(), & !< v : meridional velocity component (m/s)
     h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units (Z ~> m)
+  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m]
   real :: depth_ml           !< Depth over which to average to determine mixed
-                             !! layer properties (Z ~> m)
-  real :: dh                 !< Thickness of a layer within the mixed layer (Z ~> m)
+                             !! layer properties [Z ~> m]
+  real :: dh                 !< Thickness of a layer within the mixed layer [Z ~> m]
   real :: mass               !< Mass per unit area of a layer (kg/m2)
   real :: bathy_m            !< The depth of bathymetry in m (not Z), used for error checking.
   real :: T_freeze           !< freezing temperature (oC)

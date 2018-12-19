@@ -115,7 +115,7 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
   real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being
-                                                              !! initialized, in H ~> m or kg m-2.
+                                                              !! initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
                                                               !! file to parse for model
                                                               !! parameter values.
@@ -124,7 +124,7 @@ subroutine Neverland_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure in Pa.
   ! Local variables
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units (Z ~> m),
+  real :: e0(SZK_(G)+1)     ! The resting interface heights, in depth units [Z ~> m],
                             ! usually negative because it is positive upward.
   real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile [Z ~> m].
   real :: e_interface ! Current interface position [Z ~> m].

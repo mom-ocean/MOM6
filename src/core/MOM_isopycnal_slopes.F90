@@ -28,7 +28,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights [Z ~> m] or units
                                                                      !! given by 1/eta_to_m)
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
@@ -73,9 +73,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
                         ! interface times the grid spacing, in kg m-3.
   real :: drdkL, drdkR  ! Vertical density differences across an interface, in kg m-3.
-  real :: hg2A, hg2B    ! Squares of geometric mean thicknesses, in H2 ~> m2 or kg2 m-4.
-  real :: hg2L, hg2R    ! Squares of geometric mean thicknesses, in H2 ~> m2 or kg2 m-4.
-  real :: haA, haB, haL, haR  ! Arithmetic mean thicknesses in H ~> m or kg m-2.
+  real :: hg2A, hg2B    ! Squares of geometric mean thicknesses [H2 ~> m2 or kg2 m-4].
+  real :: hg2L, hg2R    ! Squares of geometric mean thicknesses [H2 ~> m2 or kg2 m-4].
+  real :: haA, haB, haL, haR  ! Arithmetic mean thicknesses [H ~> m or kg m-2].
   real :: dzaL, dzaR    ! Temporary thicknesses in eta units (Z?).
   real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
   real :: drdx, drdy    ! Zonal and meridional density gradients, in kg m-4.
@@ -85,8 +85,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient, in kg2 m-8.
   real :: slope2_Ratio  ! The ratio of the slope squared to slope_max squared.
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H ~> m or kg m-2.
-  real :: h_neglect2    ! h_neglect^2, in H2 ~> m2 or kg2 m-4.
+                        ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
   real :: dz_neglect    ! A change in interface heighs that is so small it is usually lost
                         ! in roundoff and can be neglected [Z ~> m].
   logical :: use_EOS    ! If true, density is calculated from T & S using an
@@ -333,7 +333,7 @@ end subroutine calc_isoneutral_slopes
 subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Salinity (psu)
   real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing

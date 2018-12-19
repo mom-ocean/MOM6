@@ -75,7 +75,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                intent(in) :: um  !< The new zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                               intent(in) :: hin !< The layer thickness, in H ~> m or kg m-2.
+                               intent(in) :: hin !< The layer thickness [H ~> m or kg m-2].
   type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !<  A structure with pointers to various terms
@@ -90,7 +90,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                      optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, Z s-1.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
-                                                 !! from vertvisc, in H ~> m or kg m-2.
+                                                 !! from vertvisc [H ~> m or kg m-2].
   ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom
@@ -406,7 +406,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                intent(in) :: vm  !< The new meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                               intent(in) :: hin !< The layer thickness, in H ~> m or kg m-2.
+                               intent(in) :: hin !< The layer thickness [H ~> m or kg m-2].
   type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !< A structure with pointers to various terms in
@@ -421,7 +421,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                      optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, Z s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
-                                                 !! from vertvisc, in H ~> m or kg m-2.
+                                                 !! from vertvisc [H ~> m or kg m-2].
   ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom

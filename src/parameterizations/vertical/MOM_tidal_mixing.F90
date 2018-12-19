@@ -658,7 +658,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, C
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2
+                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy
                                                             !! frequency, in s-2.
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
@@ -708,7 +708,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
   real, dimension(SZI_(G),SZK_(G)+1), intent(in) :: N2_int !< The squared buoyancy
                                                   !! frequency at the interfaces, in s-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h     !< Layer thicknesses, in H ~> m or kg m-2.
+                           intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: Kd_lay!< The diapycnal diffusivities in the layers [Z2 s-1 ~> m2 s-1].
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
@@ -930,7 +930,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2
+                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G)),         intent(in)    :: N2_bot !< The near-bottom squared buoyancy frequency
                                                             !! frequency, in s-2.
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
@@ -971,7 +971,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
                         ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
                         ! z*=int(N2/N2_bot) * N2_bot/N2_meanz = int(N2/N2_meanz)
                         ! z0_Polzin_scaled = z0_Polzin * N2_bot/N2_meanz
-    N2_meanz,         & ! vertically averaged squared buoyancy frequency (1/s2) for WKB scaling
+    N2_meanz,         & ! vertically averaged squared buoyancy frequency [s-2] for WKB scaling
     TKE_itidal_rem,   & ! remaining internal tide TKE (from barotropic source)
     TKE_Niku_rem,     & ! remaining lee-wave TKE
     TKE_lowmode_rem,  & ! remaining internal tide TKE (from propagating low mode source) (BDM)
@@ -985,13 +985,13 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   real :: I_rho0        ! 1 / RHO0, (m3/kg)
   real :: Kd_add        ! diffusivity to add in a layer [Z2 s-1 ~> m2 s-1].
   real :: TKE_itide_lay ! internal tide TKE imparted to a layer (from barotropic) (m3/s3)
-  real :: TKE_Niku_lay  ! lee-wave TKE imparted to a layer (m3/s3)
+  real :: TKE_Niku_lay  ! lee-wave TKE imparted to a layer [m3 s-3]
   real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) (m3/s3) (BDM)
   real :: frac_used     ! fraction of TKE that can be used in a layer (nondim)
   real :: Izeta         ! inverse of TKE decay scale [Z-1 ~> m-1].
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves [Z-1 ~> m-1].
-  real :: z0_psl        ! temporary variable with units of Z ~> m.
-  real :: TKE_lowmode_tot ! TKE from all low modes (W/m2) (BDM)
+  real :: z0_psl        ! temporary variable [Z ~> m].
+  real :: TKE_lowmode_tot ! TKE from all low modes [W m-2] (BDM)
 
   logical :: use_Polzin, use_Simmons
   character(len=160) :: mesg  ! The text of an error message
@@ -1421,7 +1421,7 @@ subroutine post_tidal_diagnostics(G, GV, h ,CS)
   type(ocean_grid_type),    intent(in)   :: G   !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)   :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                            intent(in)   :: h   !< Layer thicknesses, in H ~> m or kg m-2.
+                            intent(in)   :: h   !< Layer thicknesses [H ~> m or kg m-2].
   type(tidal_mixing_cs),    pointer      :: CS  !< The control structure for this module
 
   ! local

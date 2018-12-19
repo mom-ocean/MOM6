@@ -138,7 +138,7 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, dia
   logical,                               intent(in) :: restart !< .true. if the fields have already
                                                                !! been read from a restart file.
   type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl), target,               intent(in) :: diag    !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),                  pointer    :: OBC     !< Structure specifying open boundary options.
   type(dyed_obc_tracer_CS),              pointer    :: CS      !< The control structure returned by a previous

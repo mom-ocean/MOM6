@@ -188,7 +188,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v !< The meridional velocity, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thicknesses, in H ~> m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thicknesses [H ~> m or kg m-2].
                                                    !! (usually m or kg m-2).
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure pointing to various
                                                    !! thermodynamic variables.
@@ -211,7 +211,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume or mass
                                                    !! transport since the last tracer advection, in m3 or kg.
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_av !< The time-mean free surface height or
-                                                   !! column mass, in H ~> m or kg m-2.
+                                                   !! column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
                                                    !! initialize_dyn_unsplit.
   type(VarMix_CS),         pointer       :: VarMix !< A pointer to a structure with fields
@@ -570,7 +570,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                   intent(inout) :: v          !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , &
-                                  intent(inout) :: h          !< Layer thicknesses, in H ~> m or kg m-2
+                                  intent(inout) :: h          !< Layer thicknesses [H ~> m or kg m-2]
                                                               !! (usually m or kg m-2).
   type(time_type),        target, intent(in)    :: Time       !< The current model time.
   type(param_file_type),          intent(in)    :: param_file !< A structure to parse

@@ -104,7 +104,7 @@ type, public :: wave_parameters_CS ; private
                           !! Horizontal -> V points
                           !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       KvS                !< Viscosity for Stokes Drift shear (Z2/s ~> m2 s-1)
+       KvS                !< Viscosity for Stokes Drift shear [Z2/s ~> m2 s-1]
 
   ! Pointers to auxiliary fields
   type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
@@ -873,7 +873,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
                                 !! LA outputs are desired that are different than
                                 !! those used by the dynamical model.
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: H     !< Grid layer thickness in H ~> m or kg m-2
+       intent(in)      :: H     !< Grid layer thickness [H ~> m or kg m-2]
   real, dimension(SZK_(GV)), optional, &
        intent(in)      :: U_H   !< Zonal velocity at H point (m/s)
   real, dimension(SZK_(GV)), optional, &

@@ -143,13 +143,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     KE          ! Kinetic energy per unit mass, KE = (u^2 + v^2)/2, in m2 s-2.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     hArea_u, &  ! The cell area weighted thickness interpolated to u points
-                ! times the effective areas, in H m2 ~> m3 or kg.
+                ! times the effective areas [H m2 ~> m3 or kg].
     KEx, &      ! The zonal gradient of Kinetic energy per unit mass,
                 ! KEx = d/dx KE, in m s-2.
     uh_center   ! centered u times h at u-points
   real, dimension(SZI_(G),SZJB_(G)) :: &
     hArea_v, &  ! The cell area weighted thickness interpolated to v points
-                ! times the effective areas, in H m2 ~> m3 or kg.
+                ! times the effective areas [H m2 ~> m3 or kg].
     KEy, &      ! The meridonal gradient of Kinetic energy per unit mass,
                 ! KEy = d/dy KE, in m s-2.
     vh_center   ! centered v times h at v-points

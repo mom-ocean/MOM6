@@ -48,7 +48,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
 
   type(ocean_grid_type),            intent(in)    :: G     !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV    !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: h     !< Layer thicknesses, in H ~> m or kg m-2.
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(:,:,:),           intent(in)    :: opacity_band !< Opacity in each band of
                                                            !! penetrating shortwave radiation (1/H).
                                                            !! The indicies are band, i, k.
@@ -83,9 +83,9 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
                                                            !! nsw x SZI_(G).
   real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: eps !< Small thickness that must remain in
                                                            !! each layer, and which will not be
-                                                           !! subject to heating (H ~> m or kg m-2)
+                                                           !! subject to heating [H ~> m or kg m-2]
   integer, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: ksort !< Density-sorted k-indicies.
-  real, dimension(SZI_(G)), optional, intent(in)    :: htot !< Total mixed layer thickness, in H ~> m or kg m-2.
+  real, dimension(SZI_(G)), optional, intent(in)    :: htot !< Total mixed layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature (units of K H).
   real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
@@ -103,7 +103,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
                    ! radiation that hits the bottom.
   real, dimension(SZI_(G)) :: &
     h_heat, &      ! The thickness of the water column that will be heated by
-                   ! any remaining shortwave radiation (H ~> m or kg m-2).
+                   ! any remaining shortwave radiation [H ~> m or kg m-2].
     T_chg, &       ! The temperature change of thick layers due to the remaining
                    ! shortwave radiation and contributions from T_chg_above, in K.
     Pen_SW_rem     ! The sum across all wavelength bands of the penetrating shortwave
@@ -129,7 +129,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
                             ! efficiency, instead of continuing to penetrate, in units
                             ! of K H s-1.  The default, 2.5e-11, is about 0.08 K m / century.
   real :: epsilon           ! A small thickness that must remain in each
-                            ! layer, and which will not be subject to heating (H ~> m or kg m-2)
+                            ! layer, and which will not be subject to heating [H ~> m or kg m-2]
   real :: I_G_Earth
   real :: g_Hconv2
   logical :: SW_Remains     ! If true, some column has shortwave radiation that
@@ -303,7 +303,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
   type(ocean_grid_type),    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK_(G)), &
-                            intent(in)    :: h   !< Layer thicknesses, in H ~> m or kg m-2.
+                            intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(:,:,:),   intent(in)    :: opacity_band !< opacity in each band of
                                                  !! penetrating shortwave radiation,
                                                  !! in m-1. The indicies are band, i, k.
@@ -313,7 +313,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
   real,                     intent(in)    :: dt  !< Time step (seconds).
   real,                     intent(in)    :: H_limit_fluxes !< the total depth at which the
                                                  !! surface fluxes start to be limited to avoid
-                                                 !! excessive heating of a thin ocean (H ~> m or kg m-2)
+                                                 !! excessive heating of a thin ocean [H ~> m or kg m-2]
   logical,                  intent(in)    :: absorbAllSW !< If true, ensure that all shortwave
                                                  !! radiation is absorbed in the ocean water column.
   real, dimension(:,:),     intent(in)    :: iPen_SW_bnd !< The incident penetrating shortwave
@@ -325,7 +325,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
                                                  !! interface, summed across all bands, in K H.
   ! Local variables
   real :: h_heat(SZI_(G))     ! thickness of the water column that receives
-                              ! remaining shortwave radiation, in H ~> m or kg m-2.
+                              ! remaining shortwave radiation [H ~> m or kg m-2].
   real :: Pen_SW_rem(SZI_(G)) ! sum across all wavelength bands of the
                               ! penetrating shortwave heating that hits the bottom
                               ! and will be redistributed through the water column
@@ -338,7 +338,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
                           ! not absorbed because the layers are too thin.
   real :: Ih_limit        ! inverse of the total depth at which the
                           ! surface fluxes start to be limited (1/H units)
-  real :: h_min_heat      ! minimum thickness layer that should get heated (H ~> m or kg m-2)
+  real :: h_min_heat      ! minimum thickness layer that should get heated [H ~> m or kg m-2]
   real :: opt_depth       ! optical depth of a layer (non-dim)
   real :: exp_OD          ! exp(-opt_depth) (non-dim)
   logical :: SW_Remains   ! If true, some column has shortwave radiation that

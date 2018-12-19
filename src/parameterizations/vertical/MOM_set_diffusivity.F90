@@ -90,10 +90,10 @@ type, public :: set_diffusivity_CS ; private
 
   logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
                                !! than the following:
-  real :: dissip_min    !< Minimum dissipation (Z2 m-2 W m-3 ~> W m-3)
-  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N (Z2 m-2 W m-3 ~> W m-3)
-  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N (Z2 m-2 W m-3 s ~> J m-3)
-  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 (Z2 m-2 W m-3 s2 ~> J s m-3)
+  real :: dissip_min    !< Minimum dissipation [Z2 m-2 W m-3 ~> W m-3]
+  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N [Z2 m-2 W m-3 ~> W m-3]
+  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N [Z2 m-2 W m-3 s ~> J m-3]
+  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 [Z2 m-2 W m-3 s2 ~> J s m-3]
   real :: dissip_Kd_min !< Minimum Kd [Z2 s-1 ~> m2 s-1], with dissipation Rho0*Kd_min*N^2
 
   real :: TKE_itide_max !< maximum internal tide conversion (W m-2)
@@ -211,7 +211,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                              intent(in)    :: v    !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2.
+                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                              intent(in)    :: u_h  !< Zonal velocity interpolated to h points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
@@ -670,7 +670,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                                    intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv   !< Structure containing pointers to any available
                                                           !! thermodynamic fields.
   real, dimension(SZI_(G),SZK_(G)+1), intent(in)  :: dRho_int !< Change in locally referenced potential density
@@ -874,7 +874,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   type(verticalGrid_type),  intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)  :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                            intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(in)  :: tv   !< Structure containing pointers to any available
                                                 !! thermodynamic fields.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -1051,7 +1051,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   type(thermo_var_ptrs),    intent(in)  :: tv  !< Structure containing pointers to any available
                                                !! thermodynamic fields; absent fields have NULL ptrs.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)  :: h   !< Layer thicknesses, in H ~> m or kg m-2.
+                            intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)  :: T_f !< layer temp in C with the values in massless layers
                                                !! filled vertically by diffusion.
@@ -1143,7 +1143,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                     intent(in)    :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                                    intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv   !< Structure containing pointers to any available
                                                           !! thermodynamic fields.
   type(forcing),                    intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
@@ -1537,7 +1537,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h      !< Layer thicknesses, in H ~> m or kg m-2
+                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),                    intent(in)    :: fluxes !< Surface fluxes structure
   type(set_diffusivity_CS),         pointer       :: CS     !< Diffusivity control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -1672,7 +1672,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in)    :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),            intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
   type(vertvisc_type),      intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                   !! boundary layer properies, and related fields.
@@ -1804,7 +1804,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
   type(ocean_grid_type),            intent(in)   :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)   :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)   :: h  !< Layer thicknesses, in H ~> m or kg m-2.
+                                    intent(in)   :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),            intent(in)   :: tv !< Structure containing pointers to any
                                                        !! available thermodynamic fields; absent
                                                        !! fields have NULL ptrs.

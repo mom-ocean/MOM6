@@ -144,7 +144,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                      intent(in) :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                                      intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
                                                          !! diagnostic output.
   type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
@@ -364,7 +364,7 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                      intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                                      intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                               !! tracer, in kg times concentration units.
   type(USER_tracer_example_CS),       pointer       :: CS     !< The control structure returned by a
@@ -411,7 +411,7 @@ subroutine USER_tracer_surface_state(state, h, G, CS)
   type(surface),                intent(inout) :: state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                intent(in)    :: h  !< Layer thicknesses, in H ~> m or kg m-2
+                                intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(USER_tracer_example_CS), pointer       :: CS !< The control structure returned by a previous
                                                     !! call to register_USER_tracer.
 
