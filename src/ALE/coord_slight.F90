@@ -45,7 +45,7 @@ type, public :: slight_CS ; private
   logical :: fix_haloclines = .false.
 
   !> A length scale over which to filter T & S when looking for spuriously
-  !! unstable water mass profiles, in H ~> m or kg m-2.
+  !! unstable water mass profiles [H ~> m or kg m-2].
   real :: halocline_filter_length
 
   !> A value of the stratification ratio that defines a problematic halocline region (nondim).
@@ -54,10 +54,10 @@ type, public :: slight_CS ; private
   !> Nominal density of interfaces, in kg m-3.
   real, allocatable, dimension(:) :: target_density
 
-  !> Maximum depths of interfaces, in H ~> m or kg m-2.
+  !> Maximum depths of interfaces [H ~> m or kg m-2].
   real, allocatable, dimension(:) :: max_interface_depths
 
-  !> Maximum thicknesses of layers, in H ~> m or kg m-2.
+  !> Maximum thicknesses of layers [H ~> m or kg m-2].
   real, allocatable, dimension(:) :: max_layer_thickness
 
   !> Interpolation control structure
@@ -117,11 +117,11 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
                halocline_filter_length, halocline_strat_tol, interp_CS)
   type(slight_CS),   pointer    :: CS !< Coordinate control structure
   real, dimension(:), &
-           optional, intent(in) :: max_interface_depths !< Maximum depths of interfaces in H ~> m or kg m-2
+           optional, intent(in) :: max_interface_depths !< Maximum depths of interfaces [H ~> m or kg m-2]
   real, dimension(:), &
-           optional, intent(in) :: max_layer_thickness  !< Maximum thicknesses of layers in H ~> m or kg m-2
+           optional, intent(in) :: max_layer_thickness  !< Maximum thicknesses of layers [H ~> m or kg m-2]
   real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the
-                                      !! new grid through regridding, in H ~> m or kg m-2
+                                      !! new grid through regridding [H ~> m or kg m-2]
   real,    optional, intent(in) :: compressibility_fraction !< Fraction (between 0 and 1) of
                                       !! compressibility to add to potential density profiles when
                                       !! interpolating for target grid positions. (nondim)
@@ -136,7 +136,7 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
   logical, optional, intent(in) :: fix_haloclines   !< If true, detect regions with much weaker than
                                       !! based on in-situ density, and use a stretched coordinate there.
   real,    optional, intent(in) :: halocline_filter_length !< A length scale over which to filter T & S
-                                      !! when looking for spuriously unstable water mass profiles, in H ~> m or kg m-2.
+                                      !! when looking for spuriously unstable water mass profiles [H ~> m or kg m-2].
   real,    optional, intent(in) :: halocline_strat_tol !< A value of the stratification ratio that
                                       !! defines a problematic halocline region (nondim).
   type(interp_CS_type), &
@@ -185,17 +185,17 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, H_subroundoff, &
   real,                  intent(in)    :: H_to_Pa !< GV%H_to_Pa
   real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff
   integer,               intent(in)    :: nz    !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H ~> m or kg m-2)
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive [H ~> m or kg m-2])
   real, dimension(nz),   intent(in)    :: T_col !< T for column
   real, dimension(nz),   intent(in)    :: S_col !< S for column
-  real, dimension(nz),   intent(in)    :: h_col !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(nz),   intent(in)    :: h_col !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nz),   intent(in)    :: p_col !< Layer quantities
-  real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H ~> m or kg m-2
-  real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces in H ~> m or kg m-2
+  real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface [H ~> m or kg m-2]
+  real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces [H ~> m or kg m-2]
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the purpose of
-                                                !! cell reconstructions in H ~> m or kg m-2.
+                                                !! cell reconstructions [H ~> m or kg m-2].
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose
-                                                !! of edge value calculations in H ~> m or kg m-2.
+                                                !! of edge value calculations [H ~> m or kg m-2].
   ! Local variables
   real, dimension(nz) :: rho_col ! Layer quantities
   real, dimension(nz) :: T_f, S_f  ! Filtered ayer quantities
@@ -208,20 +208,20 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, H_subroundoff, &
   real :: H_to_cPa
   real :: drIS, drR, Fn_now, I_HStol, Fn_zero_val
   real :: z_int_unst
-  real :: dz      ! A uniform layer thickness in very shallow water, in H ~> m or kg m-2.
-  real :: dz_ur   ! The total thickness of an unstable region, in H ~> m or kg m-2.
+  real :: dz      ! A uniform layer thickness in very shallow water [H ~> m or kg m-2].
+  real :: dz_ur   ! The total thickness of an unstable region [H ~> m or kg m-2].
   real :: wgt, cowgt  ! A weight and its complement, nondim.
   real :: rho_ml_av ! The average potential density in a near-surface region, in kg m-3.
-  real :: H_ml_av ! A thickness to try to use in taking the near-surface average, in H ~> m or kg m-2.
+  real :: H_ml_av ! A thickness to try to use in taking the near-surface average [H ~> m or kg m-2].
   real :: rho_x_z ! A cumulative integral of a density, in kg m-3 H.
-  real :: z_wt    ! The thickness actually used in taking the near-surface average, in H ~> m or kg m-2.
+  real :: z_wt    ! The thickness actually used in taking the near-surface average [H ~> m or kg m-2].
   real :: k_interior  ! The (real) value of k where the interior grid starts.
   real :: k_int2      ! The (real) value of k where the interior grid starts.
-  real :: z_interior  ! The depth where the interior grid starts, in H ~> m or kg m-2.
-  real :: z_ml_fix    ! The depth at which the fixed-thickness near-surface layers end, in H ~> m or kg m-2.
+  real :: z_interior  ! The depth where the interior grid starts [H ~> m or kg m-2].
+  real :: z_ml_fix    ! The depth at which the fixed-thickness near-surface layers end [H ~> m or kg m-2].
   real :: dz_dk       ! The thickness of layers between the fixed-thickness
-                      ! near-surface layars and the interior, in H ~> m or kg m-2.
-  real :: Lfilt       ! A filtering lengthscale, in H ~> m or kg m-2.
+                      ! near-surface layars and the interior [H ~> m or kg m-2].
+  real :: Lfilt       ! A filtering lengthscale [H ~> m or kg m-2].
   logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
   logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
   real :: k2_used, k2here, dz_sum, z_max

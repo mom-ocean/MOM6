@@ -32,7 +32,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
                                                                  !! (usually m or kg m-2).
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to
                                                                  !! various thermodynamic
@@ -42,7 +42,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
              !! variable that gives the "correct" free surface height (Boussinesq) or total water
              !! column mass per unit area (non-Boussinesq).  This is used to dilate the layer.
-             !! thicknesses when calculating interfaceheights, in H ~> m or kg m-2.
+             !! thicknesses when calculating interfaceheights [H ~> m or kg m-2].
   integer,                          optional, intent(in)  :: halo_size !< width of halo points on
                                                                  !! which to calculate eta.
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
@@ -147,7 +147,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
                                                                  !! (usually m or kg m-2).
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to
                                                                  !! various thermodynamic
@@ -157,7 +157,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
                                                                  !! level (z=0) (m).
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
                    !! variable that gives the "correct" free surface height (Boussinesq) or total
-                   !! water column mass per unit area (non-Boussinesq), in H ~> m or kg m-2.
+                   !! water column mass per unit area (non-Boussinesq) [H ~> m or kg m-2].
   integer,                          optional, intent(in)  :: halo_size !< width of halo points on
                                                                  !! which to calculate eta.
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
@@ -167,7 +167,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
     p     ! The pressure in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     dz_geo     ! The change in geopotential height across a layer, in m2 s-2.
-  real :: htot(SZI_(G))  ! The sum of all layers' thicknesses, in H ~> m or kg m-2.
+  real :: htot(SZI_(G))  ! The sum of all layers' thicknesses [H ~> m or kg m-2].
   real :: I_gEarth
   real :: Z_to_eta, H_to_eta, H_to_rho_eta ! Unit conversion factors with obvious names.
   integer i, j, k, is, ie, js, je, nz, halo

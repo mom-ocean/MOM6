@@ -42,7 +42,7 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
                                                      !! structure.
   real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
-                                                     !! each interface, in m2 Z-1 s-2 ~> m s-2.
+                                                     !! each interface [m2 Z-1 s-2 ~> m s-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
                                                      !! open file to parse for model
                                                      !! parameter values.
@@ -83,7 +83,7 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h  !< The thicknesses being initialized, in H ~> m or kg m-2.
+                           intent(out) :: h  !< The thicknesses being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open
                                              !! file to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -99,7 +99,7 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  h(:,:,1) = 0.0 ! h should be set in H ~> m or kg m-2.
+  h(:,:,1) = 0.0 ! h should be set [H ~> m or kg m-2].
 
   if (first_call) call write_user_log(param_file)
 
@@ -179,7 +179,7 @@ subroutine USER_initialize_sponges(G, GV, use_temp, tv, param_file, CSp, h)
                                                        !! parameter values.
   type(sponge_CS),         pointer    :: CSp           !< A pointer to the sponge control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in) :: h             !< Layer thicknesses, in H ~> m or kg m-2.
+                           intent(in) :: h             !< Layer thicknesses [H ~> m or kg m-2].
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_sponges: " // &
     "Unmodified user routine called - you must edit the routine to use it")
@@ -244,10 +244,10 @@ end subroutine write_user_log
 !!  here are:
 !!  - u - Zonal velocity in m s-1.
 !!  - v - Meridional velocity in m s-1.
-!!  - h - Layer thickness in H ~> m or kg m-2.  (Must be positive.)
+!!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
 !!  - G%CoriolisBu - The Coriolis parameter, in s-1.
-!!  - GV%g_prime - The reduced gravity at each interface, in m2 Z-1 s-2 ~> m s-2.
+!!  - GV%g_prime - The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
 !!  - GV%Rlay - Layer potential density (coordinate variable), kg m-3.
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!  - T - Temperature in C.

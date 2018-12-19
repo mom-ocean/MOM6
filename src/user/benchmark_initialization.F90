@@ -88,7 +88,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects the
@@ -98,16 +98,16 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: e0(SZK_(GV)+1)     ! The resting interface heights, in depth units (Z ~> m),
+  real :: e0(SZK_(GV)+1)     ! The resting interface heights, in depth units [Z ~> m],
                              ! usually negative because it is positive upward.
   real :: e_pert(SZK_(GV)+1) ! Interface height perturbations, positive upward,
-                             ! in depth units (Z ~> m).
+                             ! in depth units [Z ~> m].
   real :: eta1D(SZK_(GV)+1)  ! Interface height relative to the sea surface
-                             ! positive upward, in depth units (Z ~> m).
+                             ! positive upward, in depth units [Z ~> m].
   real :: SST       !  The initial sea surface temperature, in deg C.
   real :: T_int     !  The initial temperature of an interface, in deg C.
-  real :: ML_depth  !  The specified initial mixed layer depth, in depth units (Z ~> m).
-  real :: thermocline_scale ! The e-folding scale of the thermocline, in depth units (Z ~> m).
+  real :: ML_depth  !  The specified initial mixed layer depth, in depth units [Z ~> m].
+  real :: thermocline_scale ! The e-folding scale of the thermocline, in depth units [Z ~> m].
   real, dimension(SZK_(GV)) :: T0, pres, S0, rho_guess, drho, drho_dT, drho_dS
   real :: a_exp      ! The fraction of the overall stratification that is exponential.
   real :: I_ts, I_md ! Inverse lengthscales [Z-1 ~> m-1].
@@ -173,7 +173,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
 
     do k=1,nz ; e_pert(K) = 0.0 ; enddo
 
-    !   This sets the initial thickness (in H ~> m or kg m-2) of the layers.  The thicknesses
+    !   This sets the initial thickness (in [H ~> m or kg m-2]) of the layers.  The thicknesses
     ! are set to insure that: 1. each layer is at least  Gv%Angstrom_m thick, and
     ! 2. the interfaces are where they should be based on the resting depths and interface
     ! height perturbations, as long at this doesn't interfere with 1.

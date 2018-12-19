@@ -65,11 +65,11 @@ type, public :: regridding_CS ; private
   logical :: target_density_set = .false.
 
   !> This array is set by function set_regrid_max_depths()
-  !! It specifies the maximum depth that every interface is allowed to take, in H ~> m or kg m-2.
+  !! It specifies the maximum depth that every interface is allowed to take [H ~> m or kg m-2].
   real, dimension(:), allocatable :: max_interface_depths
 
   !> This array is set by function set_regrid_max_thickness()
-  !! It specifies the maximum depth that every interface is allowed to take, in H ~> m or kg m-2.
+  !! It specifies the maximum depth that every interface is allowed to take [H ~> m or kg m-2].
   real, dimension(:), allocatable :: max_layer_thickness
 
   integer :: nk !< Number of layers/levels in generated grid
@@ -81,7 +81,7 @@ type, public :: regridding_CS ; private
   !> Interpolation control structure
   type(interp_CS_type) :: interp_CS
 
-  !> Minimum thickness allowed when building the new grid through regridding, in H ~> m or kg m-2.
+  !> Minimum thickness allowed when building the new grid through regridding [H ~> m or kg m-2].
   real :: min_thickness
 
   !> Reference pressure for potential density calculations (Pa)
@@ -93,10 +93,10 @@ type, public :: regridding_CS ; private
   !! depth_of_time_filter_deep.
   real :: old_grid_weight = 0.
 
-  !> Depth above which no time-filtering of grid is applied (H ~> m or kg m-2)
+  !> Depth above which no time-filtering of grid is applied [H ~> m or kg m-2]
   real :: depth_of_time_filter_shallow = 0.
 
-  !> Depth below which time-filtering of grid is applied at full effect (H ~> m or kg m-2)
+  !> Depth below which time-filtering of grid is applied at full effect [H ~> m or kg m-2]
   real :: depth_of_time_filter_deep = 0.
 
   !> Fraction (between 0 and 1) of compressibility to add to potential density
@@ -1137,9 +1137,9 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
   type(ocean_grid_type),                     intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G), CS%nk+1), intent(inout) :: dzInterface !< The change in interface depth
-                                                                 !! in H ~> m or kg m-2.
+                                                                 !! [H ~> m or kg m-2].
   real, dimension(:,:),            optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage.
   ! Local variables
   integer :: i, j, k
@@ -1238,9 +1238,9 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
   type(ocean_grid_type),                     intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G), CS%nk+1), intent(inout) :: dzInterface !< The change in interface depth
-                                                                 !! in H ~> m or kg m-2
+                                                                 !! [H ~> m or kg m-2]
 
   ! Local variables
   integer :: i, j, k
@@ -1324,10 +1324,10 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   ! Arguments
   type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth
-                                                                    !! in H ~> m or kg m-2
+                                                                    !! [H ~> m or kg m-2]
   type(remapping_CS),                           intent(in)    :: remapCS !< The remapping control structure
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
 
@@ -1438,16 +1438,16 @@ end subroutine build_rho_grid
 subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
   type(ocean_grid_type),                     intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Existing model thickness, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Existing model thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamics structure
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
-  real, dimension(SZI_(G),SZJ_(G),CS%nk),    intent(inout) :: h_new !< New layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),CS%nk),    intent(inout) :: h_new !< New layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),  intent(inout) :: dzInterface !< Changes in interface position
 
   ! Local variables
-  real, dimension(SZK_(GV)+1) :: z_col ! Source interface positions relative to the surface in H ~> m or kg m-2
-  real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface in H ~> m or kg m-2
-  real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H ~> m or kg m-2
+  real, dimension(SZK_(GV)+1) :: z_col ! Source interface positions relative to the surface [H ~> m or kg m-2]
+  real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col [H ~> m or kg m-2]
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
   integer   :: i, j, k, nki
   real :: depth
@@ -1507,11 +1507,11 @@ end subroutine build_grid_HyCOM1
 subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth
-                                                                     !! in H ~> m or kg m-2
+                                                                     !! [H ~> m or kg m-2]
   type(remapping_CS),                          intent(in)    :: remapCS !< The remapping control structure
   type(regridding_CS),                         intent(in)    :: CS   !< Regridding control structure
 
@@ -1573,14 +1573,14 @@ end subroutine build_grid_adaptive
 subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
   type(ocean_grid_type),                       intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
 
-  real, dimension(SZK_(GV)+1) :: z_col   ! Interface positions relative to the surface in H ~> m or kg m-2
-  real, dimension(SZK_(GV)+1) :: z_col_new ! Interface positions relative to the surface in H ~> m or kg m-2
-  real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H ~> m or kg m-2
+  real, dimension(SZK_(GV)+1) :: z_col   ! Interface positions relative to the surface [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)+1) :: z_col_new ! Interface positions relative to the surface [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col [H ~> m or kg m-2]
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
   real :: depth
   integer :: i, j, k, nz
@@ -1637,8 +1637,8 @@ end subroutine build_grid_SLight
 subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
   type(regridding_CS),      intent(in)    :: CS !< Regridding control structure
   integer,                  intent(in)    :: nk !< Number of layers in h_old
-  real, dimension(nk),      intent(in)    :: h_old !< Minium allowed thickness of h (H ~> m or kg m-2)
-  real, dimension(CS%nk+1), intent(inout) :: dz_int !< Minium allowed thickness of h (H ~> m or kg m-2)
+  real, dimension(nk),      intent(in)    :: h_old !< Minium allowed thickness of h [H ~> m or kg m-2]
+  real, dimension(CS%nk+1), intent(inout) :: dz_int !< Minium allowed thickness of h [H ~> m or kg m-2]
   ! Local variables
   integer :: k
   real :: h_new, eps, h_total, h_err
@@ -1703,10 +1703,10 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
   ! Arguments
   type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)),   intent(in)    :: h  !< Original layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)),   intent(in)    :: h  !< Original layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface
-                                                                    !! depth in H ~> m or kg m-2
-  real,                                         intent(inout) :: h_new !< New layer thicknesses, in H ~> m or kg m-2
+                                                                    !! depth [H ~> m or kg m-2]
+  real,                                         intent(inout) :: h_new !< New layer thicknesses [H ~> m or kg m-2]
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
@@ -1810,7 +1810,7 @@ subroutine inflate_vanished_layers_old( CS, G, GV, h )
   type(regridding_CS),                    intent(in)    :: CS   !< Regridding control structure
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h    !< Layer thicknesses, in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
   integer :: i, j, k
@@ -1842,7 +1842,7 @@ subroutine convective_adjustment(G, GV, h, tv)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: h    !< Layer thicknesses, in H ~> m or kg m-2
+                           intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv   !< A structure pointing to various thermodynamic variables
 !------------------------------------------------------------------------------
 ! Check each water column to see whether it is stratified. If not, sort the
@@ -2209,8 +2209,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the new grid (H)
   real,    optional, intent(in) :: old_grid_weight  !< Weight given to old coordinate when time-filtering grid
   character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
-  real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic (H ~> m or kg m-2)
-  real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic (H ~> m or kg m-2)
+  real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic [H ~> m or kg m-2]
+  real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic [H ~> m or kg m-2]
   real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density
   real,    optional, intent(in) :: dz_min_surface   !< The fixed resolution in the topmost SLight_nkml_min layers (H)
   integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickness layers at the top of the model
@@ -2226,7 +2226,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward
                                                     !! from the top.
   real,    optional, intent(in) :: adaptTimeRatio   !< Ratio of the ALE timestep to the grid timescale, ND.
-  real,    optional, intent(in) :: adaptZoom        !< Depth of near-surface zooming region, in H ~> m or kg m-2.
+  real,    optional, intent(in) :: adaptZoom        !< Depth of near-surface zooming region [H ~> m or kg m-2].
   real,    optional, intent(in) :: adaptZoomCoeff   !< Coefficient of near-surface zooming diffusivity, ND.
   real,    optional, intent(in) :: adaptBuoyCoeff   !< Coefficient of buoyancy diffusivity, ND.
   real,    optional, intent(in) :: adaptAlpha       !< Scaling factor on optimization tendency, ND.

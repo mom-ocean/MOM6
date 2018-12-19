@@ -95,17 +95,17 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
   ! Local variables
-  real :: e0(SZK_(GV))     ! The resting interface heights, in depth units (Z ~> m), usually
+  real :: e0(SZK_(GV))     ! The resting interface heights, in depth units [Z ~> m], usually
                            ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
-                           ! positive upward, in depth units (Z ~> m).
+                           ! positive upward, in depth units [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
   real    :: delta_h
@@ -227,7 +227,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will

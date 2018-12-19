@@ -101,7 +101,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   ! The following variables are only used with the split time stepping scheme.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta    !< Instantaneous free surface height (in Boussinesq
                                                                   !! mode) or column mass anomaly (in non-Boussinesq
-                                                                  !! mode), in H ~> m or kg m-2
+                                                                  !! mode) [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av   !< layer x-velocity with vertical mean replaced by
                                                                   !! time-mean barotropic velocity over a baroclinic
                                                                   !! timestep (m s-1)
