@@ -79,9 +79,9 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< The model thicknesses in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< The model thicknesses [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file  !< Parameter file handle
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing T & S.
@@ -90,7 +90,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution
   real      :: S_ref, dSdz, dSdx, delta_S ! Parameters describing salinity distribution
   real      :: L_zone ! Width of baroclinic zone
-  real      :: zc, zi ! Depths in depth units (Z ~> m).
+  real      :: zc, zi ! Depths in depth units [Z ~> m]
   real      :: x, xd, xs, y, yd, fn
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
   logical :: just_read    ! If true, just read parameters but set nothing.

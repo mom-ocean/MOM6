@@ -107,7 +107,7 @@ end subroutine USER_initialize_thickness
 !> initialize velocities.
 subroutine USER_initialize_velocity(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m/s]
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m s-1]
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [m/s]
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model

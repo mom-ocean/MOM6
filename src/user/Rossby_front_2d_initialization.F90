@@ -28,9 +28,9 @@ public Rossby_front_initialize_temperature_salinity
 public Rossby_front_initialize_velocity
 
 ! Parameters defining the initial conditions of this test case
-real, parameter :: frontFractionalWidth = 0.5 !< Width of front as fraction of domain
-real, parameter :: HMLmin = 0.25 !< Shallowest ML as fractional depth of ocean
-real, parameter :: HMLmax = 0.75 !< Deepest ML as fractional depth of ocean
+real, parameter :: frontFractionalWidth = 0.5 !< Width of front as fraction of domain [nondim]
+real, parameter :: HMLmin = 0.25 !< Shallowest ML as fractional depth of ocean [nondim]
+real, parameter :: HMLmax = 0.75 !< Deepest ML as fractional depth of ocean [nondim]
 
 contains
 
@@ -39,7 +39,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
   type(ocean_grid_type),   intent(in) :: G            !< Grid structure
   type(verticalGrid_type), intent(in) :: GV           !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H ~> m or kg m-2.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -110,9 +110,9 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
                    param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness in H ~> m or kg m-2
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -163,11 +163,11 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
   type(ocean_grid_type),      intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),    intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                              intent(out) :: u  !< i-component of velocity [m/s]
+                              intent(out) :: u  !< i-component of velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                              intent(out) :: v  !< j-component of velocity [m/s]
+                              intent(out) :: v  !< j-component of velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-                              intent(in)  :: h  !< Thickness [H]
+                              intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
   type(param_file_type),      intent(in)  :: param_file !< A structure indicating the open file
                                                 !! to parse for model parameter values.
   logical,          optional, intent(in)  :: just_read_params !< If present and true, this call
