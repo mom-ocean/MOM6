@@ -130,7 +130,7 @@ type, public :: forcing
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
     TKE_tidal     => NULL(), & !< tidal energy source driving mixing in bottom boundary layer (W/m^2)
-    ustar_tidal   => NULL()    !< tidal contribution to bottom ustar (m/s)
+    ustar_tidal   => NULL()    !< tidal contribution to bottom ustar [m s-1]
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
@@ -346,14 +346,15 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   type(optics_type),        pointer       :: optics         !< pointer to optics
   integer,                  intent(in)    :: nsw            !< number of bands of penetrating SW
   integer,                  intent(in)    :: j              !< j-index to work on
-  real,                     intent(in)    :: dt             !< time step in seconds
-  real,                     intent(in)    :: FluxRescaleDepth !< min ocean depth before scale away fluxes (H)
+  real,                     intent(in)    :: dt             !< time step [s]
+  real,                     intent(in)    :: FluxRescaleDepth !< min ocean depth before fluxes
+                                                            !! are scaled away [H ~> m or kg m-2]
   logical,                  intent(in)    :: useRiverHeatContent   !< logical for river heat content
   logical,                  intent(in)    :: useCalvingHeatContent !< logical for calving heat content
   real, dimension(SZI_(G),SZK_(G)), &
                             intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZK_(G)), &
-                            intent(in)    :: T              !< layer temperatures (degC)
+                            intent(in)    :: T              !< layer temperatures [degC]
   real, dimension(SZI_(G)), intent(out)   :: netMassInOut   !< net mass flux (non-Bouss) or volume flux
                                                             !! (if Bouss) of water in/out of ocean over
                                                             !! a time step [H ~> m or kg m-2]
@@ -778,14 +779,15 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
   type(optics_type),                pointer       :: optics            !< pointer to optics
   integer,                          intent(in)    :: nsw               !< number of bands of penetrating SW
   real,                             intent(in)    :: dt                !< time step in seconds
-  real,                             intent(in)    :: FluxRescaleDepth  !< min ocean depth before scale away fluxes (H)
+  real,                             intent(in)    :: FluxRescaleDepth  !< min ocean depth before fluxes
+                                                                       !! are scaled away [H ~> m or kg m-2]
   logical,                          intent(in)    :: useRiverHeatContent   !< logical for river heat content
   logical,                          intent(in)    :: useCalvingHeatContent !< logical for calving heat content
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h                 !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: T                 !< layer temperatures (deg C)
-  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: netMassInOut      !<  net mass flux (non-Bouss) or volume flux
+                                    intent(in)    :: T                 !< layer temperatures [degC]
+  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: netMassInOut      !< net mass flux (non-Bouss) or volume flux
                                                                        !! (if Bouss) of water in/out of ocean over
                                                                        !! a time step [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: netMassOut        !< net mass flux (non-Bouss) or volume flux
@@ -797,11 +799,11 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
                                                                        !! (1) downwelling (penetrative) SW,
                                                                        !! (2) evaporation heat content,
                                                                        !! (since do not yet know temperature of evap).
-                                                                       !! Units of net_heat are (K * H).
+                                                                       !! Units of net_heat are (degC H).
   real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: net_salt          !< surface salt flux into the ocean accumulated
-                                                                       !! over a time step (ppt * H)
+                                                                       !! over a time step (ppt H)
   real, dimension(:,:,:),           intent(out)   :: pen_SW_bnd        !< penetrating shortwave flux, split into bands.
-                                                                       !! Units (deg K * H) & array size nsw x SZI_(G),
+                                                                       !! Units (degC H) & array size nsw x SZI_(G),
                                                                        !! where nsw=number of SW bands in pen_SW_bnd.
                                                                        !! This heat flux is not in net_heat.
   type(thermo_var_ptrs),            intent(inout) :: tv                !< structure containing pointers to available
@@ -836,8 +838,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(unit_scale_type),                    intent(in)    :: US             !< A dimensional unit scaling type
   type(forcing),                            intent(inout) :: fluxes         !< surface fluxes
   type(optics_type),                        pointer       :: optics         !< penetrating SW optics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h              !< layer thickness (H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Temp           !< prognostic temp(deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Temp           !< prognostic temp (degC)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Salt           !< salinity (ppt)
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
@@ -926,7 +928,7 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
   type(forcing),                              intent(inout) :: fluxes !< surface fluxes
   type(optics_type),                          pointer       :: optics !< SW ocean optics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< layer thickness (H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp   !< temperature (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt   !< salinity (ppt)
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type

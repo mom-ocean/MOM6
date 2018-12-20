@@ -400,9 +400,9 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
   type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure.
   type(time_type),                  intent(in)  :: Time      !< The time for the caluculation.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta       !< The sea surface height anomaly from
-                                                             !! a time-mean geoid in depth units (Z).
+                                                             !! a time-mean geoid [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal !< The tidal forcing geopotential height
-                                                             !! anomalies, in depth units (Z).
+                                                             !! anomalies [Z ~> m].
   type(tidal_forcing_CS),           pointer     :: CS        !< The control structure returned by a
                                                              !! previous call to tidal_forcing_init.
   real, optional,                   intent(out) :: deta_tidal_deta !< The partial derivative of

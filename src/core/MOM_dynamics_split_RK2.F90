@@ -235,9 +235,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                             target, intent(inout) :: u            !< zonal velocity (m/s)
+                             target, intent(inout) :: u            !< zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                             target, intent(inout) :: v            !< merid velocity (m/s)
+                             target, intent(inout) :: v            !< merid velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                                      intent(inout) :: h            !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),             intent(in)    :: tv           !< thermodynamic type
@@ -960,9 +960,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
   type(unit_scale_type),            intent(in)    :: US         !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: u          !< zonal velocity (m/s)
+                                    intent(inout) :: u          !< zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                    intent(inout) :: v          !< merid velocity (m/s)
+                                    intent(inout) :: v          !< merid velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             target, intent(inout) :: uh !< zonal volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]

@@ -53,9 +53,9 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   type(verticalGrid_type),    intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  &
-                              intent(in)  :: u  !< The zonal velocity, in m s-1.
+                              intent(in)  :: u  !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  &
-                              intent(in)  :: v  !< The meridional velocity, in m s-1.
+                              intent(in)  :: v  !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                               intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),      intent(in)  :: tv !< A structure containing pointers to any available
@@ -63,7 +63,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
                                                 !! ptrs.
   type(forcing),              intent(in)  :: fluxes !< A structure of surface fluxes that may
                                                 !! be used.
-  real,                       intent(in)  :: dt !< The time increment in s.
+  real,                       intent(in)  :: dt !< The time increment [s].
   type(entrain_diffusive_CS), pointer     :: CS !< The control structure returned by a previous
                                                 !! call to entrain_diffusive_init.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
@@ -112,9 +112,9 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real, allocatable, dimension(:,:,:) :: &
     Kd_eff, &     ! The effective diffusivity that actually applies to each
                   ! layer after the effects of boundary conditions are
-                  ! considered, in m2 s-1.
+                  ! considered [Z2 s-1 ~> m2 s-1].
     diff_work     ! The work actually done by diffusion across each
-                  ! interface, in W m-2.  Sum vertically for the total work.
+                  ! interface [W m-2].  Sum vertically for the total work.
 
   real :: hm, fm, fr, fk  ! Work variables with units of H, H, H, and H2.
 
@@ -124,7 +124,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real, dimension(SZI_(G)) :: &
     htot, &       ! The total thickness above or below a layer [H ~> m or kg m-2].
     Rcv, &        ! Value of the coordinate variable (potential density)
-                  ! based on the simulated T and S and P_Ref, kg m-3.
+                  ! based on the simulated T and S and P_Ref [kg m-3].
     pres, &       ! Reference pressure (P_Ref) in Pa.
     eakb, &       ! The entrainment from above by the layer below the buffer
                   ! layer (i.e. layer kb) [H ~> m or kg m-2].
@@ -135,7 +135,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
     dS_anom_lim, &! The amount by which dS_kb is reduced when limits are
                   ! applied [kg m-3].
     I_dSkbp1, &   ! The inverse of the potential density difference across the
-                  ! interface below layer kb, in m3 kg-1.
+                  ! interface below layer kb [m3 kg-1].
     dtKd_kb, &    ! The diapycnal diffusivity in layer kb times the time step
                   ! [H2 ~> m2 or kg2 m-4].
     maxF_correct, & ! An amount by which to correct maxF due to excessive
@@ -177,9 +177,9 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface [Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
-                     ! evaluate dRho_dT and dRho_dS, in degC and PSU.
+                     ! evaluate dRho_dT and dRho_dS [degC] and [PSU].
     dRho_dT, dRho_dS ! The partial derivatives of potential density with
-                     ! temperature and salinity, in kg m-3 K-1 and kg m-3 psu-1.
+                     ! temperature and salinity, [kg m-3 degC-1] and [kg m-3 ppt-1].
 
   real :: tolerance  ! The tolerance within which E must be converged [H ~> m or kg m-2].
   real :: Angstrom   ! The minimum layer thickness [H ~> m or kg m-2].
@@ -187,11 +187,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
                      ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: F_cor      ! A correction to the amount of F that is used to
                      ! entrain from the layer above [H ~> m or kg m-2].
-  real :: Kd_here    ! The effective diapycnal diffusivity, in H2 s-1.
+  real :: Kd_here    ! The effective diapycnal diffusivity [H2 s-1 ~> m2 s-1 or kg2 m-4 s-1].
   real :: h_avail    ! The thickness that is available for entrainment [H ~> m or kg m-2].
   real :: dS_kb_eff  ! The value of dS_kb after limiting is taken into account.
   real :: Rho_cor    ! The depth-integrated potential density anomaly that
-                     ! needs to be corrected for, in kg m-2.
+                     ! needs to be corrected for [H kg m-3 ~> kg m-2 or kg2 m-5].
   real :: ea_cor     ! The corrective adjustment to eakb [H ~> m or kg m-2].
   real :: h1         ! The layer thickness after entrainment through the
                      ! interface below is taken into account [H ~> m or kg m-2].

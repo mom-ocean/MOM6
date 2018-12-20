@@ -131,8 +131,8 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_int   ! Reduced gravities across the internal interfaces, in m s-2.
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_int   ! Reduced gravities across the internal interfaces [m s-2].
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   character(len=40)  :: mdl = "set_coord_from_gprime" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
@@ -165,7 +165,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   real :: Rlay_Ref! The surface layer's target density, in kg m-3.
   real :: RLay_range ! The range of densities, in kg m-3.
   character(len=40)  :: mdl = "set_coord_from_layer_density" ! This subroutine's name.
@@ -214,8 +214,8 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
   ! Local variables
   real :: T_ref   ! Reference temperature
   real :: S_ref   ! Reference salinity
-  real :: g_int   ! Reduced gravities across the internal interfaces, in m s-2.
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_int   ! Reduced gravities across the internal interfaces [m s-2].
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   character(len=40)  :: mdl = "set_coord_from_TS_ref" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
@@ -265,7 +265,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
                                                        !! in Pa.
   ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_TS_profile" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
@@ -319,7 +319,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
                   ! of the range to that in the lighter part of the range.
                   ! Setting this greater than 1 increases the resolution for
                   ! the denser water.
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   real :: a1, frac_dense, k_frac
   integer :: k, nz, k_light
   character(len=40)  :: mdl = "set_coord_from_TS_range" ! This subroutine's name.
@@ -391,7 +391,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
@@ -481,12 +481,12 @@ subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
                                                      !! (potential density).
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces,
-                                                     !! in m s-2.
+                                                     !! [m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   character(len=40)  :: mdl = "set_coord_to_none" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke

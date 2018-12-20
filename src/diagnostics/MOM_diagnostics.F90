@@ -69,7 +69,7 @@ type, public :: diagnostics_CS ; private
   real, pointer, dimension(:,:,:) :: &
     du_dt => NULL(), & !< net i-acceleration in m/s2
     dv_dt => NULL(), & !< net j-acceleration in m/s2
-    dh_dt => NULL(), & !< thickness rate of change in (m/s) or kg/(m2*s)
+    dh_dt => NULL(), & !< thickness rate of change in [m s-1] or kg/(m2*s)
     p_ebt => NULL()    !< Equivalent barotropic modal structure
 
   real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
@@ -85,7 +85,7 @@ type, public :: diagnostics_CS ; private
 
   ! following fields are 2-D.
   real, pointer, dimension(:,:) :: &
-    cg1 => NULL(),       & !< First baroclinic gravity wave speed, in m s-1
+    cg1 => NULL(),       & !< First baroclinic gravity wave speed [m s-1]
     Rd1 => NULL(),       & !< First baroclinic deformation radius, in m
     cfl_cg1 => NULL(),   & !< CFL for first baroclinic gravity wave speed, nondim
     cfl_cg1_x => NULL(), & !< i-component of CFL for first baroclinic gravity wave speed, nondim
@@ -189,9 +189,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+                           intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+                           intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -883,9 +883,9 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+                           intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+                           intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &

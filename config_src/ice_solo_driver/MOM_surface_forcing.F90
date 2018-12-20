@@ -104,7 +104,7 @@ type, public :: surface_forcing_CS ; private
 
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
   real :: G_Earth               ! gravitational acceleration (m/s^2)
-  real :: Flux_const            ! piston velocity for surface restoring (m/s)
+  real :: Flux_const            ! piston velocity for surface restoring [m s-1]
 
   real    :: gust_const                 ! constant unresolved background gustiness for ustar (Pa)
   logical :: read_gust_2d               ! if true, use 2-dimensional gustiness supplied from a file

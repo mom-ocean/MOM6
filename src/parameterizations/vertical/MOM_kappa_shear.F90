@@ -73,7 +73,7 @@ type, public :: Kappa_shear_CS ; private
                              !! massive layers in this calculation.
                              !  I can think of no good reason why this should be false. - RWH
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
-                             !! are set to 0, in m s-1.
+                             !! are set to 0 [m s-1].
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -98,9 +98,9 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
+                           intent(in)    :: u_in   !< Initial zonal velocity [m s-1]. (Intent in)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
+                           intent(in)    :: v_in   !< Initial meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
@@ -137,8 +137,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     kappa_2d, tke_2d                ! 2-D versions of various kappa_io and tke_io.
   real, dimension(SZK_(GV)) :: &
-    u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
-    v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
+    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
+    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     T, &        ! The potential temperature after a timestep of mixing [degC].
     Sal, &      ! The salinity after a timestep of mixing [PSU].
@@ -385,9 +385,9 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)   :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
+                           intent(in)    :: u_in   !< Initial zonal velocity [m s-1]. (Intent in)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   &
-                           intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
+                           intent(in)    :: v_in   !< Initial meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
@@ -428,8 +428,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     tke_2d      ! 2-D version tke_io [m2 s-2].
   real, dimension(SZK_(GV)) :: &
-    u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
-    v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
+    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
+    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     T, &        ! The potential temperature after a timestep of mixing, in C.
     Sal, &      ! The salinity after a timestep of mixing [PSU].
@@ -744,8 +744,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                                                !! call to kappa_shear_init.
 
   real, dimension(nzc) :: &
-    u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
-    v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
+    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
+    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     T, &        ! The potential temperature after a timestep of mixing [degC].
     Sal, &      ! The salinity after a timestep of mixing [PSU].
@@ -1235,27 +1235,26 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                               !! layers?).
   real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
                                               !! [Z2 s-1 ~> m2 s-1].
-  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity, in m s-1.
-  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity, in m s-1.
-  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature, in C.
+  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [m s-1].
+  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [m s-1].
+  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [degC].
   real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [PSU].
   real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers [Z ~> m].
   real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dT !< The partial derivative of buoyancy with
-                                              !! temperature [Z s-2 C-1 ~> m s-2 C-1].
+                                              !! temperature [Z s-2 degC-1 ~> m s-2 degC-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
                                               !! salinity [Z s-2 PSU-1 ~> m s-2 PSU-1].
-  real,                  intent(in)    :: dt  !< The time step in s.
-  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt, in m s-1.
-  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt, in m s-1.
-  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt, in C.
+  real,                  intent(in)    :: dt  !< The time step [s].
+  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [m s-1].
+  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [m s-1].
+  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [degC].
   real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [PSU].
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), optional, &
-                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces,
-                                              !! in s-2.
+                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces [s-2].
   real, dimension(nz+1), optional, &
                          intent(inout) :: S2  !< The squared shear at interfaces [s-2].
   integer, optional,     intent(in)    :: ks_int !< The topmost k-index with a non-zero diffusivity.
@@ -1263,13 +1262,13 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                               !! diffusivity.
   real,    optional,     intent(in)    :: vel_underflow !< If present and true, any velocities that
                                               !! are smaller in magnitude than this value are
-                                              !! set to 0, in m s-1.
+                                              !! set to 0 [m s-1].
 
   ! Local variables
   real, dimension(nz+1) :: c1
   real :: L2_to_Z2       ! A conversion factor from horizontal length units to vertical depth
                          ! units squared [Z2 m-2 ~> 1].
-  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0, in m s-1.
+  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0 [m s-1].
   real :: a_a, a_b, b1, d1, bd1, b1nz_0
   integer :: k, ks, ke
 
@@ -1437,7 +1436,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0, Z2 s-1.
 
   real :: eden1, eden2, I_eden, ome  ! Variables used in calculating e1.
-  real :: diffusive_src ! The diffusive source in the kappa equation, in m s-1.
+  real :: diffusive_src ! The diffusive source in the kappa equation [m s-1].
   real :: chg_by_k0     ! The value of k_src that leads to an increase of
                         ! kappa_0 if only the diffusive term is a sink [s-1].
 

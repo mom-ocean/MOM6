@@ -36,7 +36,7 @@ type, public :: adapt_CS ; private
   !> Stratification-dependent diffusion coefficient
   real :: adaptBuoyCoeff
 
-  !> Reference density difference for stratification-dependent diffusion in kg m-3
+  !> Reference density difference for stratification-dependent diffusion [kg m-3]
   real :: adaptDrho0
 
   !> If true, form a HYCOM1-like mixed layet by preventing interfaces
@@ -52,7 +52,8 @@ contains
 subroutine init_coord_adapt(CS, nk, coordinateResolution, m_to_H)
   type(adapt_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,            intent(in) :: nk !< Number of layers in the grid
-  real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution (H)
+  real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution [m] or
+                                       !! other units specified with m_to_H
   real,     optional, intent(in) :: m_to_H !< A conversion factor from m to the units of thicknesses
 
   real :: m_to_H_rescale  ! A unit conversion factor.
@@ -72,7 +73,7 @@ subroutine init_coord_adapt(CS, nk, coordinateResolution, m_to_H)
   CS%adaptZoom = 200.0 * m_to_H_rescale
   CS%adaptZoomCoeff = 0.0  ! Nondim.
   CS%adaptBuoyCoeff = 0.0  ! Nondim.
-  CS%adaptDrho0     = 0.5  ! kg m-3
+  CS%adaptDrho0     = 0.5  ! [kg m-3]
 
 end subroutine init_coord_adapt
 

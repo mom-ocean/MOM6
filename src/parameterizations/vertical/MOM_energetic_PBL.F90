@@ -48,7 +48,7 @@ type, public :: energetic_PBL_CS ; private
                              !!  mechanically forced entrainment of the mixed layer is converted to
                              !!  TKE [nondim].
 ! real    :: Hmix_min        !< The minimum mixed layer thickness in m.
-  real    :: ustar_min       !< A minimum value of ustar to avoid numerical problems, in m s-1.
+  real    :: ustar_min       !< A minimum value of ustar to avoid numerical problems [m s-1].
                              !! If the value is small enough, this should not affect the solution.
   real    :: omega           !<   The Earth's rotation rate [s-1].
   real    :: omega_frac      !<   When setting the decay scale for turbulence, use this fraction of
@@ -267,8 +267,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     h, &            !   The layer thickness [H ~> m or kg m-2].
     T, &            !   The layer temperatures [degC].
     S, &            !   The layer salinities [PSU].
-    u, &            !   The zonal velocity, in m s-1.
-    v               !   The meridional velocity, in m s-1.
+    u, &            !   The zonal velocity [m s-1].
+    v               !   The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Kd, &           ! The diapycnal diffusivity, in m2 s-1.
     pres, &         ! Interface pressures in Pa.
@@ -359,7 +359,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity [Z s-1 ~> m s-1].
   real :: U_Star_Mean ! The surface friction without gustiness [Z s-1 ~> m s-1].
-  real :: vstar     ! An in-situ turbulent velocity, in m s-1.
+  real :: vstar     ! An in-situ turbulent velocity [m s-1].
   real :: Enhance_M ! An enhancement factor for vstar, based here on Langmuir impact.
   real :: LA        ! The Langmuir number (non-dim)
   real :: LAmod     ! A modified Langmuir number accounting for other parameters.
@@ -1872,10 +1872,10 @@ end subroutine energetic_PBL_get_MLD
 
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
 subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
-  real,                    intent(in)  :: USTair !< Ustar in the air, in m s-1.
+  real,                    intent(in)  :: USTair !< Ustar in the air [m s-1].
   type(verticalGrid_type), intent(in)  :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US     !< A dimensional unit scaling type
-  real,                    intent(out) :: U10    !< The 10 m wind speed, in m s-1.
+  real,                    intent(out) :: U10    !< The 10 m wind speed [m s-1].
 
   real, parameter :: vonkar = 0.4
   real, parameter :: nu=1e-6
@@ -1918,14 +1918,14 @@ end subroutine ust_2_u10_coare3p5
 !> This subroutine returns the Langmuir number, given ustar and the boundary
 !! layer thickness, inclusion conversion to the 10m wind.
 subroutine get_LA_windsea(ustar, hbl, GV, US, LA)
-  real,                    intent(in)  :: ustar !< The water-side surface friction velocity (m/s)
+  real,                    intent(in)  :: ustar !< The water-side surface friction velocity [m s-1]
   real,                    intent(in)  :: hbl   !< The ocean boundary layer depth (m)
   type(verticalGrid_type), intent(in)  :: GV    !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US    !< A dimensional unit scaling type
   real,                    intent(out) :: LA    !< The Langmuir number returned from this module
 ! Original description:
 ! This function returns the enhancement factor, given the 10-meter
-! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
+! wind [m s-1], friction velocity [m s-1] and the boundary layer depth (m).
 ! Update (Jan/25):
 ! Converted from function to subroutine, now returns Langmuir number.
 ! Computes 10m wind internally, so only ustar and hbl need passed to
