@@ -159,7 +159,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
 
   real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
   real :: min_depth

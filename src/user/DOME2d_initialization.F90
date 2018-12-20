@@ -367,7 +367,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO
   real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness, in m.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness
-  real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate, in s-1.
+  real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [s-1].
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
   real :: S_range, T_range             ! Range of salinities and temperatures over the vertical
   real :: e0(SZK_(G)+1)             ! The resting interface heights [Z ~> m],

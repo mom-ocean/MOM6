@@ -106,7 +106,7 @@ type, public :: int_tide_CS ; private
                         !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
   real, dimension(:,:,:), pointer :: En_restart => NULL()
                         !< The internal wave energy density as a function of (i,j,angle); temporary for restart
-  real, allocatable, dimension(:) :: frequency  !< The frequency of each band, in s-1.
+  real, allocatable, dimension(:) :: frequency  !< The frequency of each band [s-1].
 
   !### Delete later
   real    :: int_tide_source_x !< X Location of generation site for internal tide testing
@@ -164,9 +164,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                                                         !! internal waves, in W m-2.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide !< Barotropic velocity read
                                                         !! from file, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency, in s-1.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency [s-1].
   real,                             intent(in)    :: dt !< Length of time over which these fluxes
-                                                        !! will be applied, in s.
+                                                        !! will be applied [s].
   type(int_tide_CS),                pointer       :: CS !< The control structure returned by a
                                                         !! previous call to int_tide_init.
   real, dimension(SZI_(G),SZJ_(G),CS%nMode), &
@@ -627,7 +627,7 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
   type(int_tide_CS),         pointer       :: CS !< The control structure returned by a
                                                  !! previous call to int_tide_init.
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                             intent(in)    :: Nb !< Near-bottom stratification, in s-1.
+                             intent(in)    :: Nb !< Near-bottom stratification [s-1].
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), &
                              intent(inout) :: Ub !< Rms (over one period) near-bottom horizontal
                                                  !! mode velocity, in m s-1.
@@ -639,7 +639,7 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
                              intent(out)   :: TKE_loss    !< Energy loss rate, in W m-2
                                                  !! (q*rho*kappa*h^2*N*U^2).
-  real,                      intent(in)    :: dt !< Time increment, in s.
+  real,                      intent(in)    :: dt !< Time increment [s].
   logical,optional,          intent(in)    :: full_halos  !< If true, do the calculation over the
                                                  !! entirecomputational domain.
   ! Local variables
@@ -740,8 +740,8 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
                                                !! in J m-2 radian-1.
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
                          intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
-  real,                  intent(in)    :: freq !< Wave frequency, in s-1.
-  real,                  intent(in)    :: dt   !< Time step, in s.
+  real,                  intent(in)    :: freq !< Wave frequency [s-1].
+  real,                  intent(in)    :: dt   !< Time step [s].
   logical,               intent(in)    :: use_PPMang !< If true, use PPM for advection rather
                                                !! than upwind.
   ! Local variables
@@ -756,8 +756,8 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
     Flux_E
   real, dimension(SZI_(G),SZJ_(G),1-stencil:NAngle+stencil) :: &
     CFL_ang
-  real :: f2              ! The squared Coriolis parameter, in s-2.
-  real :: favg            ! The average Coriolis parameter at a point, in s-1.
+  real :: f2              ! The squared Coriolis parameter [s-2].
+  real :: favg            ! The average Coriolis parameter at a point [s-1].
   real :: df2_dy, df2_dx  ! The x- and y- gradients of the squared Coriolis parameter, in s-2 m-1.
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter, in s-1 m-1.
   real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself in m-1.
@@ -960,8 +960,8 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
                                                !! in J m-2 radian-1.
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
                          intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
-  real,                  intent(in)    :: freq !< Wave frequency, in s-1.
-  real,                  intent(in)    :: dt   !< Time step, in s.
+  real,                  intent(in)    :: freq !< Wave frequency [s-1].
+  real,                  intent(in)    :: dt   !< Time step [s].
   type(int_tide_CS),     pointer       :: CS   !< The control structure returned by a
                                                !! previous call to int_tide_init.
   ! Local variables
@@ -976,7 +976,7 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
     cos_angle, sin_angle
   real, dimension(NAngle) :: &
     Cgx_av, Cgy_av, dCgx, dCgy
-  real :: f2   ! The squared Coriolis parameter, in s-2.
+  real :: f2   ! The squared Coriolis parameter [s-2].
   real :: Angle_size, I_Angle_size, angle
   real :: Ifreq, freq2
   real, parameter :: cn_subRO = 1e-100
@@ -1528,7 +1528,7 @@ subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
   logical,                   intent(in)    :: vol_CFL !< If true, rescale the ratio of face areas to
                                                  !! the cell areas when estimating the CFL number.
   ! Local variables
-  real :: CFL  ! The CFL number based on the local velocity and grid spacing, ND.
+  real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim].
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
   integer :: i
@@ -1573,7 +1573,7 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
                                                         !! areas to the cell areas when estimating
                                                         !! the CFL number.
   ! Local variables
-  real :: CFL ! The CFL number based on the local velocity and grid spacing, ND.
+  real :: CFL ! The CFL number based on the local velocity and grid spacing [nondim].
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
   integer :: i

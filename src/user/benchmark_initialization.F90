@@ -34,7 +34,7 @@ contains
 subroutine benchmark_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth in m or [Z ~> m] if US is present
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
   real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
   type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
@@ -104,8 +104,8 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
                              ! in depth units [Z ~> m].
   real :: eta1D(SZK_(GV)+1)  ! Interface height relative to the sea surface
                              ! positive upward, in depth units [Z ~> m].
-  real :: SST       !  The initial sea surface temperature, in deg C.
-  real :: T_int     !  The initial temperature of an interface, in deg C.
+  real :: SST       !  The initial sea surface temperature [degC].
+  real :: T_int     !  The initial temperature of an interface [degC].
   real :: ML_depth  !  The specified initial mixed layer depth, in depth units [Z ~> m].
   real :: thermocline_scale ! The e-folding scale of the thermocline, in depth units [Z ~> m].
   real, dimension(SZK_(GV)) :: T0, pres, S0, rho_guess, drho, drho_dT, drho_dS
@@ -234,7 +234,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
                         ! kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.   !
   real :: PI        ! 3.1415926... calculated as 4*atan(1)
-  real :: SST       !  The initial sea surface temperature, in deg C.
+  real :: SST       !  The initial sea surface temperature [degC].
   real :: lat
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "benchmark_init_temperature_salinity" ! This subroutine's name.

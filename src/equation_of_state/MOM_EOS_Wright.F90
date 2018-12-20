@@ -26,14 +26,14 @@ public int_density_dz_wright, int_spec_vol_dp_wright
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 
-!> Compute the in situ density of sea water (in units of kg/m^3), or its anomaly with respect to
+!> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
 !! a reference density, from salinity (in psu), potential temperature (in deg C), and pressure in Pa,
 !! using the expressions from Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 interface calculate_density_wright
   module procedure calculate_density_scalar_wright, calculate_density_array_wright
 end interface calculate_density_wright
 
-!> Compute the in situ specific volume of sea water (in units of m^3/kg), or an anomaly with respect
+!> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
 !! to a reference specific volume, from salinity (in psu), potential temperature (in deg C), and
 !! pressure in Pa, using the expressions from Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 interface calculate_spec_vol_wright
@@ -74,8 +74,8 @@ real, parameter :: c3 = 5.140652e-2, c4 = -2.302158e2, c5 = -3.079464
 contains
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from salinity (S in psu), potential temperature
-!! (T in deg C), and pressure in Pa.  It uses the expression from
+!! [kg m-3]) from salinity (S [PSU]), potential temperature
+!! (T [degC]), and pressure in Pa.  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Potential temperature relative to the surface in C.
@@ -86,8 +86,8 @@ subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
 
 ! *====================================================================*
 ! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from salinity (S in psu), potential temperature  *
-! *  (T in deg C), and pressure in Pa.  It uses the expression from    *
+! *  [kg m-3]) from salinity (S [PSU]), potential temperature  *
+! *  (T [degC]), and pressure in Pa.  It uses the expression from    *
 ! *  Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.                *
 ! *  Coded by R. Hallberg, 7/00                                        *
 ! *====================================================================*
@@ -104,8 +104,8 @@ subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
 end subroutine calculate_density_scalar_wright
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from salinity (S in psu), potential temperature
-!! (T in deg C), and pressure in Pa.  It uses the expression from
+!! [kg m-3]) from salinity (S [PSU]), potential temperature
+!! (T [degC]), and pressure in Pa.  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface in C.
@@ -143,7 +143,7 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
 end subroutine calculate_density_array_wright
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
 !! and pressure in Pa.  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
@@ -164,7 +164,7 @@ subroutine calculate_spec_vol_scalar_wright(T, S, pressure, specvol, spv_ref)
 end subroutine calculate_spec_vol_scalar_wright
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
 !! and pressure in Pa.  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
@@ -361,9 +361,9 @@ subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start
 end subroutine calculate_specvol_derivs_wright
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) and the compressibility (drho/dp = C_sound^-2)
-!! (drho_dp in units of s2 m-2) from salinity (sal in psu), potential
-!! temperature (T in deg C), and pressure in Pa.  It uses the expressions
+!! [kg m-3]) and the compressibility (drho/dp = C_sound^-2)
+!! (drho_dp [s2 m-2]) from salinity (sal in psu), potential
+!! temperature (T [degC]), and pressure in Pa.  It uses the expressions
 !! from Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 !! Coded by R. Hallberg, 1/01
 subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
@@ -419,7 +419,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa      !< The change in the pressure anomaly across the
-                                                !! layer, in Pa.
+                                                !! layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa !< The integral through the thickness of the layer
                                                 !! of the pressure anomaly relative to the anomaly
@@ -427,13 +427,13 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intx_dpa !< The integral in x of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
-                                                !! layer divided by the x grid spacing, in Pa.
+                                                !! layer divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(out) :: inty_dpa !< The integral in y of the difference between the
                                                 !! pressure anomaly at the top and bottom of the
-                                                !! layer divided by the y grid spacing, in Pa.
+                                                !! layer divided by the y grid spacing [Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT   !< The depth of the bathymetry in units of Z.
+              optional, intent(in)  :: bathyT   !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                 !! interpolate T/S for top and bottom integrals.
@@ -441,7 +441,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   ! Local variables
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
-  real :: rho_anom   ! The density anomaly from rho_ref, in kg m-3.
+  real :: rho_anom   ! The density anomaly from rho_ref [kg m-3].
   real :: eps, eps2, rem
   real :: GxRho, I_Rho
   real :: p_ave, I_al0, I_Lzz
@@ -449,12 +449,12 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
   real :: iDenom     ! The inverse of the denominator in the weights, in m-Z.
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations, in Pa.
+                     ! 5 sub-column locations [Pa].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
@@ -620,7 +620,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
            !! effects of roundoff.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza       !< The change in the geopotential anomaly across
-                                                 !! the layer, in m2 s-2.
+                                                 !! the layer [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intp_dza  !< The integral in pressure through the layer of
                                                  !! the geopotential anomaly relative to the anomaly
@@ -638,7 +638,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate
                                                  !! dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry in Pa
+              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
                                                  !! the same units as p_t (Pa?)
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
@@ -650,16 +650,16 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: p_ave
   real :: rem, eps, eps2
   real :: alpha_anom ! The depth averaged specific density anomaly in m3 kg-1.
-  real :: dp         ! The pressure change through a layer, in Pa.
-  real :: hWght      ! A pressure-thickness below topography, in Pa.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
+  real :: dp         ! The pressure change through a layer [Pa].
+  real :: hWght      ! A pressure-thickness below topography [Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
   real :: iDenom     ! The inverse of the denominator in the weights, in Pa-2.
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations, in m2 s-2.
+                     ! 5 sub-column locations [m2 s-2].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.

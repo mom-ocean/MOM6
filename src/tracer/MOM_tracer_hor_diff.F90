@@ -34,7 +34,7 @@ public tracer_hordiff, tracer_hor_diff_init, tracer_hor_diff_end
 
 !> The ocntrol structure for along-layer and epineutral tracer diffusion
 type, public :: tracer_hor_diff_CS ; private
-  real    :: dt             !< The baroclinic dynamics time step, in s.
+  real    :: dt             !< The baroclinic dynamics time step [s].
   real    :: KhTr           !< The along-isopycnal tracer diffusivity in m2/s.
   real    :: KhTr_Slope_Cff !< The non-dimensional coefficient in KhTr formula
   real    :: KhTr_min       !< Minimum along-isopycnal tracer diffusivity in m2/s.
@@ -97,7 +97,7 @@ contains
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(in)    :: h       !< Layer thickness (m or kg m-2)
+                              intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
   real,                       intent(in)    :: dt      !< time step (seconds)
   type(MEKE_type),            pointer       :: MEKE    !< MEKE type
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
@@ -125,7 +125,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
                   ! grid cell, in m-3 or kg-1.
     Kh_h, &       ! The tracer diffusivity averaged to tracer points, in m2 s-1.
-    CFL, &        ! A diffusive CFL number for each cell, nondim.
+    CFL, &        ! A diffusive CFL number for each cell [nondim].
     dTr           ! The change in a tracer's concentration, in units of
                   ! concentration.
 
@@ -149,13 +149,13 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
   real :: I_numitts  ! The inverse of the number of iterations, num_itts.
   real :: scale      ! The fraction of khdt_x or khdt_y that is applied in this
-                     ! layer for this iteration, nondim.
-  real :: Idt        ! The inverse of the time step, in s-1.
+                     ! layer for this iteration [nondim].
+  real :: Idt        ! The inverse of the time step [s-1].
   real :: h_neglect  ! A thickness that is so small it is usually lost
                      ! in roundoff and can be neglected, in m.
   real :: Kh_loc     ! The local value of Kh, in m2 s-1.
-  real :: Res_Fn     ! The local value of the resolution function, nondim.
-  real :: Rd_dx      ! The local value of deformation radius over grid-spacing, nondim.
+  real :: Res_Fn     ! The local value of the resolution function [nondim].
+  real :: Rd_dx      ! The local value of deformation radius over grid-spacing [nondim].
   real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -541,7 +541,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                     GV, CS, tv, num_itts)
   type(ocean_grid_type),                    intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV         !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness [H ~> m or kg m-2]
   real,                                     intent(in)    :: dt         !< time step
   type(tracer_type),                        intent(inout) :: Tr(:)      !< tracer array
   integer,                                  intent(in)    :: ntr        !< number of tracers
@@ -553,18 +553,18 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    Rml_max  ! The maximum coordinate density within the mixed layer, in kg m-3.
+    Rml_max  ! The maximum coordinate density within the mixed layer [kg m-3].
   real, dimension(SZI_(G), SZJ_(G), max(1,GV%nk_rho_varies)) :: &
-    rho_coord ! The coordinate density that is used to mix along, in kg m-3.
+    rho_coord ! The coordinate density that is used to mix along [kg m-3].
 
   ! The naming mnemnonic is a=above,b=below,L=Left,R=Right,u=u-point,v=v-point.
   ! These are 1-D arrays of pointers to 2-d arrays to minimize memory usage.
   type(p2d), dimension(SZJ_(G)) :: &
-    deep_wt_Lu, deep_wt_Ru, &  ! The relative weighting of the deeper of a pair, ND.
+    deep_wt_Lu, deep_wt_Ru, &  ! The relative weighting of the deeper of a pair [nondim].
     hP_Lu, hP_Ru       ! The total thickness on each side for each pair, in m or kg m-2.
 
   type(p2d), dimension(SZJB_(G)) :: &
-    deep_wt_Lv, deep_wt_Rv, & ! The relative weighting of the deeper of a pair, ND.
+    deep_wt_Lv, deep_wt_Rv, & ! The relative weighting of the deeper of a pair [nondim].
     hP_Lv, hP_Rv       ! The total thickness on each side for each pair, in m or kg m-2.
 
   type(p2di), dimension(SZJ_(G)) :: &
@@ -579,7 +579,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
 
   real, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
-    rho_srt, & ! The density of each layer of the sorted columns, in kg m-3.
+    rho_srt, & ! The density of each layer of the sorted columns [kg m-3].
     h_srt      ! The thickness of each layer of the sorted columns, in m or kg m-2.
   integer, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
     k0_srt     ! The original k-index that each layer of the sorted column
@@ -610,9 +610,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     nPv          ! The number of epipycnal pairings at each v-point.
   real :: h_exclude    ! A thickness that layers must attain to be considered
                        ! for inclusion in mixing, in m.
-  real :: Idt        ! The inverse of the time step, in s-1.
+  real :: Idt        ! The inverse of the time step [s-1].
   real :: I_maxitt   ! The inverse of the maximum number of iterations.
-  real :: rho_pair, rho_a, rho_b  ! Temporary densities, in kg m-3.
+  real :: rho_pair, rho_a, rho_b  ! Temporary densities [kg m-3].
   real :: Tr_min_face  ! The minimum and maximum tracer concentrations
   real :: Tr_max_face  ! associated with a pairing, in conc.
   real :: Tr_La, Tr_Lb ! The 4 tracer concentrations that might be
@@ -623,7 +623,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real :: Tr_adj_vert  ! A downward vertical adjustment to Tr_flux between the
                      ! two cells that make up one side of the pairing, in conc m3.
   real :: h_L, h_R   ! Thicknesses to the left and right, in m or kg m-2 (H).
-  real :: wt_a, wt_b ! Fractional weights of layers above and below, ND.
+  real :: wt_a, wt_b ! Fractional weights of layers above and below [nondim].
   real :: vol        ! A cell volume or mass, in m3 or kg (H m2).
   logical, dimension(SZK_(G)) :: &
     left_set, &  ! If true, the left or right point determines the density of

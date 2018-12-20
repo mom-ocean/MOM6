@@ -133,11 +133,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
                                                   !! call to regularize_layers_init.
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    def_rat_u   ! The ratio of the thickness deficit to the minimum depth, ND.
+    def_rat_u   ! The ratio of the thickness deficit to the minimum depth [nondim].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    def_rat_v   ! The ratio of the thickness deficit to the minimum depth, ND.
+    def_rat_v   ! The ratio of the thickness deficit to the minimum depth [nondim].
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    def_rat_h   ! The ratio of the thickness deficit to the minimum depth, ND.
+    def_rat_h   ! The ratio of the thickness deficit to the minimum depth [nondim].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     e           ! The interface depths [H ~> m or kg m-2], positive upward.
 
@@ -156,12 +156,12 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
     e_filt, e_2d  ! The interface depths [H ~> m or kg m-2], positive upward.
   real, dimension(SZI_(G),SZK_(G)) :: &
     h_2d, &     !   A 2-d version of h [H ~> m or kg m-2].
-    T_2d, &     !   A 2-d version of tv%T, in deg C.
-    S_2d, &     !   A 2-d version of tv%S, in PSU.
-    Rcv, &      !   A 2-d version of the coordinate density, in kg m-3.
+    T_2d, &     !   A 2-d version of tv%T [degC].
+    S_2d, &     !   A 2-d version of tv%S [PSU].
+    Rcv, &      !   A 2-d version of the coordinate density [kg m-3].
     h_2d_init, &  ! The initial value of h_2d [H ~> m or kg m-2].
-    T_2d_init, &  ! THe initial value of T_2d, in deg C.
-    S_2d_init, &  ! The initial value of S_2d, in PSU.
+    T_2d_init, &  ! THe initial value of T_2d [degC].
+    S_2d_init, &  ! The initial value of S_2d [PSU].
     d_eb, &     !   The downward increase across a layer in the entrainment from
                 ! below [H ~> m or kg m-2].  The sign convention is that positive values of
                 ! d_eb correspond to a gain in mass by a layer by upward motion.
@@ -170,21 +170,21 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
                 ! d_ea mean a net gain in mass by a layer from downward motion.
   real, dimension(SZI_(G)) :: &
     p_ref_cv, & !   Reference pressure for the potential density which defines
-                ! the coordinate variable, set to P_Ref, in Pa.
+                ! the coordinate variable, set to P_Ref [Pa].
     Rcv_tol, &  !   A tolerence, relative to the target density differences
-                ! between layers, for detraining into the interior, ND.
+                ! between layers, for detraining into the interior [nondim].
     h_add_tgt, h_add_tot, &
     h_tot1, Th_tot1, Sh_tot1, &
     h_tot3, Th_tot3, Sh_tot3, &
     h_tot2, Th_tot2, Sh_tot2
   real, dimension(SZK_(G)) :: &
     h_prev_1d     ! The previous thicknesses [H ~> m or kg m-2].
-  real :: I_dtol  ! The inverse of the tolerance changes, nondim.
-  real :: I_dtol34 ! The inverse of the tolerance changes, nondim.
+  real :: I_dtol  ! The inverse of the tolerance changes [nondim].
+  real :: I_dtol34 ! The inverse of the tolerance changes [nondim].
   real :: h1, h2  ! Temporary thicknesses [H ~> m or kg m-2].
   real :: e_e, e_w, e_n, e_s  ! Temporary interface heights [H ~> m or kg m-2].
-  real :: wt    ! The weight of the filted interfaces in setting the targets, ND.
-  real :: scale ! A scaling factor, ND.
+  real :: wt    ! The weight of the filted interfaces in setting the targets [nondim].
+  real :: scale ! A scaling factor [nondim].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real, dimension(SZK_(G)+1) :: &
@@ -193,7 +193,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
   real :: h_det_tot
   real :: max_def_rat
   real :: Rcv_min_det  ! The lightest (min) and densest (max) coordinate density
-  real :: Rcv_max_det  ! that can detrain into a layer, in kg m-3.
+  real :: Rcv_max_det  ! that can detrain into a layer [kg m-3].
 
   real :: int_top, int_bot
   real :: h_predicted
@@ -726,20 +726,20 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                               intent(in)  :: e         !< Interface depths [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),          &
                               intent(out) :: def_rat_u !< The thickness deficit ratio at u points,
-                                                       !! nondim.
+                                                       !! [nondim].
   real, dimension(SZI_(G),SZJB_(G)),          &
                               intent(out) :: def_rat_v !< The thickness deficit ratio at v points,
-                                                       !! nondim.
+                                                       !! [nondim].
   type(regularize_layers_CS), pointer     :: CS        !< The control structure returned by a
                                                        !! previous call to regularize_layers_init.
   real, dimension(SZIB_(G),SZJ_(G)),          &
                     optional, intent(out) :: def_rat_u_2lay !< The thickness deficit ratio at u
                                                        !! points when the mixed and buffer layers
-                                                       !! are aggregated into 1 layer, nondim.
+                                                       !! are aggregated into 1 layer [nondim].
   real, dimension(SZI_(G),SZJB_(G)),          &
                     optional, intent(out) :: def_rat_v_2lay !< The thickness deficit ratio at v
                                                        !! pointswhen the mixed and buffer layers
-                                                       !! are aggregated into 1 layer, nondim.
+                                                       !! are aggregated into 1 layer [nondim].
   integer,          optional, intent(in)  :: halo      !< An extra-wide halo size, 0 by default.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                     optional, intent(in)  :: h         !< Layer thicknesses [H ~> m or kg m-2].
@@ -758,7 +758,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
     h_def2_v
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: Hmix_min  ! CS%Hmix_min converted to units of H.
+  real :: Hmix_min  ! A local copy of CS%Hmix_min [H ~> m or kg m-2].
   real :: h1, h2  ! Temporary thicknesses [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, nkmb
 

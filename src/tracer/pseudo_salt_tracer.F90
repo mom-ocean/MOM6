@@ -42,7 +42,7 @@ type, public :: pseudo_salt_tracer_CS ; private
   real, pointer :: ps(:,:,:) => NULL()   !< The array of pseudo-salt tracer used in this
                                          !! subroutine, in psu
   real, pointer :: diff(:,:,:) => NULL() !< The difference between the pseudo-salt
-                                         !! tracer and the real salt, in psu.
+                                         !! tracer and the real salt [PSU].
   logical :: pseudo_salt_may_reinit = .true. !< Hard coding since this should not matter
 
   integer :: id_psd = -1   !< A diagnostic ID

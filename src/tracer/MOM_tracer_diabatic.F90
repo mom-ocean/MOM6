@@ -26,11 +26,12 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate, convert_flux_in)
   type(ocean_grid_type),                     intent(in)    :: G      !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old  !< layer thickness before entrainment (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old  !< layer thickness before entrainment
+                                                                     !! [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: ea     !< amount of fluid entrained from the layer
-                                                                     !! above (units of h_work)
+                                                                     !! above [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb     !< amount of fluid entrained from the layer
-                                                                     !! below (units of h_work)
+                                                                     !! below [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration (in concentration units CU)
   real,                                      intent(in)    :: dt     !< amount of time covered by this call (seconds)
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units
@@ -53,7 +54,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G)) :: &
     b1, &           !< b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
     d1              !! d1=1-c1 is used by the tridiagonal solver, nondimensional.
-  real :: c1(SZI_(G),SZK_(GV))    !< c1 is used by the tridiagonal solver, ND.
+  real :: c1(SZI_(G),SZK_(GV))    !< c1 is used by the tridiagonal solver [nondim].
   real :: h_minus_dsink(SZI_(G),SZK_(GV)) !< The layer thickness minus the
                     !! difference in sinking rates across the layer, in m or kg m-2.
                     !! By construction, 0 <= h_minus_dsink < h_work.

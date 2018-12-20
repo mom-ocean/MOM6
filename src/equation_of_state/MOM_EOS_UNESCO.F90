@@ -16,14 +16,14 @@ public calculate_compress_UNESCO, calculate_density_UNESCO, calculate_spec_vol_U
 public calculate_density_derivs_UNESCO
 public calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 
-!> Compute the in situ density of sea water (in units of kg/m^3), or its anomaly with respect to
+!> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
 !! a reference density, from salinity (in psu), potential temperature (in deg C), and pressure in Pa,
 !! using the UNESCO (1981) equation of state.
 interface calculate_density_UNESCO
   module procedure calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 end interface calculate_density_UNESCO
 
-!> Compute the in situ specific volume of sea water (in units of m^3/kg), or an anomaly with respect
+!> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
 !! to a reference specific volume, from salinity (in psu), potential temperature (in deg C), and
 !! pressure in Pa, using the UNESCO (1981) equation of state.
 interface calculate_spec_vol_UNESCO
@@ -54,8 +54,8 @@ real, parameter ::  S00 = 1.965933e4, S10 = 1.444304e2, S20 = -1.706103, &
 contains
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from salinity (S in psu), potential temperature
-!! (T in deg C), and pressure in Pa, using the UNESCO (1981) equation of state.
+!! [kg m-3]) from salinity (S [PSU]), potential temperature
+!! (T [degC]), and pressure in Pa, using the UNESCO (1981) equation of state.
 subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Potential temperature relative to the surface in C.
   real,           intent(in)  :: S        !< Salinity in PSU.
@@ -77,8 +77,8 @@ subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
 end subroutine calculate_density_scalar_UNESCO
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from salinity (S in psu), potential temperature
-!! (T in deg C), and pressure in Pa, using the UNESCO (1981) equation of state.
+!! [kg m-3]) from salinity (S [PSU]), potential temperature
+!! (T [degC]), and pressure in Pa, using the UNESCO (1981) equation of state.
 subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface in C.
   real, dimension(:), intent(in)  :: S        !< salinity in PSU.
@@ -92,8 +92,8 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_
   real :: t_local, t2, t3, t4, t5 ! Temperature to the 1st - 5th power.
   real :: s_local, s32, s2        ! Salinity to the 1st, 3/2, & 2nd power.
   real :: p1, p2      ! Pressure (in bars) to the 1st and 2nd power.
-  real :: rho0        ! Density at 1 bar pressure, in kg m-3.
-  real :: sig0        ! The anomaly of rho0 from R00, in kg m-3.
+  real :: rho0        ! Density at 1 bar pressure [kg m-3].
+  real :: sig0        ! The anomaly of rho0 from R00 [kg m-3].
   real :: ks          ! The secant bulk modulus in bar.
   integer :: j
 
@@ -131,7 +131,7 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_
 end subroutine calculate_density_array_UNESCO
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
 !! and pressure in Pa, using the UNESCO (1981) equation of state.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
@@ -152,7 +152,7 @@ subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
 end subroutine calculate_spec_vol_scalar_UNESCO
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
 !! and pressure in Pa, using the UNESCO (1981) equation of state.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts, spv_ref)
@@ -169,7 +169,7 @@ subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts,
   real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
   real :: s_local, s32, s2;        ! Salinity to the 1st, 3/2, & 2nd power.
   real :: p1, p2;      ! Pressure (in bars) to the 1st and 2nd power.
-  real :: rho0;        ! Density at 1 bar pressure, in kg m-3.
+  real :: rho0;        ! Density at 1 bar pressure [kg m-3].
   real :: ks;          ! The secant bulk modulus in bar.
   integer :: j
 
@@ -225,7 +225,7 @@ subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, sta
   real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
   real :: s12, s_local, s32, s2;   ! Salinity to the 1/2 - 2nd powers.
   real :: p1, p2;         ! Pressure (in bars) to the 1st & 2nd power.
-  real :: rho0;           ! Density at 1 bar pressure, in kg m-3.
+  real :: rho0;           ! Density at 1 bar pressure [kg m-3].
   real :: ks;             ! The secant bulk modulus, in bar.
   real :: drho0_dT;       ! Derivative of rho0 with T, in kg m-3 K-1.
   real :: drho0_dS;       ! Derivative of rho0 with S, kg m-3 psu-1.
@@ -296,7 +296,7 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
   real :: s_local, s32, s2;        ! Salinity to the 1st, 3/2, & 2nd power.
   real :: p1, p2;      ! Pressure (in bars) to the 1st and 2nd power.
-  real :: rho0;        ! Density at 1 bar pressure, in kg m-3.
+  real :: rho0;        ! Density at 1 bar pressure [kg m-3].
   real :: ks;          ! The secant bulk modulus in bar.
   real :: ks_0, ks_1, ks_2
   real :: dks_dp;      ! The derivative of the secant bulk modulus
