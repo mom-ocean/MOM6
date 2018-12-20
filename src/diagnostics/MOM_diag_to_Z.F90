@@ -51,8 +51,8 @@ type, public :: diag_to_Z_CS ; private
   real, pointer, dimension(:,:,:) :: &
     u_z  => NULL(), &   !< zonal velocity remapped to depth space (m/s)
     v_z  => NULL(), &   !< meridional velocity remapped to depth space (m/s)
-    uh_z => NULL(), &   !< zonal transport remapped to depth space (m3/s or kg/s)
-    vh_z => NULL()      !< meridional transport remapped to depth space (m3/s or kg/s)
+    uh_z => NULL(), &   !< zonal transport remapped to depth space [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vh_z => NULL()      !< meridional transport remapped to depth space [H m2 s-1 ~> m3 s-1 or kg s-1]
 
   type(p3d) :: tr_z(MAX_FIELDS_)     !< array of tracers, remapped to depth space
   type(p3d) :: tr_model(MAX_FIELDS_) !< pointers to an array of tracers
@@ -505,9 +505,9 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
                                                                    !! structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh_int !< Time integrated zonal
-                                                                   !! transport (m3 or kg).
+                                                                   !! transport [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int !< Time integrated meridional
-                                                                   !! transport (m3 or kg).
+                                                                   !! transport [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real,                                      intent(in)    :: dt   !< The time difference in s since
                                                                    !! the last call to this
@@ -522,24 +522,24 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
                    ! into z* space [Z H-1 ~> 1 or m3 kg-1].  (-G%D < z* < 0)
 
   real, dimension(SZI_(G), max(CS%nk_zspace,1)) :: &
-    uh_Z           ! uh_int interpolated into depth space (m3 or kg)
+    uh_Z           ! uh_int interpolated into depth space [H m2 ~> m3 or kg]
   real, dimension(SZIB_(G), max(CS%nk_zspace,1)) :: &
-    vh_Z           ! vh_int interpolated into depth space (m3 or kg)
+    vh_Z           ! vh_int interpolated into depth space [H m2 ~> m3 or kg]
 
   real :: h_rem    ! dilated thickness of a layer that has yet to be mapped
                    ! into depth space [Z ~> m]
   real :: uh_rem   ! integrated zonal transport of a layer that has yet to be
-                   ! mapped into depth space (m3 or kg)
+                   ! mapped into depth space [H m2 ~> m3 or kg]
   real :: vh_rem   ! integrated meridional transport of a layer that has yet
-                   ! to be mapped into depth space (m3 or kg)
+                   ! to be mapped into depth space [H m2 ~> m3 or kg]
   real :: h_here   ! thickness of a layer that is within the range of the
                    ! current depth level [Z ~> m]
   real :: h_above  ! thickness of a layer that is above the current depth
                    ! level [Z ~> m]
   real :: uh_here  ! zonal transport of a layer that is attributed to the
-                   ! current depth level (m3 or kg)
+                   ! current depth level [H m2 ~> m3 or kg]
   real :: vh_here  ! meridional transport of a layer that is attributed to
-                   ! the current depth level (m3 or kg)
+                   ! the current depth level [H m2 ~> m3 or kg]
   real :: Idt      ! inverse of the time step (sec)
 
   real :: z_int_above(SZIB_(G)) ! height of the interface atop a layer (meter or kg/m2)

@@ -47,7 +47,7 @@ type, public :: regridding_CS ; private
   !> This array is set by function setCoordinateResolution()
   !! It contains the "resolution" or delta coordinate of the target
   !! coorindate. It has the units of the target coordinate, e.g.
-  !! Z (often meters) for z*, non-dimensional for sigma, etc.
+  !! [Z ~> m] for z*, non-dimensional for sigma, etc.
   real, dimension(:), allocatable :: coordinateResolution
 
   !> This is a scaling factor that restores coordinateResolution to values in
@@ -194,14 +194,16 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
   real :: filt_len, strat_tol, index_scale, tmpReal
-  real :: maximum_depth !< The maximum depth of the ocean, in m.
+  real :: maximum_depth !< The maximum depth of the ocean [m] (not in Z).
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
   integer :: nz_fixed_sfc, k, nzf(4)
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
-  real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses, in m.
-  real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths, in m.
-  real, dimension(:), allocatable :: z_max  ! Maximum interface depths, in m.
+  real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses [H ~> m or kg m-2]
+  real, dimension(:), allocatable :: z_max  ! Maximum interface depths [H ~> m or kg m-2] or other
+                                            ! units depending on the coordinate
+  real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths
+                                            ! [H ~> m or kg m-2] or other units
   real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode
   ! Thicknesses that give level centers corresponding to table 2 of WOA09
   real, dimension(40) :: woa09_dz = (/ 5.,  10.,  10.,  15.,  22.5, 25., 25.,  25.,  &
@@ -226,7 +228,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   if (main_parameters) then
     ! Read coordinate units parameter (main model = REGRIDDING_COORDINATE_UNITS)
     call get_param(param_file, mdl, "REGRIDDING_COORDINATE_UNITS", coord_units, &
-                 "Units of the regridding coordinuate.",&
+                 "Units of the regridding coordinuate.",& !### Spelling error "coordinuate"
                  default=coordinateUnits(coord_mode))
   else
     coord_units=coordinateUnits(coord_mode)
@@ -1473,7 +1475,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
 
       z_col(1) = 0. ! Work downward rather than bottom up
       do K = 1, GV%ke
-        z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
+        z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of [H ~> m or kg m-2]
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
@@ -1605,7 +1607,7 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
       depth = G%bathyT(i,j) * GV%Z_to_H
       z_col(1) = 0. ! Work downward rather than bottom up
       do K=1,nz
-        z_col(K+1) = z_col(K) + h(i, j, k) ! Work in units of h (m or Pa)
+        z_col(K+1) = z_col(K) + h(i, j, k) ! Work in units of [H ~> m or kg m-2]
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
                     ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
@@ -1901,7 +1903,7 @@ end subroutine convective_adjustment
 
 
 !------------------------------------------------------------------------------
-!> Return a uniform resolution vector in the units of the coordinata
+!> Return a uniform resolution vector in the units of the coordinate
 function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
 !------------------------------------------------------------------------------
 ! Calculate a vector of uniform resolution in the units of the coordinate
@@ -2329,7 +2331,7 @@ end function get_rho_CS
 function getStaticThickness( CS, SSH, depth )
   type(regridding_CS), intent(in) :: CS !< Regridding control structure
   real,                intent(in) :: SSH   !< The sea surface height, in the same units as depth
-  real,                intent(in) :: depth !< The maximum depth of the grid, perhaps in m.
+  real,                intent(in) :: depth !< The maximum depth of the grid, often [Z ~> m]
   real, dimension(CS%nk)          :: getStaticThickness !< The returned thicknesses in the units of depth
   ! Local
   integer :: k

@@ -50,7 +50,7 @@ type, public :: wave_structure_CS ; !private
   real, allocatable, dimension(:,:,:) :: z_depths
                                    !< Depths of layer interfaces, in m.
   real, allocatable, dimension(:,:,:) :: N2
-                                   !< Squared buoyancy frequency at each interface, in S-2.
+                                   !< Squared buoyancy frequency at each interface [s-2].
   integer, allocatable, dimension(:,:):: num_intfaces
                                    !< Number of layer interfaces (including surface and bottom)
   real    :: int_tide_source_x     !< X Location of generation site
@@ -100,7 +100,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! internal gravity wave speed,
                                                               !! in m s-1.
   integer,                                  intent(in)  :: ModeNum !< Mode number
-  real,                                     intent(in)  :: freq !< Intrinsic wave frequency, in s-1.
+  real,                                     intent(in)  :: freq !< Intrinsic wave frequency [s-1].
   type(wave_structure_CS),                  pointer     :: CS !< The control structure returned
                                                               !! by a previous call to
                                                               !! wave_structure_init.
@@ -118,7 +118,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it,
-                  ! in units of s2 m-2.
+                  ! [s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &
@@ -157,7 +157,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real                       :: w2avg   ! average of squared vertical velocity structure funtion
   real                       :: int_dwdz2, int_w2, int_N2w2, KE_term, PE_term, W0
                                         ! terms in vertically averaged energy equation
-  real                       :: gp_unscaled ! A version of gprime rescaled to units of m s-2.
+  real                       :: gp_unscaled ! A version of gprime rescaled to [m s-2].
   real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
                                         ! interface (excluding surface and bottom)
   real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag

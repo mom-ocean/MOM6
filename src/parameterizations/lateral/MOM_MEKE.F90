@@ -112,11 +112,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     mass, &         ! The total mass of the water column, in kg m-2.
     I_mass, &       ! The inverse of mass, in m2 kg-1.
     src, &          ! The sum of all MEKE sources, in m2 s-3.
-    MEKE_decay, &   ! The MEKE decay timescale, in s-1.
+    MEKE_decay, &   ! The MEKE decay timescale [s-1].
     MEKE_GM_src, &  ! The MEKE source from thickness mixing, in m2 s-3.
     MEKE_mom_src, & ! The MEKE source from momentum, in m2 s-3.
     drag_rate_visc, &
-    drag_rate, &    ! The MEKE spindown timescale due to bottom drag, in s-1.
+    drag_rate, &    ! The MEKE spindown timescale due to bottom drag [s-1].
     LmixScale, &    ! Square of eddy mixing length, in m2.
     barotrFac2, &   ! Ratio of EKE_barotropic / EKE (nondim)/
     bottomFac2      ! Ratio of EKE_bottom / EKE (nondim)/
@@ -137,7 +137,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real :: advFac
   real :: mass_neglect ! A negligible mass, in kg m-2.
   real :: ldamping  ! The MEKE damping rate in s-1.
-  real :: Rho0      ! A density used to convert mass to distance, in kg m-3.
+  real :: Rho0      ! A density used to convert mass to distance [kg m-3].
   real :: sdt  ! dt to use locally (could be scaled to accelerate)
   real :: sdt_damp  ! dt for damping (sdt could be split).
   logical :: use_drag_rate ! Flag to indicate drag_rate is finite

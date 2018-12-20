@@ -131,9 +131,9 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
     ea_kbp1, &    ! The entrainment from above by layer kb+1 [H ~> m or kg m-2].
     eb_kmb, &     ! The entrainment from below by the deepest buffer layer [H ~> m or kg m-2].
     dS_kb, &      ! The reference potential density difference across the
-                  ! interface between the buffer layers and layer kb, in kg m-3.
+                  ! interface between the buffer layers and layer kb [kg m-3].
     dS_anom_lim, &! The amount by which dS_kb is reduced when limits are
-                  ! applied, in kg m-3.
+                  ! applied [kg m-3].
     I_dSkbp1, &   ! The inverse of the potential density difference across the
                   ! interface below layer kb, in m3 kg-1.
     dtKd_kb, &    ! The diapycnal diffusivity in layer kb times the time step
@@ -148,14 +148,14 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
     err_eakb0, &  ! A value of error returned by determine_Ea_kb.
     F_kb, &       ! The value of F in layer kb, or equivalently the entrainment
                   ! from below by layer kb [H ~> m or kg m-2].
-    dFdfm_kb, &   ! The partial derivative of F with fm, nondim. See dFdfm.
+    dFdfm_kb, &   ! The partial derivative of F with fm [nondim]. See dFdfm.
     maxF_kb, &    ! The maximum value of F_kb that might be realized [H ~> m or kg m-2].
     eakb_maxF, &  ! The value of eakb that gives F_kb=maxF_kb [H ~> m or kg m-2].
     F_kb_maxEnt   ! The value of F_kb when eakb = max_eakb [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(G)) :: &
     Sref, &  ! The reference potential density of the mixed and buffer layers,
              ! and of the two lightest interior layers (kb and kb+1) copied
-             ! into layers kmb+1 and kmb+2, in kg m-3.
+             ! into layers kmb+1 and kmb+2 [kg m-3].
     h_bl     ! The thicknesses of the mixed and buffer layers, and of the two
              ! lightest interior layers (kb and kb+1) copied into layers kmb+1
              ! and kmb+2 [H ~> m or kg m-2].
@@ -172,10 +172,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
                     !       4*ds_Lay*(1/ds_k + 1/ds_k+1). Nondim.
 
   real :: dRHo      ! The change in locally referenced potential density between
-                    ! the layers above and below an interface, in kg m-3.
+                    ! the layers above and below an interface [kg m-3].
   real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors, in m3 H-2 s-3.
   real, dimension(SZI_(G)) :: &
-    pressure, &      ! The pressure at an interface, in Pa.
+    pressure, &      ! The pressure at an interface [Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
                      ! evaluate dRho_dT and dRho_dS, in degC and PSU.
     dRho_dT, dRho_dS ! The partial derivatives of potential density with
@@ -195,7 +195,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real :: ea_cor     ! The corrective adjustment to eakb [H ~> m or kg m-2].
   real :: h1         ! The layer thickness after entrainment through the
                      ! interface below is taken into account [H ~> m or kg m-2].
-  real :: Idt        ! The inverse of the time step, in s-1.
+  real :: Idt        ! The inverse of the time step [s-1].
 
   logical :: do_any
   logical :: do_i(SZI_(G)), did_i(SZI_(G)), reiterate, correct_density
@@ -1042,7 +1042,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, CS, j, Ent_bl, Sref
                                                           !! downward across each interface around
                                                           !! the buffer layers [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(G)), intent(out)   :: Sref !< The coordinate potential density -
-                                                          !! 1000 for each layer, in kg m-3.
+                                                          !! 1000 for each layer [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), intent(out)   :: h_bl !< The thickness of each layer [H ~> m or kg m-2].
 
 !   This subroutine sets the average entrainment across each of the interfaces
@@ -1057,11 +1057,11 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, CS, j, Ent_bl, Sref
     Rcv, &      ! Value of the coordinate variable (potential density)
                 ! based on the simulated T and S and P_Ref, kg m-3.
     pres, &     ! Reference pressure (P_Ref) in Pa.
-    frac_rem, & ! The fraction of the diffusion remaining, ND.
+    frac_rem, & ! The fraction of the diffusion remaining [nondim].
     h_interior  ! The interior thickness available for entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G), SZK_(G)) :: &
     S_est ! An estimate of the coordinate potential density - 1000 after
-          ! entrainment for each layer, in kg m-3.
+          ! entrainment for each layer [kg m-3].
   real :: max_ent  ! The maximum possible entrainment [H ~> m or kg m-2].
   real :: dh       ! An available thickness [H ~> m or kg m-2].
   real :: Kd_x_dt  ! The diffusion that remains after thin layers are
@@ -1221,7 +1221,7 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
                                                               !! with E, in kg m-3 H-1.
   real, dimension(SZI_(G)), optional, intent(inout) :: dS_anom_lim !< A limiting value to use for
                                                               !! the density anomalies below the
-                                                              !! buffer layer, in kg m-3.
+                                                              !! buffer layer [kg m-3].
   logical, dimension(SZI_(G)), optional, intent(in) :: do_i_in !< If present, determines which
                                                               !! columns are worked on.
 
@@ -1436,19 +1436,18 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)), &
                             intent(in)    :: h_bl !< Layer thickness, with the top interior
-                                                  !! layer at k-index kmb+1, in units of m
-                                                  !! or kg m-2  (abbreviated as H below).
+                                                  !! layer at k-index kmb+1 [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(G)), &
                             intent(in)    :: Sref !< The coordinate reference potential density,
                                                   !! with the value of the topmost interior layer
-                                                  !! at index kmb+1, in units of kg m-3.
+                                                  !! at index kmb+1 [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), &
                             intent(in)    :: Ent_bl !< The average entrainment upward and downward
                                                   !! across each interface around the buffer layers,
                                                   !! [H ~> m or kg m-2].
   real, dimension(SZI_(G)), intent(in)    :: I_dSkbp1 !< The inverse of the difference in reference
                                                   !! potential density across the base of the
-                                                  !! uppermost interior layer, in units of m3 kg-1.
+                                                  !! uppermost interior layer [m3 kg-1].
   real, dimension(SZI_(G)), intent(in)    :: F_kb !< The entrainment from below by the
                                                   !! uppermost interior layer [H ~> m or kg m-2]
   integer,                  intent(in)    :: kmb  !< The number of mixed and buffer layers.
@@ -1573,14 +1572,14 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real, dimension(SZI_(G),SZK_(G)), intent(in)  :: Sref     !< The coordinate reference potential
                                                             !! density, with the value of the
                                                             !! topmost interior layer at layer
-                                                            !! kmb+1, in units of kg m-3.
+                                                            !! kmb+1 [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), intent(in)  :: Ent_bl   !< The average entrainment upward and
                                                             !! downward across each interface around
                                                             !! the buffer layers [H ~> m or kg m-2].
   real, dimension(SZI_(G)),         intent(in)  :: I_dSkbp1 !< The inverse of the difference in
                                                             !! reference potential density across
                                                             !! the base of the uppermost interior
-                                                            !! layer, in units of m3 kg-1.
+                                                            !! layer [m3 kg-1].
   real, dimension(SZI_(G)),         intent(in)  :: dtKd_kb  !< The diapycnal diffusivity in the top
                                                             !! interior layer times the time step
                                                             !! [H2 ~> m2 or kg2 m-4].
@@ -1613,7 +1612,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                                                             !! corresponding to the returned
                                                             !! value of Ent [H ~> m or kg m-2].
   real, dimension(SZI_(G)), optional, intent(out) :: dFdfm_kb !< The partial derivative of F_kb with
-                                                            !! ea_kbp1, nondim.
+                                                            !! ea_kbp1 [nondim].
 
 !  This subroutine determines the entrainment from above by the top interior
 ! layer (labeled kb elsewhere) given an entrainment by the layer below it,
@@ -1623,10 +1622,10 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real, dimension(SZI_(G)) :: &
     dS_kb, &                !   The coordinate-density difference between the
                             ! layer kb and deepest buffer layer, limited to
-                            ! ensure that it is positive, in kg m-3.
+                            ! ensure that it is positive [kg m-3].
     dS_Lay, &               !   The coordinate-density difference across layer
                             ! kb, limited to ensure that it is positive and not
-                            ! too much bigger than dS_kb or dS_kbp1, in kg m-3.
+                            ! too much bigger than dS_kb or dS_kbp1 [kg m-3].
     ddSkb_dE, ddSlay_dE, &  ! The derivatives of dS_kb and dS_Lay with E,
                             ! in kg m-3 H-1.
     derror_dE, &            ! The derivative of err with E [H ~> m or kg m-2].
@@ -1780,17 +1779,16 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
   type(verticalGrid_type),    intent(in)  :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK_(G)), &
                               intent(in)  :: h_bl     !< Layer thickness [H ~> m or kg m-2]
-                                                      !! (abbreviated as H below).
   real, dimension(SZI_(G),SZK_(G)), &
-                              intent(in)  :: Sref     !< Reference potential density (in kg m-3?).
+                              intent(in)  :: Sref     !< Reference potential density [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), &
                               intent(in)  :: Ent_bl   !< The average entrainment upward and
                                                       !! downward across each interface around
                                                       !! the buffer layers [H ~> m or kg m-2].
   real, dimension(SZI_(G)),   intent(in)  :: I_dSkbp1 !< The inverse of the difference in
                                                       !! reference potential density across the
-                                                      !! base of the uppermost interior layer,
-                                                      !! in units of m3 kg-1.
+                                                      !! base of the uppermost interior layer
+                                                      !! [m3 kg-1].
   real, dimension(SZI_(G)),   intent(in)  :: min_ent_in !< The minimum value of ent to search,
                                                       !! [H ~> m or kg m-2].
   real, dimension(SZI_(G)),   intent(in)  :: max_ent_in !< The maximum value of ent to search,

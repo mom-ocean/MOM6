@@ -469,7 +469,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   type(verticalGrid_type), intent(in)    :: GV    !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-       intent(in)    :: h     !< Thickness (m or kg/m2)
+       intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
        intent(in)    :: ustar !< Wind friction velocity [Z s-1 ~> m s-1].
   ! Local Variables

@@ -175,21 +175,18 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   ! Local variables
 
-  real :: b1(SZIB_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZIB_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
-                                ! while b1 has units of inverse thickness.
-  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
+  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
+  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
   real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity [Z s-1 ~> m s-1].
   real :: b_denom_1             ! The first term in the denominator of b1 [H ~> m or kg m-2].
 
   real :: Hmix             ! The mixed layer thickness over which stress
                            ! is applied with direct_stress [H ~> m or kg m-2].
   real :: I_Hmix           ! The inverse of Hmix [H-1 ~> m-1 or m2 kg-1].
-  real :: Idt              ! The inverse of the time step, in s-1.
-  real :: dt_Rho0          ! The time step divided by the mean
-                           ! density, in s m3 kg-1.
-  real :: Rho0             ! A density used to convert drag laws into stress in
-                           ! Pa, in kg m-3.
+  real :: Idt              ! The inverse of the time step [s-1].
+  real :: dt_Rho0          ! The time step divided by the mean density [s m3 kg-1].
+  real :: Rho0             ! A density used to convert drag laws into stress in Pa [kg m-3].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
                            ! units of thickness - [s H Z-1 ~> s or s kg m-3].
   real :: h_neglect        ! A thickness that is so small it is usually lost
@@ -465,26 +462,24 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   type(vertvisc_type),   intent(in)   :: visc !< Viscosities and bottom drag
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                          intent(inout) :: visc_rem_u !< Fraction of a time-step's worth of a
-                                              !! barotopic acceleration that a layer experiences
-                                              !! after viscosity is applied in the zonal direction
+                                              !! barotopic acceleration that a layer experiences after
+                                              !! viscosity is applied in the zonal direction [nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                          intent(inout) :: visc_rem_v !< Fraction of a time-step's worth of a
-                                              !! barotopic acceleration that a layer experiences
-                                              !! after viscosity is applied in the meridional direction
+                                              !! barotopic acceleration that a layer experiences after
+                                              !! viscosity is applied in the meridional direction [nondim]
   real,                  intent(in)    :: dt  !< Time increment in s
   type(vertvisc_CS),     pointer       :: CS  !< Vertical viscosity control structure
 
   ! Local variables
 
-  real :: b1(SZIB_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZIB_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
-                                ! while b1 has units of inverse thickness.
-  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
-  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the
-                                ! time step, in m.
+  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
+  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
+  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the time step [m].
   real :: b_denom_1   ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
-                           ! units of thickness - either s or s m3 kg-1.
+                           ! units of thickness [s H Z-1 ~> s or s kg m-3].
   logical :: do_i(SZIB_(G))
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
@@ -1074,7 +1069,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
   real, dimension(SZIB_(G)) :: &
     u_star, &   ! ustar at a velocity point [Z s-1 ~> m s-1].
-    absf, &     ! The average of the neighboring absolute values of f, in s-1.
+    absf, &     ! The average of the neighboring absolute values of f [s-1].
 !      h_ml, &  ! The mixed layer depth [H ~> m or kg m-2].
     nk_visc, &  ! The (real) interface index of the base of mixed layer.
     z_t, &      ! The distance from the top, sometimes normalized

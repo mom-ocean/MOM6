@@ -69,7 +69,7 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
 
 
 ! This subroutine sets up the initial mass and area covered by the ice shelf.
-  real :: Rho_ocean  ! The ocean's typical density, in kg m-3.
+  real :: Rho_ocean  ! The ocean's typical density [kg m-3].
   real :: max_draft  ! The maximum ocean draft of the ice shelf, in m.
   real :: min_draft  ! The minimum ocean draft of the ice shelf, in m.
   real :: flat_shelf_width ! The range over which the shelf is min_draft thick.

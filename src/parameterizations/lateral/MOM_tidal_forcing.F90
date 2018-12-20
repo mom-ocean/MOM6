@@ -36,10 +36,10 @@ type, public :: tidal_forcing_CS ; private
                       !! and bottom geopotential anomalies.
   integer :: nc       !< The number of tidal constituents in use.
   real, dimension(MAX_CONSTITUENTS) :: &
-    freq, &           !< The frequency of a tidal constituent, in s-1.
+    freq, &           !< The frequency of a tidal constituent [s-1].
     phase0, &         !< The phase of a tidal constituent at time 0, in radians.
     amp, &            !< The amplitude of a tidal constituent at time 0, in m.
-    love_no           !< The Love number of a tidal constituent at time 0, ND.
+    love_no           !< The Love number of a tidal constituent at time 0 [nondim].
   integer :: struct(MAX_CONSTITUENTS) !< An encoded spatial structure for each constituent
   character (len=16) :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
 
@@ -379,7 +379,7 @@ subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
   type(ocean_grid_type),  intent(in)  :: G  !< The ocean's grid structure.
   type(tidal_forcing_CS), pointer     :: CS !< The control structure returned by a previous call to tidal_forcing_init.
   real,                   intent(out) :: deta_tidal_deta !< The partial derivative of eta_tidal with
-                                            !! the local value of eta, nondim.
+                                            !! the local value of eta [nondim].
 
   if (CS%USE_SAL_SCALAR .and. CS%USE_PREV_TIDES) then
     deta_tidal_deta = 2.0*CS%SAL_SCALAR
@@ -407,7 +407,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
                                                              !! previous call to tidal_forcing_init.
   real, optional,                   intent(out) :: deta_tidal_deta !< The partial derivative of
                                                              !! eta_tidal with the local value of
-                                                             !! eta, nondim.
+                                                             !! eta [nondim].
   real, optional,                   intent(in)  :: m_to_Z    !< A scaling factor from m to the units of eta.
 
   ! Local variables

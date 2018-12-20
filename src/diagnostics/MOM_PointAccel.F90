@@ -51,13 +51,13 @@ type, public :: PointAccel_CS ; private
     v_av => NULL(), &       !< Time average velocity in m s-1.
     u_prev => NULL(), &     !< Previous u-velocity in m s-1.
     v_prev => NULL(), &     !< Previous v-velocity in m s-1.
-    T => NULL(), &          !< Temperature in deg C.
-    S => NULL(), &          !< Salinity in ppt
-    u_accel_bt => NULL(), & !< Barotropic u-acclerations in m s-2.
-    v_accel_bt => NULL()    !< Barotropic v-acclerations in m s-2.
+    T => NULL(), &          !< Temperature [degC].
+    S => NULL(), &          !< Salinity [ppt].
+    u_accel_bt => NULL(), & !< Barotropic u-acclerations [m s-2]
+    v_accel_bt => NULL()    !< Barotropic v-acclerations [m s-2]
   real, pointer, dimension(:,:,:) :: pbce => NULL() !< pbce times eta gives the baroclinic
-                            !! pressure anomaly in each layer due to free surface height anomalies.
-                            !! pbce has units of m s-2.
+                            !! pressure anomaly in each layer due to free surface height anomalies
+                            !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2].
 
 end type PointAccel_CS
 
@@ -80,7 +80,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !<  A structure with pointers to various terms
                                                  !! in the continuity equations.
-  real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
+  real,                        intent(in) :: dt  !< The ocean dynamics time step [s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report, in m s-1.
@@ -411,7 +411,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !< A structure with pointers to various terms in
                                                  !! the continuity equations.
-  real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
+  real,                        intent(in) :: dt  !< The ocean dynamics time step [s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report, in m s-1.

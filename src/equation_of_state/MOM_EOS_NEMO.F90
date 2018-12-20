@@ -22,7 +22,7 @@ public calculate_compress_nemo, calculate_density_nemo
 public calculate_density_derivs_nemo
 public calculate_density_scalar_nemo, calculate_density_array_nemo
 
-!> Compute the in situ density of sea water (units of kg/m^3), or its anomaly with respect to
+!> Compute the in situ density of sea water ([kg m-3]), or its anomaly with respect to
 !! a reference density, from absolute salinity (g/kg), conservative temperature (in deg C),
 !! and pressure in Pa, using the expressions derived for use with NEMO
 interface calculate_density_nemo
@@ -174,8 +174,8 @@ real, parameter :: BET003 = -2.3025968587e-04
 contains
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
-!! (T in deg C), and pressure in Pa.  It uses the expressions derived for use
+!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
+!! (T [degC]), and pressure in Pa.  It uses the expressions derived for use
 !! with NEMO.
 subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Conservative temperature in C.
@@ -199,8 +199,8 @@ subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
 end subroutine calculate_density_scalar_nemo
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
-!! (T in deg C), and pressure in Pa.  It uses the expressions derived for use
+!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
+!! (T [degC]), and pressure in Pa.  It uses the expressions derived for use
 !! with NEMO.
 subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)  :: T        !< Conservative temperature in C.
@@ -339,7 +339,7 @@ end subroutine calculate_density_derivs_array_nemo
 
 !> Wrapper to calculate_density_derivs_array for scalar inputs
 subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
-  real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,    intent(in)  :: T        !< Potential temperature relative to the surface in degC.
   real,    intent(in)  :: S        !< Salinity in PSU.
   real,    intent(in)  :: pressure !< Pressure in Pa.
   real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
@@ -361,9 +361,9 @@ subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds
   drho_ds = drds0(1)
 end subroutine calculate_density_derivs_scalar_nemo
 
-!> Compute the in situ density of sea water (rho in units of kg/m^3) and the compressibility
-!! (drho/dp = C_sound^-2, stored as drho_dp in units of s2 m-2) from absolute salinity
-!! (sal in g/kg), conservative temperature (T in deg C), and pressure in Pa, using the expressions
+!> Compute the in situ density of sea water (rho in [kg m-3]) and the compressibility
+!! (drho/dp = C_sound^-2, stored as drho_dp [s2 m-2]) from absolute salinity
+!! (sal in g/kg), conservative temperature (T [degC]), and pressure in Pa, using the expressions
 !! derived for use with NEMO.
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.

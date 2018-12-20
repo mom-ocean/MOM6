@@ -246,15 +246,14 @@ end subroutine write_user_log
 !!  - v - Meridional velocity in m s-1.
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
-!!  - G%CoriolisBu - The Coriolis parameter, in s-1.
+!!  - G%CoriolisBu - The Coriolis parameter [s-1].
 !!  - GV%g_prime - The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
-!!  - GV%Rlay - Layer potential density (coordinate variable), kg m-3.
+!!  - GV%Rlay - Layer potential density (coordinate variable) [kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!  - T - Temperature in C.
-!!  - S - Salinity in psu.
+!!  - T - Temperature [degC].
+!!  - S - Salinity [psu].
 !!  If BULKMIXEDLAYER is defined:
-!!  - Rml - Mixed layer and buffer layer potential densities in
-!!          units of kg m-3.
+!!  - Rml - Mixed layer and buffer layer potential densities [kg m-3].
 !!  If SPONGE is defined:
 !!  - A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped

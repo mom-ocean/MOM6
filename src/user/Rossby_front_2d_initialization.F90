@@ -177,9 +177,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
   real    :: T_range      ! Range of salinities and temperatures over the vertical
   real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f
   real    :: dRho_dT
-  real    :: Dml, zi, zc, zm ! Depths in units of Z.
+  real    :: Dml, zi, zc, zm ! Depths [Z ~> m].
   real    :: f, Ty
-  real    :: hAtU         ! Interpolated layer thickness in units of Z.
+  real    :: hAtU         ! Interpolated layer thickness [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate

@@ -125,11 +125,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
                                                   !! [H ~> m or kg m-2].
-  real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures, in degC.
+  real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures [degC].
   real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities, in g kg-1.
   real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities
                                                   !! [Z2 s-1 ~> m2 s-1].
-  real,                     intent(in)    :: dt   !< The amount of time covered by this call, in s.
+  real,                     intent(in)    :: dt   !< The amount of time covered by this call [s].
   real,                     intent(out)   :: energy_Kd !< The column-integrated rate of energy
                                                   !! consumption by diapycnal diffusion, in W m-2.
   type(thermo_var_ptrs),    intent(inout) :: tv   !< A structure containing pointers to any
@@ -148,7 +148,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 ! for other bits of code.
 
   real, dimension(GV%ke) :: &
-    p_lay, &    ! Average pressure of a layer, in Pa.
+    p_lay, &    ! Average pressure of a layer [Pa].
     dSV_dT, &   ! Partial derivative of specific volume with temperature, in m3 kg-1 degC-1.
     dSV_dS, &   ! Partial derivative of specific volume with salinity, in m3 kg-1 / (g kg-1).
     T0, S0, &   ! Initial temperatures and salinities.
@@ -180,19 +180,19 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     dT_to_dPE_a, &  ! Partial derivatives of column potential energy with the temperature
     dS_to_dPE_a, &  ! and salinity changes within a layer, including the implicit effects
                     ! of mixing with layers higher in the water column, in
-                    ! units of J m-2 K-1 and J m-2 ppt-1.
+                    ! units of [J m-2 degC-1] and [J m-2 ppt-1].
     dT_to_dPE_b, &  ! Partial derivatives of column potential energy with the temperature
     dS_to_dPE_b, &  ! and salinity changes within a layer, including the implicit effects
                     ! of mixing with layers lower in the water column, in
-                    ! units of J m-2 K-1 and J m-2 ppt-1.
+                    ! units of [J m-2 degC-1] and [J m-2 ppt-1].
     hp_a, &     ! An effective pivot thickness of the layer including the effects
                 ! of coupling with layers above [H ~> m or kg m-2].  This is the first term
                 ! in the denominator of b1 in a downward-oriented tridiagonal solver.
     hp_b, &     ! An effective pivot thickness of the layer including the effects
                 ! of coupling with layers below [H ~> m or kg m-2].  This is the first term
                 ! in the denominator of b1 in an upward-oriented tridiagonal solver.
-    c1_a, &     ! c1_a is used by a downward-oriented tridiagonal solver, ND.
-    c1_b, &     ! c1_b is used by an upward-oriented tridiagonal solver, ND.
+    c1_a, &     ! c1_a is used by a downward-oriented tridiagonal solver [nondim].
+    c1_b, &     ! c1_b is used by an upward-oriented tridiagonal solver [nondim].
     h_tr        ! h_tr is h at tracer points with a h_neglect added to
                 ! ensure positive definiteness [H ~> m or kg m-2].
   real, dimension(GV%ke+1) :: &
@@ -229,12 +229,12 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                     ! change in the layer below the interface, in ppt H.
   real :: Kddt_h_guess ! A guess of the final value of Kddt_h [H ~> m or kg m-2].
   real :: dMass     ! The mass per unit area within a layer, in kg m-2.
-  real :: dPres     ! The hydrostatic pressure change across a layer, in Pa.
+  real :: dPres     ! The hydrostatic pressure change across a layer [Pa].
   real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
                     ! converted to turbulent kinetic energy if the velocity in
                     ! the layer below an interface were homogenized with all of
                     ! the water above the interface, in J m-2 = kg s-2.
-  real :: rho_here  ! The in-situ density, in kg m-3.
+  real :: rho_here  ! The in-situ density [kg m-3].
   real :: PE_change ! The change in column potential energy from applying Kddt_h at the
                     ! present interface, in J m-2.
   real :: ColHt_cor ! The correction to PE_chg that is made due to a net
@@ -1034,12 +1034,12 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real, optional, intent(out) :: PE_chg   !< The change in column potential energy from applying
                                           !! Kddt_h at the present interface, in J m-2.
   real, optional, intent(out) :: dPEc_dKd !< The partial derivative of PE_chg with Kddt_h,
-                                          !! in units of J m-2 H-1.
+                                          !! [J m-2 H-1 ~> J m-3 or J kg-1].
   real, optional, intent(out) :: dPE_max  !< The maximum change in column potential energy that could
                                           !! be realizedd by applying a huge value of Kddt_h at the
                                           !! present interface, in J m-2.
   real, optional, intent(out) :: dPEc_dKd_0 !< The partial derivative of PE_chg with Kddt_h in the
-                                            !! limit where Kddt_h = 0, in J m-2 H-1.
+                                            !! limit where Kddt_h = 0 [J m-2 H-1 ~> J m-3 or J kg-1].
   real, optional, intent(out) :: ColHt_cor  !< The correction to PE_chg that is made due to a net
                                             !! change in the column height, in J m-2.
 
@@ -1174,12 +1174,12 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real, optional, intent(out) :: PE_chg   !< The change in column potential energy from applying
                                           !! Kddt_h at the present interface, in J m-2.
   real, optional, intent(out) :: dPEc_dKd !< The partial derivative of PE_chg with Kddt_h,
-                                          !! in units of J m-2 H-1.
+                                          !! [J m-2 H-1 ~> J m-3 or J kg-1].
   real, optional, intent(out) :: dPE_max  !< The maximum change in column potential energy that could
                                           !! be realizedd by applying a huge value of Kddt_h at the
                                           !! present interface, in J m-2.
   real, optional, intent(out) :: dPEc_dKd_0 !< The partial derivative of PE_chg with Kddt_h in the
-                                            !! limit where Kddt_h = 0, in J m-2 H-1.
+                                            !! limit where Kddt_h = 0 [J m-2 H-1 ~> J m-3 or J kg-1].
 
 !   This subroutine determines the total potential energy change due to mixing
 ! at an interface, including all of the implicit effects of the prescribed

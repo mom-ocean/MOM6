@@ -36,12 +36,12 @@ type, public :: ctrl_forcing_CS ; private
   logical :: do_integrated   !< If true, use time-integrated anomalies to control
                              !! the surface state.
   integer :: num_cycle       !< The number of elements in the forcing cycle.
-  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate, in s-1.
-  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate, in s-1.
+  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate [s-1].
+  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate [s-1].
   real    :: heat_cyc_rate  !< The rate at which cyclical heating anomaliess
-                            !! accumulate, in s-1.
+                            !! accumulate [s-1].
   real    :: prec_cyc_rate  !< The rate at which cyclical precipitation anomaliess
-                            !! accumulate, in s-1.
+                            !! accumulate [s-1].
   real    :: Len2           !< The square of the length scale over which the anomalies
                             !! are smoothed via a Laplacian filter, in m2.
   real    :: lam_heat       !< A constant of proportionality between SST anomalies
@@ -81,7 +81,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
                               day_start, dt, G, CS)
   type(ocean_grid_type), intent(inout) :: G                    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature
-                                                               !! anomalies, in deg C.
+                                                               !! anomalies [degC].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity
                                                                !! anomlies, in g kg-1.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface
@@ -95,7 +95,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
                                                                !! subroutine, in kg m-2 s-1.
   type(time_type),       intent(in)    :: day_start      !< Start time of the fluxes.
   real,                  intent(in)    :: dt             !< Length of time over which these
-                                                         !! fluxes will be applied, in s.
+                                                         !! fluxes will be applied [s].
   type(ctrl_forcing_CS), pointer       :: CS             !< A pointer to the control structure
                                                          !! returned by a previous call to
                                                          !! ctrl_forcing_init.
@@ -107,7 +107,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     flux_heat_y, &
     flux_prec_y
   type(time_type) :: day_end
-  real    :: coef    ! A heat-flux coefficient with units of m2.
+  real    :: coef    ! A heat-flux coefficient [m2].
   real    :: mr_st, mr_end, mr_mid, mr_prev, mr_next
   real    :: dt_wt, dt_heat_rate, dt_prec_rate
   real    :: dt1_heat_rate, dt1_prec_rate, dt2_heat_rate, dt2_prec_rate
