@@ -146,7 +146,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   endif
 
 !    Calculate the value of the Coriolis parameter at the latitude   !
-!  of the q grid points, in s-1.
+!  of the q grid points [s-1].
   call MOM_initialize_rotation(G%CoriolisBu, G, PF)
 !   Calculate the components of grad f (beta)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G)

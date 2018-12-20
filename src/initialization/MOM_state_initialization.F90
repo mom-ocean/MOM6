@@ -154,7 +154,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   character(len=200) :: config
   real :: H_rescale ! A rescaling factor for thicknesses from the representation in
                     ! a restart file to the internal representation in this run.
-  real :: dt        ! The baroclinic dynamics timestep for this run, in s.
+  real :: dt        ! The baroclinic dynamics timestep for this run [s].
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
@@ -923,7 +923,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     p_top, p_bot
   real :: dz_geo(SZI_(G),SZJ_(G))      ! The change in geopotential height
-                                       ! across a layer, in m2 s-2.
+                                       ! across a layer [m2 s-2].
   real :: rho(SZI_(G))
   real :: I_gEarth
   real :: Hm_rho_to_Pa  ! A conversion factor from the input geometric thicknesses
@@ -1003,7 +1003,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
     eta_sfc  ! The free surface height that the model should use, in m.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     eta  ! The free surface height that the model should use, in m.
-  real :: dilate  ! A ratio by which layers are dilated, nondim.
+  real :: dilate  ! A ratio by which layers are dilated [nondim].
   real :: scale_factor ! A scaling factor for the eta_sfc values that are read
                        ! in, which can be used to change units, for example.
   character(len=40)  :: mdl = "depress_surface" ! This subroutine's name.
@@ -1085,7 +1085,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   character(len=200) :: mdl = "trim_for_ice"
-  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface (Pa)
+  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface [Pa]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b ! Top and bottom edge values for reconstructions
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity and temperature within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
@@ -1155,16 +1155,16 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
-  real,                  intent(in)    :: G_earth !< Gravitational acceleration (m2 Z-1 s-2)
+  real,                  intent(in)    :: G_earth !< Gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
   real,                  intent(in)    :: depth !< Depth of ocean column [Z ~> m].
   real,                  intent(in)    :: min_thickness !< Smallest thickness allowed [Z ~> m].
-  real, dimension(nk),   intent(inout) :: T   !< Layer mean temperature
-  real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer
-  real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer
-  real, dimension(nk),   intent(inout) :: S   !< Layer mean salinity
-  real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer
-  real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer
-  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
+  real, dimension(nk),   intent(inout) :: T   !< Layer mean temperature [degC]
+  real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer [degC]
+  real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer [degC]
+  real, dimension(nk),   intent(inout) :: S   !< Layer mean salinity [ppt]
+  real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer [ppt]
+  real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer [ppt]
+  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface [Pa]
   real, dimension(nk),   intent(inout) :: h   !< Layer thickness (H units, m or Pa)
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
@@ -1686,8 +1686,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   real, dimension (SZI_(G),SZJ_(G)) :: &
     tmp_2d ! A temporary array for tracers.
 
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-  real :: pres(SZI_(G))     ! An array of the reference pressure, in Pa.
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: pres(SZI_(G))     ! An array of the reference pressure [Pa].
 
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed

@@ -216,14 +216,14 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
   real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m].
-  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
-  real :: damp_rate    ! The inverse zonal-mean damping rate, in s-1.
+  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [s-1].
+  real :: damp_rate    ! The inverse zonal-mean damping rate [s-1].
   real :: jet_width    ! The width of the zonal mean jet, in km.
   real :: jet_height   ! The interface height scale associated with the zonal-mean jet [Z ~> m].
   real :: y_2          ! The y-position relative to the channel center, in km.
-  real :: half_strat   ! The fractional depth where the straficiation is centered, ND.
+  real :: half_strat   ! The fractional depth where the straficiation is centered [nondim].
   real :: half_depth   ! The depth where the stratification is centered [Z ~> m].
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
@@ -352,8 +352,8 @@ end subroutine Phillips_initialize_topography
 !!    v - Meridional velocity in m s-1.
 !!    h - Layer thickness in m.  (Must be positive.)
 !!    D - Basin depth in m.  (Must be positive.)
-!!    f - The Coriolis parameter, in s-1.
-!!    g - The reduced gravity at each interface, in m s-2.
+!!    f - The Coriolis parameter [s-1].
+!!    g - The reduced gravity at each interface [m s-2]
 !!    Rlay - Layer potential density (coordinate variable) in kg m-3.
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!    T - Temperature in C.

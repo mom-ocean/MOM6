@@ -91,7 +91,7 @@ type, public :: EOS_type ; private
                              !! code for the integrals of density.
   logical :: Compressible = .true. !< If true, in situ density is a function of pressure.
 ! The following parameters are used with the linear equation of state only.
-  real :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real :: dRho_dT   !< The partial derivatives of density with temperature
   real :: dRho_dS   !< and salinity, in kg m-3 K-1 and kg m-3 psu-1.
 ! The following parameters are use with the linear expression for the freezing
@@ -571,7 +571,7 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza !< The change in the geopotential anomaly across
-                            !! the layer, in m2 s-2.
+                            !! the layer [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intp_dza !< The integral in pressure through the layer of the
                             !! geopotential anomaly relative to the anomaly at the bottom of the
@@ -579,11 +579,11 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(out) :: intx_dza !< The integral in x of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the x grid spacing, in m2 s-2.
+                            !! the x grid spacing [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(out) :: inty_dza !< The integral in y of the difference between the
                             !! geopotential anomaly at the top and bottom of the layer divided by
-                            !! the y grid spacing, in m2 s-2.
+                            !! the y grid spacing [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP  !< The pressure at the bathymetry in Pa
@@ -640,7 +640,7 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-                        intent(out) :: dpa !< The change in the pressure anomaly across the layer, in Pa.
+                        intent(out) :: dpa !< The change in the pressure anomaly across the layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
@@ -648,13 +648,13 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the x grid spacing, in Pa.
+                                           !! divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(out) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the y grid spacing, in Pa.
+                                           !! divided by the y grid spacing [Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT !< The depth of the bathymetry in units of Z.
+              optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
@@ -894,7 +894,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa !< The change in the pressure anomaly
-                                          !! across the layer, in Pa.
+                                          !! across the layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa !< The integral through the thickness of the
                                           !! layer of the pressure anomaly relative to the
@@ -902,13 +902,13 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intx_dpa !< The integral in x of the difference between
                                           !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the x grid spacing, in Pa.
+                                          !! layer divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(out) :: inty_dpa !< The integral in y of the difference between
                                           !! the pressure anomaly at the top and bottom of the
-                                          !! layer divided by the y grid spacing, in Pa.
+                                          !! layer divided by the y grid spacing [Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT !< The depth of the bathymetry in units of Z.
+              optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                           !! interpolate T/S for top and bottom integrals.
@@ -921,12 +921,12 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
   real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2].
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations, in Pa.
+                     ! with height at the 5 sub-column locations [Pa].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m, n, ioff, joff
 
@@ -1084,10 +1084,10 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real,                 intent(in)  :: dz_subroundoff !< A miniscule thickness
                                            !! change with the same units as z_t
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: bathyT !< The depth of the bathymetry in units of Z.
+                        intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m].
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-                        intent(out) :: dpa !< The change in the pressure anomaly across the layer, in Pa.
+                        intent(out) :: dpa !< The change in the pressure anomaly across the layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
@@ -1095,11 +1095,11 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the x grid spacing, in Pa.
+                                           !! divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(out) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the y grid spacing, in Pa.
+                                           !! divided by the y grid spacing [Pa].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
 ! This subroutine calculates (by numerical quadrature) integrals of
@@ -1114,20 +1114,20 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 ! a linear interpolation is used to compute intermediate values.
 
   ! Local variables
-  real :: T5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Temperatures along a line of subgrid locations, in degC
-  real :: S5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Salinities along a line of subgrid locations, in ppt
-  real :: p5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Pressures along a line of subgrid locations, in Pa
-  real :: r5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Densities along a line of subgrid locations, in kg m-3
-  real :: T15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Temperatures at an array of subgrid locations, in degC
-  real :: S15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Salinities at an array of subgrid locations, in ppt
-  real :: p15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Pressures at an array of subgrid locations, in Pa
-  real :: r15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Densities at an array of subgrid locations, in kg m-3
-  real :: wt_t(5), wt_b(5)          ! Top and bottom weights, ND.
+  real :: T5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Temperatures along a line of subgrid locations, in degC.
+  real :: S5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Salinities along a line of subgrid locations, in ppt.
+  real :: p5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Pressures along a line of subgrid locations, in Pa.
+  real :: r5((5*HIO%iscB+1):(5*(HIO%iecB+2)))  ! Densities along a line of subgrid locations, in kg m-3.
+  real :: T15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Temperatures at an array of subgrid locations, in degC.
+  real :: S15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Salinities at an array of subgrid locations, in ppt.
+  real :: p15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Pressures at an array of subgrid locations, in Pa.
+  real :: r15((15*HIO%iscB+1):(15*(HIO%iecB+1))) ! Densities at an array of subgrid locations, in kg m-3.
+  real :: wt_t(5), wt_b(5)          ! Top and bottom weights [nondim].
   real :: rho_anom                  ! A density anomaly in kg m-3.
-  real :: w_left, w_right           ! Left and right weights, ND.
+  real :: w_left, w_right           ! Left and right weights [nondim].
   real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations, in Pa.
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant, ND.
+                     ! with height at the 5 sub-column locations [Pa].
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim].
   real :: GxRho                     ! Gravitational acceleration times density, in kg m-1 Z-1 s-2.
   real :: I_Rho                     ! The inverse of the reference density, in m3 kg-1.
   real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m].
@@ -1135,7 +1135,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m].
   real :: weight_t, weight_b        ! Nondimensional wieghts of the top and bottom.
   real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1).
-  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners, in degC.
+  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC].
   real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners, in ppt.
   real :: hWght                     ! A topographically limited thicknes weight [Z ~> m].
   real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m].
@@ -1400,7 +1400,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   Pa_left = P_t - P_tgt ! Pa_left < 0
   F_r = 1.
   Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.e-5 ! 1e-5 has diimensions of m, but should be converted to the units of z.
+  Pa_tol = GxRho * 1.e-5 ! 1e-5 has dimensions of m, but should be converted to the units of z.
   if (present(z_tol)) Pa_tol = GxRho * z_tol
   F_guess = F_l - Pa_left / ( Pa_right -Pa_left ) * ( F_r - F_l )
   Pa = Pa_right - Pa_left ! To get into iterative loop
@@ -1441,7 +1441,7 @@ real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EO
   real,           intent(in)  :: z_b !< The geometric height at the bottom of the layer, usually in m
   real,           intent(in)  :: rho_ref !< A mean density, in kg m-3, that is subtracted out to
                                      !! reduce the magnitude of each of the integrals.
-  real,           intent(in)  :: G_e !< The Earth's gravitational acceleration, in m s-2.
+  real,           intent(in)  :: G_e !< The Earth's gravitational acceleration [m s-2]
   real,           intent(in)  :: pos !< The fractional vertical position, nondim, 0 to 1.
   type(EOS_type), pointer     :: EOS !< Equation of state structure
   ! Local variables
@@ -1499,10 +1499,10 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
                                            !! reduce the magnitude of each of the integrals.
   real,                 intent(in)  :: rho_0 !< A density, in kg m-3, that is used to calculate the
                                            !! pressure (as p~=-z*rho_0*G_e) used in the equation of state.
-  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration, in m s-2.
+  real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration [m s-2]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-                        intent(out) :: dpa !< The change in the pressure anomaly across the layer, in Pa.
+                        intent(out) :: dpa !< The change in the pressure anomaly across the layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
@@ -1510,11 +1510,11 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the x grid spacing, in Pa.
+                                           !! divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
               optional, intent(out) :: inty_dpa !< The integral in y of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
-                                           !! divided by the y grid spacing, in Pa.
+                                           !! divided by the y grid spacing [Pa].
 
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
@@ -1540,7 +1540,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
 !                    (The pressure is calucated as p~=-z*rho_0*G_e.)
 !  (in)      rho_0 - A density, in kg m-3, that is used to calculate the pressure
 !                    (as p~=-z*rho_0*G_e) used in the equation of state.
-!  (in)      G_e - The Earth's gravitational acceleration, in m s-2.
+!  (in)      G_e - The Earth's gravitational acceleration [m s-2]
 !  (in)      G - The ocean's grid structure.
 !  (in)      form_of_eos - integer that selects the eqn of state.
 !  (out)     dpa - The change in the pressure anomaly across the layer,
@@ -1550,10 +1550,10 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
 !                       the layer, in Pa m.
 !  (out,opt) intx_dpa - The integral in x of the difference between the
 !                       pressure anomaly at the top and bottom of the layer
-!                       divided by the x grid spacing, in Pa.
+!                       divided by the x grid spacing [Pa].
 !  (out,opt) inty_dpa - The integral in y of the difference between the
 !                       pressure anomaly at the top and bottom of the layer
-!                       divided by the y grid spacing, in Pa.
+!                       divided by the y grid spacing [Pa].
 
   real :: T5(5), S5(5), p5(5), r5(5)
   real :: rho_anom
@@ -1959,7 +1959,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza !< The change in the geopotential anomaly
-                            !! across the layer, in m2 s-2.
+                            !! across the layer [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intp_dza !< The integral in pressure through the
                             !! layer of the geopotential anomaly relative to the anomaly
@@ -1967,11 +1967,11 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(out) :: intx_dza  !< The integral in x of the difference
                             !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the x grid spacing, in m2 s-2.
+                            !! the layer divided by the x grid spacing [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(out) :: inty_dza  !< The integral in y of the difference
                             !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the y grid spacing, in m2 s-2.
+                            !! the layer divided by the y grid spacing [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP !< The pressure at the bathymetry in Pa
@@ -1989,17 +1989,17 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
 
   real :: T5(5), S5(5), p5(5), a5(5)
   real :: alpha_anom ! The depth averaged specific density anomaly in m3 kg-1.
-  real :: dp         ! The pressure change through a layer, in Pa.
-!  real :: dp_90(2:4) ! The pressure change through a layer divided by 90, in Pa.
-  real :: hWght      ! A pressure-thickness below topography, in Pa.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
+  real :: dp         ! The pressure change through a layer [Pa].
+!  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [Pa].
+  real :: hWght      ! A pressure-thickness below topography [Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
   real :: iDenom     ! The inverse of the denominator in the weights, in Pa-2.
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations, in m2 s-2.
+                     ! 5 sub-column locations [m2 s-2].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, halo
@@ -2157,7 +2157,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza !< The change in the geopotential anomaly
-                            !! across the layer, in m2 s-2.
+                            !! across the layer [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intp_dza !< The integral in pressure through the
                             !! layer of the geopotential anomaly relative to the anomaly
@@ -2165,11 +2165,11 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(out) :: intx_dza  !< The integral in x of the difference
                             !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the x grid spacing, in m2 s-2.
+                            !! the layer divided by the x grid spacing [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(out) :: inty_dza  !< The integral in y of the difference
                             !! between the geopotential anomaly at the top and bottom of
-                            !! the layer divided by the y grid spacing, in m2 s-2.
+                            !! the layer divided by the y grid spacing [m2 s-2].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
 
@@ -2186,17 +2186,17 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real :: T_top, T_bot, S_top, S_bot, P_top, P_bot
 
   real :: alpha_anom ! The depth averaged specific density anomaly in m3 kg-1.
-  real :: dp         ! The pressure change through a layer, in Pa.
-  real :: dp_90(2:4) ! The pressure change through a layer divided by 90, in Pa.
-  real :: hWght      ! A pressure-thickness below topography, in Pa.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
+  real :: dp         ! The pressure change through a layer [Pa].
+  real :: dp_90(2:4) ! The pressure change through a layer divided by 90 [Pa].
+  real :: hWght      ! A pressure-thickness below topography [Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
   real :: iDenom     ! The inverse of the denominator in the weights, in Pa-2.
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations, in m2 s-2.
+                     ! 5 sub-column locations [m2 s-2].
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n, pos

@@ -50,8 +50,7 @@ type, public :: ideal_age_tracer_CS ; private
   real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
   real, dimension(NTR_MAX) :: young_val = 0.0 !< The value assigned to tr at the surface.
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
-  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value,
-                                              !! in units of year-1.
+  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value [year-1].
   real, dimension(NTR_MAX) :: tracer_start_year !< The year in which tracers start aging, or at which the
                                               !! surface value equals young_val, in years.
   logical :: tracers_may_reinit  !< If true, these tracers be set up via the initialization code if

@@ -33,12 +33,10 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
-                                                                 !! (usually m or kg m-2).
-  type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to
-                                                                 !! various thermodynamic
-                                                                 !! variables.
+  type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to various
+                                                                 !! thermodynamic variables.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: eta !< layer interface heights
-                                                                 !! (Z or 1/eta_to_m m).
+                                                                 !! [Z ~> m] or 1/eta_to_m m).
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
              !! variable that gives the "correct" free surface height (Boussinesq) or total water
              !! column mass per unit area (non-Boussinesq).  This is used to dilate the layer.
@@ -51,7 +49,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   ! Local variables
   real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)
   real :: dz_geo(SZI_(G),SZJ_(G),SZK_(G)) ! The change in geopotential height
-                                          ! across a layer, in m2 s-2.
+                                          ! across a layer [m2 s-2].
   real :: dilate(SZI_(G))                 ! non-dimensional dilation factor
   real :: htot(SZI_(G))                   ! total thickness H
   real :: I_gEarth
@@ -148,13 +146,10 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2]
-                                                                 !! (usually m or kg m-2).
-  type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to
-                                                                 !! various thermodynamic
-                                                                 !! variables.
-  real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta !< free surface height
-                                                                 !! relative to mean sea
-                                                                 !! level (z=0) (m).
+  type(thermo_var_ptrs),                      intent(in)  :: tv  !< A structure pointing to various
+                                                                 !! thermodynamic variables.
+  real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta !< free surface height relative to
+                                                                 !! mean sea level (z=0) often [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
                    !! variable that gives the "correct" free surface height (Boussinesq) or total
                    !! water column mass per unit area (non-Boussinesq) [H ~> m or kg m-2].
@@ -166,7 +161,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     p     ! The pressure in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    dz_geo     ! The change in geopotential height across a layer, in m2 s-2.
+    dz_geo     ! The change in geopotential height across a layer [m2 s-2].
   real :: htot(SZI_(G))  ! The sum of all layers' thicknesses [H ~> m or kg m-2].
   real :: I_gEarth
   real :: Z_to_eta, H_to_eta, H_to_rho_eta ! Unit conversion factors with obvious names.

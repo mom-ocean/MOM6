@@ -71,7 +71,7 @@ type, public :: set_visc_CS ; private
                             !! determine the mixed layer thickness for viscosity.
   real    :: bulk_Ri_ML     !< The bulk mixed layer used to determine the
                             !! thickness of the viscous mixed layer.  Nondim.
-  real    :: omega          !<   The Earth's rotation rate, in s-1.
+  real    :: omega          !<   The Earth's rotation rate [s-1].
   real    :: ustar_min      !< A minimum value of ustar to avoid numerical
                             !! problems [Z s-1 ~> m s-1].  If the value is small enough,
                             !! this should not affect the solution.
@@ -127,29 +127,27 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real, dimension(SZIB_(G)) :: &
     ustar, &    !   The bottom friction velocity, in m s-1.
     T_EOS, &    !   The temperature used to calculate the partial derivatives
-                ! of density with T and S, in degC.
+                ! of density with T and S [degC].
     S_EOS, &    !   The salinity used to calculate the partial derivatives
-                ! of density with T and S, in PSU.
+                ! of density with T and S [PSU].
     dR_dT, &    !   Partial derivative of the density in the bottom boundary
-                ! layer with temperature, in units of kg m-3 K-1.
+                ! layer with temperature [kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density in the bottom boundary
-                ! layer with salinity, in units of kg m-3 psu-1.
-    press       !   The pressure at which dR_dT and dR_dS are evaluated, in Pa.
-  real :: htot             ! Sum of the layer thicknesses up to some
-                           ! point [H ~> m or kg m-2].
-  real :: htot_vel         ! Sum of the layer thicknesses up to some
-                           ! point [H ~> m or kg m-2].
+                ! layer with salinity [kg m-3 PSU-1].
+    press       !   The pressure at which dR_dT and dR_dS are evaluated [Pa].
+  real :: htot      ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
+  real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
 
-  real :: Rhtot            ! Running sum of thicknesses times the layer potential
-                           ! densities [H kg m-3 ~> kg m-2 or kg2 m-5].
+  real :: Rhtot ! Running sum of thicknesses times the layer potential
+                ! densities [H kg m-3 ~> kg m-2 or kg2 m-5].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    D_u, &      ! Bottom depth interpolated to u points, in depth units (m).
+    D_u, &      ! Bottom depth interpolated to u points [Z ~> m].
     mask_u      ! A mask that disables any contributions from u points that
-                ! are land or past open boundary conditions, nondim., 0 or 1.
+                ! are land or past open boundary conditions [nondim], 0 or 1.
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    D_v, &      ! Bottom depth interpolated to v points, in depth units (m).
+    D_v, &      ! Bottom depth interpolated to v points [Z ~> m].
     mask_v      ! A mask that disables any contributions from v points that
-                ! are land or past open boundary conditions, nondim., 0 or 1.
+                ! are land or past open boundary conditions [nondim], 0 or 1.
   real, dimension(SZIB_(G),SZK_(G)) :: &
     h_at_vel, & ! Layer thickness at a velocity point, using an upwind-biased
                 ! second order accurate estimate based on the previous velocity
@@ -157,11 +155,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     h_vel, &    ! Arithmetic mean of the layer thicknesses adjacent to a
                 ! velocity point [H ~> m or kg m-2].
     T_vel, &    ! Arithmetic mean of the layer temperatures adjacent to a
-                ! velocity point, in degC.
+                ! velocity point [degC].
     S_vel, &    ! Arithmetic mean of the layer salinities adjacent to a
-                ! velocity point, in PSU.
+                ! velocity point [PSU].
     Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
-                ! to a velocity point, in kg m-3.
+                ! to a velocity point [kg m-3].
 
   real :: h_vel_pos        ! The arithmetic mean thickness at a velocity point
                            ! plus H_neglect to avoid 0 values [H ~> m or kg m-2].
@@ -170,7 +168,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! from m to thickness units, in kg m-2 or kg2 m-5.
   real :: cdrag_sqrt_Z     ! Square root of the drag coefficient, times a unit conversion
                            ! factor from lateral lengths to vertical depths [Z m-1 ~> 1].
-  real :: cdrag_sqrt       ! Square root of the drag coefficient, nd.
+  real :: cdrag_sqrt       ! Square root of the drag coefficient [nondim].
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
                            ! divided by G_Earth [H kg m-3 ~> kg m-2 or kg2 m-5].
@@ -195,23 +193,25 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: hweight          ! The thickness of a layer that is within Hbbl
                            ! of the bottom [H ~> m or kg m-2].
   real :: v_at_u, u_at_v   ! v at a u point or vice versa [m s-1].
-  real :: Rho0x400_G       ! 400*Rho0/G_Earth, times unit conversion factors, in kg s2 H m-3 Z-2.
+  real :: Rho0x400_G       ! 400*Rho0/G_Earth, times unit conversion factors
+                           ! [kg s2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                            ! The 400 is a constant proposed by Killworth and Edwards, 1999.
   real, dimension(SZI_(G),SZJ_(G),max(GV%nk_rho_varies,1)) :: &
-    Rml                    ! The mixed layer coordinate density, in kg m-3.
+    Rml                    ! The mixed layer coordinate density [kg m-3].
   real :: p_ref(SZI_(G))   !   The pressure used to calculate the coordinate
-                           ! density, in Pa (usually set to 2e7 Pa = 2000 dbar).
+                           ! density [Pa] (usually set to 2e7 Pa = 2000 dbar).
 
   real :: D_vel            ! The bottom depth at a velocity point [H ~> m or kg m-2].
   real :: Dp, Dm           ! The depths at the edges of a velocity cell [H ~> m or kg m-2].
   real :: a                ! a is the curvature of the bottom depth across a
                            ! cell, times the cell width squared [H ~> m or kg m-2].
-  real :: a_3, a_12, C24_a ! a/3, a/12, and 24/a [H ~> m or kg m-2], H, and H-1.
+  real :: a_3, a_12        ! a/3 and a/12 [H ~> m or kg m-2].
+  real :: C24_a            ! 24/a [H-1 ~> m-1 or m2 kg-1].
   real :: slope            ! The absolute value of the bottom depth slope across
                            ! a cell times the cell width [H ~> m or kg m-2].
   real :: apb_4a, ax2_3apb ! Various nondimensional ratios of a and slope.
-  real :: a2x48_apb3, Iapb, Ibma_2 ! Combinations of a and slope with units of H-1.
-  ! All of the following "volumes" have units of meters as they are normalized
+  real :: a2x48_apb3, Iapb, Ibma_2 ! Combinations of a and slope [H-1 ~> m-1 or m2 kg-1].
+  ! All of the following "volumes" have units of thickness because they are normalized
   ! by the full horizontal area of a velocity cell.
   real :: Vol_open         ! The cell volume above which it is open [H ~> m or kg m-2].
   real :: Vol_direct       ! With less than Vol_direct [H ~> m or kg m-2], there is a direct
@@ -228,12 +228,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: Vol_tol          ! A volume error tolerance [H ~> m or kg m-2].
   real :: L(SZK_(G)+1)     ! The fraction of the full cell width that is open at
                            ! the depth of each interface, nondimensional.
-  real :: L_direct         ! The value of L above volume Vol_direct, nondim.
+  real :: L_direct         ! The value of L above volume Vol_direct [nondim].
   real :: L_max, L_min     ! Upper and lower bounds on the correct value for L.
   real :: Vol_err_max      ! The volume errors for the upper and lower bounds on
   real :: Vol_err_min      ! the correct value for L [H ~> m or kg m-2].
   real :: Vol_0            ! A deeper volume with known width L0 [H ~> m or kg m-2].
-  real :: L0               ! The value of L above volume Vol_0, nondim.
+  real :: L0               ! The value of L above volume Vol_0 [nondim].
   real :: dVol             ! vol - Vol_0 [H ~> m or kg m-2].
   real :: dV_dL2           ! The partial derivative of volume with L squared
                            ! evaluated at L=L0 [H ~> m or kg m-2].
@@ -247,11 +247,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! velocity magnitude to give the Rayleigh drag velocity, times
                            ! a lateral to vertical distance conversion factor [Z L-1 ~> 1].
   real :: gam              ! The ratio of the change in the open interface width
-                           ! to the open interface width atop a cell, nondim.
+                           ! to the open interface width atop a cell [nondim].
   real :: BBL_frac         ! The fraction of a layer's drag that goes into the
-                           ! viscous bottom boundary layer, nondim.
+                           ! viscous bottom boundary layer [nondim].
   real :: BBL_visc_frac    ! The fraction of all the drag that is expressed as
-                           ! a viscous bottom boundary layer, nondim.
+                           ! a viscous bottom boundary layer [nondim].
   real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0
   real :: C2pi_3           ! An irrational constant, 2/3 pi.
   real :: tmp              ! A temporary variable.
@@ -1022,11 +1022,11 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     htot, &     !   The total depth of the layers being that are within the
                 ! surface mixed layer [H ~> m or kg m-2].
     Thtot, &    !   The integrated temperature of layers that are within the
-                ! surface mixed layer [H degC ~> m degC or kg degC m-2]
+                ! surface mixed layer [H degC ~> m degC or kg degC m-2].
     Shtot, &    !   The integrated salt of layers that are within the
                 ! surface mixed layer [H PSU ~> m PSU or kg PSU m-2].
-    Rhtot, &    !   The integrated density of layers that are within the
-                ! surface mixed layer, [H kg m-3 ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
+    Rhtot, &    !   The integrated density of layers that are within the surface mixed layer
+                ! [H kg m-3 ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
                 ! equation of state is used.
     uhtot, &    !   The depth integrated zonal and meridional velocities within
     vhtot, &    ! the surface mixed layer [H m s-1 ~> m2 s-1 or kg m-1 s-1].
@@ -1036,15 +1036,15 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     dR_dS, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with salinity [kg m-3 psu-1].
     ustar, &    !   The surface friction velocity under ice shelves [Z s-1 ~> m s-1].
-    press, &    ! The pressure at which dR_dT and dR_dS are evaluated, in Pa.
+    press, &    ! The pressure at which dR_dT and dR_dS are evaluated [Pa].
     T_EOS, &    ! The potential temperature at which dR_dT and dR_dS are evaluated [degC]
     S_EOS       ! The salinity at which dR_dT and dR_dS are evaluated [PSU].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     mask_u      ! A mask that disables any contributions from u points that
-                ! are land or past open boundary conditions, nondim., 0 or 1.
+                ! are land or past open boundary conditions [nondim], 0 or 1.
   real, dimension(SZI_(G),SZJB_(G)) :: &
     mask_v      ! A mask that disables any contributions from v points that
-                ! are land or past open boundary conditions, nondim., 0 or 1.
+                ! are land or past open boundary conditions [nondim], 0 or 1.
   real :: h_at_vel(SZIB_(G),SZK_(G))! Layer thickness at velocity points,
                 ! using an upwind-biased second order accurate estimate based
                 ! on the previous velocity direction [H ~> m or kg m-2].
@@ -1055,8 +1055,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                 ! integrated through the mixed layer and the velocity of the
                 ! interior layer layer times the depth of the the mixed layer
                 ! [H2 m2 s-2 ~> m4 s-2 or kg2 m-2 s-2].
-  real :: htot_vel  ! Sum of the layer thicknesses up to some
-                    ! point [H ~> m or kg m-2].
+  real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: hwtot     ! Sum of the thicknesses used to calculate
                     ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot     ! Running sum of thicknesses times the
@@ -1067,10 +1066,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
   real :: hlay      ! The layer thickness at velocity points [H ~> m or kg m-2].
   real :: I_2hlay   ! 1 / 2*hlay [H-1 ~> m-1 or m2 kg-1].
-  real :: T_lay     ! The layer temperature at velocity points, in deg C.
-  real :: S_lay     ! The layer salinity at velocity points, in PSU.
-  real :: Rlay      ! The layer potential density at velocity points, in kg m-3.
-  real :: Rlb       ! The potential density of the layer below, in kg m-3.
+  real :: T_lay     ! The layer temperature at velocity points [degC].
+  real :: S_lay     ! The layer salinity at velocity points [PSU].
+  real :: Rlay      ! The layer potential density at velocity points [kg m-3].
+  real :: Rlb       ! The potential density of the layer below [kg m-3].
   real :: v_at_u    ! The meridonal velocity at a zonal velocity point in m s-1.
   real :: u_at_v    ! The zonal velocity at a meridonal velocity point in m s-1.
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
@@ -1080,15 +1079,15 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                     ! viscous mixed layer, including reduction for turbulent
                     ! decay. Nondimensional.
   real :: dt_Rho0   ! The time step divided by the conversion from the layer
-                    ! thickness to layer mass, in s H m2 kg-1.
-  real :: g_H_Rho0  !   The gravitational acceleration times the conversion from
-                    ! H to m divided by the mean density, in m5 s-2 H-1 kg-1.
+                    ! thickness to layer mass [s H m2 kg-1 ~> s m3 kg-1 or s].
+  real :: g_H_Rho0  !   The gravitational acceleration times the conversion from H to m divided
+                    ! by the mean density [m5 s-2 H-1 kg-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
   real :: ustarsq     ! 400 times the square of ustar, times
                       ! Rho0 divided by G_Earth and the conversion
-                      ! from m to thickness units, in kg m-2 or kg2 m-5.
+                      ! from m to thickness units [H kg m-3 ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z  ! Square root of the drag coefficient, times a unit conversion
                       ! factor from lateral lengths to vertical depths [Z m-1 ~> 1].
-  real :: cdrag_sqrt  ! Square root of the drag coefficient, ND.
+  real :: cdrag_sqrt  ! Square root of the drag coefficient [nondim].
   real :: oldfn       ! The integrated energy required to
                       ! entrain up to the bottom of the layer,
                       ! divided by G_Earth [H kg m-3 ~> kg m-2 or kg2 m-5].
@@ -1105,10 +1104,11 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: U_star    ! The friction velocity at velocity points [Z s-1 ~> m s-1].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: Rho0x400_G ! 400*Rho0/G_Earth, times unit conversion factors, in kg s2 H m-3 Z-2.
+  real :: Rho0x400_G ! 400*Rho0/G_Earth, times unit conversion factors
+                     ! [kg s2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                      ! The 400 is a constant proposed by Killworth and Edwards, 1999.
   real :: ustar1    ! ustar [H s-1 ~> m s-1 or kg m-2 s-1]
-  real :: h2f2      ! (h*2*f)^2
+  real :: h2f2      ! (h*2*f)^2 [H2 s-2 ~> m2 s-2 or kg2 m-4 s-2]
   logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml, n
   type(ocean_OBC_type), pointer :: OBC => NULL()

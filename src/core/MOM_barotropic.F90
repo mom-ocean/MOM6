@@ -74,9 +74,9 @@ type, private :: BT_OBC_type
   real, dimension(:,:), pointer :: vhbt => NULL()  !< The meridional barotropic thickness fluxes specified
                                      !! for open boundary conditions (if any) [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(:,:), pointer :: ubt_outer => NULL() !< The zonal velocities just outside the domain,
-                                     !! as set by the open boundary conditions, in units of m s-1.
+                                     !! as set by the open boundary conditions [m s-1].
   real, dimension(:,:), pointer :: vbt_outer => NULL() !< The meridional velocities just outside the domain,
-                                     !! as set by the open boundary conditions, in units of m s-1.
+                                     !! as set by the open boundary conditions [m s-1].
   real, dimension(:,:), pointer :: eta_outer_u => NULL() !< The surface height outside of the domain
                                      !! at a u-point with an open boundary condition [H ~> m or kg m-2].
   real, dimension(:,:), pointer :: eta_outer_v => NULL() !< The surface height outside of the domain
@@ -402,7 +402,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                                        !! in m s-2.
   type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
-                                                         !! due to free surface height anomalies, in m2 H-1 s-2.
+                                                         !! due to free surface height anomalies
+                                                         !! [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in  !< The 2-D eta field (either SSH anomaly or
                                                          !! column mass anomaly) that was used to calculate the input
                                                          !! pressure gradient accelerations (or its final value if
@@ -496,8 +497,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ubt_trans, &  ! The latest value of ubt used for a transport, in m s-1.
     azon, bzon, & ! _zon & _mer are the values of the Coriolis force which
     czon, dzon, & ! are applied to the neighboring values of vbtav & ubtav,
-    amer, bmer, & ! respectively to get the barotropic inertial rotation,
-    cmer, dmer, & ! in units of s-1.
+    amer, bmer, & ! respectively to get the barotropic inertial rotation
+    cmer, dmer, & ! [s-1].
     Cor_u, &      ! The zonal Coriolis acceleration, in m s-2.
     Cor_ref_u, &  ! The zonal barotropic Coriolis acceleration due
                   ! to the reference velocities, in m s-2.
@@ -559,8 +560,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     gtot_E, &     ! gtot_X is the effective total reduced gravity used to relate
     gtot_W, &     ! free surface height deviations to pressure forces (including
     gtot_N, &     ! GFS and baroclinic  contributions) in the barotropic momentum
-    gtot_S, &     ! equations half a grid-point in the X-direction (X is N, S,
-                  ! E, or W) from the thickness point. gtot_X has units of m2 H-1 s-2.
+    gtot_S, &     ! equations half a grid-point in the X-direction (X is N, S, E, or W)
+                  ! from the thickness point [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
                   ! (See Hallberg, J Comp Phys 1997 for a discussion.)
     eta_src, &    ! The source of eta per barotropic timestep, in m or kg m-2.
     dyn_coef_eta, & ! The coefficient relating the changes in eta to the
@@ -1405,12 +1406,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
                      (dtbt**2 * H_eff_dx2)
 
-      ! ice_strength has units of m s-2. rigidity_ice_[uv] has units of m3 s-1.
+      ! ice_strength has units of [m s-2]. rigidity_ice_[uv] has units of [m3 s-1].
       ice_strength = ((forces%rigidity_ice_u(I,j) + forces%rigidity_ice_u(I-1,j)) + &
                       (forces%rigidity_ice_v(i,J) + forces%rigidity_ice_v(i,J-1))) / &
                       (CS%ice_strength_length**2 * dtbt)
 
-      ! Units of dyn_coef: m2 s-2 H-1
+      ! Units of dyn_coef: [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1]
       dyn_coef_eta(i,j) = min(dyn_coef_max, ice_strength * GV%H_to_m)
     enddo ; enddo ; endif
   endif
@@ -2274,7 +2275,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                                                       !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: pbce  !< The baroclinic pressure
                                                       !! anomaly in each layer due to free surface
-                                                      !! height anomalies, in m2 H-1 s-2.
+                                                      !! height anomalies [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
   type(BT_cont_type), optional, pointer       :: BT_cont  !< A structure with elements that describe
                                                       !! the effective open face areas as a
                                                       !! function of barotropic flow.
@@ -2289,8 +2290,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     gtot_E, &     ! gtot_X is the effective total reduced gravity used to relate
     gtot_W, &     ! free surface height deviations to pressure forces (including
     gtot_N, &     ! GFS and baroclinic  contributions) in the barotropic momentum
-    gtot_S        ! equations half a grid-point in the X-direction (X is N, S,
-                  ! E, or W) from the thickness point. gtot_X has units of m2 H-1 s-2.
+    gtot_S        ! equations half a grid-point in the X-direction (X is N, S, E, or W)
+                  ! from the thickness point [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
                   ! (See Hallberg, J Comp Phys 1997 for a discussion.)
   real, dimension(SZIBS_(G),SZJ_(G)) :: &
     Datu          ! Basin depth at u-velocity grid points times the y-grid

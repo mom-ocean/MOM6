@@ -56,7 +56,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
     Rho           ! Density itself, when a nonlinear equation of state is
                   ! not in use.
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
-    pres          ! The pressure at an interface, in Pa.
+    pres          ! The pressure at an interface [Pa].
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivatives of density with temperature and
     drho_dS_u     ! salinity at u points, in kg m-3 K-1 and kg m-3 psu-1.
@@ -71,18 +71,18 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
     pres_v        ! the v-point in the horizontal.
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
-                        ! interface times the grid spacing, in kg m-3.
-  real :: drdkL, drdkR  ! Vertical density differences across an interface, in kg m-3.
+                        ! interface times the grid spacing [kg m-3].
+  real :: drdkL, drdkR  ! Vertical density differences across an interface [kg m-3].
   real :: hg2A, hg2B    ! Squares of geometric mean thicknesses [H2 ~> m2 or kg2 m-4].
   real :: hg2L, hg2R    ! Squares of geometric mean thicknesses [H2 ~> m2 or kg2 m-4].
   real :: haA, haB, haL, haR  ! Arithmetic mean thicknesses [H ~> m or kg m-2].
-  real :: dzaL, dzaR    ! Temporary thicknesses in eta units (Z?).
+  real :: dzaL, dzaR    ! Temporary thicknesses in eta units [Z ~> m].
   real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
-  real :: drdx, drdy    ! Zonal and meridional density gradients, in kg m-4.
-  real :: drdz          ! Vertical density gradient, in units of kg m-3 Z-1.
+  real :: drdx, drdy    ! Zonal and meridional density gradients [kg m-4].
+  real :: drdz          ! Vertical density gradient [kg m-3 Z-1 ~> kg m-4].
   real :: Slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1.
-  real :: mag_grad2     ! The squared magnitude of the 3-d density gradient, in kg2 m-8.
+  real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [kg2 m-8].
   real :: slope2_Ratio  ! The ratio of the slope squared to slope_max squared.
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].

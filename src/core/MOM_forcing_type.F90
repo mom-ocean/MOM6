@@ -113,10 +113,10 @@ type, public :: forcing
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
-                !< Pressure at the top ocean interface (Pa).
+                !< Pressure at the top ocean interface [Pa].
                 !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   real, pointer, dimension(:,:) :: p_surf => NULL()
-                !< Pressure at the top ocean interface (Pa) as used to drive the ocean model.
+                !< Pressure at the top ocean interface [Pa] as used to drive the ocean model.
                 !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
   real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
                 !< Pressure at the top ocean interface that is used in corrections to the sea surface
@@ -159,7 +159,7 @@ type, public :: forcing
   logical :: fluxes_used = .true. !< If true, all of the heat, salt, and mass
                                   !! fluxes have been applied to the ocean.
   real :: dt_buoy_accum = -1.0    !< The amount of time over which the buoyancy fluxes
-                                  !! should be applied, in s.  If negative, this forcing
+                                  !! should be applied [s].  If negative, this forcing
                                   !! type variable has not yet been inialized.
 
   real :: C_p                !< heat capacity of seawater ( J/(K kg) ).
@@ -184,17 +184,17 @@ end type forcing
 type, public :: mech_forcing
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-    taux  => NULL(), & !< zonal wind stress (Pa)
-    tauy  => NULL(), & !< meridional wind stress (Pa)
+    taux  => NULL(), & !< zonal wind stress [Pa]
+    tauy  => NULL(), & !< meridional wind stress [Pa]
     ustar => NULL(), & !< surface friction velocity scale [Z s-1 ~> m s-1].
     net_mass_src => NULL() !< The net mass source to the ocean, in kg m-2 s-1.
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
-                !< Pressure at the top ocean interface (Pa).
+                !< Pressure at the top ocean interface [Pa].
                 !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   real, pointer, dimension(:,:) :: p_surf => NULL()
-                !< Pressure at the top ocean interface (Pa) as used to drive the ocean model.
+                !< Pressure at the top ocean interface [Pa] as used to drive the ocean model.
                 !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
   real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
                 !< Pressure at the top ocean interface that is used in corrections to the sea surface
@@ -217,7 +217,7 @@ type, public :: mech_forcing
     rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points (m3/s)
     rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points (m3/s)
   real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
-                                !! have been averaged, in s.
+                                !! have been averaged [s].
   logical :: net_mass_src_set = .false. !< If true, an estimate of net_mass_src has been provided.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
                                 !! and various types of ice needs to be accumulated, and the
@@ -853,7 +853,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   real, dimension( SZI_(G) )                :: netEvap    ! net FW flux leaving ocean via evaporation (m/s for Bouss)
   real, dimension( SZI_(G) )                :: netHeat    ! net temp flux (K m/s)
   real, dimension( optics%nbands, SZI_(G) ) :: penSWbnd   ! SW penetration bands
-  real, dimension( SZI_(G) )                :: pressure   ! pressurea the surface (Pa)
+  real, dimension( SZI_(G) )                :: pressure   ! pressurea the surface [Pa]
   real, dimension( SZI_(G) )                :: dRhodT     ! density partial derivative wrt temp
   real, dimension( SZI_(G) )                :: dRhodS     ! density partial derivative wrt saln
   real, dimension(SZI_(G),SZK_(G)+1)        :: netPen

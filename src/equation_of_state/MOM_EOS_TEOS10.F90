@@ -22,14 +22,14 @@ public calculate_specvol_derivs_teos10
 public calculate_density_second_derivs_teos10
 public gsw_sp_from_sr, gsw_pt_from_ct
 
-!> Compute the in situ density of sea water (units of kg/m^3), or its anomaly with respect to
+!> Compute the in situ density of sea water ([kg m-3]), or its anomaly with respect to
 !! a reference density, from absolute salinity (g/kg), conservative temperature (in deg C),
 !! and pressure in Pa, using the TEOS10 expressions.
 interface calculate_density_teos10
   module procedure calculate_density_scalar_teos10, calculate_density_array_teos10
 end interface calculate_density_teos10
 
-!> Compute the in situ specific volume of sea water (in units of m^3/kg), or an anomaly with respect
+!> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
 !! to a reference specific volume, from absolute salinity (in g/kg), conservative temperature
 !! (in deg C), and pressure in Pa, using the TEOS10 expressions.
 interface calculate_spec_vol_teos10
@@ -53,8 +53,8 @@ real, parameter :: Pa2db  = 1.e-4  !< The conversion factor from Pa to dbar.
 contains
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
-!! (T in deg C), and pressure in Pa.  It uses the expression from the
+!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
+!! (T [degC]), and pressure in Pa.  It uses the expression from the
 !! TEOS10 website.
 subroutine calculate_density_scalar_teos10(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Conservative temperature in C.
@@ -77,8 +77,8 @@ subroutine calculate_density_scalar_teos10(T, S, pressure, rho, rho_ref)
 end subroutine calculate_density_scalar_teos10
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
-!! (T in deg C), and pressure in Pa.  It uses the expression from the
+!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
+!! (T [degC]), and pressure in Pa.  It uses the expression from the
 !! TEOS10 website.
 subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)  :: T        !< Conservative temperature in C.
@@ -109,7 +109,7 @@ subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts, rho_
 end subroutine calculate_density_array_teos10
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from absolute salinity (S in g/kg), conservative temperature (T in deg C)
+!! [m3 kg-1]) from absolute salinity (S [g kg-1]), conservative temperature (T [degC])
 !! and pressure in Pa, using the TEOS10 equation of state.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_teos10(T, S, pressure, specvol, spv_ref)
@@ -130,7 +130,7 @@ end subroutine calculate_spec_vol_scalar_teos10
 
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from absolute salinity (S in g/kg), conservative temperature (T in deg C)
+!! [m3 kg-1]) from absolute salinity (S [g kg-1]), conservative temperature (T [degC])
 !! and pressure in Pa, using the TEOS10 equation of state.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_teos10(T, S, pressure, specvol, start, npts, spv_ref)
@@ -306,9 +306,9 @@ subroutine calculate_density_second_derivs_array_teos10(T, S, pressure, drho_dS_
 end subroutine calculate_density_second_derivs_array_teos10
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) and the compressibility (drho/dp = C_sound^-2)
-!! (drho_dp in units of s2 m-2) from absolute salinity (sal in g/kg),
-!! conservative temperature (T in deg C), and pressure in Pa.  It uses the
+!! [kg m-3]) and the compressibility (drho/dp = C_sound^-2)
+!! (drho_dp [s2 m-2]) from absolute salinity (sal in g/kg),
+!! conservative temperature (T [degC]), and pressure in Pa.  It uses the
 !! subroutines from TEOS10 website
 subroutine calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.

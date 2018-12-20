@@ -93,7 +93,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
   type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
                                                !! call to diabatic_aux_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(in)    :: p_surf !< The pressure at the ocean surface, in Pa.
+                 optional, intent(in)    :: p_surf !< The pressure at the ocean surface [Pa].
   integer,       optional, intent(in)    :: halo !< Halo width over which to calculate frazil
 
   ! Local variables
@@ -212,12 +212,12 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
                                                  !! available thermodynamic fields.
   type(vertvisc_type),     intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                  !! boundary layer properies, and related fields.
-  real,                    intent(in)    :: dt   !<  Time increment, in s.
+  real,                    intent(in)    :: dt   !<  Time increment [s].
 
   ! local variables
   real, dimension(SZI_(G)) :: &
     b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S [H ~> m or kg m-2].
-    d1_T, d1_S     !  Variables used by the tridiagonal solvers, nondim.
+    d1_T, d1_S     !  Variables used by the tridiagonal solvers [nondim].
   real, dimension(SZI_(G),SZK_(G)) :: &
     c1_T, c1_S     !  Variables used by the tridiagonal solvers [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(G)+1) :: &
@@ -380,7 +380,7 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
   integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
                                                  !! call to diabatic_aux_init
-  real,                    intent(in)    :: dt   !< The thermodyanmic time step, in s.
+  real,                    intent(in)    :: dt   !< The thermodyanmic time step [s].
   integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic
                                                  !! which layer receivees the brine.
 
@@ -502,8 +502,8 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
                                                  !! above within this time step [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: eb !< The amount of fluid entrained from the layer
                                                  !! below within this time step [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T  !< Layer potential temperatures, in degC.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities, in PSU.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T  !< Layer potential temperatures [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S  !< Layer salinities [PSU].
 
   ! Local variables
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
@@ -654,12 +654,12 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   integer,       optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
 
   ! Local variables
-  real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences, in kg m-3.
+  real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [kg m-3].
   real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2     ! Reference pressures in Pa.
   real, dimension(SZI_(G)) :: dK, dKm1, d1          ! Depths [Z ~> m].
-  real, dimension(SZI_(G)) :: rhoSurf, rhoAtK, rho1 ! Densities used for N2, in kg m-3.
+  real, dimension(SZI_(G)) :: rhoSurf, rhoAtK, rho1 ! Densities used for N2 [kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
-  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML, in s-2.
+  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
   real :: Rho_x_gE         ! The product of density, gravitational acceleartion and a unit
                            ! conversion factor, in kg m-1 Z-1 s-2.
@@ -794,24 +794,27 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   real :: H_limit_fluxes, IforcingDepthScale, Idt
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
-  real :: RivermixConst  ! A constant used in implementing river mixing, in Pa s.
+  real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
   real, dimension(SZI_(G)) :: &
-    d_pres,       &  ! pressure change across a layer (Pa)
-    p_lay,        &  ! average pressure in a layer (Pa)
-    pres,         &  ! pressure at an interface (Pa)
+    d_pres,       &  ! pressure change across a layer [Pa]
+    p_lay,        &  ! average pressure in a layer [Pa]
+    pres,         &  ! pressure at an interface [Pa]
     netMassInOut, &  ! surface water fluxes [H ~> m or kg m-2] over time step
     netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
     netMassOut,   &  ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
-    netHeat,      &  ! heat (degC * H) via surface fluxes, excluding
-                     ! Pen_SW_bnd and netMassOut
+    netHeat,      &  ! heat via surface fluxes excluding Pen_SW_bnd and netMassOut
+                     ! [degC H ~> degC m or degC kg m-2]
     netSalt,      &  ! surface salt flux ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
+                     ! [ppt H ~> ppt m or ppt kg m-2]
     nonpenSW,     &  ! non-downwelling SW, which is absorbed at ocean surface
-    SurfPressure, &  ! Surface pressure (approximated as 0.0)
-    dRhodT,       &  ! change in density per change in temperature
-    dRhodS,       &  ! change in density per change in salinity
-    netheat_rate, &  ! netheat but for dt=1 (e.g. returns a rate)
+                     ! [degC H ~> degC m or degC kg m-2]
+    SurfPressure, &  ! Surface pressure (approximated as 0.0) [Pa]
+    dRhodT,       &  ! change in density per change in temperature [kg m-3 degC-1]
+    dRhodS,       &  ! change in density per change in salinity [kg m-3 ppt-1]
+    netheat_rate, &  ! netheat but for dt=1 [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
-    netMassInOut_rate! netmassinout but for dt=1 (e.g. returns a rate)
+                     ! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+    netMassInOut_rate! netmassinout but for dt=1 [H s-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G), SZK_(G))                     :: h2d, T2d
   real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
   real, dimension(SZI_(G),SZK_(G)+1)                    :: netPen

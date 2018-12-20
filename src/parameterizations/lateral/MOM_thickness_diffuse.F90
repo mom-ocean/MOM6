@@ -443,9 +443,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     h_avail, &    ! The mass available for diffusion out of each face, divided
                   ! by dt [H m2 s-1 ~> m3 s-1 or kg s-1].
     h_frac        ! The fraction of the mass in the column above the bottom
-                  ! interface of a layer that is within a layer, ND. 0<h_frac<=1
+                  ! interface of a layer that is within a layer [nondim]. 0<h_frac<=1
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
-    pres, &       ! The pressure at an interface, in Pa.
+    pres, &       ! The pressure at an interface [Pa].
     h_avail_rsum  ! The running sum of h_avail above an interface [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivatives of density with temperature and
@@ -467,8 +467,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: I4dt          ! 1 / 4 dt in s-1.
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
-                        ! interface times the grid spacing, in kg m-3.
-  real :: drdkL, drdkR  ! Vertical density differences across an interface, in kg m-3.
+                        ! interface times the grid spacing [kg m-3].
+  real :: drdkL, drdkR  ! Vertical density differences across an interface [kg m-3].
   real :: drdi_u(SZIB_(G), SZK_(G)+1) ! Copy of drdi at u-points in kg m-3.
   real :: drdj_v(SZI_(G), SZK_(G)+1)  ! Copy of drdj at v-points in kg m-3.
   real :: drdkDe_u(SZIB_(G),SZK_(G)+1) ! Lateral difference of product of drdk and e at u-points
@@ -1237,7 +1237,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                     ! between the arithmetic and harmonic mean thicknesses
                     ! normalized by the arithmetic mean thickness.
   real :: Kh_scale  ! A ratio by which Kh_u_CFL is scaled for maximally jagged
-                    ! layers, nondim.
+                    ! layers [nondim].
   real :: Kh_det    ! The detangling diffusivity, in m2 s-1.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
@@ -1245,19 +1245,19 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   real :: I_sl      ! The absolute value of the larger in magnitude of the slopes
                     ! above and below.
   real :: Rsl       ! The ratio of the smaller magnitude slope to the larger
-                    ! magnitude one, ND. 0 <= Rsl <1.
-  real :: IRsl      ! The (limited) inverse of Rsl, ND. 1 < IRsl <= 1e9.
+                    ! magnitude one [nondim]. 0 <= Rsl <1.
+  real :: IRsl      ! The (limited) inverse of Rsl [nondim]. 1 < IRsl <= 1e9.
   real :: dH        ! The thickness gradient divided by the damping timescale
                     ! and the ratio of the face length to the adjacent cell
                     ! areas for comparability with the diffusivities, in m2 s-1.
   real :: adH       ! The absolute value of dH, in m2 s-1.
   real :: sign      ! 1 or -1, with the same sign as the layer thickness gradient.
-  real :: sl_K      ! The sign-corrected slope of the interface above, ND.
-  real :: sl_Kp1    ! The sign-corrected slope of the interface below, ND.
-  real :: I_sl_K    ! The (limited) inverse of sl_K, ND.
-  real :: I_sl_Kp1  ! The (limited) inverse of sl_Kp1, ND.
+  real :: sl_K      ! The sign-corrected slope of the interface above [nondim].
+  real :: sl_Kp1    ! The sign-corrected slope of the interface below [nondim].
+  real :: I_sl_K    ! The (limited) inverse of sl_K [nondim].
+  real :: I_sl_Kp1  ! The (limited) inverse of sl_Kp1 [nondim].
   real :: I_4t      ! A quarter of a unit conversion factor divided by
-                    ! the damping timescale, in s-1.
+                    ! the damping timescale [s-1].
   real :: Fn_R      ! A function of Rsl, such that Rsl < Fn_R < 1.
   real :: denom, I_denom ! A denominator and its inverse, various units.
   real :: Kh_min    ! A local floor on the diffusivity, in m2 s-1.
@@ -1283,13 +1283,13 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
     !    Kh(I,K) >= Kh_min_p(I,K)*Kh(I,K+1) + Kh0_min_p(I,K)
     !    Kh(I,K) <= Kh_max_m(I,K)*Kh(I,K-1) + Kh0_max_m(I,K)
     !    Kh(I,K) <= Kh_max_p(I,K)*Kh(I,K+1) + Kh0_max_p(I,K)
-    Kh_min_m , &   ! See above, ND.
+    Kh_min_m , &   ! See above [nondim].
     Kh0_min_m , &  ! See above, in m2 s-1.
-    Kh_max_m , &   ! See above, ND.
+    Kh_max_m , &   ! See above [nondim].
     Kh0_max_m, &   ! See above, in m2 s-1.
-    Kh_min_p , &   ! See above, ND.
+    Kh_min_p , &   ! See above [nondim].
     Kh0_min_p , &  ! See above, in m2 s-1.
-    Kh_max_p , &   ! See above, ND.
+    Kh_max_p , &   ! See above [nondim].
     Kh0_max_p      ! See above, in m2 s-1.
   real, dimension(SZIB_(G)) :: &
     Kh_max_max  ! The maximum diffusivity permitted in a column.

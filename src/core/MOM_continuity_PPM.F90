@@ -75,9 +75,8 @@ contains
 subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, &
                           uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
-  ! In the following documentation, H is used for the units of thickness (usually m or kg m-2.)
-  type(ocean_grid_type),                     intent(inout) :: G   !< The ocean's grid structure.
-  type(continuity_PPM_CS),                   pointer       :: CS  !< Module's control structure.
+  type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure.
+  type(continuity_PPM_CS), pointer       :: CS  !< Module's control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u   !< Zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -87,15 +86,17 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(inout) :: h   !< Final layer thickness [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out)   :: uh  !< Zonal volume flux, u*h*dy, H m2 s-1.
+                           intent(out)   :: uh  !< Zonal volume flux, u*h*dy [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out)   :: vh  !< Meridional volume flux, v*h*dx, H m2 s-1.
+                           intent(out)   :: vh  !< Meridional volume flux, v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt  !< Time increment in s.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G)), &
-                 optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces, H m2 s-1.
+                 optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
-                 optional, intent(in)    :: vhbt !< The summed volume flux through meridional faces, H m2 s-1.
+                 optional, intent(in)    :: vhbt !< The summed volume flux through meridional faces
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type),  &
                  optional, pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -234,7 +235,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real,  dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h_in !< Layer thickness used to calculate fluxes [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out)   :: uh   !< Volume flux through zonal faces = u*h*dy, H m2 s-1.
+                           intent(out)   :: uh   !< Volume flux through zonal faces = u*h*dy
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt   !< Time increment in s.
   type(continuity_PPM_CS), pointer       :: CS   !< This module's control structure.
   type(loop_bounds_type),  intent(in)    :: LB   !< Loop bounds structure.
@@ -247,7 +249,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                      !! acceleration that a layer experiences after viscosity is applied.
                      !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G)), &
-                 optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces, H m2 s-1.
+                 optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt_aux
                      !< A second set of summed volume fluxes through zonal faces [H m2 s-1 ~> m3 s-1 or kg s-1].
@@ -733,7 +736,8 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
                        !! experiences after viscosity is applied.
                        !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G)),       optional, intent(in)    :: uhbt !< The summed volume flux
-                       !! through zonal faces, H m2 s-1.
+                       !! through zonal faces [H m2 s-1 ~> m3 s-1 or kg s-1].
+
   real, dimension(SZIB_(G)),                 intent(in)    :: du_max_CFL  !< Maximum acceptable
                        !! value of du, in m s-1.
   real, dimension(SZIB_(G)),                 intent(in)    :: du_min_CFL  !< Minimum acceptable
@@ -755,7 +759,7 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
                        !! A flag indicating how carefully to iterate.  The
                        !! default is .true. (more accurate).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(inout) :: uh_3d !<
-                       !! Volume flux through zonal faces = u*h*dy, H m2 s-1.
+                       !! Volume flux through zonal faces = u*h*dy [H m2 s-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real, dimension(SZIB_(G),SZK_(G)) :: &
@@ -1051,7 +1055,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real,  dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h_in !< Layer thickness used to
                                                                    !! calculate fluxes [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: vh   !< Volume flux through meridional
-                                                                   !! faces = v*h*dx, H m2 s-1.
+                                                                   !! faces = v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                                      intent(in)    :: dt   !< Time increment in s.
   type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
   type(loop_bounds_type),                    intent(in)    :: LB   !< Loop bounds structure.
@@ -1064,7 +1068,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                                    !! that a layer experiences after viscosity is applied.  Nondimensional between
                                    !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in)  :: vhbt  !< The summed volume flux through
-                                   !< meridional faces, H m2 s-1.
+                                   !< meridional faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in)  :: vhbt_aux !< A second set of summed volume fluxes
                                    !! through meridional faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
