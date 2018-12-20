@@ -184,7 +184,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                  intent(in)  :: v      !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                                  intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2]
-                                                       !! (usually m or kg m-2).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
                                                        !! along-coordinate stress tensor (m/s2)
@@ -254,8 +253,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      ! points where masks are applied [H ~> m or kg m-2].
   real :: hq         ! harmonic mean of the harmonic means of the u- & v- poing thicknesses,
                      ! [H ~> m or kg m-2]; This form guarantees that hq/hu < 4.
-  real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected (H)
-  real :: h_neglect3 ! h_neglect^3, in H3
+  real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected [H ~> m or kg m-2]
+  real :: h_neglect3 ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
   real :: hrat_min   ! minimum thicknesses at the 4 neighboring
                      ! velocity points divided by the thickness at the stress
                      ! point (h or q point) (nondimensional)
