@@ -28,11 +28,11 @@ type, public :: BFB_surface_forcing_CS ; private
                              !! state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !<   The density used in the Boussinesq
-                             !! approximation, in kg m-3.
-  real :: G_Earth            !<   The gravitational acceleration in m s-2.
+                             !! approximation [kg m-3].
+  real :: G_Earth            !<   The gravitational acceleration [m s-2]
   real :: Flux_const         !<   The restoring rate at the surface, in m s-1.
   real :: gust_const         !<   A constant unresolved background gustiness
-                             !! that contributes to ustar, in Pa.
+                             !! that contributes to ustar [Pa].
   real :: SST_s              !< SST at the southern edge of the linear
                              !! forcing ramp
   real :: SST_n              !< SST at the northern edge of the linear
@@ -68,9 +68,9 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
                                                       !! BFB_surface_forcing_init.
   ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward, in C.
-  real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
+  real :: Salin_restore  ! The salinity that is being restored toward [PSU].
   real :: density_restore  ! The potential density that is being restored
-                         ! toward, in kg m-3.
+                         ! toward [kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.

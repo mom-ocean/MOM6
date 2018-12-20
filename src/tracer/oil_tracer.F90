@@ -57,8 +57,8 @@ type, public :: oil_tracer_CS ; private
   real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
   real, dimension(NTR_MAX) :: young_val = 0.0 !< The value assigned to tr at the surface.
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
-  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value, in units of year-1.
-  real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil (in days)
+  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value [year-1].
+  real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil [days]
   real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil (in s^-1) calculated from oil_decay_days
   integer, dimension(NTR_MAX) :: oil_source_k !< Layer of source
   logical :: oil_may_reinit  !< If true, oil tracers may be reset by the initialization code

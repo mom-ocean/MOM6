@@ -52,14 +52,14 @@ contains
 
 !> This subroutine computes the density of sea water with a trivial
 !! linear equation of state (in kg m-3) from salinity (sal in PSU),
-!! potential temperature (T in deg C), and pressure in Pa.
+!! potential temperature (T [degC]), and pressure in Pa.
 subroutine calculate_density_scalar_linear(T, S, pressure, rho, &
                                            Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)
   real,           intent(in)  :: T        !< Potential temperature relative to the surface in C.
   real,           intent(in)  :: S        !< Salinity in PSU.
   real,           intent(in)  :: pressure !< Pressure in Pa.
   real,           intent(out) :: rho      !< In situ density in kg m-3.
-  real,           intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,           intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,           intent(in)  :: dRho_dT  !< The derivatives of density with temperature
                                           !! in kg m-3 C-1.
   real,           intent(in)  :: dRho_dS  !< The derivatives of density with salinity
@@ -76,7 +76,7 @@ end subroutine calculate_density_scalar_linear
 
 !> This subroutine computes the density of sea water with a trivial
 !! linear equation of state (in kg/m^3) from salinity (sal in psu),
-!! potential temperature (T in deg C), and pressure in Pa.
+!! potential temperature (T [degC]), and pressure in Pa.
 subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
                                           Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface in C.
@@ -85,7 +85,7 @@ subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
   real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
   integer,            intent(in)  :: start    !< the starting point in the arrays.
   integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,               intent(in)  :: dRho_dT  !< The derivatives of density with temperature
                                               !! in kg m-3 C-1.
   real,               intent(in)  :: dRho_dS  !< The derivatives of density with salinity
@@ -103,7 +103,7 @@ subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
 end subroutine calculate_density_array_linear
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
 !! and pressure in Pa, using a trivial linear equation of state for density.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
@@ -113,7 +113,7 @@ subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
   real,    intent(in)  :: S        !< salinity in PSU.
   real,    intent(in)  :: pressure !< pressure in Pa.
   real,    intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
-  real,    intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,    intent(in)  :: dRho_dT  !< The derivatives of density with temperature in kg m-3 C-1.
   real,    intent(in)  :: dRho_dS  !< The derivatives of density with salinity in kg m-3 psu-1.
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
@@ -130,7 +130,7 @@ subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
 end subroutine calculate_spec_vol_scalar_linear
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
 !! and pressure in Pa, using a trivial linear equation of state for density.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_linear(T, S, pressure, specvol, start, npts, &
@@ -142,7 +142,7 @@ subroutine calculate_spec_vol_array_linear(T, S, pressure, specvol, start, npts,
   real, dimension(:), intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
   integer,            intent(in)  :: start    !< the starting point in the arrays.
   integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,               intent(in)  :: dRho_dT  !< The derivatives of density with temperature in kg m-3 C-1.
   real,               intent(in)  :: dRho_dS  !< The derivatives of density with salinity in kg m-3 psu-1.
   real,     optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
@@ -170,7 +170,7 @@ subroutine calculate_density_derivs_array_linear(T, S, pressure, drho_dT_out, &
                                                     !! potential temperature, in kg m-3 K-1.
   real,    intent(out), dimension(:) :: drho_dS_out !< The partial derivative of density with
                                                     !! salinity, in kg m-3 psu-1.
-  real,    intent(in)                :: Rho_T0_S0   !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)                :: Rho_T0_S0   !< The density at T=0, S=0 [kg m-3].
   real,    intent(in)                :: dRho_dT     !< The derivatives of density with temperature in kg m-3 C-1.
   real,    intent(in)                :: dRho_dS     !< The derivatives of density with salinity in kg m-3 psu-1.
   integer, intent(in)                :: start       !< The starting point in the arrays.
@@ -197,7 +197,7 @@ subroutine calculate_density_derivs_scalar_linear(T, S, pressure, drho_dT_out, &
                                       !! potential temperature, in kg m-3 K-1.
   real,    intent(out) :: drho_dS_out !< The partial derivative of density with
                                       !! salinity, in kg m-3 psu-1.
-  real,    intent(in)  :: Rho_T0_S0   !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)  :: Rho_T0_S0   !< The density at T=0, S=0 [kg m-3].
   real,    intent(in)  :: dRho_dT     !< The derivatives of density with temperature in kg m-3 C-1.
   real,    intent(in)  :: dRho_dS     !< The derivatives of density with salinity in kg m-3 psu-1.
   drho_dT_out = dRho_dT
@@ -267,7 +267,7 @@ subroutine calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, &
                                                   !! potential temperature, in m3 kg-1 K-1.
   integer, intent(in)                :: start     !< The starting point in the arrays.
   integer, intent(in)                :: npts      !< The number of values to calculate.
-  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,    intent(in)                :: dRho_dT   !< The derivative of density with
                                                   !! temperature, in kg m-3 C-1.
   real,    intent(in)                :: dRho_dS   !< The derivative of density with
@@ -300,7 +300,7 @@ subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
                                                   !! in s2 m-2.
   integer, intent(in)                :: start     !< The starting point in the arrays.
   integer, intent(in)                :: npts      !< The number of values to calculate.
-  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,    intent(in)                :: dRho_dT   !< The derivative of density with
                                                   !! temperature, in kg m-3 C-1.
   real,    intent(in)                :: dRho_dS   !< The derivative of density with
@@ -339,14 +339,14 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
                                                  !! the equation of state. rho_0_pres is not used
                                                  !! here.
   real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
-  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
                                                  !! in kg m-3 C-1.
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
                                                  !! in kg m-3 psu-1.
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa       !< The change in the pressure anomaly across the
-                                                 !! layer, in Pa.
+                                                 !! layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa  !< The integral through the thickness of the layer
                                                  !! of the pressure anomaly relative to the anomaly
@@ -354,29 +354,29 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed),  &
               optional, intent(out) :: intx_dpa  !< The integral in x of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the x grid spacing, in Pa.
+                                                 !! layer divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB),  &
               optional, intent(out) :: inty_dpa  !< The integral in y of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the y grid spacing, in Pa.
+                                                 !! layer divided by the y grid spacing [Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT    !< The depth of the bathymetry in units of Z.
+              optional, intent(in)  :: bathyT    !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                  !! interpolate T/S for top and bottom integrals.
   ! Local variables
-  real :: rho_anom      ! The density anomaly from rho_ref, in kg m-3.
-  real :: raL, raR      ! rho_anom to the left and right, in kg m-3.
+  real :: rho_anom      ! The density anomaly from rho_ref [kg m-3].
+  real :: raL, raR      ! rho_anom to the left and right [kg m-3].
   real :: dz, dzL, dzR  ! Layer thicknesses [Z ~> m].
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
   real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2].
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations, in Pa.
+                     ! 5 sub-column locations [Pa].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff, m
@@ -508,14 +508,14 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
           !! to reduce the magnitude of each of the integrals, m3 kg-1. The calculation is
           !! mathematically identical with different values of alpha_ref, but this reduces the
           !! effects of roundoff.
-  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
                                                  !! in kg m-3 C-1.
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
                                                  !! in kg m-3 psu-1.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza       !< The change in the geopotential anomaly across
-                                                 !! the layer, in m2 s-2.
+                                                 !! the layer [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intp_dza  !< The integral in pressure through the layer of
                                                  !! the geopotential anomaly relative to the anomaly
@@ -538,19 +538,19 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
   ! Local variables
-  real :: dRho_TS       ! The density anomaly due to T and S, in kg m-3.
+  real :: dRho_TS       ! The density anomaly due to T and S [kg m-3].
   real :: alpha_anom    ! The specific volume anomaly from 1/rho_ref, in m3 kg-1.
-  real :: aaL, aaR      ! rho_anom to the left and right, in kg m-3.
+  real :: aaL, aaR      ! rho_anom to the left and right [kg m-3].
   real :: dp, dpL, dpR  ! Layer pressure thicknesses in Pa.
-  real :: hWght      ! A pressure-thickness below topography, in Pa.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
+  real :: hWght      ! A pressure-thickness below topography [Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
   real :: iDenom     ! The inverse of the denominator in the weights, in Pa-2.
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations, in m2 s-2.
+                     ! 5 sub-column locations [m2 s-2].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo

@@ -68,14 +68,14 @@ implicit none ; private
 !> MOM_dynamics_split_RK2 module control structure
 type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    !< CAu = f*v - u.grad(u) in m s-2.
-    PFu, &    !< PFu = -dM/dx, in m s-2.
-    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+    CAu, &    !< CAu = f*v - u.grad(u) [m s-2]
+    PFu, &    !< PFu = -dM/dx [m s-2]
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-2]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    !< CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &    !< PFv = -dM/dy, in m s-2.
-    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+    CAv, &    !< CAv = -f*u - u.grad(v) [m s-2]
+    PFv, &    !< PFv = -dM/dy [m s-2]
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-2]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: visc_rem_u
               !< Both the fraction of the zonal momentum originally in a
@@ -86,7 +86,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_accel_bt
               !< The zonal layer accelerations due to the difference between
               !! the barotropic accelerations and the baroclinic accelerations
-              !! that were fed into the barotopic calculation, in m s-2.
+              !! that were fed into the barotopic calculation [m s-2]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: visc_rem_v
               !< Both the fraction of the meridional momentum originally in
               !! a layer that remains after a time-step of viscosity, and the
@@ -96,7 +96,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_accel_bt
               !< The meridional layer accelerations due to the difference between
               !! the barotropic accelerations and the baroclinic accelerations
-              !! that were fed into the barotopic calculation, in m s-2.
+              !! that were fed into the barotopic calculation [m s-2]
 
   ! The following variables are only used with the split time stepping scheme.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta    !< Instantaneous free surface height (in Boussinesq
@@ -104,26 +104,26 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                                                   !! mode) [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av   !< layer x-velocity with vertical mean replaced by
                                                                   !! time-mean barotropic velocity over a baroclinic
-                                                                  !! timestep (m s-1)
+                                                                  !! timestep [m s-1]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av   !< layer y-velocity with vertical mean replaced by
                                                                   !! time-mean barotropic velocity over a baroclinic
-                                                                  !! timestep (m s-1)
+                                                                  !! timestep [m s-1]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: h_av   !< arithmetic mean of two successive layer
-                                                                  !! thicknesses (m or kg m-2)
+                                                                  !! thicknesses [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta_PF !< instantaneous SSH used in calculating PFu and
-                                                                  !! PFv (meter)
+                                                                  !! PFv [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_)        :: uhbt   !< average x-volume or mass flux determined by the
-                                                                  !! barotropic solver (m3 s-1 or kg s-1). uhbt should
-                                                                  !! be (roughly?) equal to vertical sum of uh.
+                                                                  !! barotropic solver [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                                  !! uhbt is roughly equal to the vertical sum of uh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_)        :: vhbt   !< average y-volume or mass flux determined by the
-                                                                  !! barotropic solver (m3 s-1 or kg s-1). vhbt should
-                                                                  !! be (roughly?) equal to vertical sum of vh.
+                                                                  !! barotropic solver [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                                  !! vhbt is roughly equal to vertical sum of vh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce   !< pbce times eta gives the baroclinic pressure
                                                                   !! anomaly in each layer due to free surface height
-                                                                  !! anomalies.  pbce has units of m2 H-1 s-2.
+                                                                  !! anomalies [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor (Pa)
-  real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor (Pa)
+  real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor [Pa]
+  real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor [Pa]
   type(BT_cont_type), pointer   :: BT_cont  => NULL() !<  A structure with elements that describe the
                                                       !! effective summed open face areas as a function
                                                       !! of barotropic flow.
@@ -239,28 +239,30 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                              target, intent(inout) :: v            !< merid velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                     intent(inout) :: h            !< layer thickness (m or kg/m2)
+                                     intent(inout) :: h            !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),             intent(in)    :: tv           !< thermodynamic type
   type(vertvisc_type),               intent(inout) :: visc         !< vertical visc, bottom drag, and related
   type(time_type),                   intent(in)    :: Time_local   !< model time at end of time step
   real,                              intent(in)    :: dt           !< time step (sec)
   type(mech_forcing),                intent(in)    :: forces       !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at start of this dynamic
-                                                                   !! time step (Pa)
+                                                                   !! time step [Pa]
   real, dimension(:,:),              pointer       :: p_surf_end   !< surf pressure at end   of this dynamic
-                                                                   !! time step (Pa)
+                                                                   !! time step [Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                             target, intent(inout) :: uh           !< zonal volume/mass transport (m3/s or kg/s)
+                             target, intent(inout) :: uh           !< zonal volume/mass transport
+                                                                   !! [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                             target, intent(inout) :: vh           !< merid volume/mass transport (m3/s or kg/s)
+                             target, intent(inout) :: vh           !< merid volume/mass transport
+                                                                   !! [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                      intent(inout) :: uhtr         !< accumulatated zonal volume/mass transport
-                                                                   !! since last tracer advection (m3 or kg)
+                                                                   !! since last tracer advection [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                      intent(inout) :: vhtr         !< accumulatated merid volume/mass transport
-                                                                   !! since last tracer advection (m3 or kg)
+                                                                   !! since last tracer advection [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av       !< free surface height or column mass time
-                                                                   !! averaged over time step (m or kg/m2)
+                                                                   !! averaged over time step [H ~> m or kg m-2]
   type(MOM_dyn_split_RK2_CS),        pointer       :: CS           !< module control structure
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
   type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
@@ -269,24 +271,24 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                                                                    !! fields related to the surface wave conditions
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping.
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocity in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp   ! Predicted meridional velocity in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: hp   ! Predicted thickness in m or kg m-2 (H).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocity [m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp   ! Predicted meridional velocity [m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: hp   ! Predicted thickness [H ~> m or kg m-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_bc_accel
     ! u_bc_accel and v_bc_accel are the summed baroclinic accelerations of each
-    ! layer calculated by the non-barotropic part of the model, both in m s-2.
+    ! layer calculated by the non-barotropic part of the model [m s-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: uh_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: vh_in
     ! uh_in and vh_in are the zonal or meridional mass transports that would be
-    ! obtained using the initial velocities, both in m3 s-1 or kg s-1.
+    ! obtained using the initial velocities [H m2 s-1 ~> m3 s-1 or kg s-1].
 
   real, dimension(SZIB_(G),SZJ_(G)) :: uhbt_out
   real, dimension(SZI_(G),SZJB_(G)) :: vhbt_out
     ! uhbt_out and vhbt_out are the vertically summed transports from the
-    ! barotropic solver based on its final velocities, both in m3 s-1 or kg s-1.
+    ! barotropic solver based on its final velocities [H m2 s-1 ~> m3 s-1 or kg s-1].
 
   real, dimension(SZI_(G),SZJ_(G)) :: eta_pred
     ! eta_pred is the predictor value of the free surface height or column mass,
@@ -296,12 +298,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: v_adj
     ! u_adj and v_adj are the zonal or meridional velocities after u and v
     ! have been barotropically adjusted so the resulting transports match
-    ! uhbt_out and vhbt_out, both in m s-1.
+    ! uhbt_out and vhbt_out [m s-1].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_old_rad_OBC
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_old_rad_OBC
     ! u_old_rad_OBC and v_old_rad_OBC are the starting velocities, which are
-    ! saved for use in the Flather open boundary condition code, both in m s-1.
+    ! saved for use in the Flather open boundary condition code [m s-1].
 
   real :: Pa_to_eta ! A factor that converts pressures to the units of eta.
   real, pointer, dimension(:,:) :: &
@@ -312,8 +314,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, pointer, dimension(:,:,:) :: &
     uh_ptr => NULL(), u_ptr => NULL(),  vh_ptr => NULL(), v_ptr => NULL(), &
     u_init => NULL(), v_init => NULL(), & ! Pointers to u and v or u_adj and v_adj.
-    u_av, & ! The zonal velocity time-averaged over a time step, in m s-1.
-    v_av, & ! The meridional velocity time-averaged over a time step, in m s-1.
+    u_av, & ! The zonal velocity time-averaged over a time step [m s-1].
+    v_av, & ! The meridional velocity time-averaged over a time step [m s-1].
     h_av    ! The layer thickness time-averaged over a time step, in m or
             ! kg m-2.
   real :: Idt
@@ -880,9 +882,9 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
   type(MOM_restart_CS),          pointer       :: restart_CS !< restart control structure
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), &
-                         target, intent(inout) :: uh !< zonal volume/mass transport (m3/s or kg/s)
+                         target, intent(inout) :: uh !< zonal volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
-                         target, intent(inout) :: vh !< merid volume/mass transport (m3/s or kg/s)
+                         target, intent(inout) :: vh !< merid volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
 
   type(vardesc)      :: vd
   character(len=40)  :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
@@ -961,12 +963,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                     intent(inout) :: u          !< zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                     intent(inout) :: v          !< merid velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h          !< layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            target, intent(inout) :: uh !< zonal volume/mass transport (m3 s-1 or kg s-1)
+                            target, intent(inout) :: uh !< zonal volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            target, intent(inout) :: vh !< merid volume/mass transport (m3 s-1 or kg s-1)
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: eta        !< free surface height or column mass (m or kg m-2)
+                            target, intent(inout) :: vh !< merid volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: eta        !< free surface height or column mass [H ~> m or kg m-2]
   type(time_type),          target, intent(in)    :: Time       !< current model time
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics

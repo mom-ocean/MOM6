@@ -28,7 +28,7 @@ type, public :: verticalGrid_type
   real :: max_depth !< The maximum depth of the ocean in Z (often m).
   real :: g_Earth   !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real :: Rho0      !< The density used in the Boussinesq approximation or nominal
-                    !! density used to convert depths into mass units, in kg m-3.
+                    !! density used to convert depths into mass units [kg m-3].
 
   ! Vertical coordinate descriptions for diagnostics and I/O
   character(len=40) :: zAxisUnits !< The units that vertical coordinates are written in

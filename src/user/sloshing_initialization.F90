@@ -65,7 +65,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
                                                       !! only read parameters without changing h.
 
   real    :: displ(SZK_(G)+1)   ! The interface displacement in depth units.
-  real    :: z_unif(SZK_(G)+1)  ! Fractional uniform interface heights, nondim.
+  real    :: z_unif(SZK_(G)+1)  ! Fractional uniform interface heights [nondim].
   real    :: z_inter(SZK_(G)+1) ! Interface heights, in depth units.
   real    :: a0                 ! The displacement amplitude in depth units.
   real    :: weight_z           ! A (misused?) depth-space weighting, in inconsistent units.

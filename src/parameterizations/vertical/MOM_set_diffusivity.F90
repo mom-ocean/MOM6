@@ -499,12 +499,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     if (CS%limit_dissipation) then
-      do k=2,nz-1 ; do i=is,ie
       ! This calculates the dissipation ONLY from Kd calculated in this routine
-      ! dissip has units of W/m3 (kg/m3 * m2/s * 1/s2 = J/s/m3)
+      ! dissip has units of W/m3 (= kg/m3 * m2/s * 1/s2)
       !   1) a global constant,
       !   2) a dissipation proportional to N (aka Gargett) and
       !   3) dissipation corresponding to a (nearly) constant diffusivity.
+      do k=2,nz-1 ; do i=is,ie
         dissip = max( CS%dissip_min, &   ! Const. floor on dissip.
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_lay(i,k)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_lay(i,k) ) ! Floor of Kd_min*rho0/F_Ri
@@ -513,11 +513,6 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       enddo ; enddo
 
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
-      ! This calculates the dissipation ONLY from Kd calculated in this routine
-      ! dissip has units of W/m3 (kg/m3 * m2/s * 1/s2 = J/s/m3)
-      !   1) a global constant,
-      !   2) a dissipation proportional to N (aka Gargett) and
-      !   3) dissipation corresponding to a (nearly) constant diffusivity.
         dissip = max( CS%dissip_min, &   ! Const. floor on dissip.
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_int(i,K)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_int(i,K) ) ! Floor of Kd_min*rho0/F_Ri
@@ -529,7 +524,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (associated(dd%Kd_work)) then
       do k=1,nz ; do i=is,ie
         dd%Kd_Work(i,j,k) = GV%Rho0 * US%Z_to_m**3*Kd_lay(i,j,k) * N2_lay(i,k) * &
-                            GV%H_to_Z*h(i,j,k)  ! Watt m-2 s or kg s-3
+                            GV%H_to_Z*h(i,j,k)  ! Watt m-2 s = kg s-3
       enddo ; enddo
     endif
   enddo ! j-loop
@@ -674,7 +669,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   type(thermo_var_ptrs),            intent(in)    :: tv   !< Structure containing pointers to any available
                                                           !! thermodynamic fields.
   real, dimension(SZI_(G),SZK_(G)+1), intent(in)  :: dRho_int !< Change in locally referenced potential density
-                                                          !! across each interface, in kg m-3.
+                                                          !! across each interface [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
                                                           !! layers, in s-2.
   integer,                          intent(in)    :: j    !< j-index of row to work on
@@ -888,7 +883,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   type(set_diffusivity_CS), pointer     :: CS   !< Diffusivity control structure
   real, dimension(SZI_(G),SZK_(G)+1), &
                             intent(out) :: dRho_int !< Change in locally referenced potential density
-                                                !! across each interface, in kg m-3.
+                                                !! across each interface [kg m-3].
   real, dimension(SZI_(G),SZK_(G)+1), &
                             intent(out) :: N2_int !< The squared buoyancy frequency at the interfaces, in s-2.
   real, dimension(SZI_(G),SZK_(G)), &

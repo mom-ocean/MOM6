@@ -553,7 +553,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   U_TS = CS%hurr_translation_spd/2.*cos(transdir)
   V_TS = CS%hurr_translation_spd/2.*sin(transdir)
 
-  ! Set the surface wind stresses, in units of Pa. A positive taux
+  ! Set the surface wind stresses, in [Pa]. A positive taux
   ! accelerates the ocean to the (pseudo-)east.
   !   The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
@@ -601,7 +601,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
     endif
     forces%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
   enddo ; enddo
-  ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
+  ! Set the surface friction velocity [m s-1]. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &

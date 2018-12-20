@@ -76,8 +76,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it,
-                  ! in units of s2 m-2.
+                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &
@@ -520,7 +519,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds (m/s)
@@ -531,11 +530,10 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m s-2.
+    gprime        ! The reduced gravity across each interface [m s-2]
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it,
-                  ! in units of s2 m-2.
+                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
   real, dimension(SZK_(G)-1) :: &
     a_diag, b_diag, c_diag
                   ! diagonals of tridiagonal matrix; one value for each
