@@ -94,9 +94,9 @@ type, public :: surface_forcing_CS ; private
     gust => NULL()              !< A spatially varying unresolved background gustiness that
                                 !! contributes to ustar (Pa).  gust is used when read_gust_2d is true.
   real, pointer, dimension(:,:) :: &
-    ustar_tidal => NULL()       !< Tidal contribution to the bottom friction velocity (m/s)
+    ustar_tidal => NULL()       !< Tidal contribution to the bottom friction velocity [m s-1]
   real :: cd_tides              !< Drag coefficient that applies to the tides (nondimensional)
-  real :: utide                 !< Constant tidal velocity to use if read_tideamp is false, in m s-1.
+  real :: utide                 !< Constant tidal velocity to use if read_tideamp is false [m s-1].
   logical :: read_tideamp       !< If true, spatially varying tidal amplitude read from a file.
 
   logical :: rigid_sea_ice      !< If true, sea-ice exerts a rigidity that acts to damp surface
@@ -112,7 +112,7 @@ type, public :: surface_forcing_CS ; private
                                 !! salinity to a specified value.
   logical :: restore_temp       !< If true, the coupled MOM driver adds a term to restore sea
                                 !! surface temperature to a specified value.
-  real    :: Flux_const                     !< Piston velocity for surface restoring (m/s)
+  real    :: Flux_const                     !< Piston velocity for surface restoring [m s-1]
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_srestore_to_zero    !< Adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling !< Adjust srestore w/o moving zero contour
@@ -172,7 +172,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: runoff          =>NULL() !< mass flux of liquid runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: calving         =>NULL() !< mass flux of frozen runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: stress_mag      =>NULL() !< The time-mean magnitude of the stress on the ocean (Pa)
-  real, pointer, dimension(:,:) :: ustar_berg      =>NULL() !< frictional velocity beneath icebergs (m/s)
+  real, pointer, dimension(:,:) :: ustar_berg      =>NULL() !< frictional velocity beneath icebergs [m s-1]
   real, pointer, dimension(:,:) :: area_berg       =>NULL() !< area covered by icebergs(m2/m2)
   real, pointer, dimension(:,:) :: mass_berg       =>NULL() !< mass of icebergs(kg/m2)
   real, pointer, dimension(:,:) :: runoff_hflx     =>NULL() !< heat content of liquid runoff (W/m2)
@@ -587,7 +587,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   real, dimension(SZI_(G),SZJ_(G)) :: &
     rigidity_at_h, &  ! Ice rigidity at tracer points (m3 s-1)
     net_mass_src, &   ! A temporary of net mass sources, in kg m-2 s-1.
-    ustar_tmp         ! A temporary array of ustar values, in m s-1.
+    ustar_tmp         ! A temporary array of ustar values [m s-1].
 
   real :: I_GEarth      ! 1.0 / G%G_Earth  (s^2/m)
   real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice) ( m^5/(s*kg) )
@@ -1142,7 +1142,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                                                   !! structure for this module
 
   ! Local variables
-  real :: utide  ! The RMS tidal velocity, in m s-1.
+  real :: utide  ! The RMS tidal velocity [m s-1].
   type(directories)  :: dirs
   logical            :: new_sim, iceberg_flux_diags
   type(time_type)    :: Time_frc
@@ -1333,7 +1333,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   endif
 
-! Optionally read tidal amplitude from input file (m s-1) on model grid.
+! Optionally read tidal amplitude from input file [m s-1] on model grid.
 ! Otherwise use default tidal amplitude for bottom frictionally-generated
 ! dissipation. Default cd_tides is chosen to yield approx 1 TWatt of
 ! work done against tides globally using OSU tidal amplitude.

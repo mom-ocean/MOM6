@@ -80,9 +80,9 @@ type, public :: surface_forcing_CS ; private
 
   real :: Rho0                  !< Boussinesq reference density (kg/m^3)
   real :: G_Earth               !< gravitational acceleration (m/s^2)
-  real :: Flux_const            !< piston velocity for surface restoring (m/s)
-  real :: Flux_const_T          !< piston velocity for surface temperature restoring (m/s)
-  real :: Flux_const_S          !< piston velocity for surface salinity restoring (m/s)
+  real :: Flux_const            !< piston velocity for surface restoring [m s-1]
+  real :: Flux_const_T          !< piston velocity for surface temperature restoring [m s-1]
+  real :: Flux_const_S          !< piston velocity for surface salinity restoring [m s-1]
   real :: latent_heat_fusion    !< latent heat of fusion (J/kg)
   real :: latent_heat_vapor     !< latent heat of vaporization (J/kg)
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const" forcing
@@ -672,7 +672,7 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   ! Local variables
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
-  real :: temp_ustar(SZI_(G),SZJ_(G)) ! ustar in m s-1 (not rescaled).
+  real :: temp_ustar(SZI_(G),SZJ_(G)) ! ustar [m s-1] (not rescaled).
   integer :: i, j, is_in, ie_in, js_in, je_in
   logical :: read_uStar
 

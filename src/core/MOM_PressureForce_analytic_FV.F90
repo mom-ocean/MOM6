@@ -69,15 +69,15 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbc
   type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration (m/s2)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration (m/s2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration [m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [m s-2]
   type(PressureForce_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer       :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
-                                                           !! anomaly in each layer due to eta anomalies,
-                                                           !! in m2 s-2 H-1.
+                                                           !! anomaly in each layer due to eta anomalies
+                                                           !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                            !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
                                                            !! contributions or compressibility compensation.
@@ -105,15 +105,15 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration (m/s2)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration (m/s2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [m s-2]
   type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
-                                                           !! anomaly in each layer due to eta anomalies,
-                                                           !! in m2 s-2 H-1.
+                                                           !! anomaly in each layer due to eta anomalies
+                                                           !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                            !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
                                                            !! contributions or compressibility compensation.
@@ -446,15 +446,15 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration (m/s2)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration (m/s2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [m s-2]
   type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                          !! or atmosphere-ocean interface in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
-                                                         !! anomaly in each layer due to eta anomalies,
-                                                         !! in m2 s-2 H-1.
+                                                         !! anomaly in each layer due to eta anomalies
+                                                         !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
                                                          !! calculate PFu and PFv [H ~> m or kg m-2], with any
                                                          !! tidal contributions or compressibility compensation.

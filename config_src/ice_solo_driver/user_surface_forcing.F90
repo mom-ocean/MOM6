@@ -80,8 +80,8 @@ type, public :: user_surface_forcing_CS ; private
   logical :: restorebuoy     ! If true, use restoring surface buoyancy forcing.
   real :: Rho0               !   The density used in the Boussinesq
                              ! approximation, in kg m-3.
-  real :: G_Earth            !   The gravitational acceleration in m s-2.
-  real :: Flux_const         !   The restoring rate at the surface, in m s-1.
+  real :: G_Earth            !   The gravitational acceleration [m s-2].
+  real :: Flux_const         !   The restoring rate at the surface [m s-1].
   real :: gust_const         !   A constant unresolved background gustiness
                              ! that contributes to ustar, in Pa.
 

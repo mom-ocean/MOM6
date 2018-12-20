@@ -278,9 +278,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u   !< The zonal velocity, in m s-1.
+                           intent(in)    :: u   !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v   !< The meridional velocity, in m s-1.
+                           intent(in)    :: v   !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
@@ -1003,7 +1003,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 !    enddo ; enddo ; endif
 
     if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
-      ! convert salt_flux from kg (salt)/(m^2 s) to ppt * (m/s).
+      ! convert salt_flux from kg (salt)/(m^2 s) to ppt * [m s-1].
       salt_in(i,j) = dt*G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif

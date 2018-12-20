@@ -47,7 +47,7 @@ type, public :: thickness_diffuse_CS ; private
   real    :: FGNV_scale          !< A coefficient scaling the vertical smoothing term in the
                                  !! Ferrari et al., 2010, streamfunction formulation.
   real    :: FGNV_c_min          !< A minimum wave speed used in the Ferrari et al., 2010,
-                                 !! streamfunction formulation (m s-1).
+                                 !! streamfunction formulation [m s-1].
   real    :: N2_floor            !< A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010,
                                  !! streamfunction formulation (s-2).
   logical :: detangle_interfaces !< If true, add 3-d structured interface height
@@ -120,7 +120,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity (m2/s)
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real, dimension(:,:), pointer :: cg1 => null() !< Wave speed (m/s)
+  real, dimension(:,:), pointer :: cg1 => null() !< Wave speed [m s-1]
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct
   integer :: i, j, k, is, ie, js, je, nz
   real :: hu(SZI_(G), SZJ_(G))       ! u-thickness [H ~> m or kg m-2]
@@ -409,7 +409,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   type(verticalGrid_type),                     intent(in)  :: GV     !< Vertical grid structure
   type(unit_scale_type),                       intent(in)  :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)  :: e      !< Interface positions (Z)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)  :: e      !< Interface positions [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: Kh_u   !< Thickness diffusivity on interfaces
                                                                      !! at u points (m2/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)  :: Kh_v   !< Thickness diffusivity on interfaces
@@ -417,7 +417,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   type(thermo_var_ptrs),                       intent(in)  :: tv     !< Thermodynamics structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),   intent(out) :: uhD    !< Zonal mass fluxes (m2 H s-1)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),   intent(out) :: vhD    !< Meridional mass fluxes (m2 H s-1)
-  real, dimension(:,:),                        pointer     :: cg1    !< Wave speed (m/s)
+  real, dimension(:,:),                        pointer     :: cg1    !< Wave speed [m s-1]
   real,                                        intent(in)  :: dt     !< Time increment (s)
   type(MEKE_type),                             pointer     :: MEKE   !< MEKE control structue
   type(thickness_diffuse_CS),                  pointer     :: CS     !< Control structure for thickness diffusion
@@ -1159,8 +1159,8 @@ end subroutine thickness_diffuse_full
 !> Tridiagonal solver for streamfunction at interfaces
 subroutine streamfn_solver(nk, c2_h, hN2, sfn)
   integer,               intent(in)    :: nk   !< Number of layers
-  real, dimension(nk),   intent(in)    :: c2_h !< Wave speed squared over thickness in layers (m s-2)
-  real, dimension(nk+1), intent(in)    :: hN2  !< Thickness times N2 at interfaces (m s-2)
+  real, dimension(nk),   intent(in)    :: c2_h !< Wave speed squared over thickness in layers [m s-2]
+  real, dimension(nk+1), intent(in)    :: hN2  !< Thickness times N2 at interfaces [m s-2]
   real, dimension(nk+1), intent(inout) :: sfn  !< Streamfunction (Z m2 s-1 or arbitrary units)
                                                !! On entry, equals diffusivity times slope.
                                                !! On exit, equals the streamfunction.

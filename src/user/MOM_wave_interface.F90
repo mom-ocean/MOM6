@@ -73,9 +73,9 @@ type, public :: wave_parameters_CS ; private
   real, allocatable, dimension(:), public :: &
        Freq_Cen           !< Frequency bands for read/coupled (1/s)
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkX !< Surface Stokes drift if prescribed (m/s)
+       PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkY !< Surface Stokes drift if prescribed (m/s)
+       PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:,:,:), public :: &
        Us_x               !< 3d Stokes drift profile (zonal, m/s)
                           !! Horizontal -> U points
@@ -875,9 +875,9 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   real, dimension(SZK_(GV)), optional, &
        intent(in)      :: H     !< Grid layer thickness [H ~> m or kg m-2]
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: U_H   !< Zonal velocity at H point (m/s)
+       intent(in)      :: U_H   !< Zonal velocity at H point [m s-1]
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: V_H   !< Meridional velocity at H point (m/s)
+       intent(in)      :: V_H   !< Meridional velocity at H point [m s-1]
   type(Wave_parameters_CS), &
        pointer         :: Waves !< Surface wave control structure.
 
@@ -966,7 +966,7 @@ end subroutine get_Langmuir_Number
 !!
 !! Original description:
 !! - This function returns the enhancement factor, given the 10-meter
-!!   wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
+!!   wind [m s-1], friction velocity [m s-1] and the boundary layer depth (m).
 !!
 !! Update (Jan/25):
 !! - Converted from function to subroutine, now returns Langmuir number.
@@ -983,7 +983,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
   real, intent(in)  :: hbl   !< boundary layer depth [Z ~> m].
   type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  real, intent(out) :: UStokes_SL !< Surface layer averaged Stokes drift (m/s)
+  real, intent(out) :: UStokes_SL !< Surface layer averaged Stokes drift [m s-1]
   real, intent(out) :: LA    !< Langmuir number
   ! Local variables
   ! parameters
@@ -1062,12 +1062,12 @@ subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
        intent(in)   :: GV       !< Ocean vertical grid structure
   real, intent(in)  :: AvgDepth !< Depth to average over [Z ~> m].
   real, dimension(SZK_(GV)), &
-       intent(in)   :: H        !< Grid thickness (H)
+       intent(in)   :: H        !< Grid thickness [H ~> m or kg m-2]
   real, dimension(SZK_(GV)), &
-       intent(in)   :: Profile  !< Profile of quantity to be averaged
-                                !! (used here for Stokes drift, m/s)
-  real, intent(out) :: Average  !< Output quantity averaged over depth AvgDepth
-                                !! (used here for Stokes drift, m/s)
+       intent(in)   :: Profile  !< Profile of quantity to be averaged [arbitrary]
+                                !! (used here for Stokes drift)
+  real, intent(out) :: Average  !< Output quantity averaged over depth AvgDepth [arbitrary]
+                                !! (used here for Stokes drift)
   !Local variables
   real :: top, midpoint, bottom ! Depths [Z ~> m].
   real :: Sum
@@ -1104,8 +1104,8 @@ subroutine Get_SL_Average_Band( GV, AvgDepth, NB, WaveNumbers, SurfStokes, Avera
   real, dimension(NB), &
        intent(in)     :: WaveNumbers !< Wavenumber corresponding to each band (1/Z)
   real, dimension(NB), &
-       intent(in)     :: SurfStokes  !< Surface Stokes drift for each band (m/s)
-  real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth (m/s)
+       intent(in)     :: SurfStokes  !< Surface Stokes drift for each band [m s-1]
+  real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth [m s-1]
 
   ! Local variables
   integer :: bb
@@ -1133,7 +1133,7 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   type(verticalGrid_type), intent(in)  :: GV  !< Ocean vertical grid
   type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
   real, intent(in)  :: ZPT   !< Depth to get Stokes drift [Z ~> m]. !### THIS IS NOT USED YET.
-  real, intent(out) :: UStokes !< Stokes drift (m/s)
+  real, intent(out) :: UStokes !< Stokes drift [m s-1]
   !
   real :: ann, Bnn, Snn, Cnn, Dnn
   real :: omega_peak, omega, u10, WA, domega
@@ -1192,9 +1192,9 @@ subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(inout) :: u     !< Velocity i-component (m/s)
+       intent(inout) :: u     !< Velocity i-component [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(inout) :: v     !< Velocity j-component (m/s)
+       intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   ! Local variables
@@ -1295,8 +1295,8 @@ end subroutine CoriolisStokes
 !! wind speed for wind-wave relationships.  Should be a fine way to estimate
 !! the neutral wind-speed as written here.
 subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
-  real, intent(in)                    :: USTair !< Wind friction velocity (m/s)
-  real, intent(out)                   :: U10    !< 10-m neutral wind speed (m/s)
+  real, intent(in)                    :: USTair !< Wind friction velocity [m s-1]
+  real, intent(out)                   :: U10    !< 10-m neutral wind speed [m s-1]
   type(verticalGrid_type), intent(in) :: GV     !< vertical grid type
   type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
 

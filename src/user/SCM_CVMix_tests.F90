@@ -36,12 +36,12 @@ type SCM_CVMix_tests_CS ; private
   logical :: UseHeatFlux    !< True to use heat flux
   logical :: UseEvaporation !< True to use evaporation
   logical :: UseDiurnalSW   !< True to use diurnal sw radiation
-  real :: tau_x !< (Constant) Wind stress, X (Pa)
-  real :: tau_y !< (Constant) Wind stress, Y (Pa)
-  real :: surf_HF !< (Constant) Heat flux (m K s^{-1})
-  real :: surf_evap !< (Constant) Evaporation rate (m/s)
-  real :: Max_sw !< maximum of diurnal sw radiation (m K s^{-1})
-  real,public :: Rho0 !< reference density copied for easy passing
+  real :: tau_x !< (Constant) Wind stress, X [Pa]
+  real :: tau_y !< (Constant) Wind stress, Y [Pa]
+  real :: surf_HF !< (Constant) Heat flux [m degC s-1]
+  real :: surf_evap !< (Constant) Evaporation rate [m s-1]
+  real :: Max_sw !< maximum of diurnal sw radiation [m degC s-1]
+  real,public :: Rho0 !< reference density copied for easy passing [kg m-3]
 end type
 
 ! This include declares and sets the variable "version".
@@ -53,8 +53,8 @@ contains
 
 !> Initializes temperature and salinity for the SCM CVMix test example
 subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_params)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T  !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S  !< Salinity (psu)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T  !< Potential temperature [degC]
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S  !< Salinity [psu]
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(ocean_grid_type),                  intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                intent(in)  :: GV !< Vertical grid structure
@@ -225,10 +225,10 @@ end subroutine SCM_CVMix_tests_wind_forcing
 
 
 subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
-  type(surface),                    intent(in)    :: state  !< Surface state structure
-  type(forcing),                    intent(inout) :: fluxes !< Surface fluxes structure
-  type(time_type),                  intent(in)    :: day    !< Time in days (seconds?)
-  type(ocean_grid_type),            intent(inout) :: G      !< Grid structure
+  type(surface),            intent(in)    :: state  !< Surface state structure
+  type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
+  type(time_type),          intent(in)    :: day    !< Time in days (seconds?)
+  type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
   type(SCM_CVMix_tests_CS), pointer       :: CS     !< Container for SCM parameters
 
   ! Local variables

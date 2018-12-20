@@ -29,8 +29,8 @@ type, public :: marine_ice_CS ; private
   real :: berg_area_threshold !< Fraction of grid cell which iceberg must occupy
                               !! so that fluxes below are set to zero. (0.5 is a
                               !! good value to use.) Not applied for negative values.
-  real :: latent_heat_fusion  !< Latent heat of fusion
-  real :: density_iceberg     !< A typical density of icebergs in kg/m3 (for ice rigidity)
+  real :: latent_heat_fusion  !< Latent heat of fusion [J kg-1]
+  real :: density_iceberg     !< A typical density of icebergs [kg m-3] (for ice rigidity)
 
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
@@ -48,10 +48,10 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
-  real,                  intent(in)    :: time_step   !< The coupling time step, in s.
+  real,                  intent(in)    :: time_step   !< The coupling time step [s].
   type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
 
-  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
+  real :: kv_rho_ice ! The viscosity of ice divided by its density [m5 kg-1 s-1].
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
@@ -110,11 +110,11 @@ subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   logical,               intent(in)    :: use_ice_shelf  !< If true, this configuration uses ice shelves.
-  real,                  intent(in)    :: time_step   !< The coupling time step, in s.
+  real,                  intent(in)    :: time_step   !< The coupling time step [s].
   type(marine_ice_CS),   pointer       :: CS !< Pointer to the control structure for MOM_marine_ice
 
-  real :: fraz      ! refreezing rate in kg m-2 s-1
-  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion, in kg J-1 s-1.
+  real :: fraz      ! refreezing rate [kg m-2 s-1]
+  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion [kg J-1 s-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed

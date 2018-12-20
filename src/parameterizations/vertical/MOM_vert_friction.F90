@@ -46,10 +46,9 @@ type, public :: vertvisc_CS ; private
   real    :: Kvbbl           !< The vertical viscosity in the bottom boundary
                              !! layer, in m2 s-1.
 
-  real    :: maxvel          !< Velocity components greater than maxvel,
-                             !! in m s-1, are truncated.
+  real    :: maxvel          !< Velocity components greater than maxvel are truncated [m s-1].
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
-                             !! are set to 0, in m s-1.
+                             !! are set to 0 [m s-1].
   logical :: CFL_based_trunc !< If true, base truncations on CFL numbers, not
                              !! absolute velocities.
   real    :: CFL_trunc       !< Velocity components will be truncated when they
@@ -149,9 +148,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: u      !< Zonal velocity in m s-1
+                           intent(inout) :: u      !< Zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(inout) :: v      !< Meridional velocity in m s-1
+                           intent(inout) :: v      !< Meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   type(mech_forcing),    intent(in)      :: forces !< A structure with the driving mechanical forces
@@ -568,9 +567,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: u      !< Zonal velocity in m s-1
+                           intent(in)    :: u      !< Zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(in)    :: v      !< Meridional velocity in m s-1
+                           intent(in)    :: v      !< Meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
@@ -580,7 +579,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary condition structure
 
   ! Field from forces used in this subroutine:
-  !   ustar: the friction velocity in m s-1, used here as the mixing
+  !   ustar: the friction velocity [m s-1], used here as the mixing
   !     velocity in the mixed layer if NKML > 1 in a bulk mixed layer.
 
   ! Local variables
@@ -1083,7 +1082,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: visc_ml ! The mixed layer viscosity [Z2 s-1 ~> m2 s-1].
   real :: I_Hmix  ! The inverse of the mixed layer thickness [H-1 ~> m-1 or m2 kg-1].
   real :: a_ml    ! The layer coupling coefficient across an interface in
-                  ! the mixed layer, in m s-1.
+                  ! the mixed layer [m s-1].
   real :: I_amax  ! The inverse of the maximum coupling coefficient [Z-1 ~> m-1].???
   real :: temp1   ! A temporary variable [H Z ~> m2 or kg m-1]
   real :: h_neglect   ! A thickness that is so small it is usually lost
@@ -1355,9 +1354,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: u      !< Zonal velocity in m s-1
+                           intent(inout) :: u      !< Zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(inout) :: v      !< Meridional velocity in m s-1
+                           intent(inout) :: v      !< Meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   type(accel_diag_ptrs),   intent(in)    :: ADp    !< Acceleration diagnostic pointers
@@ -1370,7 +1369,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   ! Local variables
 
   real :: maxvel           ! Velocities components greater than maxvel
-  real :: truncvel         ! are truncated to truncvel, both in m s-1.
+  real :: truncvel         ! are truncated to truncvel, both [m s-1].
   real :: CFL              ! The local CFL number.
   real :: H_report         ! A thickness below which not to report truncations.
   real :: dt_Rho0          ! The timestep divided by the Boussinesq density, in dt m3 kg-1.
