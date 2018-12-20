@@ -167,15 +167,15 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
   type(ocean_grid_type),                      intent(in)  :: G    !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV   !< Vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
                                                                   !! diffusivity for temp (Z2/sec).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_S !< Interface double diffusion diapycnal
                                                                   !! diffusivity for salt (Z2/sec).
-  type(CVMix_ddiff_cs),                           pointer :: CS   !< The control structure returned
+  type(CVMix_ddiff_cs),                       pointer     :: CS   !< The control structure returned
                                                                   !! by a previous call to CVMix_ddiff_init.
-  integer,                                   intent(in)   :: j    !< Meridional grid indice.
+  integer,                                    intent(in)  :: j    !< Meridional grid indice.
   ! Local variables
   real, dimension(SZK_(G)) :: &
     cellHeight, &  !< Height of cell centers (m)

@@ -58,10 +58,10 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   real,                             intent(in)    :: dt    !< Time step (seconds).
   real,                             intent(in)    :: H_limit_fluxes !< If the total ocean depth is
                                                            !! less than this, they are scaled away
-                                                           !! to avoid numerical instabilities. (H)
-                                                           !! This would not be necessary if a
-                                                           !! finite heat capacity mud-layer
-                                                           !! were added.
+                                                           !! to avoid numerical instabilities
+                                                           !! [H ~> m or kg m-2]. This would
+                                                           !! not be necessary if a finite heat
+                                                           !! capacity mud-layer were added.
   logical,                          intent(in)    :: adjustAbsorptionProfile !< If true, apply
                                                            !! heating above the layers in which it
                                                            !! should have occurred to get the
@@ -75,7 +75,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
                                                            !! shortwave that should be absorbed by
                                                            !! each layer.
   real, dimension(SZI_(G),SZK_(G)), intent(inout) :: T     !< Layer potential/conservative
-                                                           !! temperatures (deg C)
+                                                           !! temperatures [degC]
   real, dimension(:,:),             intent(inout) :: Pen_SW_bnd !< Penetrating shortwave heating in
                                                            !! each band that hits the bottom and
                                                            !! will be redistributed through the
@@ -114,8 +114,8 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   real :: unabsorbed        ! fraction of the shortwave radiation that
                             ! is not absorbed because the layers are too thin
   real :: Ih_limit          ! inverse of the total depth at which the
-                            ! surface fluxes start to be limited (1/H)
-  real :: h_min_heat        ! minimum thickness layer that should get heated (H)
+                            ! surface fluxes start to be limited [H-1 ~> m-1 or m2 kg-1]
+  real :: h_min_heat        ! minimum thickness layer that should get heated [H ~> m or kg m-2]
   real :: opt_depth         ! optical depth of a layer (non-dim)
   real :: exp_OD            ! exp(-opt_depth) (non-dim)
   real :: heat_bnd          ! heating due to absorption in the current

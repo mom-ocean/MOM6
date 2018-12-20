@@ -68,12 +68,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
                                                 !! call to entrain_diffusive_init.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                               intent(out) :: ea !< The amount of fluid entrained from the layer
-                                                !! above within this time step, in the same units
-                                                !! as h, m or kg m-2.
+                                                !! above within this time step [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                               intent(out) :: eb !< The amount of fluid entrained from the layer
-                                                !! below within this time step, in the same units
-                                                !! as h, m or kg m-2.
+                                                !! below within this time step [H ~> m or kg m-2].
   integer, dimension(SZI_(G),SZJ_(G)),        &
                   optional, intent(inout) :: kb_out !< The index of the lightest layer denser than
                                                 !! the buffer layer.
@@ -91,13 +89,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
 ! differences between layers.  The scheme that is used here is described in
 ! detail in Hallberg, Mon. Wea. Rev. 2000.
 
-! In the comments below, H is used as shorthand for the units of h, m or kg m-2.
   real, dimension(SZI_(G),SZK_(G)) :: &
-    dtKd    ! The layer diapycnal diffusivity times the time step, translated
-            ! into the same unints as h, m2 or kg2 m-4 (i.e. H2).
+    dtKd    ! The layer diapycnal diffusivity times the time step [H2 ~> m2 or kg2 m-4].
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    dtKd_int ! The diapycnal diffusivity at the interfaces times the time step,
-            ! translated into the same unints as h, m2 or kg2 m-4 (i.e. H2).
+    dtKd_int ! The diapycnal diffusivity at the interfaces times the time step [H2 ~> m2 or kg2 m-4]
   real, dimension(SZI_(G),SZK_(G)) :: &
     F, &    ! The density flux through a layer within a time step divided by the
             ! density difference across the interface below the layer [H ~> m or kg m-2].
@@ -928,7 +923,7 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
 ! mixed layer.
 
   real :: h1        ! The thickness in excess of the minimum that will remain
-                    ! after exchange with the layer below, in m or kg m-2.
+                    ! after exchange with the layer below [H ~> m or kg m-2].
   logical :: do_i(SZI_(G))
   integer :: i, k, is, ie, nz
 
@@ -1027,7 +1022,6 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, CS, j, Ent_bl, Sref
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-                                                          !! (usually m or kg m-2).
   real, dimension(SZI_(G),SZK_(G)+1),       &
                                     intent(in)    :: dtKd_int !< The diapycnal diffusivity across
                                                           !! each interface times the time step
@@ -1051,30 +1045,13 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, CS, j, Ent_bl, Sref
                                                           !! 1000 for each layer, in kg m-3.
   real, dimension(SZI_(G),SZK_(G)), intent(out)   :: h_bl !< The thickness of each layer [H ~> m or kg m-2].
 
-! Arguments: h - Layer thickness, in m or kg m-2 (abbreviated as H below).
-!  (in)      dtKd_int - The diapycnal diffusivity across each interface times
-!                       the time step [H2 ~> m2 or kg2 m-4].
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      kb - The index of the lightest layer denser than the
-!                 buffer layer or 1 if there is no buffer layer.
-!  (in)      do_i - A logical variable indicating which i-points to work on.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - This module's control structure.
-!  (in)      j - The meridional index upon which to work.
-!  (out)     Ent_bl - The average entrainment upward and downward across
-!                     each interface around the buffer layers [H ~> m or kg m-2].
-!  (out)     Sref - The coordinate potential density - 1000 for each layer,
-!                   in kg m-3.
-!  (out)     h_bl - The thickness of each layer [H ~> m or kg m-2].
-
 !   This subroutine sets the average entrainment across each of the interfaces
 ! between buffer layers within a timestep. It also causes thin and relatively
 ! light interior layers to be entrained by the deepest buffer layer.
 !   Also find the initial coordinate potential densities (Sref) of each layer.
-
 ! Does there need to be limiting when the layers below are all thin?
+
+  ! Local variables
   real, dimension(SZI_(G)) :: &
     b1, d1, &   ! Variables used by the tridiagonal solver, in H-1 and ND.
     Rcv, &      ! Value of the coordinate variable (potential density)
@@ -1218,10 +1195,8 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
   type(ocean_grid_type),              intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in)    :: GV     !< The ocean's vertical grid
                                                               !! structure.
-  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: h_bl   !< Layer thickness, in m or kg m-2
-                                                              !! (abbreviated as H below).
-  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: Sref   !< Reference potential vorticity
-                                                              !! (in kg m-3?).
+  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: h_bl   !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: Sref   !< Reference potential density [kg m-3]
   real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: Ent_bl !< The average entrainment upward and
                                                               !! downward across each interface
                                                               !! around the buffer layers [H ~> m or kg m-2].
@@ -1249,24 +1224,7 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
                                                               !! buffer layer, in kg m-3.
   logical, dimension(SZI_(G)), optional, intent(in) :: do_i_in !< If present, determines which
                                                               !! columns are worked on.
-! Arguments: h_bl - Layer thickness, in m or kg m-2 (abbreviated as H below).
-!  (in)      Sref - Reference potential vorticity (in kg m-3?)
-!  (in)      Ent_bl - The average entrainment upward and downward across
-!                     each interface around the buffer layers [H ~> m or kg m-2].
-!  (in)      E_kb - The entrainment by the top interior layer [H ~> m or kg m-2].
-!  (in)      is, ie - The range of i-indices to work on.
-!  (in)      kmb - The number of mixed and buffer layers.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      limit - If true, limit dSkb and dSlay to avoid negative values.
-!  (out)     dSkb - The limited potential density difference across the
-!                   interface between the bottommost buffer layer and the
-!                   topmost interior layer.  dSkb > 0.
-!  (out,opt) dSlay - The limited potential density difference across the
-!                        topmost interior layer. 0 < dSkb
-!  (out,opt) ddSkb_dE - The partial derivative of dSkb with E, in kg m-3 H-1.
-!  (out,opt) ddSlay_dE - The partial derivative of dSlay with E, in kg m-3 H-1.
-!  (in,opt)  do_i_in - If present, determines which columns are worked on.
+
 ! Note that dSkb, ddSkb_dE, dSlay, ddSlay_dE, and dS_anom_lim are declared
 ! intent inout  because they should not change where do_i_in is false.
 
@@ -1282,6 +1240,8 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
 ! exceed the density differences across an interface.
 !   Additionally, the partial derivatives of dSkb and dSlay with E_kb could
 ! also be returned.
+
+  ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
     b1, c1, &       ! b1 and c1 are variables used by the tridiagonal solver.
     S, dS_dE, &     ! The coordinate density and its derivative with R.
@@ -1291,13 +1251,13 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
   real :: d1(SZI_(G))  ! d1 = 1.0-c1 is also used by the tridiagonal solver.
   real :: src       ! A source term for dS_dR.
   real :: h1        ! The thickness in excess of the minimum that will remain
-                    ! after exchange with the layer below, in m or kg m-2.
+                    ! after exchange with the layer below [H ~> m or kg m-2].
   logical, dimension(SZI_(G)) :: do_i
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: h_tr      ! h_tr is h at tracer points with a tiny thickness
-                    ! added to ensure positive definiteness, in m or kg m-2.
-  real :: b_denom_1 ! The first term in the denominator of b1 in m or kg m-2.
+                    ! added to ensure positive definiteness [H ~> m or kg m-2].
+  real :: b_denom_1 ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: rat
   real :: dS_kbp1, IdS_kbp1
   real :: deriv_dSLay
@@ -1609,8 +1569,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   type(ocean_grid_type),            intent(in)  :: G        !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)  :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK_(G)), intent(in)  :: h_bl     !< Layer thickness, with the top interior
-                                                            !! layer at k-index kmb+1, in units of m
-                                                            !! or kg m-2  (abbreviated as H below).
+                                                            !! layer at k-index kmb+1 [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(G)), intent(in)  :: Sref     !< The coordinate reference potential
                                                             !! density, with the value of the
                                                             !! topmost interior layer at layer
@@ -1656,40 +1615,11 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real, dimension(SZI_(G)), optional, intent(out) :: dFdfm_kb !< The partial derivative of F_kb with
                                                             !! ea_kbp1, nondim.
 
-! Arguments: h_bl - Layer thickness, with the top interior layer at k-index
-!                   kmb+1, in units of m or kg m-2 (abbreviated as H below).
-!  (in)      dtKd_kb - The diapycnal diffusivity in the top interior layer times
-!                      the time step [H2 ~> m2 or kg2 m-4].
-!  (in)      Sref - The coordinate reference potential density, with the
-!                   value of the topmost interior layer at layer kmb+1,
-!                   in units of kg m-3.
-!  (in)      I_dSkbp1 - The inverse of the difference in reference potential
-!                       density across the base of the uppermost interior layer,
-!                       in units of m3 kg-1.
-!  (in)      Ent_bl - The average entrainment upward and downward across
-!                     each interface around the buffer layers [H ~> m or kg m-2].
-!  (in)      ea_kbp1 - The entrainment from above by layer kb+1 [H ~> m or kg m-2].
-!  (in)      min_eakb - The minimum permissible rate of entrainment [H ~> m or kg m-2].
-!  (in)      max_eakb - The maximum permissible rate of entrainment [H ~> m or kg m-2].
-!  (in)      is, ie - The range of i-indices to work on.
-!  (in)      do_i - A logical variable indicating which i-points to work on.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - This module's control structure.
-!  (in/out)  Ent - The entrainment rate of the uppermost interior layer [H ~> m or kg m-2].
-!                  The input value is the first guess.
-!  (out,opt) error - The error (locally defined in this routine) associated with
-!                    the returned solution.
-!  (in,opt)  error_min_eakb0, error_max_eakb0 - The errors (locally defined)
-!                    associated with min_eakb and max_eakb when ea_kbp1 = 0,
-!                    returned from a previous call to this routine.
-!  (out,opt) F_kb - The entrainment from below by the uppermost interior layer
-!                   corresponding to the returned value of Ent [H ~> m or kg m-2].
-!  (out,out) dFdfm_kb - The partial derivative of F_kb with ea_kbp1, nondim.
-
 !  This subroutine determines the entrainment from above by the top interior
 ! layer (labeled kb elsewhere) given an entrainment by the layer below it,
 ! constrained to be within the provided bounds.
+
+  ! Local variables
   real, dimension(SZI_(G)) :: &
     dS_kb, &                !   The coordinate-density difference between the
                             ! layer kb and deepest buffer layer, limited to
@@ -1698,7 +1628,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                             ! kb, limited to ensure that it is positive and not
                             ! too much bigger than dS_kb or dS_kbp1, in kg m-3.
     ddSkb_dE, ddSlay_dE, &  ! The derivatives of dS_kb and dS_Lay with E,
-                            ! in units of kg m-3 H-1.
+                            ! in kg m-3 H-1.
     derror_dE, &            ! The derivative of err with E [H ~> m or kg m-2].
     err, &                  ! The "error" whose zero is being sought [H2 ~> m2 or kg2 m-4].
     E_min, E_max, &         ! The minimum and maximum values of E [H ~> m or kg m-2].
@@ -1849,7 +1779,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
   type(ocean_grid_type),      intent(in)  :: G        !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK_(G)), &
-                              intent(in)  :: h_bl     !< Layer thickness, in m or kg m-2
+                              intent(in)  :: h_bl     !< Layer thickness [H ~> m or kg m-2]
                                                       !! (abbreviated as H below).
   real, dimension(SZI_(G),SZK_(G)), &
                               intent(in)  :: Sref     !< Reference potential density (in kg m-3?).

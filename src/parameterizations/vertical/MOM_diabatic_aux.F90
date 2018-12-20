@@ -96,20 +96,7 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
                  optional, intent(in)    :: p_surf !< The pressure at the ocean surface, in Pa.
   integer,       optional, intent(in)    :: halo !< Halo width over which to calculate frazil
 
-!   Frazil formation keeps the temperature above the freezing point.
-! This subroutine warms any water that is colder than the (currently
-! surface) freezing point up to the freezing point and accumulates
-! the required heat (in J m-2) in tv%frazil.
-!   The expression, below, for the freezing point of sea water comes
-! from Millero (1978) via Appendix A of Gill, 1982.
-
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in/out)  tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 diabatic_driver_init.
+  ! Local variables
   real, dimension(SZI_(G)) :: &
     fraz_col, & ! The accumulated heat requirement due to frazil, in J.
     T_freeze, & ! The freezing potential temperature at the current salinity, C.
@@ -574,9 +561,9 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
                                                  !! Omitting eb is the same as setting it to 0.
 
   ! local variables
-  real :: b_denom_1    ! The first term in the denominator of b1 in m or kg m-2.
+  real :: b_denom_1    ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: h_neglect    ! A thickness that is so small it is usually lost
-                       ! in roundoff and can be neglected, in m or kg m-2.
+                       ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: b1(SZI_(G)), d1(SZI_(G)), c1(SZI_(G),SZK_(G))
   real :: a_n(SZI_(G)), a_s(SZI_(G))  ! Fractional weights of the neighboring
   real :: a_e(SZI_(G)), a_w(SZI_(G))  ! velocity points, ~1/2 in the open

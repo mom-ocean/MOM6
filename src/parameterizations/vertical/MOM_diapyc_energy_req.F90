@@ -149,7 +149,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 
   real, dimension(GV%ke) :: &
     p_lay, &    ! Average pressure of a layer, in Pa.
-    dSV_dT, &   ! Partial derivative of specific volume with temperature, in m3 kg-1 K-1.
+    dSV_dT, &   ! Partial derivative of specific volume with temperature, in m3 kg-1 degC-1.
     dSV_dS, &   ! Partial derivative of specific volume with salinity, in m3 kg-1 / (g kg-1).
     T0, S0, &   ! Initial temperatures and salinities.
     Te, Se, &   ! Running incomplete estimates of the new temperatures and salinities.
@@ -160,11 +160,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     dTe_a, dSe_a, & ! Running (1-way) estimates of temperature and salinity change.
     dTe_b, dSe_b, & ! Running (1-way) estimates of temperature and salinity change.
     Th_a, &     !  An effective temperature times a thickness in the layer above,
-                !  including implicit mixing effects with other yet higher layers, in K H.
+                !  including implicit mixing effects with other yet higher layers, in degC H.
     Sh_a, &     !  An effective salinity times a thickness in the layer above,
                 !  including implicit mixing effects with other yet higher layers, in ppt H.
     Th_b, &     !  An effective temperature times a thickness in the layer below,
-                !  including implicit mixing effects with other yet lower layers, in K H.
+                !  including implicit mixing effects with other yet lower layers, in degC H.
     Sh_b, &     !  An effective salinity times a thickness in the layer below,
                 !  including implicit mixing effects with other yet lower layers, in ppt H.
     dT_to_dPE, & ! Partial derivative of column potential energy with the temperature
@@ -194,7 +194,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     c1_a, &     ! c1_a is used by a downward-oriented tridiagonal solver, ND.
     c1_b, &     ! c1_b is used by an upward-oriented tridiagonal solver, ND.
     h_tr        ! h_tr is h at tracer points with a h_neglect added to
-                ! ensure positive definiteness, in m or kg m-2.
+                ! ensure positive definiteness [H ~> m or kg m-2].
   real, dimension(GV%ke+1) :: &
     pres, &     ! Interface pressures in Pa.
     pres_Z, &   ! Interface pressures with a rescaling factor to convert interface height
