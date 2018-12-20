@@ -96,9 +96,9 @@ type, public :: ice_shelf_dyn_CS ; private
                     ! (maybe longer) because it will depend on ocean values  that are averaged over
                     ! this time interval, and solving for the equiliabrated flow will begin to lose
                     ! meaning if it is done too frequently.
-  real :: elapsed_velocity_time  !< The elapsed time since the ice velocies were last udated, in s.
+  real :: elapsed_velocity_time  !< The elapsed time since the ice velocies were last udated [s].
 
-  real :: g_Earth      !< The gravitational acceleration in m s-2.
+  real :: g_Earth      !< The gravitational acceleration [m s-2].
   real :: density_ice  !< A typical density of ice, in kg m-3.
 
   logical :: GL_regularize  !< whether to regularize the floatation condition
@@ -1421,7 +1421,7 @@ end subroutine ice_shelf_solve_inner
 subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_uflux, flux_enter)
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
-  real,                   intent(in)    :: time_step !< The time step for this update, in s.
+  real,                   intent(in)    :: time_step !< The time step for this update [s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -1651,7 +1651,7 @@ end subroutine ice_shelf_advect_thickness_x
 subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, h_after_vflux, flux_enter)
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
-  real,                   intent(in)    :: time_step !< The time step for this update, in s.
+  real,                   intent(in)    :: time_step !< The time step for this update [s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -3481,7 +3481,7 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
                                            !! the ice-shelf state
   type(ocean_grid_type), intent(inout) :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type), intent(in)    :: US !< Pointer to a structure containing unit conversion factors
-  real,                  intent(in) :: time_step !< The time step for this update, in s.
+  real,                  intent(in) :: time_step !< The time step for this update [s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in) :: melt_rate !< basal melt rate in kg/m^2/s
   type(time_type),       intent(in) :: Time !< The current model time
@@ -3625,7 +3625,7 @@ end subroutine ice_shelf_temp
 subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, flux_enter)
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
-  real,                   intent(in)    :: time_step !< The time step for this update, in s.
+  real,                   intent(in)    :: time_step !< The time step for this update [s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -3856,7 +3856,7 @@ end subroutine ice_shelf_advect_temp_x
 subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_after_vflux, flux_enter)
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
-  real,                   intent(in)    :: time_step !< The time step for this update, in s.
+  real,                   intent(in)    :: time_step !< The time step for this update [s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf

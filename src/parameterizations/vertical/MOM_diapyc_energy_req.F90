@@ -55,8 +55,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   type(thermo_var_ptrs),          intent(inout) :: tv   !< A structure containing pointers to any
                                                         !! available thermodynamic fields.
                                                         !! Absent fields have NULL ptrs.
-  real,                           intent(in)    :: dt   !< The amount of time covered by this call,
-                                                        !! in s.
+  real,                           intent(in)    :: dt   !< The amount of time covered by this call [s].
   type(diapyc_energy_req_CS),     pointer       :: CS   !< This module's control structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke+1), &
                         optional, intent(in)    :: Kd_int !< Interface diffusivities [Z2 s-1 ~> m2 s-1].
@@ -69,7 +68,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
     Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 s-1 ~> m2 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
   real :: ustar, absf, htot
-  real :: energy_Kd ! The energy used by diapycnal mixing in W m-2.
+  real :: energy_Kd ! The energy used by diapycnal mixing [W m-2].
   real :: tmp1  ! A temporary array.
   integer :: i, j, k, is, ie, js, je, nz, itt
   logical :: may_print

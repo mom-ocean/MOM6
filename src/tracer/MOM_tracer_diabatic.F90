@@ -40,7 +40,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                                                                      !! tracer, in units of (CU * kg m-2 s-1)
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
                                                                      !! (units of CU kg m-2; formerly CU m)
-  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks, in m s-1
+  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks [m s-1]
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 

@@ -236,8 +236,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     R0, &       !   The potential density referenced to the surface [kg m-3].
     Rcv         !   The coordinate variable potential density [kg m-3].
   real, dimension(SZI_(G),SZK_(GV)) :: &
-    u, &        !   The zonal velocity, in m s-1.
-    v, &        !   The meridional velocity, in m s-1.
+    u, &        !   The zonal velocity [m s-1].
+    v, &        !   The meridional velocity [m s-1].
     h_orig, &   !   The original thickness [H ~> m or kg m-2].
     d_eb, &     !   The downward increase across a layer in the entrainment from
                 ! below [H ~> m or kg m-2].  The sign convention is that positive values of
@@ -1330,7 +1330,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   real, dimension(2,SZI_(G)), intent(out)   :: cMKE    !< Coefficients of HpE and HpE^2 in
                                                        !! calculating the denominator of MKE_rate,
                                                        !! [H-1 ~> m-1 or m2 kg-1] and [H-2 ~> m-2 or m4 kg-2].
-  real,                       intent(in)    :: dt      !< The time step in s.
+  real,                       intent(in)    :: dt      !< The time step [s].
   real,                       intent(in)    :: Idt_diag !< The inverse of the accumulated diagnostic
                                                        !! time interval [s-1].
   integer,                    intent(in)    :: j       !< The j-index to work on.
@@ -1351,7 +1351,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
                     ! that release is positive [Z m2 s-2 ~> m3 s-2].
   real :: MKE_rate_CA ! MKE_rate for convective adjustment, ND, 0 to 1.
   real :: MKE_rate_FC ! MKE_rate for free convection, ND, 0 to 1.
-  real :: totEn_Z   ! The total potential energy released by convection, Z3 s-2.
+  real :: totEn_Z   ! The total potential energy released by convection, [Z3 s-2 ~> m3 s-2].
   real :: Ih        ! The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
   real :: exp_kh    ! The nondimensional decay of TKE across a layer [nondim].
   real :: absf      ! The absolute value of f averaged to thickness points, s-1.

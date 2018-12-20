@@ -17,10 +17,10 @@ type, public :: slight_CS ; private
   !> Number of layers/levels
   integer :: nk
 
-  !> Minimum thickness allowed when building the new grid through regridding (H)
+  !> Minimum thickness allowed when building the new grid through regridding [H ~> m or kg m-2]
   real :: min_thickness
 
-  !> Reference pressure for potential density calculations (Pa)
+  !> Reference pressure for potential density calculations [Pa]
   real :: ref_pressure
 
   !> Fraction (between 0 and 1) of compressibility to add to potential density
@@ -28,7 +28,7 @@ type, public :: slight_CS ; private
   real :: compressibility_fraction
 
   ! The following 4 parameters were introduced for use with the SLight coordinate:
-  !> Depth over which to average to determine the mixed layer potential density (H)
+  !> Depth over which to average to determine the mixed layer potential density [H ~> m or kg m-2]
   real :: Rho_ML_avg_depth
 
   !> Number of layers to offset the mixed layer density to find resolved stratification (nondim)
@@ -37,7 +37,7 @@ type, public :: slight_CS ; private
   !> The number of fixed-thickness layers at the top of the model
   integer :: nz_fixed_surface = 2
 
-  !> The fixed resolution in the topmost SLight_nkml_min layers (H)
+  !> The fixed resolution in the topmost SLight_nkml_min layers [H ~> m or kg m-2]
   real :: dz_ml_min
 
   !> If true, detect regions with much weaker stratification in the coordinate
@@ -126,11 +126,11 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
                                       !! compressibility to add to potential density profiles when
                                       !! interpolating for target grid positions. (nondim)
   real,    optional, intent(in) :: dz_ml_min        !< The fixed resolution in the topmost
-                                      !! SLight_nkml_min layers (H)
+                                      !! SLight_nkml_min layers [H ~> m or kg m-2]
   integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickness layers at the
                                       !! top of the model
   real,    optional, intent(in) :: Rho_ML_avg_depth !< Depth over which to average to determine
-                                      !! the mixed layer potential density (H)
+                                      !! the mixed layer potential density [H ~> m or kg m-2]
   real,    optional, intent(in) :: nlay_ML_offset   !< Number of layers to offset the mixed layer
                                       !! density to find resolved stratification (nondim)
   logical, optional, intent(in) :: fix_haloclines   !< If true, detect regions with much weaker than

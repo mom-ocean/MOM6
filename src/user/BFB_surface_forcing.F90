@@ -30,7 +30,7 @@ type, public :: BFB_surface_forcing_CS ; private
   real :: Rho0               !<   The density used in the Boussinesq
                              !! approximation [kg m-3].
   real :: G_Earth            !<   The gravitational acceleration [m s-2]
-  real :: Flux_const         !<   The restoring rate at the surface, in m s-1.
+  real :: Flux_const         !<   The restoring rate at the surface [m s-1].
   real :: gust_const         !<   A constant unresolved background gustiness
                              !! that contributes to ustar [Pa].
   real :: SST_s              !< SST at the southern edge of the linear

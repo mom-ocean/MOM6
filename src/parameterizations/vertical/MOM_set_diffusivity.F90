@@ -207,15 +207,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                             intent(in)    :: u    !< The zonal velocity, in m s-1.
+                             intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                             intent(in)    :: v    !< The meridional velocity, in m s-1.
+                             intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                              intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: u_h  !< Zonal velocity interpolated to h points, in m s-1.
+                             intent(in)    :: u_h  !< Zonal velocity interpolated to h points [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: v_h  !< Meridional velocity interpolated to h points, in m s-1.
+                             intent(in)    :: v_h  !< Meridional velocity interpolated to h points [m s-1].
   type(thermo_var_ptrs),     intent(inout) :: tv   !< Structure with pointers to thermodynamic
                                                    !! fields. Out is for tv%TempxPmE.
   type(forcing),             intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
@@ -283,8 +283,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
          "Module must be initialized before it is used.")
 
   I_Rho0     = 1.0/GV%Rho0
-  kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant in m2 s-1.
-  dt_fill    = 7200.              !### Dimensionalconstant in s.
+  kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant [m2 s-1].
+  dt_fill    = 7200.              !### Dimensionalconstant [s].
   Omega2     = CS%Omega*CS%Omega
 
   use_EOS = associated(tv%eqn_of_state)
@@ -1134,9 +1134,9 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: u    !< The zonal velocity, in m s-1
+                                    intent(in)    :: u    !< The zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                    intent(in)    :: v    !< The meridional velocity, in m s-1
+                                    intent(in)    :: v    !< The meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv   !< Structure containing pointers to any available
@@ -1371,9 +1371,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   type(verticalGrid_type),  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),    intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: u  !< u component of flow (m s-1)
+                            intent(in)    :: u  !< u component of flow [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: v  !< v component of flow (m s-1)
+                            intent(in)    :: v  !< v component of flow [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(in)    :: tv !< Structure containing pointers to any available
@@ -1437,7 +1437,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                  (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
 
-    ! u* at the bottom, in m s-1.
+    ! u* at the bottom [m s-1].
     ustar = visc%ustar_BBL(i,j)
     ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
@@ -1663,9 +1663,9 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: u    !< The zonal velocity, in m s-1
+                            intent(in)    :: u    !< The zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: v    !< The meridional velocity, in m s-1
+                            intent(in)    :: v    !< The meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),            intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes

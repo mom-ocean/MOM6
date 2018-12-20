@@ -37,16 +37,16 @@ type, public :: wave_structure_CS ; !private
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
   real, allocatable, dimension(:,:,:) :: w_strct
-                                   !< Vertical structure of vertical velocity (normalized), in m s-1.
+                                   !< Vertical structure of vertical velocity (normalized) [m s-1].
   real, allocatable, dimension(:,:,:) :: u_strct
-                                   !< Vertical structure of horizontal velocity (normalized), in m s-1.
+                                   !< Vertical structure of horizontal velocity (normalized) [m s-1].
   real, allocatable, dimension(:,:,:) :: W_profile
                                    !< Vertical profile of w_hat(z), where
                                    !! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
-                                   !! varying vertical velocity with w_hat(z) = W0*w_strct(z), in m s-1.
+                                   !! varying vertical velocity with w_hat(z) = W0*w_strct(z) [m s-1].
   real, allocatable, dimension(:,:,:) :: Uavg_profile
                                    !< Vertical profile of the magnitude of horizontal velocity,
-                                   !! (u^2+v^2)^0.5, averaged over a period, in m s-1.
+                                   !! (u^2+v^2)^0.5, averaged over a period [m s-1].
   real, allocatable, dimension(:,:,:) :: z_depths
                                    !< Depths of layer interfaces, in m.
   real, allocatable, dimension(:,:,:) :: N2
@@ -96,9 +96,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! (usually m or kg m-2).
   type(thermo_var_ptrs),                    intent(in)  :: tv !< A structure pointing to various
                                                               !! thermodynamic variables.
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode
-                                                              !! internal gravity wave speed,
-                                                              !! in m s-1.
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode internal
+                                                              !! gravity wave speed [m s-1].
   integer,                                  intent(in)  :: ModeNum !< Mode number
   real,                                     intent(in)  :: freq !< Intrinsic wave frequency [s-1].
   type(wave_structure_CS),                  pointer     :: CS !< The control structure returned

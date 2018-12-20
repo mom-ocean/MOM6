@@ -60,7 +60,7 @@ type, public :: VarMix_CS
     SN_v => NULL(), &  !< S*N at v-points (s^-1)
     L2u => NULL(), &   !< Length scale^2 at u-points (m^2)
     L2v => NULL(), &   !< Length scale^2 at v-points (m^2)
-    cg1 => NULL(), &   !< The first baroclinic gravity wave speed in m s-1.
+    cg1 => NULL(), &   !< The first baroclinic gravity wave speed [m s-1].
     Res_fn_h => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at h points.
     Res_fn_q => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
@@ -138,9 +138,9 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
-  real :: cg1_q  ! The gravity wave speed interpolated to q points, in m s-1.
-  real :: cg1_u  ! The gravity wave speed interpolated to u points, in m s-1.
-  real :: cg1_v  ! The gravity wave speed interpolated to v points, in m s-1.
+  real :: cg1_q  ! The gravity wave speed interpolated to q points [m s-1].
+  real :: cg1_u  ! The gravity wave speed interpolated to u points [m s-1].
+  real :: cg1_v  ! The gravity wave speed interpolated to v points [m s-1].
   real :: dx_term
   integer :: power_2
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz

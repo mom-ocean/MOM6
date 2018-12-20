@@ -2208,16 +2208,18 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
-  real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the new grid (H)
+  real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the
+                                                    !! new grid [H ~> m or kg m-2]
   real,    optional, intent(in) :: old_grid_weight  !< Weight given to old coordinate when time-filtering grid
   character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
   real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic [H ~> m or kg m-2]
   real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic [H ~> m or kg m-2]
   real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density
-  real,    optional, intent(in) :: dz_min_surface   !< The fixed resolution in the topmost SLight_nkml_min layers (H)
+  real,    optional, intent(in) :: dz_min_surface   !< The fixed resolution in the topmost
+                                                    !! SLight_nkml_min layers [H ~> m or kg m-2]
   integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickness layers at the top of the model
   real,    optional, intent(in) :: Rho_ml_avg_depth !< Averaging depth over which to determine mixed layer potential
-                                                    !! density (H)
+                                                    !! density [H ~> m or kg m-2]
   real,    optional, intent(in) :: nlay_ML_to_interior !< Number of layers to offset the mixed layer density to find
                                                     !! resolved stratification (nondim)
   logical, optional, intent(in) :: fix_haloclines   !< Detect regions with much weaker stratification in the coordinate

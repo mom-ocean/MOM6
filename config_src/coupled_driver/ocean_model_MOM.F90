@@ -240,7 +240,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                               !! internal variables in the ice model.
   ! Local variables
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
-  real :: G_Earth     ! The gravitational acceleration in m s-2.
+  real :: G_Earth     ! The gravitational acceleration [m s-2].
   real :: HFrz        !< If HFrz > 0 (m), melt potential will be computed.
                       !! The actual depth over which melt potential is computed will
                       !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
@@ -439,7 +439,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   logical, optional, intent(in)    :: end_cycle   !< This indicates whether this call is to be
                                               !! treated as the last call to step_MOM in a
                                               !! time-stepping cycle; missing is like true.
-  real,    optional, intent(in)    :: cycle_length !< The duration of a coupled time stepping cycle, in s.
+  real,    optional, intent(in)    :: cycle_length !< The duration of a coupled time stepping cycle [s].
 
   ! Local variables
   type(time_type) :: Time_seg_start ! Stores the ocean model time at the start of this call to allow
@@ -447,11 +447,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   type(time_type) :: Time1  ! The value of the ocean model's time at the start of a call to step_MOM.
   integer :: index_bnds(4)  ! The computational domain index bounds in the ice-ocean boundary type.
   real :: weight            ! Flux accumulation weight of the current fluxes.
-  real :: dt_coupling       ! The coupling time step in seconds.
-  real :: dt_therm          ! A limited and quantized version of OS%dt_therm (sec)
-  real :: dt_dyn            ! The dynamics time step in sec.
-  real :: dtdia             ! The diabatic time step in sec.
-  real :: t_elapsed_seg     ! The elapsed time in this update segment, in s.
+  real :: dt_coupling       ! The coupling time step [s].
+  real :: dt_therm          ! A limited and quantized version of OS%dt_therm [s].
+  real :: dt_dyn            ! The dynamics time step [s].
+  real :: dtdia             ! The diabatic time step [s].
+  real :: t_elapsed_seg     ! The elapsed time in this update segment [s].
   integer :: n              ! The internal iteration counter.
   integer :: nts            ! The number of baroclinic dynamics time steps in a thermodynamic step.
   integer :: n_max          ! The number of calls to step_MOM dynamics in this call to update_ocean_model.

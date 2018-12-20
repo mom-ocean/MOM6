@@ -126,7 +126,7 @@ type, public :: tidal_mixing_cs
   real :: TKE_itide_max       !< maximum internal tide conversion (W m-2)
                               !! available to mix above the BBL
 
-  real :: utide               !< constant tidal amplitude (m s-1) used if
+  real :: utide               !< constant tidal amplitude [m s-1] used if
   real :: kappa_itides        !< topographic wavenumber and non-dimensional scaling [Z-1 ~> m-1].
   real :: kappa_h2_factor     !< factor for the product of wavenumber * rms sgs height
   character(len=200) :: inputdir !< The directory in which to find input files
@@ -153,7 +153,7 @@ type, public :: tidal_mixing_cs
   real, pointer, dimension(:,:) :: Nb          => NULL() !< The near bottom buoyancy frequency, in s-1.
   real, pointer, dimension(:,:) :: mask_itidal => NULL() !< A mask of where internal tide energy is input
   real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance, in m2.
-  real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [m/s]
+  real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [m s-1]
   real, allocatable, dimension(:)     :: h_src           !< tidal constituent input layer thickness [m]
   real, allocatable, dimension(:,:)   :: tidal_qe_2d     !< Tidal energy input times the local dissipation
                                                          !! fraction, q*E(x,y), with the CVMix implementation

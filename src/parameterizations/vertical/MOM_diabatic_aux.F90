@@ -66,10 +66,14 @@ type, public :: diabatic_aux_CS ; private
   integer :: id_nonpenSW_diag  = -1 !< Diagnostic ID of Non-penetrative shortwave heating
 
   ! Optional diagnostic arrays
-  real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to avoid grounding (m/s)
-  real, allocatable, dimension(:,:,:) :: penSW_diag     !< Heating in a layer from convergence of penetrative SW (W/m2)
-  real, allocatable, dimension(:,:,:) :: penSWflux_diag !< Penetrative SW flux at base of grid layer (W/m2)
-  real, allocatable, dimension(:,:)   :: nonpenSW_diag  !< Non-downwelling SW radiation (W/m2) at ocean surface
+  real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to
+                                                        !! avoid grounding [m s-1]
+  real, allocatable, dimension(:,:,:) :: penSW_diag     !< Heating in a layer from convergence of
+                                                        !! penetrative SW [W m-2]
+  real, allocatable, dimension(:,:,:) :: penSWflux_diag !< Penetrative SW flux at base of grid
+                                                        !! layer [W m-2]
+  real, allocatable, dimension(:,:)   :: nonpenSW_diag  !< Non-downwelling SW radiation at ocean
+                                                        !! surface [W m-2]
 
 end type diabatic_aux_CS
 
@@ -542,15 +546,15 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
   type(ocean_grid_type),     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                             intent(in)  :: u    !< The zonal velocity, in m s-1
+                             intent(in)  :: u    !< The zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                             intent(in)  :: v    !< The meridional velocity, in m s-1
+                             intent(in)  :: v    !< The meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(out)   :: u_h !< Zonal velocity interpolated to h points, in m s-1.
+                             intent(out)   :: u_h !< Zonal velocity interpolated to h points [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(out)   :: v_h !< Meridional velocity interpolated to h points, in m s-1.
+                             intent(out)   :: v_h !< Meridional velocity interpolated to h points [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in)  :: ea !< The amount of fluid entrained from the layer
                                                  !! above within this time step [H ~> m or kg m-2].
@@ -1201,7 +1205,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
       tv%T(i,j,k) = T2d(i,k)
     enddo ; enddo
 
-    ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
+    ! Diagnose heating [W m-2] applied to a grid cell from SW penetration
     ! Also diagnose the penetrative SW heat flux at base of layer.
     if (CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
