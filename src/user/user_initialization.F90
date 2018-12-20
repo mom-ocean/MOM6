@@ -242,8 +242,8 @@ end subroutine write_user_log
 !!  The one argument passed to initialize, Time, is set to the
 !!  current time of the simulation.  The fields which are initialized
 !!  here are:
-!!  - u - Zonal velocity in m s-1.
-!!  - v - Meridional velocity in m s-1.
+!!  - u - Zonal velocity [m s-1].
+!!  - v - Meridional velocity [m s-1].
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
 !!  - G%CoriolisBu - The Coriolis parameter [s-1].

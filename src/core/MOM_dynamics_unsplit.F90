@@ -106,14 +106,14 @@ implicit none ; private
 !> MOM_dynamics_unsplit module control structure
 type, public :: MOM_dyn_unsplit_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    !< CAu = f*v - u.grad(u) in m s-2.
-    PFu, &    !< PFu = -dM/dx, in m s-2.
-    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+    CAu, &    !< CAu = f*v - u.grad(u) [m s-2].
+    PFu, &    !< PFu = -dM/dx [m s-2].
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    !< CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &    !< PFv = -dM/dy, in m s-2.
-    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+    CAv, &    !< CAv = -f*u - u.grad(v) [m s-2].
+    PFv, &    !< PFv = -dM/dy [m s-2].
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor (Pa)
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor (Pa)
@@ -186,8 +186,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v !< The meridional velocity, in m s-1.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u !< The zonal velocity [m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thicknesses [H ~> m or kg m-2].
                                                    !! (usually m or kg m-2).
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure pointing to various
@@ -196,12 +196,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                  !! viscosities, bottom drag viscosities, and related fields.
   type(time_type),         intent(in)    :: Time_local   !< The model time at the end
                                                          !! of the time step.
-  real,                    intent(in)    :: dt     !< The dynamics time step, in s.
+  real,                    intent(in)    :: dt     !< The dynamics time step [s].
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   real, dimension(:,:),    pointer       :: p_surf_begin !< A pointer (perhaps NULL) to the surface
-                                                   !! pressure at the start of this dynamic step, in Pa.
+                                                   !! pressure at the start of this dynamic step [Pa].
   real, dimension(:,:),    pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the surface
-                                                   !! pressure at the end of this dynamic step, in Pa.
+                                                   !! pressure at the end of this dynamic step [Pa].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport,
                                                    !! in m3 s-1 or kg s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh !< The meridional volume or mass
@@ -566,9 +566,9 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   type(verticalGrid_type),        intent(in)    :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),          intent(in)    :: US         !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                  intent(inout) :: u          !< The zonal velocity, in m s-1.
+                                  intent(inout) :: u          !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                  intent(inout) :: v          !< The meridional velocity, in m s-1.
+                                  intent(inout) :: v          !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , &
                                   intent(inout) :: h          !< Layer thicknesses [H ~> m or kg m-2]
                                                               !! (usually m or kg m-2).

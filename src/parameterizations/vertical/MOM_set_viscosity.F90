@@ -46,7 +46,7 @@ type, public :: set_visc_CS ; private
   real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
                             !! calculating the drag in channels.
   real    :: drag_bg_vel    !< An assumed unresolved background velocity for
-                            !! calculating the bottom drag, in m s-1.
+                            !! calculating the bottom drag [m s-1].
   real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness [H ~> m or kg m-2].
                             !! This might be Kv / (cdrag * drag_bg_vel) to give
                             !! Kv as the minimum near-bottom viscosity.
@@ -107,9 +107,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: u    !< The zonal velocity, in m s-1.
+                            intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: v    !< The meridional velocity, in m s-1.
+                            intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),    intent(in)    :: tv   !< A structure containing pointers to any
@@ -125,7 +125,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   ! Local variables
   real, dimension(SZIB_(G)) :: &
-    ustar, &    !   The bottom friction velocity, in m s-1.
+    ustar, &    !   The bottom friction velocity [m s-1].
     T_EOS, &    !   The temperature used to calculate the partial derivatives
                 ! of density with T and S [degC].
     S_EOS, &    !   The salinity used to calculate the partial derivatives
@@ -908,7 +908,7 @@ end subroutine set_viscous_BBL
 function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                         intent(in) :: v    !< The meridional velocity, in m s-1
+                         intent(in) :: v    !< The meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   integer,               intent(in) :: i    !< The i-index of the u-location to work on.
@@ -917,7 +917,7 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
   real, dimension(SZI_(G),SZJB_(G)),&
                          intent(in) :: mask2dCv !< A multiplicative mask of the v-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
-  real                              :: set_v_at_u !< The retur value of v at u points, in m s-1.
+  real                              :: set_v_at_u !< The retur value of v at u points [m s-1].
 
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(0:1,-1:0)    ! Masked weights used to average u onto v [H ~> m or kg m-2].
@@ -951,7 +951,7 @@ end function set_v_at_u
 function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                         intent(in) :: u    !< The zonal velocity, in m s-1
+                         intent(in) :: u    !< The zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   integer,               intent(in) :: i    !< The i-index of the u-location to work on.
@@ -960,7 +960,7 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
   real, dimension(SZIB_(G),SZJ_(G)), &
                          intent(in) :: mask2dCu !< A multiplicative mask of the u-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
-  real                              :: set_u_at_v !< The return value of u at v points, in m s-1.
+  real                              :: set_u_at_v !< The return value of u at v points [m s-1].
 
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(-1:0,0:1)    ! Masked weights used to average u onto v [H ~> m or kg m-2].
@@ -1000,9 +1000,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+                           intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+                           intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
@@ -1011,7 +1011,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
-  real,                    intent(in)    :: dt   !< Time increment in s.
+  real,                    intent(in)    :: dt   !< Time increment [s].
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to vertvisc_init.
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
@@ -1070,8 +1070,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: S_lay     ! The layer salinity at velocity points [PSU].
   real :: Rlay      ! The layer potential density at velocity points [kg m-3].
   real :: Rlb       ! The potential density of the layer below [kg m-3].
-  real :: v_at_u    ! The meridonal velocity at a zonal velocity point in m s-1.
-  real :: u_at_v    ! The zonal velocity at a meridonal velocity point in m s-1.
+  real :: v_at_u    ! The meridonal velocity at a zonal velocity point [m s-1].
+  real :: u_at_v    ! The zonal velocity at a meridonal velocity point [m s-1].
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
                     ! on the mixed layer thickness and density difference across
                     ! the base of the mixed layer, in m2 s-2.

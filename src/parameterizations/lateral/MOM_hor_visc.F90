@@ -179,17 +179,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                 intent(in)  :: u      !< The zonal velocity, in m s-1.
+                                 intent(in)  :: u      !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                 intent(in)  :: v      !< The meridional velocity, in m s-1.
+                                 intent(in)  :: v      !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                                  intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
-                                                       !! along-coordinate stress tensor (m/s2)
+                                                       !! along-coordinate stress tensor [m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(out) :: diffv  !< Meridional acceleration due to convergence
-                                                       !! of along-coordinate stress tensor (m/s2).
+                                                       !! of along-coordinate stress tensor [m s-2].
   type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
@@ -978,8 +978,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                            ! grid spacing, to limit biharmonic viscosity
   real :: Kh               ! Lapacian horizontal viscosity (m2/s)
   real :: Ah               ! biharmonic horizontal viscosity (m4/s)
-  real :: Kh_vel_scale     ! this speed (m/s) times grid spacing gives Lap visc
-  real :: Ah_vel_scale     ! this speed (m/s) times grid spacing cubed gives bih visc
+  real :: Kh_vel_scale     ! this speed [m s-1] times grid spacing gives Lap visc
+  real :: Ah_vel_scale     ! this speed [m s-1] times grid spacing cubed gives bih visc
   real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
   real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
   real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
@@ -987,10 +987,10 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: dt               ! dynamics time step (sec)
   real :: Idt              ! inverse of dt (1/s)
   real :: denom            ! work variable; the denominator of a fraction
-  real :: maxvel           ! largest permitted velocity components (m/s)
+  real :: maxvel           ! largest permitted velocity components [m s-1]
   real :: bound_Cor_vel    ! grid-scale velocity variations at which value
                            ! the quadratically varying biharmonic viscosity
-                           ! balances Coriolis acceleration (m/s)
+                           ! balances Coriolis acceleration [m s-1]
   real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity (m2/s)
   real :: Kh_pwr_of_sine   ! Power used to raise sin(lat) when using Kh_sin_lat
   logical :: bound_Cor_def ! parameter setting of BOUND_CORIOLIS

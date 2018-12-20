@@ -142,10 +142,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real, dimension(SZI_(G),SZJ_(G)) :: &
     MLD_fast, &           ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
     htot_fast, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
-    Rml_av_fast, &        ! g_Rho0 times the average mixed layer density (m s-2)
+    Rml_av_fast, &        ! g_Rho0 times the average mixed layer density [m s-2]
     MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
     htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
-    Rml_av_slow           ! g_Rho0 times the average mixed layer density (m s-2)
+    Rml_av_slow           ! g_Rho0 times the average mixed layer density [m s-2]
   real :: g_Rho0          ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
   real :: rho_ml(SZI_(G)) ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
@@ -567,7 +567,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
                           ! of H m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot, &               ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
-    Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
+    Rml_av                ! g_Rho0 times the average mixed layer density [m s-2]
   real :: g_Rho0          ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
   real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)

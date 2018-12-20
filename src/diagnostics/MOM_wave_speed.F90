@@ -54,7 +54,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed (m/s)
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [m s-1]
   type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
   logical, optional,                intent(in)  :: full_halos !< If true, do the calculation
                                           !! over the entire computational domain.
@@ -522,7 +522,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds (m/s)
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [m s-1]
   type(wave_speed_CS), optional,            pointer     :: CS !< Control structure for MOM_wave_speed
   logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
                                                                       !! over the entire computational domain.

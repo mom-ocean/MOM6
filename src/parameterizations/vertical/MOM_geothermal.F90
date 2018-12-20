@@ -24,10 +24,10 @@ public geothermal, geothermal_init, geothermal_end
 type, public :: geothermal_CS ; private
   real    :: dRcv_dT_inplace !<   The value of dRcv_dT above which (dRcv_dT is
                              !! negative) the water is heated in place instead
-                             !! of moving upward between layers, in kg m-3 K-1.
-  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux, in W m-2.
+                             !! of moving upward between layers [kg m-3 degC-1].
+  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux [W m-2].
   real    :: geothermal_thick !< The thickness over which geothermal heating is
-                             !! applied, in m.
+                             !! applied [m] (not [H]).
   logical :: apply_geothermal !< If true, geothermal heating will be applied
                              !! otherwise GEOTHERMAL_SCALE has been set to 0 and
                              !! there is no heat to apply.
@@ -54,7 +54,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
                                                                 !! to any available thermodynamic
                                                                 !! fields. Absent fields have NULL
                                                                 !! ptrs.
-  real,                                     intent(in)    :: dt !< Time increment, in s.
+  real,                                     intent(in)    :: dt !< Time increment [s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The amount of fluid moved
                                                                 !! downward into a layer; this
                                                                 !! should be increased due to mixed
@@ -71,31 +71,35 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   real, dimension(SZI_(G)) :: &
     heat_rem,  & ! remaining heat (H * degC)
     h_geo_rem, & ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
-    Rcv_BL,    & ! coordinate density in the deepest variable density layer (kg/m3)
-    p_ref        ! coordiante densities reference pressure (Pa)
+    Rcv_BL,    & ! coordinate density in the deepest variable density layer [kg m-3]
+    p_ref        ! coordiante densities reference pressure [Pa]
 
   real, dimension(2) :: &
-    T2, S2, &   ! temp and saln in the present and target layers (degC and ppt)
-    dRcv_dT_, & ! partial derivative of coordinate density wrt temp (kg m-3 K-1)
-    dRcv_dS_    ! partial derivative of coordinate density wrt saln (kg m-3 ppt-1)
+    T2, S2, &   ! temp and saln in the present and target layers [degC] and [ppt]
+    dRcv_dT_, & ! partial derivative of coordinate density wrt temp [kg m-3 degC-1]
+    dRcv_dS_    ! partial derivative of coordinate density wrt saln [kg m-3 ppt-1]
 
   real :: Angstrom, H_neglect  ! small thicknesses [H ~> m or kg m-2]
-  real :: Rcv           ! coordinate density of present layer (kg m-3)
-  real :: Rcv_tgt       ! coordinate density of target layer (kg m-3)
-  real :: dRcv          ! difference between Rcv and Rcv_tgt (kg m-3)
+  real :: Rcv           ! coordinate density of present layer [kg m-3]
+  real :: Rcv_tgt       ! coordinate density of target layer [kg m-3]
+  real :: dRcv          ! difference between Rcv and Rcv_tgt [kg m-3]
   real :: dRcv_dT       ! partial derivative of coordinate density wrt temp
                         ! in the present layer (kg m-3 K-1); usually negative
   real :: h_heated      ! thickness that is being heated [H ~> m or kg m-2]
-  real :: heat_avail    ! heating available for the present layer (units of Kelvin * H)
-  real :: heat_in_place ! heating to warm present layer w/o movement between layers (K * H)
-  real :: heat_trans    ! heating available to move water from present layer to target layer (K * H)
-  real :: heating       ! heating used to move water from present layer to target layer (K * H)
+  real :: heat_avail    ! heating available for the present layer [degC H ~> degC m or degC kg m-2]
+  real :: heat_in_place ! heating to warm present layer w/o movement between layers
+                        ! [degC H ~> degC m or degC kg m-2]
+  real :: heat_trans    ! heating available to move water from present layer to target
+                        ! layer [degC H ~> degC m or degC kg m-2]
+  real :: heating       ! heating used to move water from present layer to target layer
+                        ! [degC H ~> degC m or degC kg m-2]
                         ! 0 <= heating <= heat_trans
   real :: h_transfer    ! thickness moved between layers [H ~> m or kg m-2]
-  real :: wt_in_place   ! relative weighting that goes from 0 to 1 (non-dim)
-  real :: I_h           ! inverse thickness (units of 1/H)
-  real :: dTemp         ! temperature increase in a layer (Kelvin)
-  real :: Irho_cp       ! inverse of heat capacity per unit layer volume (units K H m2 J-1)
+  real :: wt_in_place   ! relative weighting that goes from 0 to 1 [nondim]
+  real :: I_h           ! inverse thickness [H-1 ~> m-1 or m2 kg-1]
+  real :: dTemp         ! temperature increase in a layer [degC]
+  real :: Irho_cp       ! inverse of heat capacity per unit layer volume
+                        ! [degC H m2 J-1 ~> degC m3 J-1 or degC kg J-1]
 
   logical :: do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz, k2, i2

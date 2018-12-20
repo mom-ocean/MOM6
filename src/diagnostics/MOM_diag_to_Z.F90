@@ -49,8 +49,8 @@ type, public :: diag_to_Z_CS ; private
   ! module and unavailable outside of it.
 
   real, pointer, dimension(:,:,:) :: &
-    u_z  => NULL(), &   !< zonal velocity remapped to depth space (m/s)
-    v_z  => NULL(), &   !< meridional velocity remapped to depth space (m/s)
+    u_z  => NULL(), &   !< zonal velocity remapped to depth space [m s-1]
+    v_z  => NULL(), &   !< meridional velocity remapped to depth space [m s-1]
     uh_z => NULL(), &   !< zonal transport remapped to depth space [H m2 s-1 ~> m3 s-1 or kg s-1]
     vh_z => NULL()      !< meridional transport remapped to depth space [H m2 s-1 ~> m3 s-1 or kg s-1]
 
@@ -150,9 +150,9 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+                           intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+                           intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &

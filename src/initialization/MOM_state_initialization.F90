@@ -124,11 +124,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                              intent(out)   :: u    !< The zonal velocity that is being initialized,
-                                                    !! in m s-1
+                              intent(out)   :: u    !< The zonal velocity that is being
+                                                    !! initialized [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                               intent(out)   :: v    !< The meridional velocity that is being
-                                                    !! initialized, in m s-1
+                                                    !! initialized [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                               intent(out)   :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),      intent(inout) :: tv   !< A structure pointing to various thermodynamic
@@ -159,8 +159,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: new_sim
   integer :: write_geom
   logical :: use_temperature, use_sponge, use_OBC
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
+  logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
                          ! by a large surface pressure by squeezing the column.
   logical :: trim_ic_for_p_surf ! If true, remove the mass that would be displaced
@@ -1239,9 +1238,9 @@ end subroutine cut_off_column_top
 subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
+                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized, in m s-1
+                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1279,9 +1278,9 @@ end subroutine initialize_velocity_from_file
 subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
+                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized, in m s-1
+                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1313,9 +1312,9 @@ end subroutine initialize_velocity_zero
 subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
+                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized, in m s-1
+                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1353,9 +1352,9 @@ end subroutine initialize_velocity_uniform
 subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized, in m s-1
+                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized, in m s-1
+                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1373,7 +1372,7 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
 
   call get_param(param_file, mdl, "CIRCULAR_MAX_U", circular_max_u, &
                  "The amplitude of zonal flow from which to scale the\n"// &
-                 "circular stream function (m/s).", &
+                 "circular stream function [m s-1].", &
                  units="m s-1", default=0., do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.

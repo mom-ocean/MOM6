@@ -91,20 +91,20 @@ type, public :: ice_shelf_CS ; private
   real :: ustar_bg     !< A minimum value for ustar under ice shelves [Z s-1 ~> m s-1].
   real :: cdrag        !< drag coefficient under ice shelves , non-dimensional.
   real :: g_Earth      !< The gravitational acceleration [m s-2]
-  real :: Cp           !< The heat capacity of sea water, in J kg-1 K-1.
+  real :: Cp           !< The heat capacity of sea water [J kg-1 degC-1].
   real :: Rho0         !< A reference ocean density in kg/m3.
-  real :: Cp_ice       !< The heat capacity of fresh ice, in J kg-1 K-1.
+  real :: Cp_ice       !< The heat capacity of fresh ice [J kg-1 degC-1].
   real :: gamma_t      !< The (fixed) turbulent exchange velocity in the
-                       !< 2-equation formulation, in m s-1.
+                       !< 2-equation formulation [m s-1].
   real :: Salin_ice    !< The salinity of shelf ice [PSU].
-  real :: Temp_ice     !< The core temperature of shelf ice, in C.
-  real :: kv_ice       !< The viscosity of ice, in m2 s-1.
+  real :: Temp_ice     !< The core temperature of shelf ice, in degC.
+  real :: kv_ice       !< The viscosity of ice [m2 s-1].
   real :: density_ice  !< A typical density of ice [kg m-3].
   real :: rho_ice      !< Nominal ice density in kg m-2 Z-1
-  real :: kv_molec     !< The molecular kinematic viscosity of sea water, m2 s-1.
-  real :: kd_molec_salt!< The molecular diffusivity of salt, in m2 s-1.
-  real :: kd_molec_temp!< The molecular diffusivity of heat, in m2 s-1.
-  real :: Lat_fusion   !< The latent heat of fusion, in J kg-1.
+  real :: kv_molec     !< The molecular kinematic viscosity of sea water [m2 s-1].
+  real :: kd_molec_salt!< The molecular diffusivity of salt [m2 s-1].
+  real :: kd_molec_temp!< The molecular diffusivity of heat [m2 s-1].
+  real :: Lat_fusion   !< The latent heat of fusion [J kg-1].
   real :: Gamma_T_3EQ  !<  Nondimensional heat-transfer coefficient, used in the 3Eq. formulation
                        !<  This number should be specified by the user.
   real :: col_thick_melt_threshold !< if the mixed layer is below this threshold, melt rate
@@ -127,13 +127,13 @@ type, public :: ice_shelf_CS ; private
                             !! should be exclusive)
   real :: density_ocean_avg !< this does not affect ocean circulation OR thermodynamics
                             !! it is to estimate the gravitational driving force at the
-                            !! shelf front(until we think of a better way to do it-
+                            !! shelf front (until we think of a better way to do it,
                             !! but any difference will be negligible)
   logical :: calve_to_mask  !< If true, calve any ice that passes outside of a masked area
   real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
   real :: T0                !< temperature at ocean surface in the restoring region, in degC
   real :: S0                !< Salinity at ocean surface in the restoring region, in ppt.
-  real :: input_flux        !< Ice volume flux at an upstream open boundary, in m3 s-1.
+  real :: input_flux        !< Ice volume flux at an upstream open boundary [m3 s-1].
   real :: input_thickness   !< Ice thickness at an upstream open boundary, in m.
 
   type(time_type) :: Time                !< The component's time.
@@ -209,7 +209,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                                           !! the ice-shelf state
 
   real, dimension(SZI_(CS%grid)) :: &
-    Rhoml, &   !< Ocean mixed layer density in kg m-3.
+    Rhoml, &   !< Ocean mixed layer density [kg m-3].
     dR0_dT, &  !< Partial derivative of the mixed layer density
                !< with temperature [kg m-3 degC-1].
     dR0_dS, &  !< Partial derivative of the mixed layer density
@@ -231,7 +231,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                !! viscosity is linearly increasing. (Was 1/8. Why?)
   real, parameter :: RC    = 0.20     ! critical flux Richardson number.
   real :: I_ZETA_N !< The inverse of ZETA_N.
-  real :: LF, I_LF !< Latent Heat of fusion (J kg-1) and its inverse.
+  real :: LF, I_LF !< Latent Heat of fusion [J kg-1] and its inverse.
   real :: I_VK     !< The inverse of VK.
   real :: PR, SC   !< The Prandtl number and Schmidt number [nondim].
 
@@ -241,13 +241,14 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   real :: Sbdry_it
   real :: Sbdry1, Sbdry2, S_a, S_b, S_c  ! use to find salt roots
   real :: dS_it    !< The interface salinity change during an iteration [PSU].
-  real :: hBL_neut !< The neutral boundary layer thickness, in m.
+  real :: hBL_neut !< The neutral boundary layer thickness [m].
   real :: hBL_neut_h_molec !< The ratio of the neutral boundary layer thickness
                    !! to the molecular boundary layer thickness [nondim].
-  real :: wT_flux !< The vertical fluxes of heat and buoyancy just inside the
-  real :: wB_flux !< ocean, in C m s-1 and m2 s-3, ###CURRENTLY POSITIVE UPWARD.
-  real :: dB_dS   !< The derivative of buoyancy with salinity, in m s-2 PSU-1.
-  real :: dB_dT   !< The derivative of buoyancy with temperature, in m s-2 C-1.
+  !### THESE ARE CURRENTLY POSITIVE UPWARD.
+  real :: wT_flux !< The vertical flux of heat just inside the ocean [degC m s-1].
+  real :: wB_flux !< The vertical flux of heat just inside the ocean [m2 s-3].
+  real :: dB_dS   !< The derivative of buoyancy with salinity [m s-2 PSU-1].
+  real :: dB_dT   !< The derivative of buoyancy with temperature [m s-2 degC-1].
   real :: I_n_star, n_star_term, absf
   real :: dIns_dwB !< The partial derivative of I_n_star with wB_flux, in ???.
   real :: dT_ustar, dS_ustar
@@ -1747,7 +1748,7 @@ subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
   real,            intent(in)    :: time_step !< The time interval for this update [s].
   integer,         intent(inout) :: nsteps  !< The running number of ice shelf steps.
   type(time_type), intent(inout) :: Time !< The current model time
-  real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step in s.
+  real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step [s].
 
   type(ocean_grid_type), pointer :: G => NULL()
   type(unit_scale_type), pointer :: US => NULL() ! Pointer to a structure containing

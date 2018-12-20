@@ -561,11 +561,11 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   ! These are 1-D arrays of pointers to 2-d arrays to minimize memory usage.
   type(p2d), dimension(SZJ_(G)) :: &
     deep_wt_Lu, deep_wt_Ru, &  ! The relative weighting of the deeper of a pair [nondim].
-    hP_Lu, hP_Ru       ! The total thickness on each side for each pair, in m or kg m-2.
+    hP_Lu, hP_Ru       ! The total thickness on each side for each pair [H ~> m or kg m-2].
 
   type(p2d), dimension(SZJB_(G)) :: &
     deep_wt_Lv, deep_wt_Rv, & ! The relative weighting of the deeper of a pair [nondim].
-    hP_Lv, hP_Rv       ! The total thickness on each side for each pair, in m or kg m-2.
+    hP_Lv, hP_Rv       ! The total thickness on each side for each pair [H ~> m or kg m-2].
 
   type(p2di), dimension(SZJ_(G)) :: &
     k0b_Lu, k0a_Lu, &  ! The original k-indices of the layers that participate
@@ -580,7 +580,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   real, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
     rho_srt, & ! The density of each layer of the sorted columns [kg m-3].
-    h_srt      ! The thickness of each layer of the sorted columns, in m or kg m-2.
+    h_srt      ! The thickness of each layer of the sorted columns [H ~> m or kg m-2].
   integer, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
     k0_srt     ! The original k-index that each layer of the sorted column
                ! corresponds to.
@@ -589,7 +589,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     h_demand_L, & ! The thickness in the left (_L) or right (_R) column that
     h_demand_R, & ! is demanded to match the thickness in the counterpart [H ~> m or kg m-2].
     h_used_L, &   ! The summed thickness from the left or right columns that
-    h_used_R, &   ! have actually been used, in m or kg m-2 (H).
+    h_used_R, &   ! have actually been used [H ~> m or kg m-2].
     h_supply_frac_L, &  ! The fraction of the demanded thickness that can
     h_supply_frac_R     ! actually be supplied from a layer.
   integer, dimension(SZK_(G)) :: &
@@ -609,7 +609,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   integer, dimension(SZI_(G), SZJB_(G)) :: &
     nPv          ! The number of epipycnal pairings at each v-point.
   real :: h_exclude    ! A thickness that layers must attain to be considered
-                       ! for inclusion in mixing, in m.
+                       ! for inclusion in mixing [H ~> m or kg m-2].
   real :: Idt        ! The inverse of the time step [s-1].
   real :: I_maxitt   ! The inverse of the maximum number of iterations.
   real :: rho_pair, rho_a, rho_b  ! Temporary densities [kg m-3].
@@ -622,9 +622,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real :: Tr_flux    ! The tracer flux from left to right in a pair, in conc m3.
   real :: Tr_adj_vert  ! A downward vertical adjustment to Tr_flux between the
                      ! two cells that make up one side of the pairing, in conc m3.
-  real :: h_L, h_R   ! Thicknesses to the left and right, in m or kg m-2 (H).
+  real :: h_L, h_R   ! Thicknesses to the left and right [H ~> m or kg m-2].
   real :: wt_a, wt_b ! Fractional weights of layers above and below [nondim].
-  real :: vol        ! A cell volume or mass, in m3 or kg (H m2).
+  real :: vol        ! A cell volume or mass [H m2 ~> m3 or kg].
   logical, dimension(SZK_(G)) :: &
     left_set, &  ! If true, the left or right point determines the density of
     right_set    ! of the trio.  If densities are exactly equal, both are true.

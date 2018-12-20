@@ -348,8 +348,8 @@ end subroutine Phillips_initialize_topography
 !!  The one argument passed to initialize, Time, is set to the
 !!  current time of the simulation.  The fields which are initialized
 !!  here are:
-!!    u - Zonal velocity in m s-1.
-!!    v - Meridional velocity in m s-1.
+!!    u - Zonal velocity [m s-1].
+!!    v - Meridional velocity [m s-1].
 !!    h - Layer thickness in m.  (Must be positive.)
 !!    D - Basin depth in m.  (Must be positive.)
 !!    f - The Coriolis parameter [s-1].

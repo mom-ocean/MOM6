@@ -75,7 +75,7 @@ type, public :: OBC_segment_data_type
   integer                         :: nk_src     !< Number of vertical levels in the source data
   real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment data (m)
   real, dimension(:,:,:), pointer :: buffer_dst=>NULL() !< buffer src data remapped to the target vertical grid
-  real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity (m s-1)
+  real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity [m s-1]
   real                            :: value              !< constant value if fid is equal to -1
 end type OBC_segment_data_type
 
@@ -145,15 +145,15 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !< The layer velocity normal to the OB
-                                                            !! segment (m s-1).
+                                                            !! segment [m s-1].
   real, pointer, dimension(:,:,:) :: tangential_vel=>NULL() !< The layer velocity tangential to the
-                                                            !! OB segment (m s-1).
+                                                            !! OB segment [m s-1].
   real, pointer, dimension(:,:,:) :: tangential_grad=>NULL() !< The gradient of the velocity tangential
-                                                            !! to the OB segment (m s-1).
+                                                            !! to the OB segment [m s-1].
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
                                                             !! segment (m3 s-1).
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
-                                                            !! the OB segment (m s-1).
+                                                            !! the OB segment [m s-1].
   real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment (m).
   real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
                                                             !! segment (s-1)
@@ -168,9 +168,9 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: cff_normal=>NULL()     !< The denominator for oblique radiation
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: nudged_normal_vel=>NULL() !< The layer velocity normal to the OB segment
-                                                            !! that values should be nudged towards (m s-1).
+                                                            !! that values should be nudged towards [m s-1].
   real, pointer, dimension(:,:,:) :: nudged_tangential_vel=>NULL() !< The layer velocity tangential to the OB segment
-                                                            !! that values should be nudged towards (m s-1).
+                                                            !! that values should be nudged towards [m s-1].
   real, pointer, dimension(:,:,:) :: nudged_tangential_grad=>NULL() !< The layer dvdx or dudy towards which nudging
                                                             !! can occur (s-1).
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
@@ -226,7 +226,7 @@ type, public :: ocean_OBC_type
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
   logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
-  real :: g_Earth                                     !< The gravitational acceleration in m s-2.
+  real :: g_Earth                                     !< The gravitational acceleration [m s-2].
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     segment => NULL()   !< List of segment objects.
@@ -241,7 +241,7 @@ type, public :: ocean_OBC_type
                    !! new time level (1) or the running mean (0) for velocities.
                    !! Valid values range from 0 to 1, with a default of 0.3.
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation
-                   !! velocity (or speed of characteristics), in m s-1.  The
+                   !! velocity (or speed of characteristics) [m s-1].  The
                    !! default value is 10 m s-1.
   logical :: OBC_pe !< Is there an open boundary on this tile?
   type(remapping_CS),      pointer :: remap_CS   !< ALE remapping control structure for segments only
@@ -2836,8 +2836,8 @@ end subroutine deallocate_OBC_segment_data
 subroutine open_boundary_test_extern_uv(G, OBC, u, v)
   type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)),intent(inout) :: u !< Zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)),intent(inout) :: v !< Meridional velocity (m/s)
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)),intent(inout) :: u !< Zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)),intent(inout) :: v !< Meridional velocity [m s-1]
   ! Local variables
   integer :: i, j, k, n
 

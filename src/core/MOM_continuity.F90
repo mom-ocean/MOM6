@@ -57,7 +57,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out)   :: vh  !< Volume flux through meridional faces =
                                                 !! v*h*dx, in m3/s.
-  real,                    intent(in)    :: dt  !< Time increment, in s.
+  real,                    intent(in)    :: dt  !< Time increment [s].
   type(continuity_CS),     pointer       :: CS  !< Control structure for mom_continuity.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume

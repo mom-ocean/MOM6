@@ -151,7 +151,7 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:,:) :: Uz2       !< Square of bulk difference in resolved velocity (m2/s2)
   real, allocatable, dimension(:,:,:) :: BulkRi    !< Bulk Richardson number for each layer (dimensionless)
   real, allocatable, dimension(:,:,:) :: sigma     !< Sigma coordinate (dimensionless)
-  real, allocatable, dimension(:,:,:) :: Ws        !< Turbulent velocity scale for scalars (m/s)
+  real, allocatable, dimension(:,:,:) :: Ws        !< Turbulent velocity scale for scalars [m s-1]
   real, allocatable, dimension(:,:,:) :: N         !< Brunt-Vaisala frequency (1/s)
   real, allocatable, dimension(:,:,:) :: N2        !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: Vt2       !< Unresolved squared turbulence velocity for bulk Ri (m2/s2)
@@ -160,8 +160,8 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:,:) :: Kv_KPP    !< Viscosity due to KPP (m2/s)
   real, allocatable, dimension(:,:)   :: Tsurf     !< Temperature of surface layer (C)
   real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
-  real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer (m/s)
-  real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer (m/s)
+  real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer [m s-1]
+  real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer [m s-1]
   real, allocatable, dimension(:,:,:) :: EnhK      !< Enhancement for mixing coefficient
   real, allocatable, dimension(:,:,:) :: EnhVt2    !< Enhancement for Vt2
 
@@ -595,8 +595,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                                                                     !< (out) Vertical diffusivity including KPP (Z2/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (Z2/s)
                                                                     !< (out) Vertical viscosity including KPP (Z2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport [m s-1]
 
 ! Local variables
   integer :: i, j, k                             ! Loop indices
@@ -694,7 +694,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                             CS%kOBL(i,j),      & ! (in) level (+fraction) of OBL extent
                             nonLocalTrans(:,1),& ! (out) Non-local heat transport (non-dimensional)
                             nonLocalTrans(:,2),& ! (out) Non-local salt transport (non-dimensional)
-                            surfFricVel,       & ! (in) Turbulent friction velocity at surface (m/s)
+                            surfFricVel,       & ! (in) Turbulent friction velocity at surface [m s-1]
                             surfBuoyFlux,      & ! (in) Buoyancy flux at surface (m2/s3)
                             G%ke,              & ! (in) Number of levels to compute coeffs for
                             G%ke,              & ! (in) Number of levels in array shape
@@ -802,7 +802,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 !    therefore, don't repeat this operation here
 !        CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
 !                    cellHeight(1:G%ke),                 & ! Depth of cell center (m)
-!                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers (m/s)
+!                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
 !                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface (1/s)
 !                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
       endif
@@ -879,8 +879,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp  !< potential/cons temp (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity (ppt)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component (m/s)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component [m s-1]
   type(EOS_type),                             pointer       :: EOS   !< Equation of state
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (Z/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
@@ -891,7 +891,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: N2_1d           ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
-  real, dimension( G%ke )     :: Ws_1d           ! Profile of vertical velocity scale for scalars (m/s)
+  real, dimension( G%ke )     :: Ws_1d           ! Profile of vertical velocity scale for scalars [m s-1]
   real, dimension( G%ke )     :: deltaRho        ! delta Rho in numerator of Bulk Ri number
   real, dimension( G%ke )     :: deltaU2         ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
   real, dimension( G%ke )     :: surfBuoyFlux2
@@ -1103,14 +1103,14 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
         CS%surf_layer_ext, & ! (in)  Normalized surface layer depth; sigma = CS%surf_layer_ext
         -cellHeight,       & ! (in)  Assume here that OBL depth (m) = -cellHeight(k)
         surfBuoyFlux2,     & ! (in)  Buoyancy flux at surface (m2/s3)
-        surfFricVel,       & ! (in)  Turbulent friction velocity at surface (m/s)
-        w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile (m/s)
+        surfFricVel,       & ! (in)  Turbulent friction velocity at surface [m s-1]
+        w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile [m s-1]
         CVMix_kpp_params_user=CS%KPP_params )
 
       !Compute CVMix VT2
       CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
                       zt_cntr=cellHeight(1:G%ke),         & ! Depth of cell center (m)
-                      ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers (m/s)
+                      ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
                       N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface (1/s)
                     CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
@@ -1161,7 +1161,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
                   delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) (1/s)
                   delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference (m2/s2)
                   Vt_sqr_cntr=CS%Vt2(i,j,:),         &
-                  ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
+                  ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
                   N_iface=CS%N(i,j,:))               ! Buoyancy frequency (1/s)
 
 
@@ -1174,7 +1174,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
         CS%OBLdepth(i,j),       & ! (out) OBL depth (m)
         CS%kOBL(i,j),           & ! (out) level (+fraction) of OBL extent
         zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-        surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
+        surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface [m s-1]
         surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
         Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
         CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
@@ -1239,7 +1239,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
        !               cellHeight(1:G%ke),                & ! Depth of cell center (m)
        !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
        !               deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
-       !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
+       !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
        !               N_iface=CS%N )                       ! Buoyancy frequency (1/s)
 
        !   surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
@@ -1251,7 +1251,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
        !     CS%OBLdepth(i,j),       & ! (out) OBL depth (m)
        !     CS%kOBL(i,j),           & ! (out) level (+fraction) of OBL extent
        !     zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-       !     surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
+       !     surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface [m s-1]
        !     surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
        !     Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
        !     CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
@@ -1280,8 +1280,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
             -CellHeight/CS%OBLdepth(i,j),          & ! (in)  Normalized boundary layer coordinate
             CS%OBLdepth(i,j),                      & ! (in)  OBL depth (m)
             surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface (m2/s3)
-            surfFricVel,                           & ! (in)  Turbulent friction velocity at surface (m/s)
-            w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile (m/s)
+            surfFricVel,                           & ! (in)  Turbulent friction velocity at surface [m s-1]
+            w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile [m s-1]
             CVMix_kpp_params_user=CS%KPP_params)     !       KPP parameters
           CS%Ws(i,j,:) = Ws_1d(:)
       endif

@@ -41,8 +41,8 @@ type, public :: surface
     SSS, &         !< The sea surface salinity in psu.
     sfc_density, & !< The mixed layer density in kg m-3.
     Hml, &      !< The mixed layer depth in m.
-    u, &        !< The mixed layer zonal velocity in m s-1.
-    v, &        !< The mixed layer meridional velocity in m s-1.
+    u, &        !< The mixed layer zonal velocity [m s-1].
+    v, &        !< The mixed layer meridional velocity [m s-1].
     sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
                 !! used, that is compensated for in sea_lev.
     melt_potential, & !< instantaneous amount of heat that can be used to melt sea ice,
@@ -125,28 +125,28 @@ type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
     T => NULL(), & !< Pointer to the temperature state variable, in deg C
     S => NULL(), & !< Pointer to the salinity state variable, in PSU or g/kg
-    u => NULL(), & !< Pointer to the zonal velocity, in m s-1
-    v => NULL(), & !< Pointer to the meridional velocity, in m s-1
+    u => NULL(), & !< Pointer to the zonal velocity [m s-1]
+    v => NULL(), & !< Pointer to the meridional velocity [m s-1]
     h => NULL()    !< Pointer to the layer thicknesses [H ~> m or kg m-2]
   real, pointer, dimension(:,:,:) :: &
     uh => NULL(), & !<  Pointer to zonal transports [H m2 s-1 ~> m3 s-1 or kg s-1]
     vh => NULL()    !<  Pointer to meridional transports [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: &
-    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration, in m s-2
-    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration, in m s-2
-    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration, in m s-2
-    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration, in m s-2
-    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity, in m s-2
-    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity, in m s-2
+    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration [m s-2]
+    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration [m s-2]
+    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration [m s-2]
+    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration [m s-2]
+    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [m s-2]
+    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [m s-2]
     pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
                        !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2]
-    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration, in m s-2
-    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration, in m s-2
+    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration [m s-2]
+    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration [m s-2]
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep, in m s-1
-    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep, in m s-1
-    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep, in m s-1
-    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep, in m s-1
+    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep [m s-1]
+    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep [m s-1]
+    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep [m s-1]
+    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep [m s-1]
 end type ocean_internal_state
 
 !> Pointers to arrays with accelerations, which can later be used for derived diagnostics, like energy balances.
@@ -166,10 +166,10 @@ type, public :: accel_diag_ptrs
     dv_dt_dia => NULL()    !< Meridional acceleration due to diapycnal  mixing [m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
-                           !! not due to any explicit accelerations, in m s-1.
+                           !! not due to any explicit accelerations [m s-1].
   real, pointer, dimension(:,:,:) :: dv_other => NULL()
                            !< Meridional velocity changes  due to any other processes that are
-                           !! not due to any explicit accelerations, in m s-1.
+                           !! not due to any explicit accelerations [m s-1].
 
   ! These accelerations are sub-terms included in the accelerations above.
   real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [m s-2]
