@@ -66,7 +66,7 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
                                     !! are in the range of -2 to 2; 0.4 reproduces CM2M.
   real    :: Kdml                   !< mixed layer diapycnal diffusivity (Z2/s)
                                     !! when bulkmixedlayer==.false.
-  real    :: Hmix                   !< mixed layer thickness (Z) when bulkmixedlayer==.false.
+  real    :: Hmix                   !< mixed layer thickness [Z ~> m] when bulkmixedlayer==.false.
   logical :: Kd_tanh_lat_fn         !< If true, use the tanh dependence of Kd_sfc on
                                     !! latitude, like GFDL CM2.1/CM2M.  There is no
                                     !! physical justification for this form, and it can
@@ -385,10 +385,10 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
   type(ocean_grid_type),                    intent(in)    :: G   !< Grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< Vertical grid structure.
   type(unit_scale_type),                    intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
-                                                                 !! with layers (1/s2)
+                                                                 !! with layers [s-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay !< Diapycnal diffusivity of each layer
                                                                  !! [Z2 s-1 ~> m2 s-1].
   real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
@@ -401,9 +401,9 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
   real, dimension(SZK_(G)+1) :: depth_int  !< distance from surface of the interfaces (m)
   real, dimension(SZK_(G)+1) :: Kd_col     !< Diffusivities at the interfaces (m2 s-1)
   real, dimension(SZK_(G)+1) :: Kv_col     !< Viscosities at the interfaces (m2 s-1)
-  real, dimension(SZI_(G)) :: depth        !< distance from surface of an interface (Z)
-  real :: depth_c    !< depth of the center of a layer (Z)
-  real :: I_Hmix     !< inverse of fixed mixed layer thickness (1/Z)
+  real, dimension(SZI_(G)) :: depth        !< distance from surface of an interface [Z ~> m]
+  real :: depth_c    !< depth of the center of a layer [Z ~> m]
+  real :: I_Hmix     !< inverse of fixed mixed layer thickness [Z-1 ~> m-1]
   real :: I_2Omega   !< 1/(2 Omega) (sec)
   real :: N_2Omega
   real :: N02_N2
