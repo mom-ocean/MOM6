@@ -132,7 +132,7 @@ contains
 !> Calculates and stores the non-dimensional resolution functions
 subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
@@ -382,7 +382,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
   real,                                     intent(in)    :: dt !< Time increment (s)
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
@@ -423,7 +423,7 @@ end subroutine calc_slope_functions
 subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points (1/s2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
@@ -434,8 +434,8 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: S2            ! Interface slope squared (non-dim)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
-  real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
-  real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
+  real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
+  real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real :: S2max, wNE, wSE, wSW, wNW
@@ -575,7 +575,7 @@ end subroutine calc_Visbeck_coeffs
 !! interface positions only, not accounting for density variations.
 subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes)
   type(ocean_grid_type),                      intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                            pointer       :: CS !< Variable mixing coefficients
@@ -586,16 +586,16 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points (for diagnostics)
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
-  real :: H_cutoff      ! Local estimate of a minimum thickness for masking (m)
+  real :: H_cutoff      ! Local estimate of a minimum thickness for masking [H ~> m or kg m-2]
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: S2            ! Interface slope squared (non-dim)
   real :: N2            ! Brunt-Vaisala frequency (1/s)
-  real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
-  real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
+  real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
+  real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   real :: Z_to_L        ! A conversion factor between from units for e to the
                         ! units for lateral distances.
-  real :: one_meter     ! One meter in thickness units of m or kg m-2.
+  real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real    :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))

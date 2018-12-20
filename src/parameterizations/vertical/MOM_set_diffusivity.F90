@@ -1380,7 +1380,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in)    :: v  !< v component of flow (m s-1)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h  !< Layer thickness (m or kg m-2)
+                            intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(in)    :: tv !< Structure containing pointers to any available
                                                 !! thermodynamic fields.
   type(forcing),            intent(in)    :: fluxes !< Surface fluxes structure

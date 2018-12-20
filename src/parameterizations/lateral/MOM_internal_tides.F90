@@ -158,7 +158,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
-                                                        !! (usually m or kg m-2).
   type(thermo_var_ptrs),            intent(in)    :: tv !< Pointer to thermodynamic variables
                                                         !! (needed for wave structure).
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input !< The energy input to the

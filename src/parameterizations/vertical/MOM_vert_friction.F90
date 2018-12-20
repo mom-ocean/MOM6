@@ -37,12 +37,12 @@ public updateCFLtruncationValue
 
 !> The control structure with parameters and memory for the MOM_vert_friction module
 type, public :: vertvisc_CS ; private
-  real    :: Hmix            !< The mixed layer thickness in thickness units (H).
+  real    :: Hmix            !< The mixed layer thickness in thickness units [H ~> m or kg m-2].
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
                              !! stress is applied with direct_stress [H ~> m or kg m-2].
   real    :: Kvml            !< The mixed layer vertical viscosity in m2 s-1.
   real    :: Kv              !< The interior vertical viscosity in m2 s-1.
-  real    :: Hbbl            !< The static bottom boundary layer thickness, in m.
+  real    :: Hbbl            !< The static bottom boundary layer thickness [H ~> m or kg m-2].
   real    :: Kvbbl           !< The vertical viscosity in the bottom boundary
                              !! layer, in m2 s-1.
 
@@ -183,25 +183,23 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: b_denom_1             ! The first term in the denominator of b1 [H ~> m or kg m-2].
 
   real :: Hmix             ! The mixed layer thickness over which stress
-                           ! is applied with direct_stress, translated into
-                           ! thickness units - either m or kg m-2.
-  real :: I_Hmix           ! The inverse of Hmix, in m-1 or m2 kg-1.
+                           ! is applied with direct_stress [H ~> m or kg m-2].
+  real :: I_Hmix           ! The inverse of Hmix [H-1 ~> m-1 or m2 kg-1].
   real :: Idt              ! The inverse of the time step, in s-1.
   real :: dt_Rho0          ! The time step divided by the mean
                            ! density, in s m3 kg-1.
   real :: Rho0             ! A density used to convert drag laws into stress in
                            ! Pa, in kg m-3.
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
-                           ! units of thickness - either s or s m3 kg-1.
+                           ! units of thickness - [s H Z-1 ~> s or s kg m-3].
   real :: h_neglect        ! A thickness that is so small it is usually lost
-                           ! in roundoff and can be neglected, in m or kg m-2.
+                           ! in roundoff and can be neglected [H ~> m or kg m-2].
 
   real :: stress           !   The surface stress times the time step, divided
-                           ! by the density, in units of m2 s-1.
+                           ! by the density [m2 s-1].
   real :: zDS, hfr, h_a    ! Temporary variables used with direct_stress.
-  real :: surface_stress(SZIB_(G))! The same as stress, unless the wind
-                           ! stress is applied as a body force, in
-                           ! units of m2 s-1.
+  real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
+                           ! stress is applied as a body force [m2 s-1].
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
@@ -484,7 +482,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
   real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the
                                 ! time step, in m.
-  real :: b_denom_1   ! The first term in the denominator of b1, in m or kg m-2.
+  real :: b_denom_1   ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
                            ! units of thickness - either s or s m3 kg-1.
   logical :: do_i(SZIB_(G))
@@ -594,9 +592,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
   real, dimension(SZIB_(G),SZK_(G)) :: &
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
-                ! given by 2*(h+ * h-)/(h+ + h-), in m or kg m-2 (H for short).
-    h_arith, &  ! The arithmetic mean thickness, in m or kg m-2.
-    h_delta, &  ! The lateral difference of thickness, in m or kg m-2.
+                ! given by 2*(h+ * h-)/(h+ + h-) [H ~> m or kg m-2] (H for short).
+    h_arith, &  ! The arithmetic mean thickness [H ~> m or kg m-2].
+    h_delta, &  ! The lateral difference of thickness [H ~> m or kg m-2].
     hvel, &     ! hvel is the thickness used at a velocity grid point [H ~> m or kg m-2].
     hvel_shelf  ! The equivalent of hvel under shelves [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZK_(G)+1) :: &
@@ -608,19 +606,19 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                 ! normalized by the bottom boundary layer thickness, nondim.
   real, dimension(SZIB_(G)) :: &
     kv_bbl, &     ! The bottom boundary layer viscosity [Z2 s-1 ~> m2 s-1].
-    bbl_thick, &  ! The bottom boundary layer thickness in m or kg m-2.
+    bbl_thick, &  ! The bottom boundary layer thickness [H ~> m or kg m-2].
     I_Hbbl, &     ! The inverse of the bottom boundary layer thickness, in units
                   ! of H-1 (i.e., m-1 or m2 kg-1).
     I_Htbl, &     ! The inverse of the top boundary layer thickness, in units
                   ! of H-1 (i.e., m-1 or m2 kg-1).
     zcol1, &      ! The height of the interfaces to the north and south of a
-    zcol2, &      ! v-point, in m or kg m-2.
+    zcol2, &      ! v-point [H ~> m or kg m-2].
     Ztop_min, &   ! The deeper of the two adjacent surface heights [H ~> m or kg m-2].
     Dmin, &       ! The shallower of the two adjacent bottom depths converted to
-                  ! thickness units, in m or kg m-2.
+                  ! thickness units [H ~> m or kg m-2].
     zh, &         ! An estimate of the interface's distance from the bottom
-                  ! based on harmonic mean thicknesses, in m or kg m-2.
-    h_ml          ! The mixed layer depth, in m or kg m-2.
+                  ! based on harmonic mean thicknesses [H ~> m or kg m-2].
+    h_ml          ! The mixed layer depth [H ~> m or kg m-2].
   real, allocatable, dimension(:,:) :: hML_u ! Diagnostic of the mixed layer depth at u points, in m.
   real, allocatable, dimension(:,:) :: hML_v ! Diagnostic of the mixed layer depth at v points, in m.
   real, allocatable, dimension(:,:,:) :: Kv_u !< Total vertical viscosity at u-points, in m2 s-1.

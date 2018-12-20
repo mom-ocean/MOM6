@@ -41,15 +41,13 @@ public set_visc_register_restarts
 
 !> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
-  real    :: Hbbl           !< The static bottom boundary layer thickness, in
-                            !! the same units as thickness (m or kg m-2).
+  real    :: Hbbl           !< The static bottom boundary layer thickness [H ~> m or kg m-2]
   real    :: cdrag          !< The quadratic drag coefficient.
   real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
                             !! calculating the drag in channels.
   real    :: drag_bg_vel    !< An assumed unresolved background velocity for
                             !! calculating the bottom drag, in m s-1.
-  real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness in
-                            !! the same units as thickness (H, often m or kg m-2).
+  real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness [H ~> m or kg m-2].
                             !! This might be Kv / (cdrag * drag_bg_vel) to give
                             !! Kv as the minimum near-bottom viscosity.
   real    :: Htbl_shelf     !< A nominal thickness of the surface boundary layer for use
@@ -129,7 +127,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real, dimension(SZIB_(G)) :: &
     ustar, &    !   The bottom friction velocity, in m s-1.
     T_EOS, &    !   The temperature used to calculate the partial derivatives
-                ! of density with T and S, in deg C.
+                ! of density with T and S, in degC.
     S_EOS, &    !   The salinity used to calculate the partial derivatives
                 ! of density with T and S, in PSU.
     dR_dT, &    !   Partial derivative of the density in the bottom boundary
@@ -159,7 +157,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     h_vel, &    ! Arithmetic mean of the layer thicknesses adjacent to a
                 ! velocity point [H ~> m or kg m-2].
     T_vel, &    ! Arithmetic mean of the layer temperatures adjacent to a
-                ! velocity point, in deg C.
+                ! velocity point, in degC.
     S_vel, &    ! Arithmetic mean of the layer salinities adjacent to a
                 ! velocity point, in PSU.
     Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
@@ -196,7 +194,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: Shtot            ! Running sum of thickness times salinity [PSU H ~> PSU m or PSU kg m-2].
   real :: hweight          ! The thickness of a layer that is within Hbbl
                            ! of the bottom [H ~> m or kg m-2].
-  real :: v_at_u, u_at_v   ! v at a u point or vice versa, m s-1.
+  real :: v_at_u, u_at_v   ! v at a u point or vice versa [m s-1].
   real :: Rho0x400_G       ! 400*Rho0/G_Earth, times unit conversion factors, in kg s2 H m-3 Z-2.
                            ! The 400 is a constant proposed by Killworth and Edwards, 1999.
   real, dimension(SZI_(G),SZJ_(G),max(GV%nk_rho_varies,1)) :: &
@@ -204,7 +202,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: p_ref(SZI_(G))   !   The pressure used to calculate the coordinate
                            ! density, in Pa (usually set to 2e7 Pa = 2000 dbar).
 
-  ! The units H in the following are thickness units - typically m or kg m-2.
   real :: D_vel            ! The bottom depth at a velocity point [H ~> m or kg m-2].
   real :: Dp, Dm           ! The depths at the edges of a velocity cell [H ~> m or kg m-2].
   real :: a                ! a is the curvature of the bottom depth across a
@@ -242,8 +239,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! evaluated at L=L0 [H ~> m or kg m-2].
   real :: h_neglect        ! A thickness that is so small it is usually lost
                            ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: ustH             ! ustar converted to units of H s-1.
-  real :: root             ! A temporary variable with units of H s-1.
+  real :: ustH             ! ustar converted to units of H s-1 [H s-1 ~> m s-1 or kg m-2 s-1].
+  real :: root             ! A temporary variable [H s-1 ~> m s-1 or kg m-2 s-1].
 
   real :: Cell_width       ! The transverse width of the velocity cell, in m.
   real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's

@@ -82,7 +82,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux (m2 H)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux (m2 H)
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamics structure
@@ -123,8 +123,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real, dimension(:,:), pointer :: cg1 => null() !< Wave speed (m/s)
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct
   integer :: i, j, k, is, ie, js, je, nz
-  real :: hu(SZI_(G), SZJ_(G))       ! u-thickness (H)
-  real :: hv(SZI_(G), SZJ_(G))       ! v-thickness (H)
+  real :: hu(SZI_(G), SZJ_(G))       ! u-thickness [H ~> m or kg m-2]
+  real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
 
@@ -1195,8 +1195,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   type(ocean_grid_type),                       intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< Vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thickness (H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface positions (Z)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface positions [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kh_u !< Thickness diffusivity on interfaces
                                                                      !! at u points (m2/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: Kh_v !< Thickness diffusivity on interfaces
@@ -1624,20 +1624,16 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
                                                                  !! 0 by default
   ! Local variables
   real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
-                                   ! between layers in a timestep in m or kg m-2.
+                                   ! between layers in a timestep [H ~> m or kg m-2].
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
-  real :: kap_dt_x2                ! The product of 2*kappa*dt, converted to
-                                   ! the same units as h, in m2 or kg2 m-4.
-  real :: h0                       ! A negligible thickness, in m or kg m-2, to
-                                   ! allow for zero thicknesses.
-  real :: h_neglect                ! A thickness that is so small it is usually
-                                   ! lost in roundoff and can be neglected
-                                   ! (m for Bouss and kg/m^2 for non-Bouss).
-                                   ! 0 < h_neglect << h0.
+  real :: kap_dt_x2                ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
+  real :: h0                       ! A negligible thickness to allow for zero
+                                   ! thicknesses [H ~> m or kg m-2].
+  real :: h_neglect                ! A thickness that is so small it is usually lost in roundoff
+                                   ! and can be neglected [H ~> m or kg m-2]. 0 < h_neglect << h0.
   real :: h_tr                     ! h_tr is h at tracer points with a tiny thickness
-                                   ! added to ensure positive definiteness
-                                   ! (m for Bouss, kg/m^2 for non-Bouss)
+                                   ! added to ensure positive definiteness [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, halo
 
   halo=0 ; if (present(halo_here)) halo = max(halo_here,0)

@@ -62,7 +62,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(unit_scale_type),                      intent(in)  :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
                                                                  !! (not layer!) [Z2 s-1 ~> m2 s-1].
