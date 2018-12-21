@@ -208,9 +208,9 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
                     intent(inout)      :: h_pre         !< layer thicknesses before advection
                                                         !! [H ~> m or kg m-2]
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: uhtr          !< Zonal mass transport in m3 or kg
+                    intent(inout)      :: uhtr          !< Zonal mass transport [H m2 ~> m3 or kg]
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: vhtr          !< Meridional mass transport in m3 or kg
+                    intent(inout)      :: vhtr          !< Meridional mass transport [H m2 ~> m3 or kg]
   logical,          intent(  out)      :: converged     !< True if the iterations have converged
 
   ! Local pointers
@@ -649,9 +649,9 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
                     intent(inout)      :: h_pre      !< layer thicknesses before advection [H ~> m or kg m-2]
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: eatr       !< Entrainment from layer above in m or kg-2
+                    intent(inout)      :: eatr       !< Entrainment from layer above [H ~> m or kg m-2]
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: ebtr       !< Entrainment from layer below in m or kg-2
+                    intent(inout)      :: ebtr       !< Entrainment from layer below [H ~> m or kg m-2]
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G))    :: sw, sw_vis, sw_nir !< Save old value of shortwave radiation
   real :: hval

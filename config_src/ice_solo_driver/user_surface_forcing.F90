@@ -79,7 +79,7 @@ type, public :: user_surface_forcing_CS ; private
                              ! state variables.
   logical :: restorebuoy     ! If true, use restoring surface buoyancy forcing.
   real :: Rho0               !   The density used in the Boussinesq
-                             ! approximation, in kg m-3.
+                             ! approximation [kg m-3].
   real :: G_Earth            !   The gravitational acceleration [m s-2].
   real :: Flux_const         !   The restoring rate at the surface [m s-1].
   real :: gust_const         !   A constant unresolved background gustiness
@@ -109,15 +109,6 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
 ! direction as the u- and v- velocities.)  They are both in Pa.
 !   In addition, this subroutine can be used to set the surface friction
 ! velocity, forces%ustar [Z s-1 ~> m s-1]. This is needed with a bulk mixed layer.
-!
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day - Time of the fluxes.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to user_surface_forcing_init
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -186,24 +177,13 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
 
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day_start - Start time of the fluxes.
-!  (in)      day_interval - Length of time over which these fluxes
-!                           will be applied.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to user_surface_forcing_init
-
   real :: Temp_restore   ! The temperature that is being restored toward, in C.
   real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
   real :: density_restore  ! The potential density that is being restored
-                         ! toward, in kg m-3.
-  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
+                         ! toward [kg m-3].
+  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
 
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -294,7 +274,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density in kg m-3 that is being restored toward.
+       ! density [kg m-3] that is being restored toward.
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
@@ -314,16 +294,8 @@ subroutine USER_surface_forcing_init(Time, G, param_file, diag, CS)
   type(user_surface_forcing_CS), pointer    :: CS   !< A pointer that is set to point to
                                                     !! the control structure for this module
 
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "user_surface_forcing" ! This module's name.
 
   if (associated(CS)) then

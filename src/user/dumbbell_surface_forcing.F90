@@ -32,7 +32,7 @@ type, public :: dumbbell_surface_forcing_CS ; private
   real :: Flux_const         !<   The restoring rate at the surface [m s-1].
   real :: gust_const         !<   A constant unresolved background gustiness
                              !! that contributes to ustar [Pa].
-  real :: slp_amplitude      !< The amplitude of pressure loading (in Pa) applied
+  real :: slp_amplitude      !< The amplitude of pressure loading [Pa] applied
                              !! to the reservoirs
   real :: slp_period         !< Period of sinusoidal pressure wave
   real, dimension(:,:), allocatable :: &
@@ -60,13 +60,13 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   type(dumbbell_surface_forcing_CS),  pointer  :: CS     !< A control structure returned by a previous
                                                          !! call to dumbbell_surface_forcing_init
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward, in C.
+  real :: Temp_restore   ! The temperature that is being restored toward [degC].
   real :: Salin_restore  ! The salinity that is being restored toward [PSU].
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
-  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
+  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -123,7 +123,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   if (CS%use_temperature .and. CS%restorebuoy) then
     do j=js,je ; do i=is,ie
       !   Set density_restore to an expression for the surface potential
-      ! density in kg m-3 that is being restored toward.
+      ! density [kg m-3] that is being restored toward.
       if (CS%forcing_mask(i,j)>0.) then
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
           ((CS%S_restore(i,j) - state%SSS(i,j)) / &

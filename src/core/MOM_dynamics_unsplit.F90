@@ -201,14 +201,14 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                                    !! pressure at the start of this dynamic step [Pa].
   real, dimension(:,:),    pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the surface
                                                    !! pressure at the end of this dynamic step [Pa].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport,
-                                                   !! in m3 s-1 or kg s-1.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
+                                                   !! [H m2 s-1 ~> m3 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh !< The meridional volume or mass
-                                                   !! transport, in m3 s-1 or kg s-1.
+                                                   !! transport [H m2 s-1 ~> m3 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or mass
-                                                   !! transport since the last tracer advection, in m3 or kg.
+                                                   !! transport since the last tracer advection [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume or mass
-                                                   !! transport since the last tracer advection, in m3 or kg.
+                                                   !! transport since the last tracer advection [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_av !< The time-mean free surface height or
                                                    !! column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by

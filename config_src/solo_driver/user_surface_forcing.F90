@@ -33,7 +33,7 @@ type, public :: user_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !< The density used in the Boussinesq approximation, in kg m-3.
+  real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
   real :: G_Earth            !< The gravitational acceleration [m s-2].
   real :: Flux_const         !< The restoring rate at the surface [m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
@@ -124,13 +124,13 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
 
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward, in C.
+  real :: Temp_restore   ! The temperature that is being restored toward [degC].
   real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
   real :: density_restore  ! The potential density that is being restored
-                         ! toward, in kg m-3.
-  real :: rhoXcp         ! The mean density times the heat capacity, in J m-3 K-1.
+                         ! toward [kg m-3].
+  real :: rhoXcp         ! The mean density times the heat capacity [J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
 
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -221,7 +221,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density in kg m-3 that is being restored toward.
+       ! density [kg m-3] that is being restored toward.
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &

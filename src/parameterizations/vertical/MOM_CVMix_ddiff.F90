@@ -179,8 +179,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
   ! Local variables
   real, dimension(SZK_(G)) :: &
     cellHeight, &  !< Height of cell centers (m)
-    dRho_dT,    &  !< partial derivatives of density wrt temp (kg m-3 degC-1)
-    dRho_dS,    &  !< partial derivatives of density wrt saln (kg m-3 PPT-1)
+    dRho_dT,    &  !< partial derivatives of density wrt temp [kg m-3 degC-1]
+    dRho_dS,    &  !< partial derivatives of density wrt saln [kg m-3 ppt-1]
     pres_int,   &  !< pressure at each interface (Pa)
     temp_int,   &  !< temp and at interfaces (degC)
     salt_int,   &  !< salt at at interfaces
