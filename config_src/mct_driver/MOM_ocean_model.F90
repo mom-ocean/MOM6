@@ -247,7 +247,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
 ! been used in a previous call to initialize_ocean_type.
 
-  real :: Rho0           !< The Boussinesq ocean density, in kg m-3.
+  real :: Rho0           !< The Boussinesq ocean density [kg m-3].
   real :: G_Earth        !< The gravitational acceleration [m s-2].
                          !! This include declares and sets the variable "version".
   real :: HFrz           !< If HFrz > 0 (m), melt potential will be computed.

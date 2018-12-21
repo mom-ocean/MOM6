@@ -354,10 +354,10 @@ end subroutine Phillips_initialize_topography
 !!    D - Basin depth in m.  (Must be positive.)
 !!    f - The Coriolis parameter [s-1].
 !!    g - The reduced gravity at each interface [m s-2]
-!!    Rlay - Layer potential density (coordinate variable) in kg m-3.
+!!    Rlay - Layer potential density (coordinate variable) [kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!    T - Temperature in C.
-!!    S - Salinity in psu.
+!!    T - Temperature [degC].
+!!    S - Salinity [ppt].
 !!  If SPONGE is defined:
 !!    A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped

@@ -37,38 +37,38 @@ end type p2d
 !! will be returned to a the calling program
 type, public :: surface
   real, allocatable, dimension(:,:) :: &
-    SST, &         !< The sea surface temperature in C.
-    SSS, &         !< The sea surface salinity in psu.
-    sfc_density, & !< The mixed layer density in kg m-3.
-    Hml, &      !< The mixed layer depth in m.
+    SST, &         !< The sea surface temperature [degC].
+    SSS, &         !< The sea surface salinity [ppt ~> psu or gSalt/kg].
+    sfc_density, & !< The mixed layer density [kg m-3].
+    Hml, &      !< The mixed layer depth [m].
     u, &        !< The mixed layer zonal velocity [m s-1].
     v, &        !< The mixed layer meridional velocity [m s-1].
-    sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
+    sea_lev, &  !< The sea level [m].  If a reduced surface gravity is
                 !! used, that is compensated for in sea_lev.
     melt_potential, & !< instantaneous amount of heat that can be used to melt sea ice,
                       !! in J m-2. This is computed w.r.t. surface freezing temperature.
-    ocean_mass, &  !< The total mass of the ocean in kg m-2.
-    ocean_heat, &  !< The total heat content of the ocean in C kg m-2.
-    ocean_salt, &  !< The total salt content of the ocean in kgSalt m-2.
+    ocean_mass, &  !< The total mass of the ocean [kg m-2].
+    ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
+    ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
     salt_deficit   !< The salt needed to maintain the ocean column at a minimum
-                   !! salinity of 0.01 PSU over the call to step_MOM, in kgSalt m-2.
+                   !! salinity of 0.01 PSU over the call to step_MOM [kgSalt m-2].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
-                   !! conservative temperature [degC].
+                   !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
-                   !! absolute salinity, in g/kg.
+                   !! absolute salinity in [g/kg].
   real, pointer, dimension(:,:) :: &
     taux_shelf => NULL(), & !< The zonal stresses on the ocean under shelves [Pa].
     tauy_shelf => NULL()    !< The meridional stresses on the ocean under shelves [Pa].
   real, pointer, dimension(:,:) :: frazil => NULL()
                 !< The energy needed to heat the ocean column to the freezing point during the call
-                !! to step_MOM, in J m-2.
+                !! to step_MOM [J m-2].
   real, pointer, dimension(:,:) :: TempxPmE => NULL()
                 !< The net inflow of water into the ocean times the temperature at which this inflow
-                !! occurs during the call to step_MOM, in deg C kg m-2. This should be prescribed in the
+                !! occurs during the call to step_MOM [degC kg m-2]. This should be prescribed in the
                 !! forcing fields, but as it often is not, this is a useful heat budget diagnostic.
   real, pointer, dimension(:,:) :: internal_heat => NULL()
                 !< Any internal or geothermal heat sources that are applied to the ocean integrated
-                !! over the call to step_MOM, in deg C kg m-2.
+                !! over the call to step_MOM [degC kg m-2].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -123,8 +123,8 @@ end type thermo_var_ptrs
 !! they refer to in MOM.F90.
 type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
-    T => NULL(), & !< Pointer to the temperature state variable, in deg C
-    S => NULL(), & !< Pointer to the salinity state variable, in PSU or g/kg
+    T => NULL(), & !< Pointer to the temperature state variable [degC]
+    S => NULL(), & !< Pointer to the salinity state variable [ppt ~> PSU or g/kg]
     u => NULL(), & !< Pointer to the zonal velocity [m s-1]
     v => NULL(), & !< Pointer to the meridional velocity [m s-1]
     h => NULL()    !< Pointer to the layer thicknesses [H ~> m or kg m-2]
@@ -197,7 +197,7 @@ end type cont_diag_ptrs
 !> Vertical viscosities, drag coefficients, and related fields.
 type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
-                             !! that is captured in Kd_shear.
+                             !! that is captured in Kd_shear [nondim].
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points [Z ~> m].
     bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points [Z ~> m].
@@ -224,7 +224,7 @@ type, public :: vertvisc_type
                 !! terms of layers, not depth, to facilitate the movement of the viscous boundary layer
                 !! with the flow.
   real, pointer, dimension(:,:) :: nkml_visc_v => NULL()
-                !< The number of layers in the viscous surface mixed layer at v-points (nondimensional).
+                !< The number of layers in the viscous surface mixed layer at v-points [nondim].
   real, pointer, dimension(:,:) :: &
     MLD => NULL()      !< Instantaneous active mixing layer depth [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:) :: &

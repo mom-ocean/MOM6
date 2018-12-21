@@ -252,8 +252,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
                                                     eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
@@ -263,19 +263,21 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   integer   :: i, j, k, is, ie, js, je, nz, itt
   real      :: x, ds, dt, rho_sur, rho_bot
   real      :: xi0, xi1 ! Heights in depth units [Z ~> m].
-  real      :: S_sur, T_sur, S_bot, T_bot
-  real      :: dT_dz, dS_dz  ! Gradients of T and S in degC/Z and PPT/Z.
-  real      :: z          ! vertical position in z space
-  character(len=256) :: mesg  ! The text of an error message
+  real      :: S_sur, S_bot ! Salinity at the surface and bottom [ppt]
+  real      :: T_sur, T_bot ! Temperature at the bottom [degC]
+  real      :: dT_dz  ! Vertical gradient of temperature [degC Z-1 ~> degC m-1].
+  real      :: dS_dz  ! Vertical gradient of salinity [ppt Z-1 ~> ppt m-1].
+  real      :: z            ! vertical position in z space [Z ~> m]
+  character(len=256) :: mesg ! The text of an error message
   character(len=40) :: verticalCoordinate, density_profile
   real :: rho_tmp
-  logical :: just_read    ! If true, just read parameters but set nothing.
+  logical :: just_read       ! If true, just read parameters but set nothing.
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in kg m-3 K-1.                              !
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
-  real :: pres(SZK_(G))      ! An array of the reference pressure in Pa. (zero here)
+  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [kg m-3 degC-1].
+  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [kg m-3 ppt-1].
+  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [kg m-3].
+  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa]. (zero here)
   real :: drho_dT1, drho_dS1, T_Ref, S_Ref
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pres(:) = 0.0

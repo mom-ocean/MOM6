@@ -284,11 +284,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     dR0_dT, &   !   Partial derivative of the mixed layer potential density with
                 ! temperature [kg m-3 degC-1].
     dRcv_dT, &  !   Partial derivative of the coordinate variable potential
-                ! density in the mixed layer with temperature, in kg m-3 K-1.
+                ! density in the mixed layer with temperature [kg m-3 degC-1].
     dR0_dS, &   !   Partial derivative of the mixed layer potential density with
                 ! salinity [kg m-3 PSU-1].
     dRcv_dS, &  !   Partial derivative of the coordinate variable potential
-                ! density in the mixed layer with salinity, in kg m-3 psu-1.
+                ! density in the mixed layer with salinity [kg m-3 ppt-1].
     TKE_river   ! The turbulent kinetic energy available for mixing at rivermouths over a
                 ! time step [Z m2 s-2 ~> m3 s-2].
 
@@ -969,13 +969,13 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                             intent(in)    :: eps   !< The negligibly small amount of water
                                                    !! that will be left in each layer [H ~> m or kg m-2].
   real, dimension(SZI_(G)), intent(in)    :: dR0_dT  !< The partial derivative of R0 with respect to
-                                                   !! temperature, in kg m-3 degC-1.
+                                                   !! temperature [kg m-3 degC-1].
   real, dimension(SZI_(G)), intent(in)    :: dRcv_dT !< The partial derivative of Rcv with respect to
-                                                   !! temperature, in kg m-3 degC-1.
+                                                   !! temperature [kg m-3 degC-1].
   real, dimension(SZI_(G)), intent(in)    :: dR0_dS  !< The partial derivative of R0 with respect to
-                                                   !! salinity, in kg m-3 psu-1.
+                                                   !! salinity [kg m-3 ppt-1].
   real, dimension(SZI_(G)), intent(in)    :: dRcv_dS !< The partial derivative of Rcv with respect to
-                                                   !! salinity, in kg m-3 psu-1.
+                                                   !! salinity [kg m-3 ppt-1].
   real, dimension(SZI_(G)), intent(in)    :: netMassInOut !< The net mass flux (if non-Boussinesq)
                                                    !! or volume flux (if Boussinesq) into the ocean
                                                    !! within a time step [H ~> m or kg m-2]. (I.e. P+R-E.)
@@ -1044,18 +1044,18 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                        ! h_ent between iterations [H ~> m or kg m-2].
   real :: g_H2_2Rho0   !   Half the gravitational acceleration times the square of
                        ! the conversion from H to Z divided by the mean density,
-                       ! in m7 s-2 Z-1 H-2 kg-1. !### CHECK UNITS
+                       ! [m7 s-2 Z-1 H-2 kg-1 ~> m4 s-2 kg-1 or m10 s-2 kg-3].
   real :: Angstrom     !   The minimum layer thickness [H ~> m or kg m-2].
-  real :: opacity      !   The opacity converted to units of H-1.
+  real :: opacity      !   The opacity converted to inverse thickness units [H-1 ~> m-1 or m2 kg-1]
   real :: sum_Pen_En   !   The potential energy change due to penetrating
-                       ! shortwave radiation, integrated over a layer, in
-                       ! H kg m-3.
-  real :: Idt          ! 1.0/dt
+                       ! shortwave radiation, integrated over a layer
+                       ! [H kg m-3 ~> kg m-2 or kg2 m-5].
+  real :: Idt          ! 1.0/dt [s-1]
   real :: netHeatOut   ! accumulated heat content of mass leaving ocean
   integer :: is, ie, nz, i, k, ks, itt, n
   real, dimension(max(nsw,1)) :: &
-    C2, &              ! Temporary variable with units of kg m-3 H-1.
-    r_SW_top           ! Temporary variables with units of H kg m-3.
+    C2, &              ! Temporary variable [kg m-3 H-1 ~> kg m-4 or m-1].
+    r_SW_top           ! Temporary variables [H kg m-3 ~> kg m-2 or kg2 m-5].
 
   Angstrom = GV%Angstrom_H
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
@@ -1524,22 +1524,22 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                             intent(in)    :: eps   !< The negligibly small amount of water
                                                    !! that will be left in each layer [H ~> m or kg m-2].
   real, dimension(SZI_(G)), intent(in)    :: dR0_dT  !< The partial derivative of R0 with respect to
-                                                   !! temperature, in kg m-3 degC-1.
+                                                   !! temperature [kg m-3 degC-1].
   real, dimension(SZI_(G)), intent(in)    :: dRcv_dT !< The partial derivative of Rcv with respect to
-                                                   !! temperature, in kg m-3 degC-1.
+                                                   !! temperature [kg m-3 degC-1].
   real, dimension(2,SZI_(G)), intent(in)  :: cMKE  !< Coefficients of HpE and HpE^2 used in calculating
                                                    !! the denominator of MKE_rate, in m-1 and m-2.
   real,                     intent(in)    :: Idt_diag !< The inverse of the accumulated diagnostic
                                                    !! time interval [s-1].
   integer,                  intent(in)    :: nsw   !< The number of bands of penetrating
                                                    !! shortwave radiation.
-  real, dimension(:,:),     intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
-                                                   !! heating at the sea surface in each
-                                                   !! penetrating band, in K H,
+  real, dimension(:,:),     intent(inout) :: Pen_SW_bnd !< The penetrating shortwave heating at the
+                                                   !! sea surface in each penetrating band
+                                                   !! [degC H ~> degC m or degC kg m-2],
                                                    !! size nsw x SZI_(G).
   real, dimension(:,:,:),   intent(in)    :: opacity_band !< The opacity in each band of penetrating
                                                    !! shortwave radiation [H-1 ~> m-1 or m2 kg-1].
-                                                   !! The indicies of opacity_band are band, i, k.
+                                                   !! The indicies of opacity_band are (band, i, k).
   real, dimension(SZI_(G)), intent(inout) :: TKE   !< The turbulent kinetic energy
                                                    !! available for mixing over a time
                                                    !! step [Z m2 s-2 ~> m3 s-2].
@@ -1555,7 +1555,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real :: SW_trans  !   The fraction of shortwave radiation that is not
                     ! absorbed in a layer, nondimensional.
   real :: Pen_absorbed  !   The amount of penetrative shortwave radiation
-                        ! that is absorbed in a layer, in units of K m.
+                        ! that is absorbed in a layer [degC H ~> degC m or degC kg m-2].
   real :: h_avail   ! The thickness in a layer available for entrainment [H ~> m or kg m-2].
   real :: h_ent     ! The thickness from a layer that is entrained [H ~> m or kg m-2].
   real :: h_min, h_max ! Limits on the solution for h_ent [H ~> m or kg m-2].
@@ -1564,12 +1564,12 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real :: MKE_rate  !   The fraction of the energy in resolved shears
                     ! within the mixed layer that will be eliminated
                     ! within a timestep, nondim, 0 to 1.
-  real :: HpE       !   The current thickness plus entrainment, H.
+  real :: HpE       !   The current thickness plus entrainment [H ~> m or kg m-2].
   real :: g_H_2Rho0   !   Half the gravitational acceleration times the
                       ! conversion from H to m divided by the mean density,
                       ! in m5 s-2 H-1 kg-1.
-  real :: TKE_full_ent  ! The TKE remaining if a layer is fully entrained,
-                        ! in units of Z m2 s-2.
+  real :: TKE_full_ent  ! The TKE remaining if a layer is fully entrained
+                        ! [Z m2 s-2 ~> m3 s-2].
   real :: dRL       ! Work required to mix water from the next layer
                     ! across the mixed layer [m2 s-2].
   real :: Pen_En_Contrib  ! Penetrating SW contributions to the changes in
@@ -1906,19 +1906,19 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
   real, dimension(SZI_(G)),             intent(in)    :: dR0_dT  !< The partial derivative of
                                                                  !! potential density referenced
                                                                  !! to the surface with potential
-                                                                 !! temperature, in kg m-3 K-1.
+                                                                 !! temperature [kg m-3 degC-1].
   real, dimension(SZI_(G)),             intent(in)    :: dR0_dS  !< The partial derivative of
                                                                  !! cpotential density referenced
                                                                  !! to the surface with salinity,
-                                                                 !! in kg m-3 psu-1.
+                                                                 !! [kg m-3 ppt-1].
   real, dimension(SZI_(G)),             intent(in)    :: dRcv_dT !< The partial derivative of
                                                                  !! coordinate defining potential
                                                                  !! density with potential
-                                                                 !! temperature, in kg m-3 K-1.
+                                                                 !! temperature [kg m-3 degC-1].
   real, dimension(SZI_(G)),             intent(in)    :: dRcv_dS !< The partial derivative of
                                                                  !! coordinate defining potential
                                                                  !! density with salinity,
-                                                                 !! in kg m-3 psu-1.
+                                                                 !! [kg m-3 ppt-1].
 
 !   If there are no massive light layers above the deepest of the mixed- and
 ! buffer layers, do nothing (except perhaps to reshuffle these layers).
@@ -2203,7 +2203,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h    !< Layer thickness [H ~> m or kg m-2].
                                                             !!  Layer 0 is the new mixed layer.
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature, in C.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature [degC].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity [PSU].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: R0   !< Potential density referenced to
                                                             !! surface pressure [kg m-3].
@@ -2223,18 +2223,18 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real, dimension(SZI_(G)),           intent(in)    :: dR0_dT  !< The partial derivative of
                                                             !! potential density referenced to the
                                                             !! surface with potential temperature,
-                                                            !! in kg m-3 K-1.
+                                                            !! [kg m-3 degC-1].
   real, dimension(SZI_(G)),           intent(in)    :: dR0_dS  !< The partial derivative of
                                                             !! cpotential density referenced to the
-                                                            !! surface with salinity,
-                                                            !! in kg m-3 psu-1.
+                                                            !! surface with salinity
+                                                            !! [kg m-3 ppt-1].
   real, dimension(SZI_(G)),           intent(in)    :: dRcv_dT !< The partial derivative of
                                                             !! coordinate defining potential density
                                                             !! with potential temperature,
-                                                            !! in kg m-3 K-1.
+                                                            !! [kg m-3 degC-1].
   real, dimension(SZI_(G)),           intent(in)    :: dRcv_dS !< The partial derivative of
                                                             !! coordinate defining potential density
-                                                            !! with salinity, in kg m-3 psu-1.
+                                                            !! with salinity [kg m-3 ppt-1].
   real, dimension(SZI_(G)),           intent(in)    :: max_BL_det !< If non-negative, the maximum
                                                             !! detrainment permitted from the buffer
                                                             !! layers [H ~> m or kg m-2].
@@ -3103,7 +3103,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h    !< Layer thickness [H ~> m or kg m-2].
                                                             !! Layer 0 is the new mixed layer.
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature, in C.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature [degC].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity [PSU].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: R0   !< Potential density referenced to
                                                             !! surface pressure [kg m-3].
@@ -3127,11 +3127,11 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
                                                             !! previous call to mixedlayer_init.
   real, dimension(SZI_(G)),           intent(in)    :: dRcv_dT !< The partial derivative of
                                                             !! coordinate defining potential density
-                                                            !! with potential temperature,
-                                                            !! in kg m-3 K-1.
+                                                            !! with potential temperature
+                                                            !! [kg m-3 degC-1].
   real, dimension(SZI_(G)),           intent(in)    :: dRcv_dS    !< The partial derivative of
                                                             !! coordinate defining potential density
-                                                            !! with salinity, in kg m-3 psu-1.
+                                                            !! with salinity [kg m-3 ppt-1].
   real, dimension(SZI_(G)),           intent(in)    :: max_BL_det !< If non-negative, the maximum
                                                             !! detrainment permitted from the buffer
                                                             !! layers [H ~> m or kg m-2].
@@ -3145,15 +3145,15 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
                               ! from the mixed layer [H ~> m or kg m-2].
   real :: Idt                 ! The inverse of the timestep [s-1].
   real :: dT_dR, dS_dR, dRml, dR0_dRcv, dT_dS_wt2
-  real :: I_denom             ! A work variable with units of psu2 m6 kg-2.
+  real :: I_denom             ! A work variable [ppt2 m6 kg-2].
   real :: Sdown, Tdown
   real :: dt_Time, Timescale = 86400.0*30.0! *365.0/12.0
-  real :: g_H2_2Rho0dt        ! Half the gravitational acceleration times the square of
-                              ! the conversion from H to m divided by the mean
-                              ! density times the time step, in m7 s-3 Z-1 H-2 kg-1. !### CHECK UNITS
-  real :: g_H2_2dt            ! Half the gravitational acceleration times the
-                              ! square of the conversion from H to m divided
-                              ! by the diagnostic time step, in m4 Z-1 H-2 s-3.
+  real :: g_H2_2Rho0dt        ! Half the gravitational acceleration times the square of the
+                              ! conversion from H to m divided by the mean density times the time
+                              ! step [m7 s-3 Z-1 H-2 kg-1 ~> m4 s-3 kg-1 or m10 s-3 kg-3].
+  real :: g_H2_2dt            ! Half the gravitational acceleration times the square of the
+                              ! conversion from H to m divided by the diagnostic time step
+                              ! [m4 Z-1 H-2 s-3 ~> m s-3 or m7 kg-2 s-3].
 
   logical :: splittable_BL(SZI_(G)), orthogonal_extrap
   real :: x1

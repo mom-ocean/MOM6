@@ -51,7 +51,7 @@ type, public :: slight_CS ; private
   !> A value of the stratification ratio that defines a problematic halocline region (nondim).
   real :: halocline_strat_tol
 
-  !> Nominal density of interfaces, in kg m-3.
+  !> Nominal density of interfaces [kg m-3].
   real, allocatable, dimension(:) :: target_density
 
   !> Maximum depths of interfaces [H ~> m or kg m-2].
@@ -73,7 +73,7 @@ subroutine init_coord_slight(CS, nk, ref_pressure, target_density, interp_CS, m_
   type(slight_CS),      pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in the grid
   real,                 intent(in) :: ref_pressure !< Nominal density of interfaces in Pa
-  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces in kg m-3
+  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
   real,       optional, intent(in) :: m_to_H !< A conversion factor from m to the units of thicknesses
 
@@ -211,9 +211,9 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, H_subroundoff, &
   real :: dz      ! A uniform layer thickness in very shallow water [H ~> m or kg m-2].
   real :: dz_ur   ! The total thickness of an unstable region [H ~> m or kg m-2].
   real :: wgt, cowgt  ! A weight and its complement, nondim.
-  real :: rho_ml_av ! The average potential density in a near-surface region, in kg m-3.
+  real :: rho_ml_av ! The average potential density in a near-surface region [kg m-3].
   real :: H_ml_av ! A thickness to try to use in taking the near-surface average [H ~> m or kg m-2].
-  real :: rho_x_z ! A cumulative integral of a density, in kg m-3 H.
+  real :: rho_x_z ! A cumulative integral of a density [kg m-3 H ~> kg m-2 or kg2 m-5].
   real :: z_wt    ! The thickness actually used in taking the near-surface average [H ~> m or kg m-2].
   real :: k_interior  ! The (real) value of k where the interior grid starts.
   real :: k_int2      ! The (real) value of k where the interior grid starts.
@@ -503,7 +503,7 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
   real, dimension(nz,DEGREE_MAX+1) :: ppoly_i_coefficients ! Coefficients of polynomial
   logical, dimension(nz)   :: unstable_lay ! If true, this layer is in an unstable region.
   logical, dimension(nz+1) :: unstable_int ! If true, this interface is in an unstable region.
-  real :: rt  ! The current target density, in kg m-3.
+  real :: rt  ! The current target density [kg m-3].
   real :: zf  ! The fractional z-position within a layer of the target density.
   real :: rfn
   real :: a(5) ! Coefficients of a local polynomial minus the target density.

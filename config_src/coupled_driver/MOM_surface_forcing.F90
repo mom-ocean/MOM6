@@ -228,7 +228,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
     net_FW,        & ! The area integrated net freshwater flux into the ocean [kg s-1]
     net_FW2,       & ! The area integrated net freshwater flux into the ocean [kg s-1]
     work_sum,      & ! A 2-d array that is used as the work space for global sums [m2] or [kg s-1]
-    open_ocn_mask    ! a binary field indicating where ice is present based on frazil criteria
+    open_ocn_mask    ! a binary field indicating where ice is present based on frazil criteria [nondim]
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
@@ -1019,7 +1019,7 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Fluxes at h points (W m-2 or kg m-2 s-1)
+  real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Various fluxes at h points [W m-2] or [kg m-2 s-1]
 
   integer :: isc, iec, jsc, jec, i, j
   logical :: overrode_h
