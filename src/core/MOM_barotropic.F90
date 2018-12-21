@@ -407,7 +407,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in  !< The 2-D eta field (either SSH anomaly or
                                                          !! column mass anomaly) that was used to calculate the input
                                                          !! pressure gradient accelerations (or its final value if
-                                                         !! eta_PF_start is provided, in m or kg m-2.
+                                                         !! eta_PF_start is provided [H ~> m or kg m-2].
                                                          !! Note: eta_in, pbce, and eta_PF_in must have up-to-date
                                                          !! values in the first point of their halos.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_Cor      !< The (3-D) zonal-velocities used to
@@ -418,7 +418,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: accel_layer_v !< The meridional acceleration of each layer
                                                          !! due to the barotropic calculation [m s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: eta_out       !< The final barotropic free surface
-                                                         !! height anomaly or column mass anomaly, in m or kg m-2.
+                                                         !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: uhbtav        !< the barotropic zonal volume or mass
                                                          !! fluxes averaged through the barotropic steps, in
                                                          !! m3 s-1 or kg s-1.
@@ -435,7 +435,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction.
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
-                                                         !! averaged over the barotropic integration, in m or kg m-2.
+                                                         !! averaged over the barotropic integration [H ~> m or kg m-2].
   type(ocean_OBC_type),                optional, pointer :: OBC          !< The open boundary condition structure.
   type(BT_cont_type),                  optional, pointer :: BT_cont      !< A structure with elements that describe
                                                          !! the effective open face areas as a function of barotropic
@@ -471,8 +471,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     e_anom        ! The anomaly in the sea surface height or column mass
                   ! averaged between the beginning and end of the time step,
-                  ! relative to eta_PF, with SAL effects included, in units
-                  ! of H (m or kg m-2, the same as eta and h).
+                  ! relative to eta_PF, with SAL effects included [H ~> m or kg m-2].
 
   ! These are always allocated with symmetric memory and wide halos.
   real :: q(SZIBW_(CS),SZJBW_(CS))  ! A pseudo potential vorticity [s-1 Z-1 ~> s-1 m-1].
@@ -548,22 +547,22 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     eta_PF_BT     ! A pointer to the eta array (either eta or eta_pred) that
                   ! determines the barotropic pressure force [H ~> m or kg m-2]
   real, dimension(SZIW_(CS),SZJW_(CS)) :: &
-    eta_sum, &    ! eta summed across the timesteps, in m or kg m-2.
-    eta_wtd, &    ! A weighted estimate used to calculate eta_out, in m or kg m-2.
+    eta_sum, &    ! eta summed across the timesteps [H ~> m or kg m-2].
+    eta_wtd, &    ! A weighted estimate used to calculate eta_out [H ~> m or kg m-2].
     eta_PF, &     ! A local copy of the 2-D eta field (either SSH anomaly or
                   ! column mass anomaly) that was used to calculate the input
-                  ! pressure gradient accelerations, in m or kg m-2.
+                  ! pressure gradient accelerations [H ~> m or kg m-2].
     eta_PF_1, &   ! The initial value of eta_PF, when interp_eta_PF is
-                  ! true, in m or kg m-2.
+                  ! true [H ~> m or kg m-2].
     d_eta_PF, &   ! The change in eta_PF over the barotropic time stepping when
-                  ! interp_eta_PF is true, in m or kg m-2.
+                  ! interp_eta_PF is true [H ~> m or kg m-2].
     gtot_E, &     ! gtot_X is the effective total reduced gravity used to relate
     gtot_W, &     ! free surface height deviations to pressure forces (including
     gtot_N, &     ! GFS and baroclinic  contributions) in the barotropic momentum
     gtot_S, &     ! equations half a grid-point in the X-direction (X is N, S, E, or W)
                   ! from the thickness point [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
                   ! (See Hallberg, J Comp Phys 1997 for a discussion.)
-    eta_src, &    ! The source of eta per barotropic timestep, in m or kg m-2.
+    eta_src, &    ! The source of eta per barotropic timestep [H ~> m or kg m-2].
     dyn_coef_eta, & ! The coefficient relating the changes in eta to the
                   ! dynamic surface pressure under rigid ice
                   ! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -582,7 +581,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: mass_to_Z   ! The depth unit converison divided by the mean density (Rho0), in m3 kg-1.
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
   real :: vel_prev    ! The previous velocity [m s-1].
-  real :: dtbt        ! The barotropic time step in s.
+  real :: dtbt        ! The barotropic time step [s].
   real :: bebt        ! A copy of CS%bebt.
   real :: be_proj     ! The fractional amount by which velocities are projected
                       ! when project_velocity is true. For now be_proj is set
@@ -613,7 +612,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                       ! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real :: ice_strength = 0.0  ! The effective strength of the ice [m s-2].
   real :: Idt_max2    ! The squared inverse of the local maximum stable
-                      ! barotropic time step, in s-2.
+                      ! barotropic time step [s-2].
   real :: H_min_dyn   ! The minimum depth to use in limiting the size of the
                       ! dynamic surface pressure for stability [H ~> m or kg m-2].
   real :: H_eff_dx2   ! The effective total thickness divided by the grid spacing
@@ -2402,7 +2401,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt_trans !< the meridional BT velocity used in transports,
                                                                   !! m s-1.
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta     !< The barotropic free surface height anomaly or
-                                                                  !! column mass anomaly, in m or kg m-2.
+                                                                  !! column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old !< The starting value of ubt in a barotropic step,
                                                                   !! m s-1.
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of vbt in a barotropic step,
@@ -2565,7 +2564,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
   type(memory_size_type),                intent(in)    :: MS     !< A type that describes the memory sizes of the
                                                                  !! argument arrays.
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta    !< The barotropic free surface height anomaly or
-                                                                 !! column mass anomaly, in m or kg m-2.
+                                                                 !! column mass anomaly [H ~> m or kg m-2].
   type(BT_OBC_type),                     intent(inout) :: BT_OBC !< A structure with the private barotropic arrays
                                                                  !! related to the open boundary conditions,
                                                                  !! set by set_up_BT_OBC.
@@ -2772,9 +2771,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(barotropic_CS),     pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to barotropic_init.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                 optional, intent(in)    :: h_u  !< The specified thicknesses at u-points, in m or kg m-2.
+                 optional, intent(in)    :: h_u  !< The specified thicknesses at u-points [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                 optional, intent(in)    :: h_v  !< The specified thicknesses at v-points, in m or kg m-2.
+                 optional, intent(in)    :: h_v  !< The specified thicknesses at v-points [H ~> m or kg m-2].
   logical,       optional, intent(in)    :: may_use_default !< An optional logical argument
                                                  !! to indicate that the default velocity point
                                                  !! thicknesses may be used for this particular
@@ -2784,18 +2783,16 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(ocean_OBC_type), optional, pointer :: OBC !< Open boundary control structure.
 
   ! Local variables
-! All of these variables are in the same units as h - usually m or kg m-2.
-  real :: hatutot(SZIB_(G))    ! The sum of the layer thicknesses
-  real :: hatvtot(SZI_(G))     ! interpolated to the u & v grid points.
-  real :: Ihatutot(SZIB_(G))   ! Ihatutot and Ihatvtot are the inverses
-  real :: Ihatvtot(SZI_(G))    ! of hatutot and hatvtot, both [H-1 ~> m-1 or m2 kg-1].
+  real :: hatutot(SZIB_(G))    ! The sum of the layer thicknesses interpolated to u points [H ~> m or kg m-2].
+  real :: hatvtot(SZI_(G))     ! The sum of the layer thicknesses interpolated to v points [H ~> m or kg m-2].
+  real :: Ihatutot(SZIB_(G))   ! Ihatutot is the inverse of hatutot [H-1 ~> m-1 or m2 kg-1].
+  real :: Ihatvtot(SZI_(G))    ! Ihatvtot is the inverse of hatvtot [H-1 ~> m-1 or m2 kg-1].
   real :: h_arith              ! The arithmetic mean thickness [H ~> m or kg m-2].
   real :: h_harm               ! The harmonic mean thicknesses [H ~> m or kg m-2].
   real :: h_neglect            ! A thickness that is so small it is usually lost
                                ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: wt_arith             ! The nondimensional weight for the arithmetic
-                               ! mean thickness.  The harmonic mean uses
-                               ! a weight of (1 - wt_arith).
+  real :: wt_arith             ! The nondimensional weight for the arithmetic mean thickness.
+                               ! The harmonic mean uses a weight of (1 - wt_arith).
   real :: Rh                   ! A ratio of summed thicknesses, nondim.
   real :: e_u(SZIB_(G),SZK_(G)+1) !   The interface heights at u-velocity and
   real :: e_v(SZI_(G),SZK_(G)+1)  ! v-velocity points [H ~> m or kg m-2].
@@ -3556,7 +3553,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
                                                !! to overestimate the external wave speed) [Z ~> m].
 
   ! Local variables
-  real :: H1, H2      ! Temporary total thicknesses, in m or kg m-2.
+  real :: H1, H2      ! Temporary total thicknesses [H ~> m or kg m-2].
   integer :: i, j, is, ie, js, je, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = 1 ; if (present(halo)) hs = max(halo,0)

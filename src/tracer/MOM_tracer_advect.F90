@@ -366,7 +366,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     hlst, Ihnew, &      ! Work variables with units of [H m2 ~> m3 or kg] and [H-1 m-2 ~> m-3 or kg-1].
     CFL                 ! A nondimensional work variable.
   real :: min_h         ! The minimum thickness that can be realized during
-                        ! any of the passes, in m or kg m-2.
+                        ! any of the passes [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected, in m.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.

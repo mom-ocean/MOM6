@@ -239,10 +239,9 @@ type, public :: MOM_control_struct ; private
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
   logical :: useWaves                !< If true, update Stokes drift
-  real :: dtbt_reset_period          !< The time interval in seconds between dynamic
-                                     !! recalculation of the barotropic time step.  If
-                                     !! this is negative, it is never calculated, and
-                                     !! if it is 0, it is calculated every step.
+  real :: dtbt_reset_period          !< The time interval between dynamic recalculation of the
+                                     !! barotropic time step [s]. If this is negative dtbt is never
+                                     !! calculated, and if it is 0, dtbt is calculated every step.
   type(time_type) :: dtbt_reset_interval !< A time_time representation of dtbt_reset_period.
   type(time_type) :: dtbt_reset_time !< The next time DTBT should be calculated.
 
@@ -252,15 +251,15 @@ type, public :: MOM_control_struct ; private
 
   real, dimension(:,:,:), pointer :: &
     h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
-    T_pre_dyn => NULL(), &      !< Temperature before the transports, in degC.
-    S_pre_dyn => NULL()         !< Salinity before the transports, in psu.
+    T_pre_dyn => NULL(), &      !< Temperature before the transports [degC].
+    S_pre_dyn => NULL()         !< Salinity before the transports [ppt].
   type(accel_diag_ptrs) :: ADp  !< structure containing pointers to accelerations,
                                 !! for derived diagnostics (e.g., energy budgets)
   type(cont_diag_ptrs)  :: CDp  !< structure containing pointers to continuity equation
                                 !! terms, for derived diagnostics (e.g., energy budgets)
   real, dimension(:,:,:), pointer :: &
-    u_prev => NULL(), &         !< previous value of u stored for diagnostics
-    v_prev => NULL()            !< previous value of v stored for diagnostics
+    u_prev => NULL(), &         !< previous value of u stored for diagnostics [m s-1]
+    v_prev => NULL()            !< previous value of v stored for diagnostics [m s-1]
 
   logical :: interp_p_surf      !< If true, linearly interpolate surface pressure
                                 !! over the coupling time step, using specified value
@@ -269,9 +268,9 @@ type, public :: MOM_control_struct ; private
                                 !! a previous time-step or the ocean restart file.
                                 !! This is only valid when interp_p_surf is true.
   real, dimension(:,:), pointer :: &
-    p_surf_prev  => NULL(), &   !< surface pressure (Pa) at end  previous call to step_MOM
-    p_surf_begin => NULL(), &   !< surface pressure (Pa) at start of step_MOM_dyn_...
-    p_surf_end   => NULL()      !< surface pressure (Pa) at end   of step_MOM_dyn_...
+    p_surf_prev  => NULL(), &   !< surface pressure [Pa] at end  previous call to step_MOM
+    p_surf_begin => NULL(), &   !< surface pressure [Pa] at start of step_MOM_dyn_...
+    p_surf_end   => NULL()      !< surface pressure [Pa] at end   of step_MOM_dyn_...
 
   ! Variables needed to reach between start and finish phases of initialization
   logical :: write_IC           !< If true, then the initial conditions will be written to file
@@ -282,23 +281,23 @@ type, public :: MOM_control_struct ; private
 
   ! These elements are used to control the calculation and error checking of the surface state
   real :: Hmix                  !< Diagnostic mixed layer thickness over which to
-                                !! average surface tracer properties (in depth units, Z) when
-                                !! bulk mixed layer is not used, or a negative value
+                                !! average surface tracer properties when a bulk
+                                !! mixed layer is not used [Z ~> m], or a negative value
                                 !! if a bulk mixed layer is being used.
   real :: HFrz                  !< If HFrz > 0, melt potential will be computed.
                                 !! The actual depth over which melt potential is computed will
                                 !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                                 !! If HFrz <= 0 (default), melt potential will not be computed.
   real :: Hmix_UV               !< Depth scale over which to average surface flow to
-                                !! feedback to the coupler/driver (in depth units, Z) when
+                                !! feedback to the coupler/driver [Z ~> m] when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
   logical :: check_bad_sfc_vals !< If true, scan surface state for ridiculous values.
-  real    :: bad_val_ssh_max    !< Maximum SSH before triggering bad value message
-  real    :: bad_val_sst_max    !< Maximum SST before triggering bad value message
-  real    :: bad_val_sst_min    !< Minimum SST before triggering bad value message
-  real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message
-  real    :: bad_vol_col_thick  !< Minimum column thickness before triggering bad value message
+  real    :: bad_val_ssh_max    !< Maximum SSH before triggering bad value message [m]
+  real    :: bad_val_sst_max    !< Maximum SST before triggering bad value message [degC]
+  real    :: bad_val_sst_min    !< Minimum SST before triggering bad value message [degC]
+  real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message [ppt]
+  real    :: bad_val_col_thick  !< Minimum column thickness before triggering bad value message [m]
 
   type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
   type(transport_diag_IDs) :: transport_IDs  !< Handles used for transport diagnostics.
@@ -889,8 +888,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   real,               intent(in)    :: dt_thermo  !< time interval covered by any updates that may
                                                   !! span multiple dynamics steps [s].
   real,               intent(in)    :: bbl_time_int !< time interval over which updates to the
-                                                  !! bottom boundary layer properties will apply,
-                                                  !! in s, or zero not to update the properties.
+                                                  !! bottom boundary layer properties will apply [s],
+                                                  !! or zero not to update the properties.
   type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
   type(time_type),    intent(in)    :: Time_local !< End time of a segment, as a time type
   type(wave_parameters_CS), &
@@ -907,7 +906,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   real, dimension(:,:,:), pointer :: &
     u => NULL(), & ! u : zonal velocity component [m s-1]
     v => NULL(), & ! v : meridional velocity component [m s-1]
-    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+    h => NULL()    ! h : layer thickness [H ~> m or kg m-2]
 
   logical :: calc_dtbt  ! Indicates whether the dynamically adjusted
                         ! barotropic time step needs to be updated.
@@ -1067,7 +1066,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, Time_local)
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                            intent(in)    :: h      !< layer thicknesses after the transports (m or kg/m2)
+                            intent(in)    :: h      !< layer thicknesses after the transports [H ~> m or kg m-2]
   type(time_type),          intent(in)    :: Time_local !< The model time at the end
                                                     !! of the time step.
   type(group_pass_type) :: pass_T_S
@@ -1140,10 +1139,10 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(inout) :: v      !< meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                            intent(inout) :: h      !< layer thickness (m or kg/m2)
+                            intent(inout) :: h      !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
-  real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
+  real,                     intent(in)    :: dtdia  !< The time interval over which to advance [s]
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
   type(wave_parameters_CS), &
@@ -1533,8 +1532,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(unit_scale_type),  pointer :: US => NULL()
   character(len=4), parameter :: vers_num = 'v2.0'
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
@@ -1542,14 +1541,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   real    :: Z_diag_int  ! minimum interval between calc depth-space diagnostics [s]
 
   real, allocatable, dimension(:,:,:) :: e   ! interface heights (meter)
-  real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
-  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf
-  real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf
+  real, allocatable, dimension(:,:)   :: eta ! free surface height [m] or column mass [kg m-2]
+  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf [m2]
+  real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf [nondim]
   real, dimension(:,:), pointer :: shelf_area => NULL()
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
-  ! GMM, the following *is not* used. Should we delete it?
-  type(group_pass_type) :: tmp_pass_Kv_shear
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
@@ -1881,7 +1878,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "The value of SST below which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="deg C", default=-2.1)
-    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_vol_col_thick, &
+    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_val_col_thick, &
                  "The value of column thickness below which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
                  default=0.0)
@@ -2704,22 +2701,22 @@ subroutine extract_surface_state(CS, sfc_state)
                                                 !! data in this structure is intent out.
 
   ! local
-  real :: hu, hv
+  real :: hu, hv  ! Thicknesses interpolated to velocity points [H ~> m or kg m-2]
   type(ocean_grid_type), pointer :: G => NULL() !< pointer to a structure containing
                                       !! metrics and related information
   type(verticalGrid_type), pointer :: GV => NULL()
   real, dimension(:,:,:), pointer :: &
     u => NULL(), & !< u : zonal velocity component [m s-1]
     v => NULL(), & !< v : meridional velocity component [m s-1]
-    h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+    h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
   real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m]
   real :: depth_ml           !< Depth over which to average to determine mixed
                              !! layer properties [Z ~> m]
   real :: dh                 !< Thickness of a layer within the mixed layer [Z ~> m]
-  real :: mass               !< Mass per unit area of a layer (kg/m2)
-  real :: bathy_m            !< The depth of bathymetry in m (not Z), used for error checking.
-  real :: T_freeze           !< freezing temperature (oC)
-  real :: delT(SZI_(CS%G))   !< T-T_freeze (oC)
+  real :: mass               !< Mass per unit area of a layer [kg m-2]
+  real :: bathy_m            !< The depth of bathymetry [m] (not Z), used for error checking.
+  real :: T_freeze           !< freezing temperature [degC]
+  real :: delT(SZI_(CS%G))   !< T-T_freeze [degC]
   logical :: use_temperature !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
@@ -2988,7 +2985,7 @@ subroutine extract_surface_state(CS, sfc_state)
         localError = sfc_state%sea_lev(i,j)<=-bathy_m &
                 .or. sfc_state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j)<=-CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j) + bathy_m < CS%bad_vol_col_thick
+                .or. sfc_state%sea_lev(i,j) + bathy_m < CS%bad_val_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &

@@ -65,7 +65,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                                           !! for the purposes of calculating vertical modal structure.
   real, optional,                   intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
-                                          !! modal structure, in m.
+                                          !! modal structure [m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
         optional,                   intent(out) :: modal_structure !< Normalized model structure (non-dim)
 

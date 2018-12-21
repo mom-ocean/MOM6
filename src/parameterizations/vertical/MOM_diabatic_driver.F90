@@ -2470,7 +2470,7 @@ end subroutine
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
   type(ocean_grid_type),   intent(inout) :: G      !< ocean grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
+                           intent(inout) :: h      !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv     !< points to thermodynamic fields
   type(forcing),           intent(inout) :: fluxes !< boundary fluxes
   real,                    intent(in)    :: dt     !< time step (seconds)
@@ -2494,10 +2494,10 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   type(ocean_grid_type),                     intent(in) :: G        !< ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV       !< ocean vertical grid structure
   type(thermo_var_ptrs),                     intent(in) :: tv       !< points to updated thermodynamic fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h        !< thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h        !< thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: temp_old !< temperature prior to diabatic physics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: saln_old !< salinity prior to diabatic physics (PPT)
-  real,                                      intent(in) :: dt       !< time step (sec)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: saln_old !< salinity prior to diabatic physics [ppt]
+  real,                                      intent(in) :: dt       !< time step [s]
   type(diabatic_CS),                         pointer    :: CS       !< module control structure
 
   ! Local variables
@@ -2580,14 +2580,14 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   type(verticalGrid_type), intent(in) :: GV       !< ocean vertical grid structure
   type(thermo_var_ptrs),   intent(in) :: tv       !< points to updated thermodynamic fields
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h        !< thickness after boundary flux application (m or kg/m2)
+                           intent(in) :: h        !< thickness after boundary flux application [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: temp_old !< temperature prior to boundary flux application
+                           intent(in) :: temp_old !< temperature prior to boundary flux application [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: saln_old !< salinity prior to boundary flux application (PPT)
+                           intent(in) :: saln_old !< salinity prior to boundary flux application [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old    !< thickness prior to boundary flux application (m or kg/m2)
-  real,                    intent(in) :: dt       !< time step (sec)
+                           intent(in) :: h_old    !< thickness prior to boundary flux application [H ~> m or kg m-2]
+  real,                    intent(in) :: dt       !< time step [s]
   type(diabatic_CS),       pointer    :: CS       !< module control structure
 
   ! Local variables
@@ -2676,9 +2676,9 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS)
   type(verticalGrid_type),                  intent(in) :: GV       !< ocean vertical grid structure
   type(diabatic_CS),                        pointer    :: CS       !< module control structure
   type(thermo_var_ptrs),                    intent(in) :: tv       !< points to updated thermodynamic fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to frazil formation
-  real,                                     intent(in) :: dt       !< time step (sec)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to frazil formation [degC]
+  real,                                     intent(in) :: dt       !< time step [s]
 
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
   real    :: Idt

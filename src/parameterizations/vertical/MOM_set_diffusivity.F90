@@ -671,7 +671,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real, dimension(SZI_(G),SZK_(G)+1), intent(in)  :: dRho_int !< Change in locally referenced potential density
                                                           !! across each interface [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
-                                                          !! layers, in s-2.
+                                                          !! layers [s-2].
   integer,                          intent(in)    :: j    !< j-index of row to work on
   real,                             intent(in)    :: dt   !< Time increment (sec).
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
@@ -885,10 +885,10 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
                             intent(out) :: dRho_int !< Change in locally referenced potential density
                                                 !! across each interface [kg m-3].
   real, dimension(SZI_(G),SZK_(G)+1), &
-                            intent(out) :: N2_int !< The squared buoyancy frequency at the interfaces, in s-2.
+                            intent(out) :: N2_int !< The squared buoyancy frequency at the interfaces [s-2].
   real, dimension(SZI_(G),SZK_(G)), &
-                            intent(out) :: N2_lay !< The squared buoyancy frequency of the layers, in s-2.
-  real, dimension(SZI_(G)), intent(out) :: N2_bot !< The near-bottom squared buoyancy frequency, in s-2.
+                            intent(out) :: N2_lay !< The squared buoyancy frequency of the layers [s-2].
+  real, dimension(SZI_(G)), intent(out) :: N2_bot !< The near-bottom squared buoyancy frequency [s-2].
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces
@@ -1554,12 +1554,12 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
   real, dimension(SZI_(G)) :: I_decay ! A decay rate [Z-1 ~> m-1].
   real, dimension(SZI_(G)) :: Kd_mlr_ml ! Diffusivities associated with mixed layer radiation [Z2 s-1 ~> m2 s-1].
 
-  real :: f_sq              ! The square of the local Coriolis parameter or a related variable, in s-2.
+  real :: f_sq              ! The square of the local Coriolis parameter or a related variable [s-2].
   real :: h_ml_sq           ! The square of the mixed layer thickness [Z2 ~> m2].
   real :: ustar_sq          ! ustar squared [Z2 s-2 ~> m2 s-2]
   real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation [Z2 s-1 ~> m2 s-1].
   real :: C1_6              ! 1/6
-  real :: Omega2            ! rotation rate squared, in s-2.
+  real :: Omega2            ! rotation rate squared [s-2].
   real :: z1                ! layer thickness times I_decay (nondim)
   real :: dzL               ! thickness converted to heights [Z ~> m].
   real :: I_decay_len2_TKE  ! squared inverse decay lengthscale for
