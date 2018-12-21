@@ -102,12 +102,12 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf, halo)
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    fraz_col, & ! The accumulated heat requirement due to frazil, in J.
-    T_freeze, & ! The freezing potential temperature at the current salinity, C.
+    fraz_col, & ! The accumulated heat requirement due to frazil [J].
+    T_freeze, & ! The freezing potential temperature at the current salinity [degC].
     ps          ! pressure
   real, dimension(SZI_(G),SZK_(G)) :: &
-    pressure    ! The pressure at the middle of each layer in Pa.
-  real :: hc    ! A layer's heat capacity in J m-2 K-1.
+    pressure    ! The pressure at the middle of each layer [Pa].
+  real :: hc    ! A layer's heat capacity [J m-2 degC-1].
   logical :: T_fr_set  ! True if the freezing point has been calculated for a
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
@@ -659,15 +659,15 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
   ! Local variables
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [kg m-3].
-  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2     ! Reference pressures in Pa.
+  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2     ! Reference pressures [Pa].
   real, dimension(SZI_(G)) :: dK, dKm1, d1          ! Depths [Z ~> m].
   real, dimension(SZI_(G)) :: rhoSurf, rhoAtK, rho1 ! Densities used for N2 [kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
   real :: Rho_x_gE         ! The product of density, gravitational acceleartion and a unit
-                           ! conversion factor, in kg m-1 Z-1 s-2.
-  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density, in m4 s-2 kg-1.
+                           ! conversion factor [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
+  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [m4 s-2 kg-1].
   real :: dz_subML         ! Depth below ML over which to diagnose stratification [Z ~> m].
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
@@ -768,7 +768,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   type(ocean_grid_type),   intent(in)    :: G  !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  real,                    intent(in)    :: dt !< Time-step over which forcing is applied (s)
+  real,                    intent(in)    :: dt !< Time-step over which forcing is applied [s]
   type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),       pointer       :: optics !< Optical properties container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -779,16 +779,16 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   real,                    intent(in)    :: evap_CFL_limit !< The largest fraction of a layer that
                                                !! can be evaporated in one time-step (non-dim).
   real,                    intent(in)    :: minimum_forcing_depth !< The smallest depth over which
-                                               !! heat and freshwater fluxes is applied, in m.
+                                               !! heat and freshwater fluxes is applied [m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: cTKE !< Turbulent kinetic energy requirement to mix
-                                               !! forcing through each layer, in W m-2
+                                               !! forcing through each layer [W m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
-                                               !! potential temperature, in m3 kg-1 K-1.
+                                               !! potential temperature [m3 kg-1 degC-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
-                                               !! salinity, in m3 kg-1 / (g kg-1).
+                                               !! salinity [m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                    optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 s-3 ~> m2 s-3].
 

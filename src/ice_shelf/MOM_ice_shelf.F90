@@ -96,8 +96,8 @@ type, public :: ice_shelf_CS ; private
   real :: Cp_ice       !< The heat capacity of fresh ice [J kg-1 degC-1].
   real :: gamma_t      !< The (fixed) turbulent exchange velocity in the
                        !< 2-equation formulation [m s-1].
-  real :: Salin_ice    !< The salinity of shelf ice [PSU].
-  real :: Temp_ice     !< The core temperature of shelf ice, in degC.
+  real :: Salin_ice    !< The salinity of shelf ice [ppt].
+  real :: Temp_ice     !< The core temperature of shelf ice [degC].
   real :: kv_ice       !< The viscosity of ice [m2 s-1].
   real :: density_ice  !< A typical density of ice [kg m-3].
   real :: rho_ice      !< Nominal ice density in kg m-2 Z-1
@@ -131,10 +131,10 @@ type, public :: ice_shelf_CS ; private
                             !! but any difference will be negligible)
   logical :: calve_to_mask  !< If true, calve any ice that passes outside of a masked area
   real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
-  real :: T0                !< temperature at ocean surface in the restoring region, in degC
-  real :: S0                !< Salinity at ocean surface in the restoring region, in ppt.
+  real :: T0                !< temperature at ocean surface in the restoring region [degC]
+  real :: S0                !< Salinity at ocean surface in the restoring region [ppt].
   real :: input_flux        !< Ice volume flux at an upstream open boundary [m3 s-1].
-  real :: input_thickness   !< Ice thickness at an upstream open boundary, in m.
+  real :: input_thickness   !< Ice thickness at an upstream open boundary [m].
 
   type(time_type) :: Time                !< The component's time.
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
