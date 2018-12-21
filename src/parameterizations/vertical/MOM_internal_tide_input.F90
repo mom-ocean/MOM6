@@ -36,11 +36,11 @@ type, public :: int_tide_input_CS ; private
   logical :: debug      !< If true, write verbose checksums for debugging.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                         !! regulate the timing of diagnostic output.
-  real :: TKE_itide_max !< Maximum Internal tide conversion (W m-2)
-                        !! available to mix above the BBL
+  real :: TKE_itide_max !< Maximum Internal tide conversion
+                        !! available to mix above the BBL [W m-2]
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
-            !< The time-invariant field that enters the TKE_itidal input calculation, in J m-2.
+            !< The time-invariant field that enters the TKE_itidal input calculation [J m-2].
   character(len=200) :: inputdir !< The directory for input files.
 
   !>@{ Diagnostic IDs
@@ -133,9 +133,9 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure containing pointers to the
                                                                 !! thermodynamic fields
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_f  !< Temperature after vertical filtering to
-                                                                !! smooth out the values in thin layers, in degC.
+                                                                !! smooth out the values in thin layers [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_f  !< Salinity after vertical filtering to
-                                                                !! smooth out the values in thin layers, in PSU.
+                                                                !! smooth out the values in thin layers [ppt].
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
   type(forcing),                            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
@@ -145,9 +145,9 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces.
   real, dimension(SZI_(G)) :: &
-    pres, &       ! The pressure at each interface, in Pa.
-    Temp_int, &   ! The temperature at each interface, in degC.
-    Salin_int, &  ! The salinity at each interface, in PSU.
+    pres, &       ! The pressure at each interface [Pa].
+    Temp_int, &   ! The temperature at each interface [degC].
+    Salin_int, &  ! The salinity at each interface [ppt].
     drho_bot, &
     h_amp, &      ! The amplitude of topographic roughness [Z ~> m].
     hb, &         ! The depth below a layer [Z ~> m].

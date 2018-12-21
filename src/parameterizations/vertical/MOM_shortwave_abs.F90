@@ -89,9 +89,9 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
-                                                           !! volume with temperature, in m3 kg-1 K-1.
+                                                           !! volume with temperature [m3 kg-1 degC-1].
   real, dimension(SZI_(G),SZK_(G)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
-                                                           !! throughout a layer, in J m-2.
+                                                           !! throughout a layer [J m-2].
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
     T_chg_above    ! A temperature change that will be applied to all the thick
@@ -105,7 +105,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
     h_heat, &      ! The thickness of the water column that will be heated by
                    ! any remaining shortwave radiation [H ~> m or kg m-2].
     T_chg, &       ! The temperature change of thick layers due to the remaining
-                   ! shortwave radiation and contributions from T_chg_above, in K.
+                   ! shortwave radiation and contributions from T_chg_above [degC].
     Pen_SW_rem     ! The sum across all wavelength bands of the penetrating shortwave
                    ! heating that hits the bottom and will be redistributed through
                    ! the water column [degC H ~> degC m or degC kg m-2]

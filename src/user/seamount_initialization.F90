@@ -93,7 +93,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
                           ! positive upward [Z ~> m].
   real :: min_thickness   ! The minimum layer thicknesses [Z ~> m].
-  real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities, in ppt.
+  real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities [ppt].
   real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights [Z-1 ~> m-1].
   character(len=20) :: verticalCoordinate
   logical :: just_read    ! If true, just read parameters but set nothing.
