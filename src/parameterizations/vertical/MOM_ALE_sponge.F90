@@ -854,7 +854,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
   real :: damp                                  ! The timestep times the local damping coefficient.  ND.
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp).  Nondimensional.
-  real :: Idt                                   ! 1.0/dt, in s-1.
+  real :: Idt                                   ! 1.0/dt [s-1].
   real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
   real, dimension(SZK_(G)) :: tmp_val1          ! data values remapped to model grid

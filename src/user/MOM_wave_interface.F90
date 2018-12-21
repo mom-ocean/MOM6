@@ -71,7 +71,7 @@ type, public :: wave_parameters_CS ; private
   real, allocatable, dimension(:), public :: &
        WaveNum_Cen        !< Wavenumber bands for read/coupled (1/m)
   real, allocatable, dimension(:), public :: &
-       Freq_Cen           !< Frequency bands for read/coupled (1/s)
+       Freq_Cen           !< Frequency bands for read/coupled [s-1]
   real, allocatable, dimension(:), public :: &
        PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:), public :: &

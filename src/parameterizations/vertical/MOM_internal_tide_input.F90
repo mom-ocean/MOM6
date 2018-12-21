@@ -54,7 +54,7 @@ type, public :: int_tide_input_type
     TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean, in W m-2.
     h2, &               !< The squared topographic roughness height [Z2 ~> m2].
     tideamp, &          !< The amplitude of the tidal velocities [m s-1].
-    Nb                  !< The bottom stratification, in s-1.
+    Nb                  !< The bottom stratification [s-1].
 end type int_tide_input_type
 
 contains

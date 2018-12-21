@@ -114,7 +114,7 @@ type, public :: tidal_mixing_cs
 
   real :: Nbotref_Polzin      !< Reference value for the buoyancy frequency at the
                               !! ocean bottom used in Polzin formulation of the
-                              !! vertical scale of decay of tidal dissipation (1/s)
+                              !! vertical scale of decay of tidal dissipation [s-1]
   real :: Polzin_decay_scale_factor !< Scaling factor for the decay length scale
                               !! of the tidal dissipation profile in Polzin (nondimensional)
   real :: Polzin_decay_scale_max_factor !< The decay length scale of tidal dissipation
@@ -150,7 +150,7 @@ type, public :: tidal_mixing_cs
                                                          !! in W m-2
   real, pointer, dimension(:,:) :: TKE_itidal  => NULL() !< The internal Turbulent Kinetic Energy input divided
                                                          !! by the bottom stratfication, in J m-2.
-  real, pointer, dimension(:,:) :: Nb          => NULL() !< The near bottom buoyancy frequency, in s-1.
+  real, pointer, dimension(:,:) :: Nb          => NULL() !< The near bottom buoyancy frequency [s-1].
   real, pointer, dimension(:,:) :: mask_itidal => NULL() !< A mask of where internal tide energy is input
   real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance, in m2.
   real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [m s-1]

@@ -151,9 +151,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
   real :: h_vel           ! htot interpolated onto velocity points [Z ~> m] (not H).
-  real :: absf            ! absolute value of f, interpolated to velocity points (s-1)
+  real :: absf            ! absolute value of f, interpolated to velocity points [s-1]
   real :: u_star          ! surface friction velocity, interpolated to velocity points [Z s-1 ~> m s-1].
-  real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer (s-1)
+  real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer [s-1]
   real :: timescale       ! mixing growth timescale (sec)
   real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! A tiny thickness that is usually lost in roundoff so can be neglected [Z ~> m]
@@ -573,9 +573,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
   real :: h_vel           ! htot interpolated onto velocity points [Z ~> m]. (The units are not H.)
-  real :: absf            ! absolute value of f, interpolated to velocity points (s-1)
+  real :: absf            ! absolute value of f, interpolated to velocity points [s-1]
   real :: u_star          ! surface friction velocity, interpolated to velocity points [Z s-1 ~> m s-1].
-  real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer (s-1)
+  real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer [s-1]
   real :: timescale       ! mixing growth timescale (sec)
   real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! tiny thickness that usually lost in roundoff and can be neglected [Z ~> m]

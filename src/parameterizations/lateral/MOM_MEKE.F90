@@ -33,7 +33,7 @@ type, public :: MEKE_CS ; private
   ! Parameters
   real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE (non-dim)
   real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE (non-dim)
-  real :: MEKE_damping  !< Local depth-independent MEKE dissipation rate in s-1.
+  real :: MEKE_damping  !< Local depth-independent MEKE dissipation rate [s-1].
   real :: MEKE_Cd_scale !< The ratio of the bottom eddy velocity to the column mean
                         !! eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1
                         !! to account for the surface intensification of MEKE.

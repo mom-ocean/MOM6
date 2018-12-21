@@ -666,7 +666,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v !< If true, there is more advection to be
                                                                   !! done in this v-row
-  real,                                      intent(in)    :: Idt !< The inverse of dt, in s-1
+  real,                                      intent(in)    :: Idt !< The inverse of dt [s-1]
   integer,                                   intent(in)    :: ntr !< The number of tracers
   integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
   integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
