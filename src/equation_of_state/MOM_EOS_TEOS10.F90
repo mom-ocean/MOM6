@@ -222,9 +222,9 @@ subroutine calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1].
   real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
   real,    intent(out), dimension(:) :: dSV_dT   !< The partial derivative of specific volume with
-                                                 !! conservative temperature, in m3 kg-1 K-1.
+                                                 !! conservative temperature [m3 kg-1 degC-1].
   real,    intent(out), dimension(:) :: dSV_dS   !< The partial derivative of specific volume with
-                                                 !! absolute salinity, in m3 kg-1 / (g/kg).
+                                                 !! absolute salinity [m3 kg-1 (g/kg)-1].
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
 

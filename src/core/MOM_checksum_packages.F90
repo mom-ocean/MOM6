@@ -50,9 +50,11 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmet
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: uh   !< Volume flux through zonal faces = u*h*dy, m3 s-1.
+                           intent(in) :: uh   !< Volume flux through zonal faces = u*h*dy
+                                              !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in) :: vh   !< Volume flux through meridional faces = v*h*dx, in m3 s-1.
+                           intent(in) :: vh   !< Volume flux through meridional faces = v*h*dx
+                                              !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                    !! computationoal domain.
@@ -185,10 +187,10 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
                                                !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                   optional, intent(in) :: u_accel_bt !< The zonal acceleration from terms in the
-                                                     !! barotropic solver,in m s-2.
+                                                     !! barotropic solver [m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                   optional, intent(in) :: v_accel_bt !< The meridional acceleration from terms in
-                                                     !! the barotropic solver,in m s-2.
+                                                     !! the barotropic solver [m s-2].
   logical,        optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                     !! computationoal domain.
 
@@ -223,9 +225,9 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:),           &
-                           intent(in) :: Temp !< Temperature in degree C.
+                           intent(in) :: Temp !< Temperature [degC].
   real, pointer, dimension(:,:,:),           &
-                           intent(in) :: Salt !< Salinity, in ppt.
+                           intent(in) :: Salt !< Salinity [ppt].
   logical,       optional, intent(in) :: allowChange !< do not flag an error
                                                      !! if the statistics change.
   logical,       optional, intent(in) :: permitDiminishing !< do not flag error

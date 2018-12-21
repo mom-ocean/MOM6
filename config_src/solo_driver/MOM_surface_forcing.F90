@@ -78,32 +78,32 @@ type, public :: surface_forcing_CS ; private
   real    :: south_lat          !< southern latitude of the domain
   real    :: len_lat            !< domain length in latitude
 
-  real :: Rho0                  !< Boussinesq reference density (kg/m^3)
-  real :: G_Earth               !< gravitational acceleration (m/s^2)
+  real :: Rho0                  !< Boussinesq reference density [kg m-3]
+  real :: G_Earth               !< gravitational acceleration [m s-2]
   real :: Flux_const            !< piston velocity for surface restoring [m s-1]
   real :: Flux_const_T          !< piston velocity for surface temperature restoring [m s-1]
   real :: Flux_const_S          !< piston velocity for surface salinity restoring [m s-1]
-  real :: latent_heat_fusion    !< latent heat of fusion (J/kg)
-  real :: latent_heat_vapor     !< latent heat of vaporization (J/kg)
+  real :: latent_heat_fusion    !< latent heat of fusion [J kg]
+  real :: latent_heat_vapor     !< latent heat of vaporization [J kg]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const" forcing
   real :: tau_y0                !< Constant meridional wind stress used in the WIND_CONFIG="const" forcing
 
-  real    :: gust_const                 !< constant unresolved background gustiness for ustar (Pa)
+  real    :: gust_const                 !< constant unresolved background gustiness for ustar [Pa]
   logical :: read_gust_2d               !< if true, use 2-dimensional gustiness supplied from a file
-  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness (Pa)
+  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [Pa]
                                         !! gust is used when read_gust_2d is true.
 
-  real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to (deg C)
-  real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS (g/kg)
-  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density (kg/m^3)
+  real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [degC]
+  real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [ppt]
+  real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [kg m-3]
 
   integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
 
   ! if WIND_CONFIG=='gyres' then use the following as  = A, B, C and n respectively for
   ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
-  real :: gyres_taux_const   !< A constant wind stress, in Pa.
-  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres, in Pa, if WIND_CONFIG=='gyres'.
-  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres, in Pa, if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_const   !< A constant wind stress [Pa].
+  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [Pa], if WIND_CONFIG=='gyres'.
+  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [Pa], if WIND_CONFIG=='gyres'.
   real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if  if WIND_CONFIG=='gyres'
 
 
@@ -360,8 +360,8 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
-  real,                     intent(in)    :: tau_x0 !< The zonal wind stress in Pa
-  real,                     intent(in)    :: tau_y0 !< The meridional wind stress in Pa
+  real,                     intent(in)    :: tau_x0 !< The zonal wind stress [Pa]
+  real,                     intent(in)    :: tau_y0 !< The meridional wind stress [Pa]
   type(time_type),          intent(in)    :: day  !< The time of the fluxes
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -484,7 +484,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
 
-  ! steady surface wind stresses (Pa)
+  ! steady surface wind stresses [Pa]
   PI = 4.0*atan(1.0)
 
   do j=js-1,je+1 ; do I=is-1,Ieq
@@ -522,7 +522,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   ! Local variables
   character(len=200) :: filename  ! The name of the input file.
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
-  real    :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points [Pa].
   integer :: time_lev_daily          ! The time levels to read for fields with
   integer :: time_lev_monthly        ! daily and montly cycles.
   integer :: time_lev                ! The time level that is used for a field.
@@ -671,7 +671,7 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
                                                   !! a previous surface_forcing_init call
   ! Local variables
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
-  real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
+  real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points [Pa].
   real :: temp_ustar(SZI_(G),SZJ_(G)) ! ustar [m s-1] (not rescaled).
   integer :: i, j, is_in, ie_in, js_in, je_in
   logical :: read_uStar
@@ -743,15 +743,15 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     temp, &       ! A 2-d temporary work array with various units.
     SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
-                  ! target (observed) value, in deg C.
+                  ! target (observed) value [degC].
     SSS_anom, &   ! Instantaneous sea surface salinity anomalies from a target
-                  ! (observed) value, in g kg-1.
+                  ! (observed) value [ppt].
     SSS_mean      ! A (mean?) salinity about which to normalize local salinity
                   ! anomalies when calculating restorative precipitation
-                  ! anomalies, in g kg-1.
+                  ! anomalies [ppt].
 
-  real :: rhoXcp ! reference density times heat capacity (J/(m^3 * K))
-  real :: Irho0  ! inverse of the Boussinesq reference density (m^3/kg)
+  real :: rhoXcp ! reference density times heat capacity [J m-3 degC-1]
+  real :: Irho0  ! inverse of the Boussinesq reference density [m3 kg-1]
 
   integer :: time_lev_daily     ! time levels to read for fields with daily cycle
   integer :: time_lev_monthly   ! time levels to read for fields with monthly cycle
@@ -1021,14 +1021,14 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
   real, dimension(SZI_(G),SZJ_(G)) :: &
     temp, &       ! A 2-d temporary work array with various units.
     SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
-                  ! target (observed) value, in deg C.
+                  ! target (observed) value [degC].
     SSS_anom, &   ! Instantaneous sea surface salinity anomalies from a target
-                  ! (observed) value, in g kg-1.
+                  ! (observed) value [ppt].
     SSS_mean      ! A (mean?) salinity about which to normalize local salinity
                   ! anomalies when calculating restorative precipitation
-                  ! anomalies, in g kg-1.
-  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
-  real :: Irho0  ! The inverse of the Boussinesq density, in m3 kg-1.
+                  ! anomalies [ppt].
+  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
+  real :: Irho0  ! The inverse of the Boussinesq density [m3 kg-1].
 
   integer :: time_lev_daily     ! The time levels to read for fields with
   integer :: time_lev_monthly   ! daily and montly cycles.

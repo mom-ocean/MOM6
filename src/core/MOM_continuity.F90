@@ -53,18 +53,18 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                            intent(inout) :: h   !< Final layer thickness [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: uh  !< Volume flux through zonal faces =
-                                                !! u*h*dy, in m3/s.
+                                                !! u*h*dy [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out)   :: vh  !< Volume flux through meridional faces =
-                                                !! v*h*dx, in m3/s.
+                                                !! v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt  !< Time increment [s].
   type(continuity_CS),     pointer       :: CS  !< Control structure for mom_continuity.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume
-                                                !! flux through zonal faces, in m3/s.
+                                                !! flux through zonal faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(in)    :: vhbt !< The vertically summed volume
-                                                !! flux through meridional faces, in m3/s.
+                                                !! flux through meridional faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type), &
                  optional, pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &

@@ -162,14 +162,14 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   real :: g_Earth_z          ! A scaled version of g_Earth [m2 Z-1 s-2 ~> m s-2].
   real :: I_gEarth           ! The inverse of g_Earth_z [s2 Z m-2 ~> s2 m-1]
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
-                             ! layer, less alpha_ref, in m3 kg-1.
+                             ! layer, less alpha_ref [m3 kg-1].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
 
-  real :: alpha_ref ! A reference specific volume, in m3 kg-1, that is used
+  real :: alpha_ref ! A reference specific volume [m3 kg-1], that is used
                     ! to reduce the impact of truncation errors.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [kg m-3].
   real :: Pa_to_H   ! A factor to convert from Pa to the thicknesss units (H).

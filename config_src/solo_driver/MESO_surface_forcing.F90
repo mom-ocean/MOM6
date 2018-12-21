@@ -30,14 +30,14 @@ type, public :: MESO_surface_forcing_CS ; private
   real :: G_Earth            !< The gravitational acceleration [m s-2].
   real :: Flux_const         !< The restoring rate at the surface [m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar, in Pa.
+                             !! that contributes to ustar [Pa].
   real, dimension(:,:), pointer :: &
-    T_Restore(:,:) => NULL(), & !< The temperature to restore the SST toward, in C.
-    S_Restore(:,:) => NULL(), & !< The salinity to restore the sea surface salnity toward, in PSU.
-    PmE(:,:) => NULL(), &       !< The prescribed precip minus evap, in  m s-1.
-    Solar(:,:) => NULL()        !< The shortwave forcing into the ocean, in W m-2 m s-1.
+    T_Restore(:,:) => NULL(), & !< The temperature to restore the SST toward [degC].
+    S_Restore(:,:) => NULL(), & !< The salinity to restore the sea surface salnity toward [ppt]
+    PmE(:,:) => NULL(), &       !< The prescribed precip minus evap [m s-1].
+    Solar(:,:) => NULL()        !< The shortwave forcing into the ocean [W m-2].
   real, dimension(:,:), pointer :: Heat(:,:) => NULL() !< The prescribed longwave, latent and sensible
-                                !! heat flux into the ocean, in W m-2.
+                                !! heat flux into the ocean [W m-2].
   character(len=200) :: inputdir !< The directory where NetCDF input files are.
   character(len=200) :: salinityrestore_file !< The file with the target sea surface salinity
   character(len=200) :: SSTrestore_file !< The file with the target sea surface temperature
@@ -76,7 +76,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
 
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
+  real :: Salin_restore  ! The salinity that is being restored toward [ppt]
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].

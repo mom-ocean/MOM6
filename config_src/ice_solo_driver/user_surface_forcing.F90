@@ -83,7 +83,7 @@ type, public :: user_surface_forcing_CS ; private
   real :: G_Earth            !   The gravitational acceleration [m s-2].
   real :: Flux_const         !   The restoring rate at the surface [m s-1].
   real :: gust_const         !   A constant unresolved background gustiness
-                             ! that contributes to ustar, in Pa.
+                             ! that contributes to ustar [Pa].
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -126,7 +126,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   ! Allocate the forcing arrays, if necessary.
   call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
 
-  !  Set the surface wind stresses, in units of Pa.  A positive taux
+  !  Set the surface wind stresses [Pa].  A positive taux
   !  accelerates the ocean to the (pseudo-)east.
 
   !  The i-loop extends to is-1 so that taux can be used later in the
@@ -138,8 +138,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
     forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
 
-  !    Set the surface friction velocity, in units of m s-1.  ustar
-  !  is always positive.
+  !  Set the surface friction velocity [Z s-1 ~> m s-1].  ustar is always positive.
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
@@ -177,8 +176,8 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
 
-  real :: Temp_restore   ! The temperature that is being restored toward, in C.
-  real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
+  real :: Temp_restore   ! The temperature that is being restored toward [C].
+  real :: Salin_restore  ! The salinity that is being restored toward [ppt]
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].

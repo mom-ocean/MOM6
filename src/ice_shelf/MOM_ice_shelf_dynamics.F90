@@ -3621,7 +3621,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
                                               !! the zonal mass fluxes, in m.
   real, dimension(SZDI_(G),SZDJ_(G),4), &
                           intent(inout) :: flux_enter !< The integrated temperature flux into
-                                              !! the cell through the 4 cell boundaries, in degC Z m2
+                                              !! the cell through the 4 cell boundaries [degC Z m2 ~> degC m3]
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
 
@@ -3853,7 +3853,7 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
                                               !! the meridional mass fluxes [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G),4), &
                           intent(inout) :: flux_enter !< The integrated temperature flux into
-                                              !! the cell through the 4 cell boundaries, in degC Z m2
+                                              !! the cell through the 4 cell boundaries [degC Z m2 ~> degC m3]
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
 
