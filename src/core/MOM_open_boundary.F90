@@ -2879,7 +2879,7 @@ end subroutine open_boundary_test_extern_uv
 subroutine open_boundary_test_extern_h(G, OBC, h)
   type(ocean_grid_type),                    intent(in)    :: G   !< Ocean grid structure
   type(ocean_OBC_type),                     pointer       :: OBC !< Open boundary structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),intent(inout) :: h   !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),intent(inout) :: h   !< Layer thickness [H ~> m or kg m-2]
   ! Local variables
   integer :: i, j, k, n
 

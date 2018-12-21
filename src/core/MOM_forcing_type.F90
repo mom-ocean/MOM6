@@ -778,7 +778,7 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
   type(forcing),                    intent(inout) :: fluxes            !< structure containing pointers to forcing.
   type(optics_type),                pointer       :: optics            !< pointer to optics
   integer,                          intent(in)    :: nsw               !< number of bands of penetrating SW
-  real,                             intent(in)    :: dt                !< time step in seconds
+  real,                             intent(in)    :: dt                !< time step [s]
   real,                             intent(in)    :: FluxRescaleDepth  !< min ocean depth before fluxes
                                                                        !! are scaled away [H ~> m or kg m-2]
   logical,                          intent(in)    :: useRiverHeatContent   !< logical for river heat content
@@ -1774,7 +1774,7 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
   type(mech_forcing),    intent(in)    :: forces !< A structure with the driving mechanical forces
   type(forcing),         intent(inout) :: fluxes !< A structure containing time-averaged
                                                  !! thermodynamic forcing fields
-  real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
+  real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine [s]
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   real,                  intent(out)   :: wt2  !< The relative weight of the new fluxes
 
@@ -1793,7 +1793,7 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, dt, G, wt2, forces)
                                                    !! thermodynamic forcing fields
   type(forcing),             intent(inout) :: fluxes !< A structure containing time-averaged
                                                    !! thermodynamic forcing fields
-  real,                      intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
+  real,                      intent(in)    :: dt   !< The elapsed time since the last call to this subroutine [s]
   type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
   real,                      intent(out)   :: wt2  !< The relative weight of the new fluxes
   type(mech_forcing), optional, intent(in) :: forces !< A structure with the driving mechanical forces

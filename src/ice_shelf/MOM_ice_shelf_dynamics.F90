@@ -39,10 +39,10 @@ public shelf_advance_front, ice_shelf_min_thickness_calve, calve_to_mask
 
 !> The control structure for the ice shelf dynamics.
 type, public :: ice_shelf_dyn_CS ; private
-  real, pointer, dimension(:,:) :: u_shelf => NULL() !< the zonal (?) velocity of the ice shelf/sheet,
-                                       !! in meters per second??? on q-points (B grid)
-  real, pointer, dimension(:,:) :: v_shelf => NULL() !< the meridional velocity of the ice shelf/sheet,
-                                       !! in m/s ?? on q-points (B grid)
+  real, pointer, dimension(:,:) :: u_shelf => NULL() !< the zonal (?) velocity of the ice shelf/sheet
+                                       !! on q-points (B grid) [m s-1]??
+  real, pointer, dimension(:,:) :: v_shelf => NULL() !< the meridional velocity of the ice shelf/sheet
+                                       !! on q-points (B grid) [m s-1]??
 
   real, pointer, dimension(:,:) :: u_face_mask => NULL() !< mask for velocity boundary conditions on the C-grid
                                        !! u-face - this is because the FEM cares about FACES THAT GET INTEGRATED OVER,
@@ -57,9 +57,9 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: u_face_mask_bdry => NULL() !< A duplicate copy of u_face_mask?
   real, pointer, dimension(:,:) :: v_face_mask_bdry => NULL() !< A duplicate copy of v_face_mask?
   real, pointer, dimension(:,:) :: u_flux_bdry_val => NULL() !< The ice volume flux into the cell through open boundary
-                                       !! u-faces (where u_face_mask=4) [Z m2 s-1 ~> m3 s-1]???
+                                       !! u-faces (where u_face_mask=4) [Z m2 s-1 ~> m3 s-1]??
   real, pointer, dimension(:,:) :: v_flux_bdry_val => NULL() !< The ice volume flux into the cell through open boundary
-                                       !! v-faces (where v_face_mask=4) [Z m2 s-1 ~> m3 s-1]???
+                                       !! v-faces (where v_face_mask=4) [Z m2 s-1 ~> m3 s-1]??
    ! needed where u_face_mask is equal to 4, similary for v_face_mask
   real, pointer, dimension(:,:) :: umask => NULL()      !< u-mask on the actual degrees of freedom (B grid)
                                        !! 1=normal node, 3=inhomogeneous boundary node,
@@ -70,14 +70,14 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: calve_mask => NULL() !< a mask to prevent the ice shelf front from
                                           !! advancing past its initial position (but it may retreat)
   real, pointer, dimension(:,:) :: t_shelf => NULL() !< Veritcally integrated temperature in the ice shelf/stream,
-                                                     !! in degC  on corner-points (B grid)
+                                                     !! on corner-points (B grid) [degC]
   real, pointer, dimension(:,:) :: tmask => NULL()   !< A mask on tracer points that is 1 where there is ice.
-  real, pointer, dimension(:,:) :: ice_visc => NULL()   !< Glen's law ice viscosity, perhaps in m.
+  real, pointer, dimension(:,:) :: ice_visc => NULL()   !< Glen's law ice viscosity, perhaps in [m].
   real, pointer, dimension(:,:) :: thickness_bdry_val => NULL() !< The ice thickness at an inflowing boundary [Z ~> m].
-  real, pointer, dimension(:,:) :: u_bdry_val => NULL() !< The zonal ice velocity at inflowing boundaries in m/s???
-  real, pointer, dimension(:,:) :: v_bdry_val => NULL() !< The meridional ice velocity at inflowing boundaries in m/s???
-  real, pointer, dimension(:,:) :: h_bdry_val => NULL() !< The ice thickness at inflowing boundaries, in m.
-  real, pointer, dimension(:,:) :: t_bdry_val => NULL() !< The ice temperature at inflowing boundaries, in deg C.
+  real, pointer, dimension(:,:) :: u_bdry_val => NULL() !< The zonal ice velocity at inflowing boundaries [m s-1]??
+  real, pointer, dimension(:,:) :: v_bdry_val => NULL() !< The meridional ice velocity at inflowing boundaries [m s-1]??
+  real, pointer, dimension(:,:) :: h_bdry_val => NULL() !< The ice thickness at inflowing boundaries [m].
+  real, pointer, dimension(:,:) :: t_bdry_val => NULL() !< The ice temperature at inflowing boundaries [degC].
 
   real, pointer, dimension(:,:) :: taub_beta_eff => NULL() !< nonlinear part of "linearized" basal stress.
                 !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
@@ -90,8 +90,8 @@ type, public :: ice_shelf_dyn_CS ; private
                        !### [if float_frac = 1 ==> grounded; obviously counterintuitive; might fix]
   integer :: OD_rt_counter = 0 !< A counter of the number of contributions to OD_rt.
 
-  real :: velocity_update_time_step !< The time in s to update the ice shelf velocity through the
-                    !! nonlinear elliptic equation, or 0 to update every timestep.
+  real :: velocity_update_time_step !< The time interval over which to update the ice shelf velocity
+                    !! using the nonlinear elliptic equation, or 0 to update every timestep [s].
                     ! DNGoldberg thinks this should be done no more often than about once a day
                     ! (maybe longer) because it will depend on ocean values  that are averaged over
                     ! this time interval, and solving for the equiliabrated flow will begin to lose
@@ -99,10 +99,10 @@ type, public :: ice_shelf_dyn_CS ; private
   real :: elapsed_velocity_time  !< The elapsed time since the ice velocies were last udated [s].
 
   real :: g_Earth      !< The gravitational acceleration [m s-2].
-  real :: density_ice  !< A typical density of ice, in kg m-3.
+  real :: density_ice  !< A typical density of ice [kg m-3].
 
-  logical :: GL_regularize  !< whether to regularize the floatation condition
-                            !! at the grounding line a la Goldberg Holland Schoof 2009
+  logical :: GL_regularize  !< Specifies whether to regularize the floatation condition
+                            !! at the grounding line as in Goldberg Holland Schoof 2009
   integer :: n_sub_regularize
                             !< partition of cell over which to integrate for
                             !! interpolated grounding line the (rectangular) is
@@ -116,16 +116,16 @@ type, public :: ice_shelf_dyn_CS ; private
   real    :: CFL_factor     !< A factor used to limit subcycled advective timestep in uncoupled runs
                             !! i.e. dt <= CFL_factor * min(dx / u)
 
-  real :: A_glen_isothermal !< Ice viscosity parameter in Glen's Lawa, in Pa-1/3 a.
+  real :: A_glen_isothermal !< Ice viscosity parameter in Glen's Lawa, [Pa-1/3 year].
   real :: n_glen            !< Nonlinearity exponent in Glen's Law
-  real :: eps_glen_min      !< Min. strain rate to avoid infinite Glen's law viscosity, in a-1.
+  real :: eps_glen_min      !< Min. strain rate to avoid infinite Glen's law viscosity, [year-1].
   real :: C_basal_friction  !< Ceofficient in sliding law tau_b = C u^(n_basal_friction), in
                             !!  units="Pa (m-a)-(n_basal_friction)
   real :: n_basal_friction  !< Exponent in sliding law tau_b = C u^(m_slide)
-  real :: density_ocean_avg !< this does not affect ocean circulation OR thermodynamics
-                            !! it is to estimate the gravitational driving force at the
-                            !! shelf front(until we think of a better way to do it-
-                            !! but any difference will be negligible)
+  real :: density_ocean_avg !< This does not affect ocean circulation or thermodynamics.
+                            !! It is used to estimate the gravitational driving force at the
+                            !! shelf front (until we think of a better way to do it,
+                            !! but any difference will be negligible).
   real :: thresh_float_col_depth !< The water column depth over which the shelf if considered to be floating
   logical :: moving_shelf_front  !< Specify whether to advance shelf front (and calve).
   logical :: calve_to_mask       !< If true, calve off the ice shelf when it passes the edge of a mask.
@@ -138,7 +138,7 @@ type, public :: ice_shelf_dyn_CS ; private
   integer :: cg_max_iterations !< The maximum number of iterations that can be used in the CG solver
   integer :: nonlin_solve_err_mode  !< 1: exit vel solve based on nonlin residual
                     !! 2: exit based on "fixed point" metric (|u - u_last| / |u| < tol where | | is infty-norm
-  logical :: use_reproducing_sums !< use new reproducing sums of Bob & Alistair for global sums.
+  logical :: use_reproducing_sums !< Use reproducing global sums.
 
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
   !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
@@ -570,11 +570,11 @@ end subroutine initialize_diagnostic_fields
 !> This function returns the global maximum timestep that can be taken based on the current
 !! ice velocities.  Because it involves finding a global minimum, it can be suprisingly expensive.
 function ice_time_step_CFL(CS, ISS, G)
-  type(ice_shelf_dyn_CS), intent(inout) :: CS !< The ice shelf dynamics control structure
+  type(ice_shelf_dyn_CS), intent(inout) :: CS  !< The ice shelf dynamics control structure
   type(ice_shelf_state),  intent(inout) :: ISS !< A structure with elements that describe
-                                           !! the ice-shelf state
-  type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
-  real :: ice_time_step_CFL !< The maximum permitted timestep, in s, based on the ice velocities.
+                                               !! the ice-shelf state
+  type(ocean_grid_type),  intent(inout) :: G   !< The grid structure used by the ice shelf.
+  real :: ice_time_step_CFL !< The maximum permitted timestep based on the ice velocities [s].
 
   real :: ratio, min_ratio
   real :: local_u_max, local_v_max
@@ -606,11 +606,11 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
                                               !! the ice-shelf state
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type),  intent(in)    :: US !< Pointer to a structure containing unit conversion factors
-  real,                   intent(in)    :: time_step !< time step in sec
+  real,                   intent(in)    :: time_step !< time step [s]
   type(time_type),        intent(in)    :: Time !< The current model time
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                optional, intent(in)    :: ocean_mass !< If present this is the mass puer unit area
-                                              !! of the ocean in kg m-2.
+                optional, intent(in)    :: ocean_mass !< If present this is the mass per unit area
+                                              !! of the ocean [kg m-2].
   logical,      optional, intent(in)    :: coupled_grounding !< If true, the grounding line is
                                               !! determined by coupled ice-ocean dynamics
   logical,      optional, intent(in)    :: must_update_vel !< Always update the ice velocities if true.
@@ -668,17 +668,11 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time)
   type(ice_shelf_state),  intent(inout) :: ISS !< A structure with elements that describe
                                                !! the ice-shelf state
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
-  real,                   intent(in)    :: time_step !< time step in sec
+  real,                   intent(in)    :: time_step !< time step [s]
   type(time_type),        intent(in)    :: Time !< The current model time
 
-! time_step: time step in sec
 
 ! 3/8/11 DNG
-! Arguments:
-! CS - A structure containing the ice shelf state - including current velocities
-! h0 - an array containing the thickness at the beginning of the call
-! h_after_uflux - an array containing the thickness after advection in u-direction
-! h_after_vflux - similar
 !
 !    This subroutine takes the velocity (on the Bgrid) and timesteps h_t = - div (uh) once.
 !    ADDITIONALLY, it will update the volume of ice in partially-filled cells, and update
@@ -3483,19 +3477,10 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
   type(unit_scale_type), intent(in)    :: US !< Pointer to a structure containing unit conversion factors
   real,                  intent(in) :: time_step !< The time step for this update [s].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in) :: melt_rate !< basal melt rate in kg/m^2/s
+                         intent(in) :: melt_rate !< basal melt rate [kg m-2 s-1]
   type(time_type),       intent(in) :: Time !< The current model time
 
-! time_step: time step in sec
-! melt_rate: basal melt rate in kg/m^2/s
-
 ! 5/23/12 OVS
-! Arguments:
-! CS - A structure containing the ice shelf state - including current velocities
-! t0 - an array containing temperature at the beginning of the call
-! t_after_uflux - an array containing the temperature after advection in u-direction
-! t_after_vflux - similar
-!
 !    This subroutine takes the velocity (on the Bgrid) and timesteps
 !      (HT)_t = - div (uHT) + (adot Tsurf -bdot Tbot) once and then calculates T=HT/H
 !
