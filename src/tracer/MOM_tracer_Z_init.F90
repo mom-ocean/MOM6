@@ -66,7 +66,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   real    :: landval    ! The tracer value to use in land points.
   real    :: sl_tr      ! The normalized slope of the tracer
                         ! within the cell, in tracer units.
-  real    :: htot(SZI_(G)) ! The vertical sum of h, in m or kg m-2.
+  real    :: htot(SZI_(G)) ! The vertical sum of h [H ~> m or kg m-2].
   real    :: dilate     ! The amount by which the thicknesses are dilated to
                         ! create a z-star coordinate, nondim or in m3 kg-1.
   real    :: missing    ! The missing value for the tracer.

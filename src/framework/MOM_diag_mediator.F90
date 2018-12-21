@@ -161,8 +161,8 @@ type, public :: diag_ctrl
   integer :: ied !< The end i-index of cell centers within the data domain
   integer :: jsd !< The start j-index of cell centers within the data domain
   integer :: jed !< The end j-index of cell centers within the data domain
-  real :: time_int              !< The time interval in s for any fields
-                                !! that are offered for averaging.
+  real :: time_int              !< The time interval for any fields
+                                !! that are offered for averaging [s].
   type(time_type) :: time_end   !< The end time of the valid
                                 !! interval for any offered field.
   logical :: ave_enabled = .false. !< True if averaging is enabled.
@@ -1244,7 +1244,7 @@ end subroutine post_xy_average
 
 !> This subroutine enables the accumulation of time averages over the specified time interval.
 subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
-  real,            intent(in)    :: time_int_in !< The time interval in s over which any
+  real,            intent(in)    :: time_int_in !< The time interval [s] over which any
                                                 !!  values that are offered are valid.
   type(time_type), intent(in)    :: time_end_in !< The end time of the valid interval
   type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
@@ -1271,7 +1271,7 @@ end subroutine disable_averaging
 !! currently enabled.  .true. is returned if it is.
 function query_averaging_enabled(diag_cs, time_int, time_end)
   type(diag_ctrl),           intent(in)  :: diag_CS  !< Structure used to regulate diagnostic output
-  real,            optional, intent(out) :: time_int !< Current setting of diag%time_int, in s
+  real,            optional, intent(out) :: time_int !< Current setting of diag%time_int [s]
   type(time_type), optional, intent(out) :: time_end !< Current setting of diag%time_end
   logical :: query_averaging_enabled
 

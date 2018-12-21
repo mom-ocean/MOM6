@@ -61,7 +61,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
                                                       !! have NULL ptrs.
   type(time_type),              intent(in)    :: day  !< Time of the fluxes.
   real,                         intent(in)    :: dt   !< The amount of time over which
-                                                      !! the fluxes apply, in s
+                                                      !! the fluxes apply [s]
   type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure
   type(BFB_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure
                                                       !! returned by a previous call to

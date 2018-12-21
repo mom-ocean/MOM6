@@ -847,7 +847,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2] (in)
-  real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
+  real,                      intent(in)    :: dt !< The amount of time covered by this call [s].
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_sponge (in).
   type(time_type), optional, intent(in)    :: Time !< The current model date

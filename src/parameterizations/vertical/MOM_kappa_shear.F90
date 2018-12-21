@@ -1433,7 +1433,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                         ! solved for [m2 s-2].
   real :: kappa0        ! The background diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
   real :: max_err       ! The maximum value of norm_err in a column [nondim].
-  real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0, Z2 s-1.
+  real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0 [Z2 s-1 ~> m2 s-1].
 
   real :: eden1, eden2, I_eden, ome  ! Variables used in calculating e1.
   real :: diffusive_src ! The diffusive source in the kappa equation [m s-1].
@@ -1446,11 +1446,11 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   ! Temporary variables used in the Newton's method iterations.
   real :: decay_term_k  ! The decay term in the diffusivity equation
   real :: decay_term_Q  ! The decay term in the TKE equation
-  real :: I_Q           ! The inverse of TKE, in s2 m-2
+  real :: I_Q           ! The inverse of TKE [s2 m-2]
   real :: kap_src
   real :: v1, v2
   real :: Z2_to_L2       ! A conversion factor from vertical depth units to horizontal length
-                         ! units squared, in m2 Z-2.
+                         ! units squared [m2 Z-2].
   real :: tol_err        ! The tolerance for max_err that determines when to
                          ! stop iterating.
   real :: Newton_err     ! The tolerance for max_err that determines when to

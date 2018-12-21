@@ -389,8 +389,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     e             ! The interface heights relative to mean sea level, in m.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points, in s-2
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points, in s-2
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [s-2]
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [s-2]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
@@ -431,7 +431,6 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
 
   ! Local variables
-  real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: S2            ! Interface slope squared (non-dim)
   real :: N2            ! Brunt-Vaisala frequency [s-1]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
@@ -585,7 +584,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points (for diagnostics)
-  real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: H_cutoff      ! Local estimate of a minimum thickness for masking [H ~> m or kg m-2]
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
@@ -722,7 +720,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
   real :: KhTr_passivity_coeff
   real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
-             ! squared that is used to avoid division by 0, in s-2.  This
+             ! squared that is used to avoid division by 0 [s-2].  This
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
   real :: MLE_front_length

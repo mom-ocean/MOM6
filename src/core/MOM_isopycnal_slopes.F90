@@ -343,12 +343,12 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
   integer,                        optional, intent(in)  :: halo_here !< Halo width over which to compute
   ! Local variables
   real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
-                                   ! between layers in a timestep in m or kg m-2.
+                                   ! between layers in a timestep [H ~> m or kg m-2].
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
   real :: kap_dt_x2                ! The product of 2*kappa*dt, converted to
                                    ! the same units as h, in m2 or kg2 m-4.
-  real :: h_neglect                ! A negligible thickness, in m or kg m-2, to
+  real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to
                                    ! allow for zero thicknesses.
   integer :: i, j, k, is, ie, js, je, nz, halo
 

@@ -76,7 +76,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    N2_bot        ! The bottom squared buoyancy frequency, in s-2.
+    N2_bot        ! The bottom squared buoyancy frequency [s-2].
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     T_f, S_f      ! The temperature and salinity in [degC] and [ppt] with the values in
@@ -140,7 +140,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   type(forcing),                            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
   real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: N2_bot !< The squared buoyancy freqency at the
-                                                                 !! ocean bottom, in s-2.
+                                                                 !! ocean bottom [s-2].
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces.

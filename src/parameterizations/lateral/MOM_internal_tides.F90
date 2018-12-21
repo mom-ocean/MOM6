@@ -758,7 +758,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
     CFL_ang
   real :: f2              ! The squared Coriolis parameter [s-2].
   real :: favg            ! The average Coriolis parameter at a point [s-1].
-  real :: df2_dy, df2_dx  ! The x- and y- gradients of the squared Coriolis parameter, in s-2 m-1.
+  real :: df2_dy, df2_dx  ! The x- and y- gradients of the squared Coriolis parameter [s-2 m-1].
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter [s-1 m-1].
   real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself in m-1.
   real :: dlnCn_dy        ! The y-gradient of the wave speed divided by itself in m-1.

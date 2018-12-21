@@ -226,7 +226,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
   ! Local variables
-  real :: dt                     ! length of time in seconds over which fluxes applied
+  real :: dt                     ! length of time over which fluxes applied [s]
   type(time_type) :: day_center  ! central time of the fluxes.
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -735,7 +735,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply, in s
+                                               !! the fluxes apply [s]
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
@@ -1013,7 +1013,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
   type(forcing),            intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),          intent(in)    :: day  !< The time of the fluxes
   real,                     intent(in)    :: dt   !< The amount of time over which
-                                                  !! the fluxes apply, in s
+                                                  !! the fluxes apply [s]
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
@@ -1179,7 +1179,7 @@ subroutine buoyancy_forcing_zero(sfc_state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply, in s
+                                               !! the fluxes apply [s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
@@ -1222,7 +1222,7 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply, in s
+                                               !! the fluxes apply [s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
@@ -1264,7 +1264,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply, in s
+                                               !! the fluxes apply [s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call

@@ -280,7 +280,6 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
                                                                   !! structure.
   type(unit_scale_type),                 intent(in)    :: US      !< A dimensional unit scaling type
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thicknesses [H ~> m or kg m-2]
-                                                                  !! (usually m or kg m-2)
   type(param_file_type),                 intent(in)    :: param_file !< A structure to parse for
                                                                   !! run-time parameters
   type(diag_ctrl), target,               intent(in)    :: diag    !< A structure that is used to
@@ -742,19 +741,9 @@ subroutine call_tracer_surface_state(state, h, G, CS)
                                                        !! describe the surface state of the ocean.
   real, dimension(NIMEM_,NJMEM_,NKMEM_), &
                                 intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
-                                                       !! (usually m or kg m-2).
   type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure.
   type(tracer_flow_control_CS), pointer       :: CS    !< The control structure returned by a
                                                        !! previous call to call_tracer_register.
-!   This subroutine calls all registered tracer packages to enable them to
-! add to the surface state returned to the coupler. These routines are optional.
-
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (in)      h - Layer thickness, in m (Boussinesq) or kg m-2 (non-Boussinesq).
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_surface_state: "// &
          "Module must be initialized via call_tracer_register before it is used.")

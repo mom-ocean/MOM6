@@ -160,7 +160,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [Pa].
   real :: g_Earth_z          ! A scaled version of g_Earth [m2 Z-1 s-2 ~> m s-2].
-  real :: I_gEarth           ! The inverse of g_Earth_z, in s2 Z m-2
+  real :: I_gEarth           ! The inverse of g_Earth_z [s2 Z m-2 ~> s2 m-1]
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref, in m3 kg-1.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
@@ -500,9 +500,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected, in m.
   real :: g_Earth_z          ! A scaled version of g_Earth [m2 Z-1 s-2 ~> m s-2].
-  real :: I_Rho0             ! 1/Rho0.
+  real :: I_Rho0             ! 1/Rho0 [m3 kg-1].
   real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1.
-  real :: Rho_ref            ! The reference density in kg m-3.
+  real :: Rho_ref            ! The reference density [kg m-3].
   real :: dz_neglect         ! A minimal thickness [Z ~> m], like e.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.

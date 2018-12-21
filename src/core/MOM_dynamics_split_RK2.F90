@@ -292,7 +292,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   real, dimension(SZI_(G),SZJ_(G)) :: eta_pred
     ! eta_pred is the predictor value of the free surface height or column mass,
-    ! in m or kg m-2.
+    ! [H ~> m or kg m-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: u_adj
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: v_adj

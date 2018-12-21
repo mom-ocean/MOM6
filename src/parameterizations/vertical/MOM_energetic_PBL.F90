@@ -143,13 +143,13 @@ type, public :: energetic_PBL_CS ; private
 
   ! These are terms in the mixed layer TKE budget, all in J m-2 = kg s-2.
   real, allocatable, dimension(:,:) :: &
-    diag_TKE_wind, &   !< The wind source of TKE, in J m-2.
-    diag_TKE_MKE, &    !< The resolved KE source of TKE, in J m-2.
-    diag_TKE_conv, &   !< The convective source of TKE, in J m-2.
-    diag_TKE_forcing, & !< The TKE sink required to mix surface penetrating shortwave heating, in J m-2.
-    diag_TKE_mech_decay, & !< The decay of mechanical TKE, in J m-2.
-    diag_TKE_conv_decay, & !< The decay of convective TKE, in J m-2.
-    diag_TKE_mixing,&  !< The work done by TKE to deepen the mixed layer, in J m-2.
+    diag_TKE_wind, &   !< The wind source of TKE [J m-2].
+    diag_TKE_MKE, &    !< The resolved KE source of TKE [J m-2].
+    diag_TKE_conv, &   !< The convective source of TKE [J m-2].
+    diag_TKE_forcing, & !< The TKE sink required to mix surface penetrating shortwave heating [J m-2].
+    diag_TKE_mech_decay, & !< The decay of mechanical TKE [J m-2].
+    diag_TKE_conv_decay, & !< The decay of convective TKE [J m-2].
+    diag_TKE_mixing,&  !< The work done by TKE to deepen the mixed layer [J m-2].
     ! Additional output parameters also 2d
     ML_depth, &        !< The mixed layer depth [Z ~> m]. (result after iteration step)
     ML_depth2, &       !< The mixed layer depth [Z ~> m]. (guess for iteration step)
@@ -207,7 +207,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: TKE_forced !< The forcing requirements to homogenize the
                                                    !! forcing that has been applied to each layer
-                                                   !! through each layer, in J m-2.
+                                                   !! through each layer [J m-2].
   type(thermo_var_ptrs),   intent(inout) :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
@@ -273,20 +273,20 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     Kd, &           ! The diapycnal diffusivity, in m2 s-1.
     pres, &         ! Interface pressures in Pa.
     pres_Z, &       ! Interface pressures with a rescaling factor to convert interface height
-                    ! movements into changes in column potential energy, in J m-2 Z-1.
+                    ! movements into changes in column potential energy [J m-2 Z-1 ~> J m-3].
     hb_hs           ! The distance from the bottom over the thickness of the
                     ! water column [nondim].
   real, dimension(SZI_(G)) :: &
     mech_TKE, &     !   The mechanically generated turbulent kinetic energy
-                    ! available for mixing over a time step, in J m-2 = kg s-2.
+                    ! available for mixing over a time step [J m-2 = kg s-2].
     conv_PErel, &   ! The potential energy that has been convectively released
-                    ! during this timestep, in J m-2 = kg s-2. A portion nstar_FC
+                    ! during this timestep [J m-2 = kg s-2]. A portion nstar_FC
                     ! of conv_PErel is available to drive mixing.
     htot, &         !   The total depth of the layers above an interface [H ~> m or kg m-2].
     uhtot, &        !   The depth integrated zonal and meridional velocities in the
     vhtot, &        ! layers above [H m s-1 ~> m2 s-1 or kg m-1 s-1].
-    mech_TKE_top, & !    The value of mech_TKE at the top of the column, in J m-2.
-    conv_PErel_top, & !  The value of conv_PErel at the top of the column, in J m-2.
+    mech_TKE_top, & !    The value of mech_TKE at the top of the column [J m-2].
+    conv_PErel_top, & !  The value of conv_PErel at the top of the column [J m-2].
 
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     h_sum, &        ! The total thickness of the water column [H ~> m or kg m-2].
@@ -337,7 +337,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
                     ! converted to turbulent kinetic energy if the velocity in
                     ! the layer below an interface were homogenized with all of
-                    ! the water above the interface, in J m-2 = kg s-2.
+                    ! the water above the interface [J m-2 = kg s-2].
   real :: MKE2_Hharm ! Twice the inverse of the harmonic mean of the thickness
                     ! of a layer and the thickness of the water above, used in
                     ! the MKE conversion equation [H-1 ~> m-1 or m2 kg-1].
@@ -368,8 +368,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing [nondim].
   real :: TKE_reduc ! The fraction by which TKE and other energy fields are
                     ! reduced to support mixing [nondim]. between 0 and 1.
-  real :: tot_TKE   ! The total TKE available to support mixing at interface K, in J m-2.
-  real :: TKE_here  ! The total TKE at this point in the algorithm, in J m-2.
+  real :: tot_TKE   ! The total TKE available to support mixing at interface K [J m-2].
+  real :: TKE_here  ! The total TKE at this point in the algorithm [J m-2].
   real :: dT_km1_t2 ! A diffusivity-independent term related to the temperature
                     ! change in the layer above the interface, in K.
   real :: dS_km1_t2 ! A diffusivity-independent term related to the salinity
@@ -380,8 +380,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                     ! change in the layer above the interface, in ppt H.
   real :: dTe_t2    ! A part of dTe_term, in K H.
   real :: dSe_t2    ! A part of dSe_term, in ppt H.
-  real :: dPE_conv  ! The convective change in column potential energy, in J m-2.
-  real :: MKE_src   ! The mean kinetic energy source of TKE due to Kddt_h(K), in J m-2.
+  real :: dPE_conv  ! The convective change in column potential energy [J m-2].
+  real :: MKE_src   ! The mean kinetic energy source of TKE due to Kddt_h(K) [J m-2].
   real :: dMKE_src_dK  ! The partial derivative of MKE_src with Kddt_h(K) [J m-2 H-1 ~> J m-3 or J kg-1].
   real :: Kd_guess0    ! A first guess of the diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
   real :: PE_chg_g0    ! The potential energy change when Kd is Kd_guess0
@@ -392,10 +392,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: dPEc_dKd_Kd0 ! The partial derivative of PE change with Kddt_h(K)
                        ! for very small values of Kddt_h(K) [J m-2 H-1 ~> J m-3 or J kg-1].
   real :: PE_chg    ! The change in potential energy due to mixing at an
-                    ! interface, in J m-2, positive for the column increasing
+                    ! interface [J m-2], positive for the column increasing
                     ! in potential energy (i.e., consuming TKE).
   real :: TKE_left  ! The amount of turbulent kinetic energy left for the most
-                    ! recent guess at Kddt_h(K), in J m-2.
+                    ! recent guess at Kddt_h(K) [J m-2].
   real :: dPEc_dKd  ! The partial derivative of PE_chg with Kddt_h(K) [J m-2 H-1 ~> J m-3 or J kg-1].
   real :: TKE_left_min, TKE_left_max, Kddt_h_max, Kddt_h_min
   real :: Kddt_h_guess ! A guess at the value of Kddt_h(K) [H ~> m or kg m-2].
@@ -419,7 +419,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     Hsfc_used       ! The thickness of the surface region [Z ~> m].
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
-  ! Local column copies of energy change diagnostics, all in J m-2.
+  ! Local column copies of energy change diagnostics, all [J m-2].
   real :: dTKE_conv, dTKE_forcing, dTKE_mixing
   real :: dTKE_MKE, dTKE_mech_decay, dTKE_conv_decay
   !----------------------------------------------------------------------
@@ -1584,22 +1584,22 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real, intent(in)  :: dT_to_dPE_a !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! potential energy, including all implicit diffusive changes
-                                !! in the temperatures of all the layers above, in J m-2 K-1.
+                                !! in the temperatures of all the layers above [J m-2 degC-1].
   real, intent(in)  :: dS_to_dPE_a !< A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
                                 !! a layer's salinity change to the change in column
                                 !! potential energy, including all implicit diffusive changes
-                                !! in the salinities of all the layers above, in J m-2 ppt-1.
+                                !! in the salinities of all the layers above [J m-2 ppt-1].
   real, intent(in)  :: dT_to_dPE_b !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! potential energy, including all implicit diffusive changes
-                                !! in the temperatures of all the layers below, in J m-2 K-1.
+                                !! in the temperatures of all the layers below [J m-2 degC-1].
   real, intent(in)  :: dS_to_dPE_b !< A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
                                 !! a layer's salinity change to the change in column
                                 !! potential energy, including all implicit diffusive changes
-                                !! in the salinities of all the layers below, in J m-2 ppt-1.
+                                !! in the salinities of all the layers below [J m-2 ppt-1].
   real, intent(in)  :: pres_Z   !< The rescaled hydrostatic interface pressure, which relates
                                 !! the changes in column thickness to the energy that is radiated
-                                !! as gravity waves and unavailable to drive mixing, in J m-2 Z-1.
+                                !! as gravity waves and unavailable to drive mixing [J m-2 Z-1 ~> J m-3].
   real, intent(in)  :: dT_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! height, including all implicit diffusive changes
@@ -1618,16 +1618,16 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                                 !! in the salinities of all the layers below [Z ppt-1 ~> m ppt-1].
 
   real, optional, intent(out) :: PE_chg   !< The change in column potential energy from applying
-                                          !! Kddt_h at the present interface, in J m-2.
+                                          !! Kddt_h at the present interface [J m-2].
   real, optional, intent(out) :: dPEc_dKd !< The partial derivative of PE_chg with Kddt_h
                                           !! [J m-2 H-1 ~> J m-3 or J kg-1].
   real, optional, intent(out) :: dPE_max  !< The maximum change in column potential energy that could
                                           !! be realizedd by applying a huge value of Kddt_h at the
-                                          !! present interface, in J m-2.
+                                          !! present interface [J m-2].
   real, optional, intent(out) :: dPEc_dKd_0 !< The partial derivative of PE_chg with Kddt_h in the
                                             !! limit where Kddt_h = 0 [J m-2 H-1 ~> J m-3 or J kg-1].
   real, optional, intent(out) :: ColHt_cor  !< The correction to PE_chg that is made due to a net
-                                            !! change in the column height, in J m-2.
+                                            !! change in the column height [J m-2].
 
   real :: hps ! The sum of the two effective pivot thicknesses [H ~> m or kg m-2].
   real :: bdt1 ! A product of the two pivot thicknesses plus a diffusive term [H2 ~> m2 or kg2 m-4].
@@ -1722,23 +1722,23 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                                  !! salinity change in the layer above the interface, in ppt.
   real, intent(in)  :: pres_Z    !< The rescaled hydrostatic interface pressure, which relates
                                  !! the changes in column thickness to the energy that is radiated
-                                 !! as gravity waves and unavailable to drive mixing, in J m-2 Z-1.
+                                 !! as gravity waves and unavailable to drive mixing [J m-2 Z-1 ~> J m-3].
   real, intent(in)  :: dT_to_dPE_k !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! potential energy, including all implicit diffusive changes
-                                 !! in the temperatures of all the layers below, in J m-2 K-1.
+                                 !! in the temperatures of all the layers below [J m-2 degC-1].
   real, intent(in)  :: dS_to_dPE_k !< A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
                                  !! a layer's salinity change to the change in column
                                  !! potential energy, including all implicit diffusive changes
-                                 !! in the salinities of all the layers below, in J m-2 ppt-1.
+                                 !! in the salinities of all the layers below [J m-2 ppt-1].
   real, intent(in)  :: dT_to_dPEa !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! potential energy, including all implicit diffusive changes
-                                 !! in the temperatures of all the layers above, in J m-2 K-1.
+                                 !! in the temperatures of all the layers above [J m-2 degC-1].
   real, intent(in)  :: dS_to_dPEa !< A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
                                  !! a layer's salinity change to the change in column
                                  !! potential energy, including all implicit diffusive changes
-                                 !! in the salinities of all the layers above, in J m-2 ppt-1.
+                                 !! in the salinities of all the layers above [J m-2 ppt-1].
   real, intent(in)  :: dT_to_dColHt_k !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! height, including all implicit diffusive changes
@@ -1757,12 +1757,12 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                                  !! in the salinities of all the layers above [Z ppt-1 ~> m ppt-1].
 
   real, optional, intent(out) :: PE_chg   !< The change in column potential energy from applying
-                                          !! Kddt_h at the present interface, in J m-2.
+                                          !! Kddt_h at the present interface [J m-2].
   real, optional, intent(out) :: dPEc_dKd !< The partial derivative of PE_chg with Kddt_h
                                           !! [J m-2 H-1 ~> J m-3 or J kg-1].
   real, optional, intent(out) :: dPE_max  !< The maximum change in column potential energy that could
                                           !! be realizedd by applying a huge value of Kddt_h at the
-                                          !! present interface, in J m-2.
+                                          !! present interface [J m-2].
   real, optional, intent(out) :: dPEc_dKd_0 !< The partial derivative of PE_chg with Kddt_h in the
                                             !! limit where Kddt_h = 0 [J m-2 H-1 ~> J m-3 or J kg-1].
 
@@ -1777,15 +1777,15 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 
   real :: b1            ! b1 is used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
   real :: b1Kd          ! Temporary array (nondim.)
-  real :: ColHt_chg     ! The change in column thickness in m.
-  real :: dColHt_max    ! The change in column thickness for infinite diffusivity, in m.
-  real :: dColHt_dKd    ! The partial derivative of column thickness with diffusivity, in s m-1.
-  real :: dT_k, dT_km1  ! Temporary arrays in K.
-  real :: dS_k, dS_km1  ! Temporary arrays in ppt.
+  real :: ColHt_chg     ! The change in column thickness [Z ~> m].
+  real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
+  real :: dColHt_dKd    ! The partial derivative of column thickness with diffusivity [s Z-1 ~> s m-1].
+  real :: dT_k, dT_km1  ! Temporary arrays [degC].
+  real :: dS_k, dS_km1  ! Temporary arrays [ppt].
   real :: I_Kr_denom    ! Temporary array [H-2 ~> m-2 or m4 kg-2]
   real :: dKr_dKd       ! Nondimensional temporary array.
-  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays in K H-1.
-  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays in ppt H-1.
+  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays [degC H-1 ~> m-1 or m2 kg-1].
+  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays [ppt H-1 ~> ppt m-1 or ppt m2 kg-1].
 
   b1 = 1.0 / (b_den_1 + Kddt_h)
   b1Kd = Kddt_h*b1
