@@ -125,15 +125,15 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   ! Local variables
   real, dimension(SZIB_(G)) :: &
-    ustar, &    !   The bottom friction velocity [m s-1].
+    ustar, &    !   The bottom friction velocity [Z s-1 ~> m s-1].
     T_EOS, &    !   The temperature used to calculate the partial derivatives
                 ! of density with T and S [degC].
     S_EOS, &    !   The salinity used to calculate the partial derivatives
-                ! of density with T and S [PSU].
+                ! of density with T and S [ppt].
     dR_dT, &    !   Partial derivative of the density in the bottom boundary
                 ! layer with temperature [kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density in the bottom boundary
-                ! layer with salinity [kg m-3 PSU-1].
+                ! layer with salinity [kg m-3 ppt-1].
     press       !   The pressure at which dR_dT and dR_dS are evaluated [Pa].
   real :: htot      ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
@@ -165,7 +165,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! plus H_neglect to avoid 0 values [H ~> m or kg m-2].
   real :: ustarsq          ! 400 times the square of ustar, times
                            ! Rho0 divided by G_Earth and the conversion
-                           ! from m to thickness units, in kg m-2 or kg2 m-5.
+                           ! from m to thickness units [H kg m-3 ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z     ! Square root of the drag coefficient, times a unit conversion
                            ! factor from lateral lengths to vertical depths [Z m-1 ~> 1].
   real :: cdrag_sqrt       ! Square root of the drag coefficient [nondim].

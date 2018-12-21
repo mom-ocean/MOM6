@@ -153,7 +153,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
     hb, &         ! The depth below a layer [Z ~> m].
     z_from_bot, & ! The height of a layer center above the bottom [Z ~> m].
     dRho_dT, &    ! The partial derivatives of density with temperature and
-    dRho_dS       ! salinity, in kg m-3 degC-1 and kg m-3 PSU-1.
+    dRho_dS       ! salinity [kg m-3 degC-1] and [kg m-3 ppt-1].
 
   real :: dz_int  ! The thickness associated with an interface [Z ~> m].
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq

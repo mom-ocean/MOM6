@@ -160,7 +160,7 @@ type, public :: barotropic_CS ; private
                               !! for applying open boundary conditions.
 
   real    :: Rho0            !<   The density used in the Boussinesq
-                             !! approximation, in kg m-3.
+                             !! approximation [kg m-3 ~> m or kg m-2].
   real    :: dtbt            !< The barotropic time step [s].
   real    :: dtbt_fraction   !<   The fraction of the maximum time-step that
                              !! should used.  The default is 0.98.
@@ -420,11 +420,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: eta_out       !< The final barotropic free surface
                                                          !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: uhbtav        !< the barotropic zonal volume or mass
-                                                         !! fluxes averaged through the barotropic steps, in
-                                                         !! m3 s-1 or kg s-1.
+                                                         !! fluxes averaged through the barotropic steps
+                                                         !! [H m2 s-1 ~> m3 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: vhbtav        !< the barotropic meridional volume or mass
-                                                         !! fluxes averaged through the barotropic steps, in
-                                                         !! m3 s-1 or kg s-1.
+                                                         !! fluxes averaged through the barotropic steps
+                                                         !! [H m2 s-1 ~> m3 or kg s-1].
   type(barotropic_CS),                       pointer     :: CS            !< The control structure returned by a
                                                          !! previous call to barotropic_init.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
@@ -433,7 +433,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! barotropic acceleration that a layer experiences after
                                                          !! viscosity is applied, in the zonal direction. Nondimensional
                                                          !! between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v    !< Ditto for meridional direction [nondim].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: etaav        !< The free surface height or column mass
                                                          !! averaged over the barotropic integration [H ~> m or kg m-2].
   type(ocean_OBC_type),                optional, pointer :: OBC          !< The open boundary condition structure.
@@ -441,12 +441,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! the effective open face areas as a function of barotropic
                                                          !! flow.
   real, dimension(:,:),                optional, pointer :: eta_PF_start !< The eta field consistent with the pressure
-                                                         !! gradient at the start of the barotropic stepping, in m or
-                                                         !! kg m-2.
+                                                         !! gradient at the start of the barotropic stepping
+                                                         !! [H ~> m or kg m-2].
   real, dimension(:,:),                optional, pointer :: taux_bot     !< The zonal bottom frictional stress from
-                                                         !! ocean to the seafloor, in Pa.
+                                                         !! ocean to the seafloor [Pa].
   real, dimension(:,:),                optional, pointer :: tauy_bot     !< The meridional bottom frictional stress
-                                                         !! from ocean to the seafloor, in Pa.
+                                                         !! from ocean to the seafloor [Pa].
   real, dimension(:,:,:),              optional, pointer :: uh0     !< The zonal layer transports at reference
                                                                     !! velocities [H m s-1 ~> m2 s-1 or kg m-1 s-1].
   real, dimension(:,:,:),              optional, pointer :: u_uh0   !< The velocities used to calculate uh0 [m s-1]
@@ -578,7 +578,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
     vbt_prev, vhbt_prev, vbt_sum_prev, vhbt_sum_prev, vbt_wtd_prev  ! for OBC
 
-  real :: mass_to_Z   ! The depth unit converison divided by the mean density (Rho0), in m3 kg-1.
+  real :: mass_to_Z   ! The depth unit converison divided by the mean density (Rho0) [m3 kg-1].
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
   real :: vel_prev    ! The previous velocity [m s-1].
   real :: dtbt        ! The barotropic time step [s].

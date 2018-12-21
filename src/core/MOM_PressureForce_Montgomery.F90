@@ -34,15 +34,15 @@ type, public :: PressureForce_Mont_CS ; private
                             !! approximation [kg m-3].
   real    :: Rho_atm        !< The assumed atmospheric density [kg m-3].
                             !! By default, Rho_atm is 0.
-  real    :: GFS_scale      !< Ratio between gravity applied to top interface
-                            !! and the gravitational acceleration of the planet.
+  real    :: GFS_scale      !< Ratio between gravity applied to top interface and the
+                            !! gravitational acceleration of the planet [nondim].
                             !! Usually this ratio is 1.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate
                             !! the timing of diagnostic output.
   real, pointer :: PFu_bc(:,:,:) => NULL()   !< Accelerations due to pressure
   real, pointer :: PFv_bc(:,:,:) => NULL()   !< gradients deriving from density
-                                             !! gradients within layers, m s-2.
+                                             !! gradients within layers [m s-2].
   !>@{ Diagnostic IDs
   integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
   !!@}
@@ -63,44 +63,44 @@ contains
 subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure.
-  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness, in kg/m2.
+  type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness, [H ~> kg m-2].
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration due to pressure gradients
-                                                                !! (equal to -dM/dx) in m/s2.
+                                                                !! (equal to -dM/dx) [m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
-                                                                !! (equal to -dM/dy) in m/s2.
+                                                                !! (equal to -dM/dy) [m s-2].
   type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
   real, dimension(:,:),            optional, pointer     :: p_atm !< The pressure at the ice-ocean or
-                                                                !! atmosphere-ocean in Pa.
+                                                                !! atmosphere-ocean [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                    optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies,
                                                                 !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2].
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: eta !< Free surface height, in m.
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: eta !< Free surface height [H ~> kg m-1].
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     M, &          ! The Montgomery potential, M = (p/rho + gz)  [m2 s-2].
-    alpha_star, & ! Compression adjusted specific volume, in m3 kg-1.
+    alpha_star, & ! Compression adjusted specific volume [m3 kg-1].
     dz_geo        !   The change in geopotential across a layer [m2 s-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure [Pa].
                 ! p may be adjusted (with a nonlinear equation of state) so that
                 ! its derivative compensates for the adiabatic compressibility
                 ! in seawater, but p will still be close to the pressure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties, in C.
+                ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [PSU].
+                ! than the mixed layer have the mixed layer's properties [ppt].
 
   real, dimension(SZI_(G)) :: Rho_cv_BL  ! The coordinate potential density in the
                   ! deepest variable density near-surface layer [kg m-3].
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dM, &         !   A barotropic correction to the Montgomery potentials to
-                  ! enable the use of a reduced gravity form of the equations,
-                  ! in m2 s-2.
+                  ! enable the use of a reduced gravity form of the equations
+                  ! [m2 s-2].
     dp_star, &    ! Layer thickness after compensation for compressibility [Pa].
     SSH, &        ! The sea surface height anomaly, in depth units [Z ~> m].
     e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from
@@ -108,7 +108,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     geopot_bot    !   Bottom geopotential relative to time-mean sea level,
                   ! including any tidal contributions [m2 s-2].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density, in Pa (usually 2e7 Pa = 2000 dbar).
+                             ! density [Pa] (usually 2e7 Pa = 2000 dbar).
   real :: rho_in_situ(SZI_(G)) !In-situ density of a layer [kg m-3].
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer
                              ! compensated density gradients [m s-2]
@@ -374,7 +374,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies
                                                                 !! [m2 s-2 H-1 ~> m s-2].
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height, in m.
+  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height [H ~> m].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     M, &        ! The Montgomery potential, M = (p/rho + gz) [m2 s-2].
@@ -403,7 +403,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real :: G_Rho0             ! G_Earth / Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer
                              ! compensated density gradients [m s-2]
-  real :: dr                 ! Temporary variables.
+!  real :: dr                 ! Temporary variables.
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [Z ~> m].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
@@ -609,12 +609,13 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height [Z ~> m].
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density [kg m-3].
-  real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
-                                                            !! and the gravitational acceleration of the planet.
-                                                            !! Usually this ratio is 1.
+  real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top
+                                                            !! interface and the gravitational acceleration of
+                                                            !! the planet [nondim]. Usually this ratio is 1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                         intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
-                                                            !! to free surface height anomalies, in m2 H-1 s-2.
+                                                            !! to free surface height anomalies
+                                                            !! [m2 H-1 s-2 ~> m4 kg-2 s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               optional, intent(in)  :: rho_star !< The layer densities (maybe compressibility
                                                             !! compensated), times g/rho_0 [m2 Z-1 s-2 ~> m s-2].
@@ -622,11 +623,11 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses [H-1 ~> m-1 or m2 kg-1].
   real :: press(SZI_(G))     ! Interface pressure [Pa].
-  real :: T_int(SZI_(G))     ! Interface temperature in C.
-  real :: S_int(SZI_(G))     ! Interface salinity in PSU.
-  real :: dR_dT(SZI_(G))     ! Partial derivatives of density with temperature
-  real :: dR_dS(SZI_(G))     ! and salinity in kg m-3 K-1 and kg m-3 PSU-1.
-  real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer.
+  real :: T_int(SZI_(G))     ! Interface temperature [degC].
+  real :: S_int(SZI_(G))     ! Interface salinity [ppt].
+  real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [kg m-3 degC-1].
+  real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [kg m-3 ppt-1].
+  real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer [kg m-3].
   real :: G_Rho0             ! G_Earth / Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
   real :: Rho0xG             ! g_Earth * Rho0 [kg s-2 m-1 Z-1 ~> kg s-2 m-2]
   logical :: use_EOS         ! If true, density is calculated from T & S using
@@ -707,28 +708,27 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, GFS_scale, pbce, alpha_star)
   type(verticalGrid_type),              intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: p !< Interface pressures [Pa].
   type(thermo_var_ptrs),                intent(in)  :: tv !< Thermodynamic variables
-  real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
-                                                                 !! and the gravitational acceleration of the planet.
-                                                                 !! Usually this ratio is 1.
+  real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top
+                                                          !! interface and the gravitational acceleration of
+                                                          !! the planet [nondim]. Usually this ratio is 1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
-                                                                !! to free surface height anomalies, in m2 H-1 s-2.
+                                                                !! to free surface height anomalies
+                                                                !! [m2 H-1 s-2 ~> m4 kg-2 s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: alpha_star !< The layer specific volumes
-                                                          !! (maybe compressibility compensated), in m3 kg-1.
+                                                          !! (maybe compressibility compensated) [m3 kg-1].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dpbce, &      !   A barotropic correction to the pbce to enable the use of
-                  ! a reduced gravity form of the equations, in m4 s-2 kg-1.
-    C_htot        ! dP_dH divided by the total ocean pressure, m2 kg-1.
-  real :: T_int(SZI_(G))     ! Interface temperature in C.
-  real :: S_int(SZI_(G))     ! Interface salinity in PSU.
-  real :: dR_dT(SZI_(G))     ! Partial derivatives of density with temperature
-  real :: dR_dS(SZI_(G))     ! and salinity in kg m-3 K-1 and kg m-3 PSU-1.
-  real :: rho_in_situ(SZI_(G)) !In-situ density at an interface [kg m-3].
+                  ! a reduced gravity form of the equations [m4 s-2 kg-1].
+    C_htot        ! dP_dH divided by the total ocean pressure [m2 kg-1].
+  real :: T_int(SZI_(G))     ! Interface temperature [degC].
+  real :: S_int(SZI_(G))     ! Interface salinity [ppt].
+  real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [kg m-3 degC-1].
+  real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [kg m-3 ppt-1].
+  real :: rho_in_situ(SZI_(G)) ! In-situ density at an interface [kg m-3].
   real :: alpha_Lay(SZK_(G)) ! The specific volume of each layer [kg m-3].
-  real :: dalpha_int(SZK_(G)+1) ! The change in specific volume across each
-                             ! interface [kg m-3].
-  real :: dP_dH   !   A factor that converts from thickness to pressure,
-                  ! usually in Pa m2 kg-1.
+  real :: dalpha_int(SZK_(G)+1) ! The change in specific volume across each interface [kg m-3].
+  real :: dP_dH              ! A factor that converts from thickness to pressure [Pa H-1 ~> Pa m2 kg-1].
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [Pa].
   logical :: use_EOS         ! If true, density is calculated from T & S using

@@ -58,17 +58,19 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     pres          ! The pressure at an interface [Pa].
   real, dimension(SZIB_(G)) :: &
-    drho_dT_u, &  ! The derivatives of density with temperature and
-    drho_dS_u     ! salinity at u points, in kg m-3 K-1 and kg m-3 psu-1.
+    drho_dT_u, &  ! The derivative of density with temperature at u points [kg m-3 degC-1].
+    drho_dS_u     ! The derivative of density with salinity at u points [kg m-3 ppt-1].
   real, dimension(SZI_(G)) :: &
-    drho_dT_v, &  ! The derivatives of density with temperature and
-    drho_dS_v     ! salinity at v points, in kg m-3 K-1 and kg m-3 psu-1.
+    drho_dT_v, &  ! The derivative of density with temperature at v points [kg m-3 degC-1].
+    drho_dS_v     ! The derivative of density with salinity at v points [kg m-3 ppt-1].
   real, dimension(SZIB_(G)) :: &
-    T_u, S_u, &   ! Temperature, salinity, and pressure on the interface at
-    pres_u        ! the u-point in the horizontal.
+    T_u, &        ! Temperature on the interface at the u-point [degC].
+    S_u, &        ! Salinity on the interface at the u-point [ppt].
+    pres_u        ! Pressure on the interface at the u-point [Pa].
   real, dimension(SZI_(G)) :: &
-    T_v, S_v, &   ! Temperature, salinity, and pressure on the interface at
-    pres_v        ! the v-point in the horizontal.
+    T_v, &        ! Temperature on the interface at the v-point [degC].
+    S_v, &        ! Salinity on the interface at the v-point [ppt].
+    pres_v        ! Pressure on the interface at the v-point [Pa].
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
                         ! interface times the grid spacing [kg m-3].
@@ -334,12 +336,12 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Temperature (deg C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Salinity (psu)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Salinity [ppt]
   real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
                                                                 !! times a smoothing timescale [Z2 ~> m2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f  !< Filled temperature (deg C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filed salinity (psu)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f  !< Filled temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filed salinity [ppt]
   integer,                        optional, intent(in)  :: halo_here !< Halo width over which to compute
   ! Local variables
   real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
@@ -347,7 +349,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
   real :: kap_dt_x2                ! The product of 2*kappa*dt, converted to
-                                   ! the same units as h, in m2 or kg2 m-4.
+                                   ! the same units as h squared, [H2 ~> m2 or kg2 m-4].
   real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to
                                    ! allow for zero thicknesses.
   integer :: i, j, k, is, ie, js, je, nz, halo

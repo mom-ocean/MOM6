@@ -56,7 +56,7 @@ type, public :: sponge_CS ; private
   integer, pointer :: col_j(:) => NULL() !< Array of the j-indicies of each of the columns being damped.
   real, pointer :: Iresttime_col(:) => NULL() !< The inverse restoring time of each column.
   real, pointer :: Rcv_ml_ref(:) => NULL() !< The value toward which the mixed layer
-                             !! coordinate-density is being damped, in kg m-3.
+                             !! coordinate-density is being damped [kg m-3].
   real, pointer :: Ref_eta(:,:) => NULL() !< The value toward which the interface
                              !! heights are being damped [Z ~> m].
   type(p3d) :: var(MAX_FIELDS_) !< Pointers to the fields that are being damped.
@@ -66,7 +66,7 @@ type, public :: sponge_CS ; private
   real, pointer :: Iresttime_im(:) => NULL() !< The inverse restoring time of
                              !! each row for i-mean sponges.
   real, pointer :: Rcv_ml_ref_im(:) => NULL() !! The value toward which the i-mean
-                             !< mixed layer coordinate-density is being damped, in kg m-3.
+                             !< mixed layer coordinate-density is being damped [kg m-3].
   real, pointer :: Ref_eta_im(:,:) => NULL() !< The value toward which the i-mean
                              !! interface heights are being damped [Z ~> m].
   type(p2d) :: Ref_val_im(MAX_FIELDS_) !< The values toward which the i-means of
@@ -273,12 +273,12 @@ end subroutine set_up_sponge_field
 subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(in) :: sp_val !< The reference values of the mixed layer density, in kg m-3
+                         intent(in) :: sp_val !< The reference values of the mixed layer density [kg m-3]
   type(sponge_CS),       pointer    :: CS   !< A pointer to the control structure for this module that is
                                             !! set by a previous call to initialize_sponge.
   real, dimension(SZJ_(G)), &
                optional, intent(in) :: sp_val_i_mean !< the reference values of the zonal mean mixed
-                                            !! layer density in kg m-3, for use if Iresttime_i_mean > 0.
+                                            !! layer density [kg m-3], for use if Iresttime_i_mean > 0.
 !   This subroutine stores the reference value for mixed layer density.  It is
 ! handled differently from other values because it is only used in determining
 ! which layers can be inflated.
