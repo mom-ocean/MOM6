@@ -172,7 +172,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
-!  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
+!  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
 !  wherever there is no sponge, and the subroutines that are called  !
 !  will automatically set up the sponges only where Idamp is positive!
 !  and mask2dT is 1.                                                   !

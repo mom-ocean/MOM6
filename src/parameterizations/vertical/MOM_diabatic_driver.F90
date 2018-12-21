@@ -380,7 +380,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real :: Ent_int ! The diffusive entrainment rate at an interface
                   ! (H units = m for Bouss, kg/m^2 for non-Bouss).
   real :: dt_mix  ! amount of time over which to apply mixing (seconds)
-  real :: Idt     ! inverse time step (1/s)
+  real :: Idt     ! inverse time step [s-1]
 
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
@@ -1263,7 +1263,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   real :: Ent_int ! The diffusive entrainment rate at an interface
                   ! (H units = m for Bouss, kg/m^2 for non-Bouss).
   real :: dt_mix  ! amount of time over which to apply mixing (seconds)
-  real :: Idt     ! inverse time step (1/s)
+  real :: Idt     ! inverse time step [s-1]
 
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
@@ -2503,7 +2503,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real :: Idt  ! The inverse of the timestep, in s-1
+  real :: Idt  ! The inverse of the timestep [s-1]
   real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -2593,7 +2593,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real :: Idt  ! The inverse of the timestep, in s-1
+  real :: Idt  ! The inverse of the timestep [s-1]
   real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
 

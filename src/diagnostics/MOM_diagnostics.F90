@@ -1188,7 +1188,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
     zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh (meter)
-  real :: I_time_int    ! The inverse of the time interval in s-1.
+  real :: I_time_int    ! The inverse of the time interval [s-1].
   real :: zos_area_mean, volo, ssh_ga
   integer :: i, j, is, ie, js, je
 

@@ -475,14 +475,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! of H (m or kg m-2, the same as eta and h).
 
   ! These are always allocated with symmetric memory and wide halos.
-  real :: q(SZIBW_(CS),SZJBW_(CS))  ! A pseudo potential vorticity in s-1 m-1.
+  real :: q(SZIBW_(CS),SZJBW_(CS))  ! A pseudo potential vorticity [s-1 Z-1 ~> s-1 m-1].
   real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
     ubt, &        ! The zonal barotropic velocity [m s-1].
     bt_rem_u, &   ! The fraction of the barotropic zonal velocity that remains
                   ! after a time step, the remainder being lost to bottom drag.
                   ! bt_rem_u is a nondimensional number between 0 and 1.
     BT_force_u, & ! The vertical average of all of the u-accelerations that are
-                  ! not explicitly included in the barotropic equation, m s-2.
+                  ! not explicitly included in the barotropic equation [m s-2].
     u_accel_bt, & ! The difference between the zonal acceleration from the
                   ! barotropic calculation and BT_force_u [m s-2].
     uhbt, &       ! The zonal barotropic thickness fluxes [H m2 s-1 ~> m3 s-1 or kg s-1].
@@ -503,7 +503,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     Cor_ref_u, &  ! The zonal barotropic Coriolis acceleration due
                   ! to the reference velocities [m s-2].
     PFu, &        ! The zonal pressure force acceleration [m s-2].
-    Rayleigh_u, & ! A Rayleigh drag timescale operating at u-points, in s-1.
+    Rayleigh_u, & ! A Rayleigh drag timescale operating at u-points [s-1].
     PFu_bt_sum, & ! The summed zonal barotropic pressure gradient force [m s-2].
     Coru_bt_sum, & ! The summed zonal barotropic Coriolis acceleration [m s-2].
     DCor_u, &     ! A simply averaged depth at u points [Z ~> m].
@@ -515,7 +515,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! remains after a time step, the rest being lost to bottom
                   ! drag.  bt_rem_v is a nondimensional number between 0 and 1.
     BT_force_v, & ! The vertical average of all of the v-accelerations that are
-                  ! not explicitly included in the barotropic equation, m s-2.
+                  ! not explicitly included in the barotropic equation [m s-2].
     v_accel_bt, & ! The difference between the meridional acceleration from the
                   ! barotropic calculation and BT_force_v [m s-2].
     vhbt, &       ! The meridional barotropic thickness fluxes [H m2 s-1 ~> m3 s-1 or kg s-1].
@@ -532,7 +532,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     Cor_ref_v, &  ! The meridional barotropic Coriolis acceleration due
                   ! to the reference velocities [m s-2].
     PFv, &        ! The meridional pressure force acceleration [m s-2].
-    Rayleigh_v, & ! A Rayleigh drag timescale operating at v-points, in s-1.
+    Rayleigh_v, & ! A Rayleigh drag timescale operating at v-points [s-1].
     PFv_bt_sum, & ! The summed meridional barotropic pressure gradient force,
                   ! [m s-2].
     Corv_bt_sum, & ! The summed meridional barotropic Coriolis acceleration,
@@ -587,7 +587,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: be_proj     ! The fractional amount by which velocities are projected
                       ! when project_velocity is true. For now be_proj is set
                       ! to equal bebt, as they have similar roles and meanings.
-  real :: Idt         ! The inverse of dt, in s-1.
+  real :: Idt         ! The inverse of dt [s-1].
   real :: det_de      ! The partial derivative due to self-attraction and loading
                       ! of the reference geopotential with the sea surface height.
                       ! This is typically ~0.09 or less.
@@ -3654,7 +3654,7 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   real :: d_eta               ! The difference between estimates of the total
                               ! thicknesses [H ~> m or kg m-2].
   real :: limit_dt            ! The fractional mass-source limit divided by the
-                              ! thermodynamic time step, in s-1.
+                              ! thermodynamic time step [s-1].
   integer :: is, ie, js, je, nz, i, j, k
   real, parameter :: frac_cor = 0.25
   real, parameter :: slow_rate = 0.125

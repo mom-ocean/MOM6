@@ -152,7 +152,7 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:,:) :: BulkRi    !< Bulk Richardson number for each layer (dimensionless)
   real, allocatable, dimension(:,:,:) :: sigma     !< Sigma coordinate (dimensionless)
   real, allocatable, dimension(:,:,:) :: Ws        !< Turbulent velocity scale for scalars [m s-1]
-  real, allocatable, dimension(:,:,:) :: N         !< Brunt-Vaisala frequency (1/s)
+  real, allocatable, dimension(:,:,:) :: N         !< Brunt-Vaisala frequency [s-1]
   real, allocatable, dimension(:,:,:) :: N2        !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: Vt2       !< Unresolved squared turbulence velocity for bulk Ri (m2/s2)
   real, allocatable, dimension(:,:,:) :: Kt_KPP    !< Temp diffusivity from KPP (m2/s)
@@ -803,7 +803,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 !        CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
 !                    cellHeight(1:G%ke),                 & ! Depth of cell center (m)
 !                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
-!                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface (1/s)
+!                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
 !                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
       endif
 
@@ -1111,7 +1111,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
       CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
                       zt_cntr=cellHeight(1:G%ke),         & ! Depth of cell center (m)
                       ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
-                      N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface (1/s)
+                      N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
                     CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
       !Modify CVMix VT2
@@ -1158,11 +1158,11 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
       ! Calculate Bulk Richardson number from eq (21) of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
                   zt_cntr = cellHeight(1:G%ke),      & ! Depth of cell center (m)
-                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) (1/s)
+                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) [s-1]
                   delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference (m2/s2)
                   Vt_sqr_cntr=CS%Vt2(i,j,:),         &
                   ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
-                  N_iface=CS%N(i,j,:))               ! Buoyancy frequency (1/s)
+                  N_iface=CS%N(i,j,:))               ! Buoyancy frequency [s-1]
 
 
       surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
@@ -1176,7 +1176,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
         zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
         surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface [m s-1]
         surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-        Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
+        Coriolis=Coriolis,      & ! (in) Coriolis parameter [s-1]
         CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
       ! A hack to avoid KPP reaching the bottom. It was needed during development
@@ -1237,10 +1237,10 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
 
        !   BulkRi_1d = CVMix_kpp_compute_bulk_Richardson( &
        !               cellHeight(1:G%ke),                & ! Depth of cell center (m)
-       !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
+       !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) [s-1]
        !               deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
        !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
-       !               N_iface=CS%N )                       ! Buoyancy frequency (1/s)
+       !               N_iface=CS%N )                       ! Buoyancy frequency [s-1]
 
        !   surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
        !                                  ! h to Monin-Obukov (default is false, ie. not used)
@@ -1253,7 +1253,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
        !     zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
        !     surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface [m s-1]
        !     surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-       !     Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
+       !     Coriolis=Coriolis,      & ! (in) Coriolis parameter [s-1]
        !     CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
        !   if (CS%deepOBLoffset>0.) then

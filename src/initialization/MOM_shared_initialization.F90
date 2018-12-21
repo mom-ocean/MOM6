@@ -56,7 +56,7 @@ end subroutine MOM_shared_init_init
 !> MOM_initialize_rotation makes the appropriate call to set up the Coriolis parameter.
 subroutine MOM_initialize_rotation(f, G, PF, US)
   type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid type
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter in s-1
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter [s-1]
   type(param_file_type),                        intent(in)  :: PF !< Parameter file structure
   type(unit_scale_type),              optional, intent(in)  :: US !< A dimensional unit scaling type
 

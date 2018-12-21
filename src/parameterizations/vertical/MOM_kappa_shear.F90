@@ -764,7 +764,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                 ! velocity, and density equations [Z s-1 ~> m s-1] or [Z ~> m]
     c1, &       ! c1 is used in the tridiagonal (and similar) solvers.
     k_src, &    ! The shear-dependent source term in the kappa equation [s-1].
-    kappa_src, & ! The shear-dependent source term in the kappa equation in s-1.
+    kappa_src, & ! The shear-dependent source term in the kappa equation [s-1].
     kappa_out, & ! The kappa that results from the kappa equation [Z2 s-1 ~> m2 s-1].
     kappa_mid, & ! The average of the initial and predictor estimates of kappa [Z2 s-1 ~> m2 s-1].
     tke_pred, & ! The value of TKE from a predictor step [m2 s-2].
@@ -1393,7 +1393,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                          intent(out)   :: kappa_src !< The source term for kappa [s-1].
   real, dimension(nz+1), optional, &
                          intent(out)   :: local_src !< The sum of all local sources for kappa,
-                                              !! in s-1.
+                                              !! [s-1].
 !   This subroutine calculates new, consistent estimates of TKE and kappa.
 
   ! Local variables

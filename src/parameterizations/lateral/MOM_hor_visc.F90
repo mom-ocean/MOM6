@@ -213,7 +213,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
-    dvdx, dudy, & ! components in the shearing strain (s-1)
+    dvdx, dudy, & ! components in the shearing strain [s-1]
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
     bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
@@ -245,8 +245,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
                      ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
                      ! This is set equal to zero if modified Leith is not used.
-  real :: Shear_mag  ! magnitude of the shear (1/s)
-  real :: Vort_mag   ! magnitude of the vorticity (1/s)
+  real :: Shear_mag  ! magnitude of the shear [s-1]
+  real :: Vort_mag   ! magnitude of the vorticity [s-1]
   real :: h2uq, h2vq ! temporary variables [H2 ~> m2 or kg2 m-4].
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
@@ -263,8 +263,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
                     ! Laplacian viscosity is rescaled
   real :: RoScl     ! The scaling function for MEKE source term
-  real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
-  real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
+  real :: FatH      ! abs(f) at h-point for MEKE source term [s-1]
+  real :: local_strain ! Local variable for interpolating computed strain rates [s-1].
 
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
@@ -969,12 +969,12 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2)
   real :: grid_sp_q2       ! spacings at h and q points (m2)
   real :: grid_sp_q3       ! spacings at h and q points^(3/2) (m3)
-  real :: Kh_Limit         ! A coefficient (1/s) used, along with the
+  real :: Kh_Limit         ! A coefficient [s-1] used, along with the
                            ! grid spacing, to limit Laplacian viscosity.
   real :: fmax             ! maximum absolute value of f at the four
-                           ! vorticity points around a thickness point (1/s)
+                           ! vorticity points around a thickness point [s-1]
   real :: BoundCorConst    ! constant (s2/m2)
-  real :: Ah_Limit         ! coefficient (1/s) used, along with the
+  real :: Ah_Limit         ! coefficient [s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
   real :: Kh               ! Lapacian horizontal viscosity (m2/s)
   real :: Ah               ! biharmonic horizontal viscosity (m4/s)
@@ -985,7 +985,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
   real :: Leith_bi_const   ! nondimensional biharmonic Leith constant
   real :: dt               ! dynamics time step (sec)
-  real :: Idt              ! inverse of dt (1/s)
+  real :: Idt              ! inverse of dt [s-1]
   real :: denom            ! work variable; the denominator of a fraction
   real :: maxvel           ! largest permitted velocity components [m s-1]
   real :: bound_Cor_vel    ! grid-scale velocity variations at which value

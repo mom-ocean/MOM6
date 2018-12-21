@@ -493,7 +493,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
   if (associated(ACSp)) call MOM_error(FATAL, &
         "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
 
-  !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
+  !  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
   !  wherever there is no sponge, and the subroutines that are called  !
   !  will automatically set up the sponges only where Idamp is positive!
   !  and mask2dT is 1.
