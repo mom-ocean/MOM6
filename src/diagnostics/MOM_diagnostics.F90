@@ -699,8 +699,8 @@ end subroutine calculate_diagnostic_fields
 !! weights that should be assigned to elements k and k+1.
 subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
   real, dimension(:), &
-            intent(in)    :: Rlist !< The list of target densities, in kg m-3
-  real,     intent(in)    :: R_in !< The density being inserted into Rlist, in kg m-3
+            intent(in)    :: Rlist !< The list of target densities [kg m-3]
+  real,     intent(in)    :: R_in !< The density being inserted into Rlist [kg m-3]
   integer,  intent(inout) :: k    !< The value of k such that Rlist(k) <= R_in < Rlist(k+1)
                                   !! The input value is a first guess
   integer,  intent(in)    :: nz   !< The number of layers in Rlist

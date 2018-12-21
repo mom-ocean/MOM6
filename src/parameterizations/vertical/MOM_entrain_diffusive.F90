@@ -33,7 +33,8 @@ type, public :: entrain_diffusive_CS ; private
                              !! their target variables by the diapycnal mixing.
   integer :: max_ent_it      !< The maximum number of iterations that may be used to
                              !! calculate the diapycnal entrainment.
-  real    :: Tolerance_Ent   !< The tolerance with which to solve for entrainment values, in m.
+  real    :: Tolerance_Ent   !< The tolerance with which to solve for entrainment values
+                             !! [H ~> m or kg m-2].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
   integer :: id_Kd = -1      !< Diagnostic ID for diffusivity
@@ -125,7 +126,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
     htot, &       ! The total thickness above or below a layer [H ~> m or kg m-2].
     Rcv, &        ! Value of the coordinate variable (potential density)
                   ! based on the simulated T and S and P_Ref [kg m-3].
-    pres, &       ! Reference pressure (P_Ref) in Pa.
+    pres, &       ! Reference pressure (P_Ref) [Pa].
     eakb, &       ! The entrainment from above by the layer below the buffer
                   ! layer (i.e. layer kb) [H ~> m or kg m-2].
     ea_kbp1, &    ! The entrainment from above by layer kb+1 [H ~> m or kg m-2].
@@ -140,7 +141,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
                   ! [H2 ~> m2 or kg2 m-4].
     maxF_correct, & ! An amount by which to correct maxF due to excessive
                   ! surface heat loss [H ~> m or kg m-2].
-    zeros, &      ! An array of all zeros. (Usually used with units of H.)
+    zeros, &      ! An array of all zeros. (Usually used with [H ~> m or kg m-2].)
     max_eakb, &   ! The maximum value of eakb that might be realized [H ~> m or kg m-2].
     min_eakb, &   ! The minimum value of eakb that might be realized [H ~> m or kg m-2].
     err_max_eakb0, & ! The value of error returned by determine_Ea_kb
@@ -1041,7 +1042,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, CS, j, Ent_bl, Sref
                                     intent(out)   :: Ent_bl !< The average entrainment upward and
                                                           !! downward across each interface around
                                                           !! the buffer layers [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)), intent(out)   :: Sref !< The coordinate potential density -
+  real, dimension(SZI_(G),SZK_(G)), intent(out)   :: Sref !< The coordinate potential density minus
                                                           !! 1000 for each layer [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), intent(out)   :: h_bl !< The thickness of each layer [H ~> m or kg m-2].
 
@@ -1053,10 +1054,10 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, CS, j, Ent_bl, Sref
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    b1, d1, &   ! Variables used by the tridiagonal solver, in H-1 and ND.
+    b1, d1, &   ! Variables used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1] and [nondim].
     Rcv, &      ! Value of the coordinate variable (potential density)
-                ! based on the simulated T and S and P_Ref, kg m-3.
-    pres, &     ! Reference pressure (P_Ref) in Pa.
+                ! based on the simulated T and S and P_Ref [kg m-3].
+    pres, &     ! Reference pressure (P_Ref) [Pa].
     frac_rem, & ! The fraction of the diffusion remaining [nondim].
     h_interior  ! The interior thickness available for entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G), SZK_(G)) :: &
@@ -1213,12 +1214,12 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
                                                               !! and the topmost interior layer.
                                                               !! dSkb > 0.
   real, dimension(SZI_(G)), optional, intent(inout) :: ddSkb_dE !< The partial derivative of dSkb
-                                                              !! with E, in kg m-3 H-1.
+                                                              !! with E [kg m-3 H-1 ~> kg m-4 or m-1].
   real, dimension(SZI_(G)), optional, intent(inout) :: dSlay  !< The limited potential density
                                                               !! difference across the topmost
                                                               !! interior layer. 0 < dSkb
   real, dimension(SZI_(G)), optional, intent(inout) :: ddSlay_dE !< The partial derivative of dSlay
-                                                              !! with E, in kg m-3 H-1.
+                                                              !! with E [kg m-3 H-1 ~> kg m-4 or m-1].
   real, dimension(SZI_(G)), optional, intent(inout) :: dS_anom_lim !< A limiting value to use for
                                                               !! the density anomalies below the
                                                               !! buffer layer [kg m-3].
@@ -1626,8 +1627,8 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
     dS_Lay, &               !   The coordinate-density difference across layer
                             ! kb, limited to ensure that it is positive and not
                             ! too much bigger than dS_kb or dS_kbp1 [kg m-3].
-    ddSkb_dE, ddSlay_dE, &  ! The derivatives of dS_kb and dS_Lay with E,
-                            ! in kg m-3 H-1.
+    ddSkb_dE, ddSlay_dE, &  ! The derivatives of dS_kb and dS_Lay with E
+                            ! [kg m-3 H-1 ~> kg m-4 or m-1].
     derror_dE, &            ! The derivative of err with E [H ~> m or kg m-2].
     err, &                  ! The "error" whose zero is being sought [H2 ~> m2 or kg2 m-4].
     E_min, E_max, &         ! The minimum and maximum values of E [H ~> m or kg m-2].

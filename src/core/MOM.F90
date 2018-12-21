@@ -1537,11 +1537,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real    :: dtbt
-  real    :: Z_diag_int  ! minimum interval between calc depth-space diagnostics [s]
+  real    :: dtbt        ! The barotropic timestep [s]
+  real    :: Z_diag_int  ! minimum interval between calc depth-space diagnosetics [s]
 
-  real, allocatable, dimension(:,:,:) :: e   ! interface heights (meter)
-  real, allocatable, dimension(:,:)   :: eta ! free surface height [m] or column mass [kg m-2]
+  real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
   real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf [m2]
   real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf [nondim]
   real, dimension(:,:), pointer :: shelf_area => NULL()
@@ -2660,14 +2659,14 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(ocean_grid_type),             intent(in)    :: G   !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height (m)
-  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure (Pascal)
+  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
+  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure [Pa]
   logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
   real :: Rho_conv    ! The density used to convert surface pressure to
-                      ! a corrected effective SSH, in kg m-3.
-  real :: IgR0        ! The SSH conversion factor from Pa to m.
+                      ! a corrected effective SSH [kg m-3].
+  real :: IgR0        ! The SSH conversion factor from Pa to m [m Pa-1].
   logical :: calc_rho
   integer :: i, j, is, ie, js, je
 

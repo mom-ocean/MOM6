@@ -26,7 +26,7 @@ type, public :: rho_CS ; private
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .false.
 
-  !> Nominal density of interfaces, in kg m-3
+  !> Nominal density of interfaces [kg m-3]
   real, allocatable, dimension(:) :: target_density
 
   !> Interpolation control structure
@@ -47,7 +47,7 @@ subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   type(rho_CS),         pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in the grid
   real,                 intent(in) :: ref_pressure !< Nominal density of interfaces in Pa
-  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces in kg m-3
+  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_rho: CS already associated!")

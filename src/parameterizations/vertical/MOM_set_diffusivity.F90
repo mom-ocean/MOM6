@@ -892,8 +892,8 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces
-    dRho_dT,         & ! partial derivative of density wrt temp (kg m-3 degC-1)
-    dRho_dS            ! partial derivative of density wrt saln (kg m-3 PPT-1)
+    dRho_dT,         & ! partial derivative of density wrt temp [kg m-3 degC-1]
+    dRho_dS            ! partial derivative of density wrt saln [kg m-3 ppt-1]
 
   real, dimension(SZI_(G)) :: &
     pres,      &  ! pressure at each interface (Pa)
@@ -1063,8 +1063,8 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
                                                !! diffusivity for saln [Z2 s-1 ~> m2 s-1].
 
   real, dimension(SZI_(G)) :: &
-    dRho_dT,  &    ! partial derivatives of density wrt temp (kg m-3 degC-1)
-    dRho_dS,  &    ! partial derivatives of density wrt saln (kg m-3 PPT-1)
+    dRho_dT,  &    ! partial derivatives of density wrt temp [kg m-3 degC-1]
+    dRho_dS,  &    ! partial derivatives of density wrt saln [kg m-3 ppt-1]
     pres,     &    ! pressure at each interface (Pa)
     Temp_int, &    ! temp and saln at interfaces
     Salin_int

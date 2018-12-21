@@ -239,7 +239,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
   ! Local variables
-  real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
+  real :: Rho0        ! The Boussinesq ocean density [kg m-3].
   real :: G_Earth     ! The gravitational acceleration [m s-2].
   real :: HFrz        !< If HFrz > 0 (m), melt potential will be computed.
                       !! The actual depth over which melt potential is computed will

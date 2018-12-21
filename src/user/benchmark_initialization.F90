@@ -94,7 +94,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects the
                                                       !! equation of state.
   real,                    intent(in)  :: P_Ref       !< The coordinate-density
-                                                      !! reference pressure in Pa.
+                                                      !! reference pressure [Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
@@ -222,17 +222,15 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
   type(EOS_type),                      pointer     :: eqn_of_state !< integer that selects the
                                                                    !! equation of state.
   real,                                intent(in)  :: P_Ref        !< The coordinate-density
-                                                                   !! reference pressure in Pa.
+                                                                   !! reference pressure [Pa].
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
   real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! Reference pressure in kg m-3.             !
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in !
-                        ! kg m-3 K-1.                               !
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in    !
-                        ! kg m-3 PSU-1.                             !
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.   !
+  real :: pres(SZK_(G))      ! Reference pressure [kg m-3].
+  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [kg m-3 degC-1].
+  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [kg m-3 ppt-1].
+  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [kg m-3].
   real :: PI        ! 3.1415926... calculated as 4*atan(1)
   real :: SST       !  The initial sea surface temperature [degC].
   real :: lat

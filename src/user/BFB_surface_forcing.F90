@@ -71,9 +71,9 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   real :: Salin_restore  ! The salinity that is being restored toward [PSU].
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
-  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
+  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -156,7 +156,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       Temp_restore = 0.0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density in kg m-3 that is being restored toward.
+       ! density [kg m-3] that is being restored toward.
         if (G%geoLatT(i,j) < CS%lfrslat) then
             Temp_restore = CS%SST_s
         elseif (G%geoLatT(i,j) > CS%lfrnlat) then

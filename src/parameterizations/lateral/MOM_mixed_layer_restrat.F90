@@ -36,28 +36,26 @@ public mixedlayer_restrat_register_restarts
 
 !> Control structure for mom_mixed_layer_restrat
 type, public :: mixedlayer_restrat_CS ; private
-  real    :: ml_restrat_coef       !<  A non-dimensional factor by which the
-                                   !! instability is enhanced over what would be
-                                   !! predicted based on the resolved  gradients.  This
-                                   !! increases with grid spacing^2, up to something
+  real    :: ml_restrat_coef       !< A non-dimensional factor by which the instability is enhanced
+                                   !! over what would be predicted based on the resolved gradients
+                                   !! [nondim].  This increases with grid spacing^2, up to something
                                    !! of order 500.
-  real    :: ml_restrat_coef2      !< As for ml_restrat_coef but using the slow filtered MLD.
-  real    :: front_length          !< If non-zero, is the frontal-length scale used to calculate the
+  real    :: ml_restrat_coef2      !< As for ml_restrat_coef but using the slow filtered MLD [nondim].
+  real    :: front_length          !< If non-zero, is the frontal-length scale [m] used to calculate the
                                    !! upscaling of buoyancy gradients that is otherwise represented
                                    !! by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is
                                    !! non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.
   logical :: MLE_use_PBL_MLD       !< If true, use the MLD provided by the PBL parameterization.
                                    !! if false, MLE will calculate a MLD based on a density difference
                                    !! based on the parameter MLE_DENSITY_DIFF.
-  real    :: MLE_MLD_decay_time    !< Time-scale to use in a running-mean when MLD is retreating (s).
-  real    :: MLE_MLD_decay_time2   !< Time-scale to use in a running-mean when filtered MLD is retreating (s).
-  real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer
-                                   !! depth (kg/m3).
+  real    :: MLE_MLD_decay_time    !< Time-scale to use in a running-mean when MLD is retreating [s].
+  real    :: MLE_MLD_decay_time2   !< Time-scale to use in a running-mean when filtered MLD is retreating [s].
+  real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer depth [kgm-3].
   real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer restratification
                                    !! depth used for a smoother stream function at the base of
-                                   !! the mixed-layer.
-  real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD
-                                   !! used in the MLE scheme. This simply multiplies MLD wherever used.
+                                   !! the mixed-layer [nondim].
+  real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD used in
+                                   !! the MLE scheme [nondim]. This simply multiplies MLD wherever used.
   logical :: MLE_use_MLD_ave_bug   !< If true, do not account for MLD mismatch to interface positions.
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
@@ -567,14 +565,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     h_avail               ! The volume available for diffusion out of each face of each
-                          ! sublayer of the mixed layer, divided by dt, in units
-                          ! of H m2 s-1 (i.e., m3 s-1 or kg s-1).
+                          ! sublayer of the mixed layer, divided by dt [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot, &               ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av                ! g_Rho0 times the average mixed layer density [m s-2]
   real :: g_Rho0          ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
-  real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
-  real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
+  real :: Rho0(SZI_(G))   ! Potential density relative to the surface [kg m-3]
+  real :: p0(SZI_(G))     ! A pressure of 0 [Pa]
 
   real :: h_vel           ! htot interpolated onto velocity points [Z ~> m]. (The units are not H.)
   real :: absf            ! absolute value of f, interpolated to velocity points [s-1]
