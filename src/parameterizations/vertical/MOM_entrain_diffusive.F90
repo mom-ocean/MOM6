@@ -103,7 +103,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
             ! interactions between layers [H ~> m or kg m-2].
     Fprev, &! The previous estimate of F [H ~> m or kg m-2].
     dFdfm, &! The partial derivative of F with respect to changes in F of the
-            ! neighboring layers.  Nondimensional.
+            ! neighboring layers.  [nondim]
     h_guess ! An estimate of the layer thicknesses after entrainment, but
             ! before the entrainments are adjusted to drive the layer
             ! densities toward their target values [H ~> m or kg m-2].
@@ -164,17 +164,18 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real, dimension(SZI_(G),SZK_(G)) :: &
     ds_dsp1, &      ! The coordinate variable (sigma-2) difference across an
                     ! interface divided by the difference across the interface
-                    ! below it. Nondimensional.
+                    ! below it. [nondim]
     dsp1_ds, &      ! The inverse coordinate variable (sigma-2) difference
                     ! across an interface times the difference across the
-                    ! interface above it. Nondimensional.
-    I2p2dsp1_ds, &  ! 1 / (2 + 2 * ds_k+1 / ds_k). Nondimensional.
+                    ! interface above it. [nondim]
+    I2p2dsp1_ds, &  ! 1 / (2 + 2 * ds_k+1 / ds_k). [nondim]
     grats           ! 2*(2 + ds_k+1 / ds_k + ds_k / ds_k+1) =
-                    !       4*ds_Lay*(1/ds_k + 1/ds_k+1). Nondim.
+                    !       4*ds_Lay*(1/ds_k + 1/ds_k+1). [nondim]
 
   real :: dRHo      ! The change in locally referenced potential density between
                     ! the layers above and below an interface [kg m-3].
-  real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors, in m3 H-2 s-3.
+  real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors
+                    ! [m3 H-2 s-3 ~> m s-3 or m7 kg-2 s-3].
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface [Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
@@ -1262,9 +1263,9 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
   real :: rat
   real :: dS_kbp1, IdS_kbp1
   real :: deriv_dSLay
-  real :: Inv_term     ! Nondimensional.
-  real :: f1, df1_drat ! Nondimensional temporary variables.
-  real :: z, dz_drat, f2, df2_dz, expz ! Nondimensional temporary variables.
+  real :: Inv_term     ! [nondim]
+  real :: f1, df1_drat ! Temporary variables [nondim].
+  real :: z, dz_drat, f2, df2_dz, expz ! Temporary variables [nondim].
   real :: eps_dSLay, eps_dSkb ! Small nondimensional constants.
   integer :: i, k
 

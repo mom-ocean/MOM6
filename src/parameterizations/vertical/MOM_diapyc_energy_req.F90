@@ -62,7 +62,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
 
   ! Local variables
   real, dimension(GV%ke) :: &
-    T0, S0, &   ! T0 & S0 are columns of initial temperatures and salinities, in degC and g/kg.
+    T0, S0, &   ! T0 & S0 are columns of initial temperatures and salinities [degC] and g/kg.
     h_col       ! h_col is a column of thicknesses h at tracer points [H ~> m or kg m-2].
   real, dimension(GV%ke+1) :: &
     Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 s-1 ~> m2 s-1].
@@ -125,12 +125,12 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
                                                   !! [H ~> m or kg m-2].
   real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures [degC].
-  real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities, in g kg-1.
+  real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities [ppt].
   real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities
                                                   !! [Z2 s-1 ~> m2 s-1].
   real,                     intent(in)    :: dt   !< The amount of time covered by this call [s].
   real,                     intent(out)   :: energy_Kd !< The column-integrated rate of energy
-                                                  !! consumption by diapycnal diffusion, in W m-2.
+                                                  !! consumption by diapycnal diffusion [W m-2].
   type(thermo_var_ptrs),    intent(inout) :: tv   !< A structure containing pointers to any
                                                   !! available thermodynamic fields.
                                                   !! Absent fields have NULL ptrs.
@@ -148,34 +148,34 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 
   real, dimension(GV%ke) :: &
     p_lay, &    ! Average pressure of a layer [Pa].
-    dSV_dT, &   ! Partial derivative of specific volume with temperature, in m3 kg-1 degC-1.
-    dSV_dS, &   ! Partial derivative of specific volume with salinity, in m3 kg-1 / (g kg-1).
-    T0, S0, &   ! Initial temperatures and salinities.
-    Te, Se, &   ! Running incomplete estimates of the new temperatures and salinities.
-    Te_a, Se_a, & ! Running incomplete estimates of the new temperatures and salinities.
-    Te_b, Se_b, & ! Running incomplete estimates of the new temperatures and salinities.
-    Tf, Sf, &   ! New final values of the temperatures and salinities.
-    dTe, dSe, & ! Running (1-way) estimates of temperature and salinity change.
-    dTe_a, dSe_a, & ! Running (1-way) estimates of temperature and salinity change.
-    dTe_b, dSe_b, & ! Running (1-way) estimates of temperature and salinity change.
-    Th_a, &     !  An effective temperature times a thickness in the layer above,
-                !  including implicit mixing effects with other yet higher layers, in degC H.
-    Sh_a, &     !  An effective salinity times a thickness in the layer above,
-                !  including implicit mixing effects with other yet higher layers, in ppt H.
-    Th_b, &     !  An effective temperature times a thickness in the layer below,
-                !  including implicit mixing effects with other yet lower layers, in degC H.
-    Sh_b, &     !  An effective salinity times a thickness in the layer below,
-                !  including implicit mixing effects with other yet lower layers, in ppt H.
+    dSV_dT, &   ! Partial derivative of specific volume with temperature [m3 kg-1 degC-1].
+    dSV_dS, &   ! Partial derivative of specific volume with salinity [m3 kg-1 ppt-1].
+    T0, S0, &   ! Initial temperatures and salinities [degC] and [ppt].
+    Te, Se, &   ! Running incomplete estimates of the new temperatures and salinities [degC] and [ppt].
+    Te_a, Se_a, & ! Running incomplete estimates of the new temperatures and salinities [degC] and [ppt].
+    Te_b, Se_b, & ! Running incomplete estimates of the new temperatures and salinities [degC] and [ppt].
+    Tf, Sf, &   ! New final values of the temperatures and salinities [degC] and [ppt].
+    dTe, dSe, & ! Running (1-way) estimates of temperature and salinity change [degC] and [ppt].
+    dTe_a, dSe_a, & ! Running (1-way) estimates of temperature and salinity change [degC] and [ppt].
+    dTe_b, dSe_b, & ! Running (1-way) estimates of temperature and salinity change [degC] and [ppt].
+    Th_a, &     ! An effective temperature times a thickness in the layer above, including implicit
+                ! mixing effects with other yet higher layers [degC H ~> degC m or degC kg m-2].
+    Sh_a, &     ! An effective salinity times a thickness in the layer above, including implicit
+                ! mixing effects with other yet higher layers [ppt H ~> ppt m or ppt kg m-2].
+    Th_b, &     ! An effective temperature times a thickness in the layer below, including implicit
+                ! mixing effects with other yet lower layers [degC H ~> degC m or degC kg m-2].
+    Sh_b, &     ! An effective salinity times a thickness in the layer below, including implicit
+                ! mixing effects with other yet lower layers [ppt H ~> ppt m or ppt kg m-2].
     dT_to_dPE, & ! Partial derivative of column potential energy with the temperature
-    dS_to_dPE, & ! and salinity changes within a layer [J m-2 degC-1] and J m-2 / (g kg-1).
+    dS_to_dPE, & ! and salinity changes within a layer [J m-2 degC-1] and [J m-2 ppt-1].
     dT_to_dColHt, & ! Partial derivatives of the total column height with the temperature
-    dS_to_dColHt, & ! and salinity changes within a layer [Z K-1 ~> m K-1] and [Z ppt-1 ~> m ppt-1].
+    dS_to_dColHt, & ! and salinity changes within a layer [Z degC-1 ~> m degC-1] and [Z ppt-1 ~> m ppt-1].
     dT_to_dColHt_a, & ! Partial derivatives of the total column height with the temperature
     dS_to_dColHt_a, & ! and salinity changes within a layer, including the implicit effects
-                    ! of mixing with layers higher in the water colun [Z K-1 ~> m K-1] and [Z ppt-1 ~> m ppt-1].
+                    ! of mixing with layers higher in the water colun [Z degC-1 ~> m degC-1] and [Z ppt-1 ~> m ppt-1].
     dT_to_dColHt_b, & ! Partial derivatives of the total column height with the temperature
     dS_to_dColHt_b, & ! and salinity changes within a layer, including the implicit effects
-                    ! of mixing with layers lower in the water colun [Z K-1 ~> m K-1] and [Z ppt-1 ~> m ppt-1].
+                    ! of mixing with layers lower in the water colun [Z degC-1 ~> m degC-1] and [Z ppt-1 ~> m ppt-1].
     dT_to_dPE_a, &  ! Partial derivatives of column potential energy with the temperature
     dS_to_dPE_a, &  ! and salinity changes within a layer, including the implicit effects
                     ! of mixing with layers higher in the water column, in
@@ -223,11 +223,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: dTe_term  ! A diffusivity-independent term related to the temperature
-                    ! change in the layer below the interface, in K H.
+                    ! change in the layer below the interface [degC H ~> degC m or degC kg m-2].
   real :: dSe_term  ! A diffusivity-independent term related to the salinity
-                    ! change in the layer below the interface, in ppt H.
+                    ! change in the layer below the interface [ppt H ~> ppt m or ppt kg m-2].
   real :: Kddt_h_guess ! A guess of the final value of Kddt_h [H ~> m or kg m-2].
-  real :: dMass     ! The mass per unit area within a layer, in kg m-2.
+  real :: dMass     ! The mass per unit area within a layer [kg m-2].
   real :: dPres     ! The hydrostatic pressure change across a layer [Pa].
   real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
                     ! converted to turbulent kinetic energy if the velocity in
@@ -239,8 +239,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real :: ColHt_cor ! The correction to PE_chg that is made due to a net
                     ! change in the column height [J m-2].
   real :: htot      ! A running sum of thicknesses [H ~> m or kg m-2].
-  real :: dTe_t2, dT_km1_t2, dT_k_t2  ! Temporary arrays describing temperature changes.
-  real :: dSe_t2, dS_km1_t2, dS_k_t2  ! Temporary arrays describing salinity changes.
+  real :: dTe_t2, dT_km1_t2, dT_k_t2  ! Temporary arrays describing temperature changes [degC].
+  real :: dSe_t2, dS_km1_t2, dS_k_t2  ! Temporary arrays describing salinity changes [ppt].
   logical :: do_print
 
   ! The following are a bunch of diagnostic arrays for debugging purposes.
@@ -984,16 +984,16 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                                 !! Kddt_h for the interface above [H ~> m or kg m-2].
   real, intent(in)  :: Th_a     !< An effective temperature times a thickness in the layer
                                 !! above, including implicit mixing effects with other
-                                !! yet higher layers, in K H.
+                                !! yet higher layers [degC H ~> degC m or degC kg m-2].
   real, intent(in)  :: Sh_a     !< An effective salinity times a thickness in the layer
                                 !! above, including implicit mixing effects with other
-                                !! yet higher layers, in K H.
+                                !! yet higher layers [ppt H ~> ppt m or ppt kg m-2].
   real, intent(in)  :: Th_b     !< An effective temperature times a thickness in the layer
                                 !! below, including implicit mixing effects with other
-                                !! yet lower layers, in K H.
+                                !! yet lower layers [degC H ~> degC m or degC kg m-2].
   real, intent(in)  :: Sh_b     !< An effective salinity times a thickness in the layer
                                 !! below, including implicit mixing effects with other
-                                !! yet lower layers, in K H.
+                                !! yet lower layers [ppt H ~> ppt m or ppt kg m-2].
   real, intent(in)  :: dT_to_dPE_a !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! potential energy, including all implicit diffusive changes
@@ -1016,7 +1016,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real, intent(in)  :: dT_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! height, including all implicit diffusive changes
-                                !! in the temperatures of all the layers above [Z K-1 ~> m K-1].
+                                !! in the temperatures of all the layers above [Z degC-1 ~> m degC-1].
   real, intent(in)  :: dS_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                 !! a layer's salinity change to the change in column
                                 !! height, including all implicit diffusive changes
@@ -1024,7 +1024,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real, intent(in)  :: dT_to_dColHt_b !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! height, including all implicit diffusive changes
-                                !! in the temperatures of all the layers below [Z K-1 ~> m K-1].
+                                !! in the temperatures of all the layers below [Z degC-1 ~> m degC-1].
   real, intent(in)  :: dS_to_dColHt_b !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                 !! a layer's salinity change to the change in column
                                 !! height, including all implicit diffusive changes
@@ -1044,14 +1044,14 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
 
   real :: hps  ! The sum of the two effective pivot thicknesses [H ~> m or kg m-2].
   real :: bdt1 ! A product of the two pivot thicknesses plus a diffusive term [H2 ~> m2 or kg2 m-4].
-  real :: dT_c ! The core term in the expressions for the temperature changes [K H2 ~> K m2 or K kg2 m-4].
+  real :: dT_c ! The core term in the expressions for the temperature changes [degC H2 ~> degC m2 or degC kg2 m-4].
   real :: dS_c ! The core term in the expressions for the salinity changes [psu H2 ~> psu m2 or psu kg2 m-4].
   real :: PEc_core ! The diffusivity-independent core term in the expressions
-                   ! for the potential energy changes, J m-3.
+                   ! for the potential energy changes [J m-3].
   real :: ColHt_core ! The diffusivity-independent core term in the expressions
-                     ! for the column height changes, J m-3.
-  real :: ColHt_chg  ! The change in the column height, in m.
-  real :: y1   ! A local temporary term, in units of H-3 or H-4 in various contexts.
+                     ! for the column height changes [J m-3].
+  real :: ColHt_chg  ! The change in the column height [Z ~> m].
+  real :: y1   ! A local temporary term, in [H-3] or [H-4] in various contexts.
 
   !   The expression for the change in potential energy used here is derived
   ! from the expression for the final estimates of the changes in temperature
@@ -1126,14 +1126,14 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
                                 !! for the tridiagonal solver, given by h_k plus a term that
                                 !! is a fraction (determined from the tridiagonal solver) of
                                 !! Kddt_h for the interface above [H ~> m or kg m-2].
-  real, intent(in)  :: dTe_term !< A diffusivity-independent term related to the
-                                !! temperature change in the layer below the interface, in K H.
-  real, intent(in)  :: dSe_term !< A diffusivity-independent term related to the
-                                !! salinity change in the layer below the interface, in ppt H.
+  real, intent(in)  :: dTe_term !< A diffusivity-independent term related to the temperature change
+                                !! in the layer below the interface [degC H ~> degC m or degC kg m-2].
+  real, intent(in)  :: dSe_term !< A diffusivity-independent term related to the salinity change
+                                !! in the layer below the interface [ppt H ~> ppt m or ppt kg m-2].
   real, intent(in)  :: dT_km1_t2 !< A diffusivity-independent term related to the
-                                 !! temperature change in the layer above the interface, in K.
+                                 !! temperature change in the layer above the interface [degC].
   real, intent(in)  :: dS_km1_t2 !< A diffusivity-independent term related to the
-                                 !! salinity change in the layer above the interface, in ppt.
+                                 !! salinity change in the layer above the interface [ppt].
   real, intent(in)  :: pres_Z    !< The hydrostatic interface pressure, which is used to relate
                                  !! the changes in column thickness to the energy that is radiated
                                  !! as gravity waves and unavailable to drive mixing [J m-2 Z-1 ~> J m-3].
@@ -1156,7 +1156,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real, intent(in)  :: dT_to_dColHt_k !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! height, including all implicit diffusive changes
-                                 !! in the temperatures of all the layers below [Z K-1 ~> m K-1].
+                                 !! in the temperatures of all the layers below [Z degC-1 ~> m degC-1].
   real, intent(in)  :: dS_to_dColHt_k !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                  !! a layer's salinity change to the change in column
                                  !! height, including all implicit diffusive changes
@@ -1164,7 +1164,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real, intent(in)  :: dT_to_dColHta !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                  !! a layer's temperature change to the change in column
                                  !! height, including all implicit diffusive changes
-                                 !! in the temperatures of all the layers above [Z K-1 ~> m K-1].
+                                 !! in the temperatures of all the layers above [Z degC-1 ~> m degC-1].
   real, intent(in)  :: dS_to_dColHta !< A factor (mass_lay*dSColHtc_vol/dS) relating
                                  !! a layer's salinity change to the change in column
                                  !! height, including all implicit diffusive changes

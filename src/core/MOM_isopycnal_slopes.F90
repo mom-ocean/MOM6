@@ -49,12 +49,11 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; US%Z_to_m by default.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
-    T, &          ! The temperature (or density) in C, with the values in
+    T, &          ! The temperature [degC], with the values in
                   ! in massless layers filled vertically by diffusion.
-    S, &          ! The filled salinity, in PSU, with the values in
+    S, &          ! The filled salinity [PSU], with the values in
                   ! in massless layers filled vertically by diffusion.
-    Rho           ! Density itself, when a nonlinear equation of state is
-                  ! not in use.
+    Rho           ! Density itself, when a nonlinear equation of state is not in use [kg m-3].
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     pres          ! The pressure at an interface [Pa].
   real, dimension(SZIB_(G)) :: &
