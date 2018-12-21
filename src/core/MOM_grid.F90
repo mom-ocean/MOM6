@@ -148,10 +148,10 @@ type, public :: ocean_grid_type
     Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked, in depth units.
     Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv, in depth units.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
+    CoriolisBu    !< The Coriolis parameter at corner points [s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
-    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
+    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [s-1 m-1].
+    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [s-1 m-1].
   real :: g_Earth !< The gravitational acceleration [m s-2].
 
   ! These variables are global sums that are useful for 1-d diagnostics

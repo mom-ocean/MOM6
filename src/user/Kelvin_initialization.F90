@@ -180,11 +180,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
   ! The following variables are used to set up the transport in the Kelvin example.
   real :: time_sec, cff
-  real :: N0           ! Brunt-Vaisala frequency in s-1
+  real :: N0           ! Brunt-Vaisala frequency [s-1]
   real :: plx          !< Longshore wave parameter
   real :: pmz          !< Vertical wave parameter
   real :: lambda       !< Offshore decay scale
-  real :: omega        !< Wave frequency in s-1
+  real :: omega        !< Wave frequency [s-1]
   real :: PI
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB

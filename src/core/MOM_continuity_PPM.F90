@@ -282,8 +282,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: FA_u    ! A sum of zonal face areas [H m ~> m2 or kg m-1].
   real :: I_vrm   ! 1.0 / visc_rem_max, nondim.
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
-                  ! the time step, in s-1.
-  real :: I_dt    ! 1.0 / dt, in s-1.
+                  ! the time step [s-1].
+  real :: I_dt    ! 1.0 / dt [s-1].
   real :: du_lim  ! The velocity change that give a relative CFL of 1 [m s-1].
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
@@ -946,7 +946,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
                        ! of visc_rem from leading to large CFL numbers.
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
                   ! flow is truly upwind, ND.
-  real :: Idt     ! The inverse of the time step, in s-1.
+  real :: Idt     ! The inverse of the time step [s-1].
   logical :: domore
   integer :: i, k, nz
 
@@ -1100,8 +1100,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
     visc_rem      ! A 2-D copy of visc_rem_v or an array of 1's.
   real :: I_vrm   ! 1.0 / visc_rem_max, nondim.
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
-                  ! the time step, in s-1.
-  real :: I_dt    ! 1.0 / dt, in s-1.
+                  ! the time step [s-1].
+  real :: I_dt    ! 1.0 / dt [s-1].
   real :: dv_lim  ! The velocity change that give a relative CFL of 1 [m s-1].
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south [m].
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
@@ -1765,7 +1765,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
                        ! of visc_rem from leading to large CFL numbers.
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
                   ! flow is truly upwind, ND.
-  real :: Idt     ! The inverse of the time step, in s-1.
+  real :: Idt     ! The inverse of the time step [s-1].
   logical :: domore
   integer :: i, k, nz
 
