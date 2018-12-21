@@ -53,7 +53,7 @@ type, public :: diagnostics_CS ; private
                                        !! monotonic for the purposes of calculating the equivalent
                                        !! barotropic wave speed.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
-                                       !! calculating the equivalent barotropic wave speed. (m)
+                                       !! calculating the equivalent barotropic wave speed [m].
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                        !! regulate the timing of diagnostic output.
@@ -62,31 +62,31 @@ type, public :: diagnostics_CS ; private
 
   ! following fields have nz+1 levels.
   real, pointer, dimension(:,:,:) :: &
-    e => NULL(), &   !< interface height (metre)
-    e_D => NULL()    !< interface height above bottom (metre)
+    e => NULL(), &   !< interface height [Z ~> m]
+    e_D => NULL()    !< interface height above bottom [Z ~> m]
 
   ! following fields have nz layers.
   real, pointer, dimension(:,:,:) :: &
-    du_dt => NULL(), & !< net i-acceleration in m/s2
-    dv_dt => NULL(), & !< net j-acceleration in m/s2
-    dh_dt => NULL(), & !< thickness rate of change in [m s-1] or kg/(m2*s)
-    p_ebt => NULL()    !< Equivalent barotropic modal structure
+    du_dt => NULL(), & !< net i-acceleration [m s-2]
+    dv_dt => NULL(), & !< net j-acceleration [m s-2]
+    dh_dt => NULL(), & !< thickness rate of change [H s-1 ~> m s-1 or kg m-2 s-1]
+    p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
 
   real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
-                                              !! coordinates, in m (Bouss) or kg/m2 (non-Bouss)
+                                              !! coordinates [H ~> m or kg m-2]
   real, pointer, dimension(:,:,:) :: uh_Rlay => NULL() !< Zonal transports in potential density
-                                              !! coordinates in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: vh_Rlay => NULL() !< Meridional transports in potential density
-                                              !! coordinates in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: uhGM_Rlay => NULL() !< Zonal Gent-McWilliams transports in potential density
-                                              !! coordinates, in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: vhGM_Rlay => NULL() !< Meridional Gent-McWilliams transports in potential density
-                                              !! coordinates, in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
 
   ! following fields are 2-D.
   real, pointer, dimension(:,:) :: &
     cg1 => NULL(),       & !< First baroclinic gravity wave speed [m s-1]
-    Rd1 => NULL(),       & !< First baroclinic deformation radius, in m
+    Rd1 => NULL(),       & !< First baroclinic deformation radius [m]
     cfl_cg1 => NULL(),   & !< CFL for first baroclinic gravity wave speed, nondim
     cfl_cg1_x => NULL(), & !< i-component of CFL for first baroclinic gravity wave speed, nondim
     cfl_cg1_y => NULL()    !< j-component of CFL for first baroclinic gravity wave speed, nondim
@@ -209,8 +209,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure [Pa].
                                                  !! If p_surf is not associated, it is the same
                                                  !! as setting the surface pressure to 0.
-  real,                    intent(in)    :: dt   !< The time difference in s since the last
-                                                 !! call to this subroutine.
+  real,                    intent(in)    :: dt   !< The time difference since the last
+                                                 !! call to this subroutine [s].
   type(diag_grid_storage), intent(in)    :: diag_pre_sync !< Target grids from previous timestep
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
                                                  !! previous call to diagnostics_init.
@@ -218,7 +218,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                   optional, intent(in)   :: eta_bt !< An optional barotropic
     !! variable that gives the "correct" free surface height (Boussinesq) or total water column
     !! mass per unit area (non-Boussinesq).  This is used to dilate the layer thicknesses when
-    !! calculating interface heights, in m or kg m-2.
+    !! calculating interface heights [H ~> m or kg m-2].
   ! Local variables
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
@@ -782,17 +782,17 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     z_top, &  ! Height of the top of a layer or the ocean [Z ~> m].
     z_bot, &  ! Height of the bottom of a layer (for id_mass) or the
               ! (positive) depth of the ocean (for id_col_ht) [Z ~> m].
-    mass, &   ! integrated mass of the water column, in kg m-2.  For
+    mass, &   ! integrated mass of the water column [kg m-2].  For
               ! non-Boussinesq models this is rho*dz. For Boussinesq
               ! models, this is either the integral of in-situ density
               ! (rho*dz for col_mass) or reference density (Rho_0*dz for mass_wt).
     btm_pres,&! The pressure at the ocean bottom, or CMIP variable 'pbo'.
               ! This is the column mass multiplied by gravity plus the pressure
-              ! at the ocean surface.
+              ! at the ocean surface [Pa].
     dpress, & ! Change in hydrostatic pressure across a layer [Pa].
     tr_int    ! vertical integral of a tracer times density,
-              ! (Rho_0 in a Boussinesq model) in TR kg m-2.
-  real    :: IG_Earth  ! Inverse of gravitational acceleration, in s2 m-1.
+              ! (Rho_0 in a Boussinesq model) [TR kg m-2].
+  real    :: IG_Earth  ! Inverse of gravitational acceleration [s2 m-1].
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

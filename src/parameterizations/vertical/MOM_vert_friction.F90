@@ -155,7 +155,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   type(mech_forcing),    intent(in)      :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),   intent(inout)   :: visc   !< Viscosities and bottom drag
-  real,                  intent(in)      :: dt     !< Time increment in s
+  real,                  intent(in)      :: dt     !< Time increment [s]
   type(ocean_OBC_type),  pointer         :: OBC    !< Open boundary condition structure
   type(accel_diag_ptrs), intent(inout)   :: ADp    !< Accelerations in the momentum
                                                    !! equations for diagnostics
@@ -467,7 +467,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
                          intent(inout) :: visc_rem_v !< Fraction of a time-step's worth of a
                                               !! barotopic acceleration that a layer experiences after
                                               !! viscosity is applied in the meridional direction [nondim]
-  real,                  intent(in)    :: dt  !< Time increment in s
+  real,                  intent(in)    :: dt  !< Time increment [s]
   type(vertvisc_CS),     pointer       :: CS  !< Vertical viscosity control structure
 
   ! Local variables
@@ -574,7 +574,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(in)    :: visc   !< Viscosities and bottom drag
-  real,                    intent(in)    :: dt     !< Time increment in s
+  real,                    intent(in)    :: dt     !< Time increment [s]
   type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
   type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary condition structure
 
@@ -1054,7 +1054,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
                                                  !! normalized by the bottom boundary layer thickness
   real, dimension(SZIB_(G)), intent(out) :: h_ml !< Mixed layer depth [H ~> m or kg m-2]
   integer,                   intent(in)  :: j    !< j-index to find coupling coefficient for
-  real,                      intent(in)  :: dt   !< Time increment, in s
+  real,                      intent(in)  :: dt   !< Time increment [s]
   type(vertvisc_CS),         pointer     :: CS   !< Vertical viscosity control structure
   type(vertvisc_type),       intent(in)  :: visc !< Structure containing viscosities and bottom drag
   type(mech_forcing),        intent(in)  :: forces !< A structure with the driving mechanical forces
@@ -1363,7 +1363,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   type(cont_diag_ptrs),    intent(in)    :: CDp    !< Continuity diagnostic pointers
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(in)    :: visc   !< Viscosities and bottom drag
-  real,                    intent(in)    :: dt     !< Time increment in s
+  real,                    intent(in)    :: dt     !< Time increment [s]
   type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
 
   ! Local variables
@@ -1372,7 +1372,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   real :: truncvel         ! are truncated to truncvel, both [m s-1].
   real :: CFL              ! The local CFL number.
   real :: H_report         ! A thickness below which not to report truncations.
-  real :: dt_Rho0          ! The timestep divided by the Boussinesq density, in dt m3 kg-1.
+  real :: dt_Rho0          ! The timestep divided by the Boussinesq density [s m3 kg-1].
   real :: vel_report(SZIB_(G),SZJB_(G))
   real :: u_old(SZIB_(G),SZJ_(G),SZK_(G))
   real :: v_old(SZI_(G),SZJB_(G),SZK_(G))

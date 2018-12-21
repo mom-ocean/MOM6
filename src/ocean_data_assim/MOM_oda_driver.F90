@@ -73,7 +73,7 @@ type, public :: ODA_CS ; private
 
   type(domain2d), pointer :: mpp_domain => NULL() !< Pointer to a mpp domain object for DA
   type(grid_type), pointer :: oda_grid !< local tracer grid
-  real, pointer, dimension(:,:,:) :: h => NULL() !<layer thicknesses (m or kg/m2) for DA
+  real, pointer, dimension(:,:,:) :: h => NULL() !<layer thicknesses [H ~> m or kg m-2] for DA
   type(thermo_var_ptrs), pointer :: tv => NULL() !< pointer to thermodynamic variables
   integer :: ni          !< global i-direction grid size
   integer :: nj          !< global j-direction grid size
@@ -549,7 +549,7 @@ subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
   type(ocean_grid_type),    intent(in)    :: G  !< ocean grid structure
   type(thermo_var_ptrs),    intent(inout) :: tv !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                            intent(in)    :: h  !< layer thickness (m or kg/m2)
+                            intent(in)    :: h  !< layer thickness [H ~> m or kg m-2]
   type(ODA_CS),             intent(inout) :: CS !< the data assimilation structure
 
 end subroutine apply_oda_tracer_increments

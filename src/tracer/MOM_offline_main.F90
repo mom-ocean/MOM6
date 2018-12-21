@@ -112,8 +112,8 @@ type, public :: offline_transport_CS ; private
   integer :: num_off_iter   !< Number of advection iterations per offline step
   integer :: num_vert_iter  !< Number of vertical iterations per offline step
   integer :: off_ale_mod    !< Sets how frequently the ALE step is done during the advection
-  real :: dt_offline        !< Timestep used for offline tracers
-  real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics
+  real :: dt_offline        !< Timestep used for offline tracers [s]
+  real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics [s]
   real :: evap_CFL_limit    !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
   real :: minimum_forcing_depth !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
   real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity
@@ -205,7 +205,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   type(offline_transport_CS), pointer  :: CS            !< control structure for offline module
   integer,          intent(in)         :: id_clock_ALE  !< Clock for ALE routines
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: h_pre         !< layer thicknesses before advection in m or kg m-2
+                    intent(inout)      :: h_pre         !< layer thicknesses before advection
+                                                        !! [H ~> m or kg m-2]
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
                     intent(inout)      :: uhtr          !< Zonal mass transport in m3 or kg
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)), &
@@ -646,7 +647,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   type(time_type),  intent(in)         :: Time_end   !< time interval
   type(offline_transport_CS), pointer  :: CS         !< control structure from initialize_MOM
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: h_pre      !< layer thicknesses before advection in m or kg m-2
+                    intent(inout)      :: h_pre      !< layer thicknesses before advection [H ~> m or kg m-2]
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
                     intent(inout)      :: eatr       !< Entrainment from layer above in m or kg-2
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
@@ -1186,18 +1187,20 @@ subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_t
                                 dt_offline, dt_offline_vertical, skip_diffusion)
   type(offline_transport_CS), target, intent(in   ) :: CS !< Offline control structure
   ! Returned optional arguments
-  real, dimension(:,:,:), optional, pointer       :: uhtr !< Remaining zonal mass transport
-  real, dimension(:,:,:), optional, pointer       :: vhtr !< Remaining meridional mass transport
+  real, dimension(:,:,:), optional, pointer       :: uhtr !< Remaining zonal mass transport [H m2 ~> m3 or kg]
+  real, dimension(:,:,:), optional, pointer       :: vhtr !< Remaining meridional mass transport [H m2 ~> m3 or kg]
   real, dimension(:,:,:), optional, pointer       :: eatr !< Amount of fluid entrained from the layer above within
-                                                          !! one time step (m for Bouss, kg/m^2 for non-Bouss)
+                                                          !! one time step [H ~> m or kg m-2]
   real, dimension(:,:,:), optional, pointer       :: ebtr !< Amount of fluid entrained from the layer below within
-                                                          !! one time step (m for Bouss, kg/m^2 for non-Bouss)
-  real, dimension(:,:,:), optional, pointer       :: h_end !< Thicknesses at the end of offline timestep in m or kg m-2
+                                                          !! one time step [H ~> m or kg m-2]
+  real, dimension(:,:,:), optional, pointer       :: h_end !< Thicknesses at the end of offline timestep
+                                                          !! [H ~> m or kg m-2]
+  !### Why are the following variables integers?
   integer,                optional, pointer       :: accumulated_time !< Length of time accumulated in the
-                                                          !! current offline interval
-  integer,                optional, intent(  out) :: dt_offline !< Timestep used for offline tracers
+                                                          !! current offline interval [s]
+  integer,                optional, intent(  out) :: dt_offline !< Timestep used for offline tracers [s]
   integer,                optional, intent(  out) :: dt_offline_vertical !< Timestep used for calls to tracer
-                                                          !! vertical physics
+                                                          !! vertical physics [s]
   logical,                optional, intent(  out) :: skip_diffusion !< Skips horizontal diffusion of tracers
 
   ! Pointers to 3d members

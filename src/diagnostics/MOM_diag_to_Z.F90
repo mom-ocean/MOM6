@@ -163,9 +163,9 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
                                                  !! to diag_to_Z_init.
   ! Local variables
   ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
-  real :: ssh(SZI_(G),SZJ_(G))   ! copy of ssh_in whose halos can be updated (meter or kg/m2)
+  real :: ssh(SZI_(G),SZJ_(G))   ! copy of ssh_in whose halos can be updated [H ~> m or kg m-2]
   real :: e(SZK_(G)+2)           ! z-star interface heights [Z ~> m].
-  real :: h_f(SZK_(G)+1,SZI_(G)) ! thicknesses of massive layers (meter or kg/m2)
+  real :: h_f(SZK_(G)+1,SZI_(G)) ! thicknesses of massive layers [H ~> m or kg m-2]
   real :: u_f(SZK_(G)+1,SZIB_(G))! zonal velocity component in any massive layer
   real :: v_f(SZK_(G)+1,SZI_(G)) ! meridional velocity component in any massive layer
 
@@ -174,7 +174,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
 
   real :: D_pt(SZIB_(G))        ! bottom depth [Z ~> m].
   real :: shelf_depth(SZIB_(G)) ! ice shelf depth [Z ~> m].
-  real :: htot           ! summed layer thicknesses (meter or kg/m2)
+  real :: htot           ! summed layer thicknesses [H ~> m or kg m-2]
   real :: dilate         ! proportion by which to dilate every layer
   real :: wt(SZK_(G)+1)  ! fractional weight for each layer in the
                          ! range between k_top and k_bot (nondim)
@@ -542,7 +542,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
                    ! the current depth level [H m2 ~> m3 or kg]
   real :: Idt      ! inverse of the time step (sec)
 
-  real :: z_int_above(SZIB_(G)) ! height of the interface atop a layer (meter or kg/m2)
+  real :: z_int_above(SZIB_(G)) ! height of the interface atop a layer [H ~> m or kg m-2]
 
   integer :: kz(SZIB_(G)) ! index of depth level that is being contributed to
 
@@ -765,7 +765,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   real, dimension(max(num_diags,1),SZI_(G),SZK_(G)+1) :: diag2d
 
   real, dimension(SZI_(G)) :: &
-    htot, &              ! summed layer thicknesses (meter or kg/m2)
+    htot, &              ! summed layer thicknesses [H ~> m or kg m-2]
     dilate               ! proportion by which to dilate every layer
   real :: wt             ! weighting of the interface above in the
                          ! interpolation to target depths

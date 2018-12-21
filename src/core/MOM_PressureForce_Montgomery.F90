@@ -122,8 +122,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                              ! barotropic and baroclinic pieces.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
 
-  real :: I_gEarth           ! The inverse of g_Earth, in s2 Z m-2
-  real :: dalpha
+  real :: I_gEarth           ! The inverse of g_Earth [s2 Z m-2 ~> s2 m-1]
+!  real :: dalpha
   real :: Pa_to_H   ! A factor to convert from Pa to the thicknesss units (H).
   real :: alpha_Lay(SZK_(G)) ! The specific volume of each layer [kg m-3].
   real :: dalpha_int(SZK_(G)+1) ! The change in specific volume across each
@@ -365,12 +365,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness [H ~> m].
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration due to pressure gradients
-                                                                !! (equal to -dM/dx) in m/s2.
+                                                                !! (equal to -dM/dx) [m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
-                                                                !! (equal to -dM/dy) in m/s2.
+                                                                !! (equal to -dM/dy) [m s2].
   type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
   real, dimension(:,:),                     optional, pointer     :: p_atm !< The pressure at the ice-ocean or
-                                                                !! atmosphere-ocean in Pa.
+                                                                !! atmosphere-ocean [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies
                                                                 !! [m2 s-2 H-1 ~> m s-2].
